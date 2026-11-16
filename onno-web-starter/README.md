@@ -486,8 +486,8 @@ type in private sidecars. See [docs/MEDIA_UPLOADS.md](../docs/MEDIA_UPLOADS.md).
 unpost, register changes), `presence`, `notification`, `tasks-changed`, comment events and, in dev
 mode, `reload`. Every event is filtered to what the subscriber may read. Repository and command
 events reach subscribers **after the publishing transaction commits**, so a refetch sees the
-committed row and a rollback emits nothing. With `onno-cluster-starter`, events cross nodes over the
-`ClusterEventBus`.
+committed row and a rollback emits nothing. On a Postgres datasource, events cross nodes over the
+`ClusterEventBus` (`onno-framework-starter`).
 
 `@onno/ui` opens one connection per browser origin (shared across tabs) and turns each change into a
 query-cache invalidation, so every list, form, chart and `useRecords` over that entity refreshes.

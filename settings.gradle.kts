@@ -18,7 +18,6 @@ include(
     "onno-mcp-starter",
     "onno-import-starter",
     "onno-print-starter",
-    "onno-cluster-starter",
     "onno-crm-starter",
     "onno-crm-channels-starter",
     "example"

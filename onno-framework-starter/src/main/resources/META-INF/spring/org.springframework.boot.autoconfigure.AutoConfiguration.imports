@@ -1,2 +1,3 @@
 su.onno.spring.OnnoAutoConfiguration
 su.onno.spring.OnnoRepositoriesAutoConfiguration
+su.onno.cluster.pg.OnnoClusterAutoConfiguration

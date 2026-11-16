@@ -110,8 +110,8 @@ public class OnnoShopifyAutoConfiguration {
   `su.onno:onno-framework-starter` (`implementation`).
 
 Study a real starter in this repo for the full shape —
-[`onno-cluster-starter/`](../onno-cluster-starter) is a self-contained example (properties,
-conditional beans, a pluggable event-bus SPI, and an auto-configuration imports file).
+[`onno-import-starter/`](../onno-import-starter) is a small, self-contained example (properties,
+conditional beans, and an auto-configuration imports file).
 
 ## Conventions that keep the ecosystem clean
 

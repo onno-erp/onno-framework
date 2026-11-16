@@ -8,7 +8,7 @@ import java.util.function.Consumer;
  * behind a load balancer.
  *
  * <p>It is swappable exactly like {@code su.onno.web.media.MediaStorage}: the framework wires a
- * {@link NoOpClusterEventBus} when nothing better is available, {@code onno-cluster-starter} supplies
+ * {@link NoOpClusterEventBus} when nothing better is available, {@code onno-framework-starter} supplies
  * a Postgres {@code LISTEN}/{@code NOTIFY} default on a Postgres datasource, and a commercial build
  * can replace either by exposing its own {@code ClusterEventBus} bean (e.g. Kafka- or Redis-backed),
  * which the auto-configuration's {@code @ConditionalOnMissingBean} default then steps aside for.

@@ -45,7 +45,7 @@ Implemented:
 - Domain event metadata and outbox publication hooks
 - `onno-auth-starter` with session-based defaults, JSON login/logout, CSRF cookie, in-memory users via `onno.auth.users`, plus OIDC and resource-server modes
 - Integration starters: MCP server (`onno-mcp-starter`), CSV import (`onno-import-starter`), Word/Excel print forms with batch printing, admin-uploaded templates and PDF (`onno-print-starter`)
-- Horizontal scale-out: cross-node delivery of live-UI entity-change events via a pluggable `ClusterEventBus` (`onno-cluster-starter`, default Postgres `LISTEN`/`NOTIFY`), an advisory-locked schema apply, and a fail-fast remember-me key guard
+- Horizontal scale-out: cross-node delivery of live-UI entity-change events via a pluggable `ClusterEventBus` (in `onno-framework-starter`, default Postgres `LISTEN`/`NOTIFY`), an advisory-locked schema apply, and a fail-fast remember-me key guard
 - Media uploads with a pluggable `MediaStorage` SPI
 - The UI is the npm package `@onno/ui`: a React shell with a default list, record form and register report for every readable entity, built from the model the server describes (`/api/ui/model`, `/api/ui/view/**`). An app's own UI is an ordinary Vite app in `src/main/ui` — one `defineApp({ entities, pages, navigation, extensions })` call with typed entity customizations, React pages composed from `@onno/ui`'s blocks, widgets and typed data hooks, and the starters' packages (`@onno/crm`, `@onno/print`). The `su.onno.ui` Gradle plugin builds it into the jar and generates `model.gen.ts` from the Java model. (This replaces the earlier Java UI DSL — `Layout`/`Page`/`EntityView` beans — the DivKit renderer and the widget plugin.)
 - Replaceable UI SDK: the default record host shares its public `useRecordForm` controller with custom hosts; typed field bindings (`useRecordField`/`RecordField`) carry validation and picker context; custom list bodies receive the same pagination, selection and scoped select-all callbacks. Metadata, control props and rendering primitives are public (`docs/UI_SDK.md`).
@@ -74,7 +74,7 @@ Good next slices:
 
 Recently shipped (formerly on this list): role-aware deny-by-default authorization
 (`@AccessControl`), OIDC/Keycloak production auth, diff-based migration with snapshots and model
-diffs, the React-only UI on `@onno/ui`, horizontal scale-out (`onno-cluster-starter`), and
+diffs, the React-only UI on `@onno/ui`, horizontal scale-out (cluster bus in the framework starter), and
 record-level presence markers (live "who else is viewing this record" avatars, cluster-relayed).
 
 ## Auth Direction

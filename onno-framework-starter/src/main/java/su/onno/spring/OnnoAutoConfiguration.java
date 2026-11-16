@@ -248,7 +248,7 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
     }
 
     /**
-     * Local-only fallback {@link su.onno.cluster.ClusterEventBus}. {@code onno-cluster-starter}
+     * Local-only fallback {@link su.onno.cluster.ClusterEventBus}. {@code OnnoClusterAutoConfiguration}
      * supplies a Postgres {@code LISTEN}/{@code NOTIFY} bus (its auto-configuration is ordered
      * {@code before} this one, so its {@code @ConditionalOnMissingBean} bean registers first and this
      * one backs off); an application may override either with its own bean. With this no-op default,

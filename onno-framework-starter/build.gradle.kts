@@ -15,6 +15,10 @@ dependencies {
 
     api(libs.jobrunr.spring.boot3.starter)
 
+    // Cross-node live-UI bus (su.onno.cluster.pg). The PostgreSQL driver comes with a Postgres
+    // DataSource at runtime; on H2 the bus is never instantiated, so org.postgresql.* never loads.
+    compileOnly(libs.postgresql)
+
     compileOnly(libs.spring.boot.configuration.processor)
     annotationProcessor(libs.spring.boot.configuration.processor)
 
@@ -29,6 +33,8 @@ dependencies {
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.testcontainers.junit.jupiter)
     testImplementation(libs.postgresql)
+    testImplementation(libs.mockito.core)
+    testImplementation(libs.jackson.datatype.jsr310)
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 

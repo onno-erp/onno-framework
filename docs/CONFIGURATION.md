@@ -20,6 +20,12 @@ Standard Spring keys (`spring.datasource.*`, `spring.mail.*`,
 
 | Property | Type | Default | Meaning |
 | --- | --- | --- | --- |
+| `onno.cluster.channel` | `String` | `onno_cluster_events` | Postgres `LISTEN`/`NOTIFY` channel carrying cross-node entity-change notices. Must be a bare identifier (`[A-Za-z0-9_]`); an invalid value falls back to the default. |
+| `onno.cluster.enabled` | `Boolean` | `true` | Master switch for the cross-node event bus. When `false`, a local-only no-op bus is used and live-UI (SSE) updates do not propagate between nodes. |
+| `onno.cluster.max-payload-bytes` | `Integer` | `7000` | Soft cap (bytes) kept below Postgres's 8000-byte `NOTIFY` limit. A larger event first drops its natural key, then degrades to a coarse "something changed" notice rather than failing. |
+| `onno.cluster.node-id` | `String` | — | Stable id identifying this node when filtering out its own `NOTIFY` echoes. Defaults to a random per-JVM UUID; set it only if you want a deterministic id in logs. |
+| `onno.cluster.poll-timeout` | `Duration` | `5s` | How long the listener blocks waiting for notifications before looping to re-check for shutdown. Bounds shutdown latency; does not affect delivery speed. |
+| `onno.cluster.reconnect-backoff-max` | `Duration` | `30s` | Upper bound on the exponential backoff between reconnect attempts after the listener drops. |
 | `onno.history.enabled` | `Boolean` | `true` | Whether field-level change history is recorded for catalogs and documents that opt in with `@Catalog(history = true)` / `@Document(history = true)`. Entities that have not opted in are never recorded. Set to `false` to stop recording everywhere (the `onno_record_history` table is then not created and the history panel and `/api/history` endpoint disappear) without touching the model. |
 | `onno.period-close.enabled` | `Boolean` | `true` | Enables period close: documents dated on or before a closed date cannot be created, changed, deleted, posted, reposted or unposted. With no period closed nothing is rejected. Set to `false` to remove the service and every check. |
 | `onno.period-close.manage-roles` | `List<String>` | — | Roles allowed to close and reopen periods through the UI page and `/api/period-close`. `ADMIN` is always allowed. |
@@ -149,17 +155,6 @@ OIDC and resource-server modes also read the standard `spring.security.oauth2.cl
 | `onno.print.templates.enabled` | `Boolean` | `true` | Whether admins may upload replacement templates (stored in the onno_print_templates table) that take precedence over the built-in ones. |
 | `onno.print.templates.manage-roles` | `List<String>` | — | Roles allowed to list, download, upload and reset print templates. ADMIN always passes. |
 | `onno.print.templates.max-size` | `DataSize` | `10MB` | Largest accepted uploaded template. |
-
-## Cluster — `onno-cluster-starter` (`OnnoClusterProperties`, prefix `onno.cluster`)
-
-| Property | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `onno.cluster.channel` | `String` | `onno_cluster_events` | Postgres `LISTEN`/`NOTIFY` channel carrying cross-node entity-change notices. Must be a bare identifier (`[A-Za-z0-9_]`); an invalid value falls back to the default. |
-| `onno.cluster.enabled` | `Boolean` | `true` | Master switch for the cross-node event bus. When `false`, a local-only no-op bus is used and live-UI (SSE) updates do not propagate between nodes. |
-| `onno.cluster.max-payload-bytes` | `Integer` | `7000` | Soft cap (bytes) kept below Postgres's 8000-byte `NOTIFY` limit. A larger event first drops its natural key, then degrades to a coarse "something changed" notice rather than failing. |
-| `onno.cluster.node-id` | `String` | — | Stable id identifying this node when filtering out its own `NOTIFY` echoes. Defaults to a random per-JVM UUID; set it only if you want a deterministic id in logs. |
-| `onno.cluster.poll-timeout` | `Duration` | `5s` | How long the listener blocks waiting for notifications before looping to re-check for shutdown. Bounds shutdown latency; does not affect delivery speed. |
-| `onno.cluster.reconnect-backoff-max` | `Duration` | `30s` | Upper bound on the exponential backoff between reconnect attempts after the listener drops. |
 
 ## onno-crm-channels-starter
 

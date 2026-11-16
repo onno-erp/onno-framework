@@ -357,10 +357,10 @@ the JSON read contract (logical `FieldDisplay`/`FieldRef` companions, storage co
 
 ## Modules & config
 
-Core (`onno-framework` + `-starter`), plus opt-in starters: `onno-web-starter`, `onno-auth-starter`,
+Core (`onno-framework` + `-starter`, which also carries the cross-node live-UI bus for
+horizontal scale-out), plus opt-in starters: `onno-web-starter`, `onno-auth-starter`,
 `onno-mcp-starter`, `onno-import-starter`, `onno-print-starter` (Word/Excel print forms via
-`PrintForm<T>` beans), `onno-cluster-starter` (cross-node live-UI sync for
-horizontal scale-out), `onno-ui-gradle-plugin`, and the npm packages `@onno/ui`, `@onno/crm`, `@onno/print`.
+`PrintForm<T>` beans), `onno-ui-gradle-plugin`, and the npm packages `@onno/ui`, `@onno/crm`, `@onno/print`.
 Optional starters use their documented `onno.<module>.enabled` switches where provided. The full
 module map is in
 [docs/ARCHITECTURE.md](https://github.com/onno-erp/onno-framework/blob/main/docs/ARCHITECTURE.md); every `onno.*` property is in

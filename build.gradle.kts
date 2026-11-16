@@ -70,7 +70,6 @@ val publishedModules = mapOf(
     "onno-web-starter" to "Web layer for onno: the generic REST API, access control, live events and the endpoints the React UI calls; serves the bundled default UI.",
     "onno-auth-starter" to "Authentication starter for onno: in-memory and OIDC / OAuth2 (Keycloak, Zitadel) single sign-on.",
     "onno-mcp-starter" to "Model Context Protocol (MCP) server starter exposing onno query and command services to AI agents.",
-    "onno-cluster-starter" to "Cross-node delivery of onno entity-change events for horizontal scale-out via a pluggable bus (default Postgres LISTEN/NOTIFY).",
     "onno-import-starter" to "Data import starter for onno: xlsx / csv ingestion into catalogs and documents.",
     "onno-print-starter" to "Print forms for onno: fill Word (.docx) and Excel (.xlsx) templates from catalog and document records.",
     "onno-crm-channels-starter" to "Opt-in Telegram, Gmail, Instagram and WhatsApp adapters for the onno CRM inbox.",
@@ -327,7 +326,7 @@ val configNotesDir = file("docs/_config")
 // Render order + human section titles. One entry per published starter that owns `onno.*` props.
 val configModuleProjects = listOf(
     "onno-framework-starter", "onno-web-starter", "onno-auth-starter", "onno-mcp-starter",
-    "onno-import-starter", "onno-print-starter", "onno-cluster-starter", "onno-crm-channels-starter",
+    "onno-import-starter", "onno-print-starter", "onno-crm-channels-starter",
 )
 
 // Make property descriptions deterministic. spring-boot-configuration-processor reads each
@@ -354,7 +353,6 @@ val configModuleTitles = mapOf(
     "onno-mcp-starter" to "MCP — `onno-mcp-starter` (`OnnoMcpProperties`, prefix `onno.mcp`)",
     "onno-import-starter" to "Import — `onno-import-starter` (`OnnoImportProperties`, prefix `onno.import`)",
     "onno-print-starter" to "Print — `onno-print-starter` (`OnnoPrintProperties`, prefix `onno.print`)",
-    "onno-cluster-starter" to "Cluster — `onno-cluster-starter` (`OnnoClusterProperties`, prefix `onno.cluster`)",
 )
 
 // Collapse a fully-qualified type to readable simple names: java.util.List<java.lang.String> -> List<String>,

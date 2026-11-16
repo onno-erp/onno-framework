@@ -34,7 +34,7 @@ to future agents that may not have the full conversation context.
 | Path | Role |
 | --- | --- |
 | `onno-framework` | Core annotations, metadata, schema, posting, complete durable typed process graph/runtime/schema, repository contracts, UI model, and shared types. |
-| `onno-framework-starter` | Spring Boot auto-configuration for the core framework. |
+| `onno-framework-starter` | Spring Boot auto-configuration for the core framework, including the cross-node `ClusterEventBus` for horizontal scale-out (Postgres LISTEN/NOTIFY; no-op on H2). |
 | `onno-web-starter` | The web layer, Java package `su.onno.web`: generic REST API, access control and record policies, commands/checks, picker options, comments/notifications/presence/tags/media, the SSE event stream, and serving the React app plus its `/api/ui` model. |
 | `onno-ui` | npm package `@onno/ui`: the React shell, default screens, page building blocks and typed data hooks apps import. Built by `onno-web-starter` (default shell) and by apps through `su.onno.ui`. |
 | `onno-crm-starter` | Composable inbox and messaging around explicitly bound host customer/employee catalogs. Host owns sales, business fields and navigation. |
@@ -42,7 +42,6 @@ to future agents that may not have the full conversation context.
 | `onno-mcp-starter` | MCP server exposing the model + CRUD + register reads + posting as AI-agent tools. |
 | `onno-import-starter` | CSV import (preview, mapping, upsert, dry-run) through the UI command path. |
 | `onno-print-starter` | Print forms: typed `PrintForm<T>` beans fill Word/Excel templates; record ⋯ menu, list batch zip, admin template uploads, optional PDF. |
-| `onno-cluster-starter` | Cross-node delivery of entity-change events for horizontal scale-out via a pluggable `ClusterEventBus` (default Postgres LISTEN/NOTIFY; no-op on H2). |
 | `onno-ui-gradle-plugin` | Gradle plugin (`su.onno.ui`) that builds an app's own React UI (`src/main/ui`, a Vite app on `@onno/ui`) into its jar, generates `model.gen.ts` from the Java model, and seeds a starter UI (`onnoUiInit`). |
 | `example` | Local example app and smoke-test consumer inside the multi-module build. Do not publish it. |
 | `community/` | Community integrations registry: `registry.json` (source of truth) + `registry.schema.json`. `INTEGRATIONS.md` is generated from it by the `generateIntegrationsDoc` Gradle task. |

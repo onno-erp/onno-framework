@@ -33,7 +33,7 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The UI Gradle plug
 | Module | Group | Role |
 | --- | --- | --- |
 | `onno-framework` | `su.onno` | Core: annotations, metadata scanners + registry, schema diff/migration, JDBI persistence, posting engine, complete typed process graph/runtime/schema, repository contracts, events, outbox, and the behaviour beans the web layer serves: commands (`su.onno.command`), live checks (`su.onno.validation`), picker options (`su.onno.picker`) and the login identity link (`su.onno.identity`). |
-| `onno-framework-starter` | `su.onno` | Spring Boot auto-configuration that wires the core: metadata registry, repositories, schema initializer, posting and process services, timer/subprocess polling, number generation, secret cipher, background jobs. |
+| `onno-framework-starter` | `su.onno` | Spring Boot auto-configuration that wires the core: metadata registry, repositories, schema initializer, posting and process services, timer/subprocess polling, number generation, secret cipher, background jobs, and the cross-node `ClusterEventBus` (Postgres `LISTEN`/`NOTIFY` on a Postgres datasource, no-op on H2) that keeps SSE live UI, task inboxes, presence and notifications in sync across instances. |
 | `onno-web-starter` | `su.onno` (package `su.onno.web`) | The web layer: generic REST controllers under `/api/**`, access control and record policies, commands/checks/picker endpoints, media uploads, SSE event stream, comment threads, per-user notifications; serves the bundled default UI and the `/api/ui` model. |
 | `onno-ui` | (npm `@onno/ui`) | The UI: the React shell, default screens, page building blocks and typed data hooks apps import. `onno-web-starter` builds it into the default shell. |
 | `onno-crm-starter` | `su.onno` | Composable messaging: inboxes, conversations/messages, channel identities, and the `@onno/crm` React components. Explicit host customer bindings enable it; customers, employees, sales models and navigation remain host-owned. |
@@ -41,7 +41,6 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The UI Gradle plug
 | `onno-mcp-starter` | `su.onno` | Model Context Protocol server exposing the model + CRUD + register reads + posting as AI-agent tools, generated from the registry. |
 | `onno-import-starter` | `su.onno` | CSV import (preview, mapping, upsert, dry-run, document grouping) through the same command path as the UI. |
 | `onno-print-starter` | `su.onno` | Print forms: `PrintForm<T>` beans fill Word (`.docx`) / Excel (`.xlsx`) templates via Apache POI; record-menu actions, list batch printing (zip), admin-uploaded template overrides (`onno_print_templates`), optional PDF via a `PdfConverter` (Gotenberg / LibreOffice). |
-| `onno-cluster-starter` | `su.onno` | Cross-node delivery of `ClusterEvent`s (entity changes, process-task invalidations, presence, and notifications) for horizontal scale-out via a pluggable `ClusterEventBus` SPI (default Postgres `LISTEN`/`NOTIFY`; no-op on H2). Keeps the SSE live UI, task inboxes, collaboration markers, and notification delivery in sync across instances. |
 | `onno-ui-gradle-plugin` | (`su.onno.ui` plugin) | Builds an app's own React UI (`src/main/ui`, a Vite app on `@onno/ui`) into its jar and generates `model.gen.ts` from the Java model. |
 | `example` | (not published) | The Onno Books retailer app: a compact end-to-end consumer and smoke-test fixture. |
 | `onno-tochka-starter`, `onno-yookassa-starter`, `onno-ozon-starter`, … | `su.onno.enterprise` | Commercial connectors in the separate [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo. |
@@ -808,8 +807,8 @@ Local SSE entity notifications are dispatched after the publishing Spring transa
 rolled-back writes produce no notification. Publishers outside a transaction still notify immediately.
 This prevents a browser from refetching a newly created conversation before it exists in committed data.
 
-The SSE fan-out is in-JVM by default — fine for one node. Add `onno-cluster-starter` (see below) to
-make `EntityChangedEvent`s reach browsers on **every** node of a scaled-out deployment.
+On a Postgres datasource the framework starter's cluster bus (see below) makes `EntityChangedEvent`s
+reach browsers on **every** node of a scaled-out deployment; on H2 the fan-out stays in-JVM.
 
 On the browser side, all tabs of an origin share a **single** `/api/events` connection: one tab is
 elected leader (via the Web Locks API) and holds the stream, rebroadcasting each event to the other
@@ -826,7 +825,7 @@ API calls. Browsers without Web Locks/`BroadcastChannel` fall back to one stream
 
 Running more than one instance behind a load balancer needs these, beyond a shared database:
 
-- **Live-UI events across nodes** — add `onno-cluster-starter`. It relays each `EntityChangedEvent`
+- **Live-UI events across nodes** — automatic on Postgres (`onno-framework-starter`, `onno.cluster.*`). It relays each `EntityChangedEvent`
   over a pluggable `ClusterEventBus` (`su.onno.cluster`, an SPI swappable like `MediaStorage`);
   the default uses Postgres `LISTEN`/`NOTIFY` (no extra infrastructure) and is a no-op on H2. A
   received event is pushed straight to the local SSE stream and is **never** re-published as a Spring
