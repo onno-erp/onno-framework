@@ -14,7 +14,7 @@ plugins {
 
 | Task | What it does |
 | --- | --- |
-| `onnoUiInit` | Seeds `src/main/ui` with a minimal app (`package.json`, `vite.config.ts`, `tsconfig.json`, `index.html`, `main.tsx`, `pages/HomePage.tsx`, `pages/README.md`). Never overwrites a file. |
+| `onnoUiInit` | Seeds `src/main/ui` with a starter app (`package.json`, `vite.config.ts`, `tsconfig.json`, `index.html`, `.gitignore`, `main.tsx`, `pages/LoginPage.tsx`, `pages/HomePage.tsx`, `pages/README.md`, `components/README.md`). The default screens are wired explicitly in `main.tsx` (`login: LoginPage` rendering `<DefaultLogin>`, home rendering `<DefaultHome>`), so an app extends one by editing its file. Never overwrites a file. The template is a plain file tree in [`src/main/resources/su/onno/ui/template`](src/main/resources/su/onno/ui/template); `{{onnoUiVersion}}` is replaced with the matching `@onno/ui` version and `gitignore` is written as `.gitignore`. `onno-ui`'s `tsconfig.template.json` type-checks it against the current public API. |
 | `generateUiModel` | Writes `src/main/ui/model.gen.ts` — TypeScript types of the Java entities, enumerations, information registers, constants and roles — from the compiled classes. Runs before every UI build; git-ignore the file. |
 | `buildUi` | `npm run build` (Vite) into `build/onno-ui/onno-app/`, which goes into the jar as `classpath:/onno-app/`. Wired before `processResources`. `onno-web-starter` serves it in place of its default shell. |
 

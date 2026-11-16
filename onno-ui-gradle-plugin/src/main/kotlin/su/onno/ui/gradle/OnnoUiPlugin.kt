@@ -45,7 +45,8 @@ abstract class OnnoUiExtension {
  *  - `generateUiModel` — writes `model.gen.ts` (TypeScript types of the Java entities) into the UI.
  *  - `buildUi`         — `npm run build`, into `classpath:/onno-app/`, which the server serves in
  *                        place of the default shell. Wired before `processResources`.
- *  - `onnoUiInit`      — seeds `src/main/ui` with a minimal app (never overwrites).
+ *  - `onnoUiInit`      — seeds `src/main/ui` with a starter app whose default screens are wired
+ *                        explicitly (never overwrites); the template is `resources/su/onno/ui/template`.
  *
  * For development, run `npm run dev` in `src/main/ui` next to the running backend.
  */

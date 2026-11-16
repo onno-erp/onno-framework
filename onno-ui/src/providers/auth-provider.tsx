@@ -41,7 +41,9 @@ interface AuthContextValue {
   loginUrl: string | null;
   // Present in OIDC mode: the URL logout redirects to (ends the Keycloak session). Null otherwise.
   logoutUrl: string | null;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, remember?: boolean) => Promise<void>;
+  /** Sign in through an application `LoginMethod` (a one-time code, a magic link, …). */
+  loginWith: (method: string, credentials: Record<string, unknown>) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -127,9 +129,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [user, refresh]);
 
-  const login = useCallback(async (username: string, password: string) => {
+  const login = useCallback(async (username: string, password: string, remember?: boolean) => {
     try {
-      const currentUser = await api.login(username, password);
+      const currentUser = await api.login(username, password, remember);
+      wasAuthenticatedRef.current = true;
+      setUser(currentUser);
+    } catch (err) {
+      setUser(null);
+      throw err;
+    }
+  }, []);
+
+  const loginWith = useCallback(async (method: string, credentials: Record<string, unknown>) => {
+    try {
+      const currentUser = await api.loginWith(method, credentials);
       wasAuthenticatedRef.current = true;
       setUser(currentUser);
     } catch (err) {
@@ -158,8 +171,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [logoutUrl]);
 
   const value = useMemo(
-    () => ({ user, loading, loginUrl, logoutUrl, login, logout, refresh }),
-    [user, loading, loginUrl, logoutUrl, login, logout, refresh]
+    () => ({ user, loading, loginUrl, logoutUrl, login, loginWith, logout, refresh }),
+    [user, loading, loginUrl, logoutUrl, login, loginWith, logout, refresh]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

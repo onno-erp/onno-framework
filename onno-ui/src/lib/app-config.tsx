@@ -10,6 +10,7 @@ import type { ListDescriptor } from "../components/lists/entity-list";
 import { RecordForm, type RecordFormState, type FormDescriptor } from "../components/entities/record-form";
 import type { NavigationProps } from "../components/shell/navigation";
 import type { UiExtension } from "./extension-types";
+import type { LoginPageProps } from "../components/auth/sign-in";
 
 /**
  * The whole app UI as one declaration: its pages, its navigation and how each entity's default
@@ -70,6 +71,8 @@ export type AppDefinition = {
   navigation?: NavSectionSpec[] | ((model: AppModel, defaults: ShellNavSection[]) => ShellNavSection[]);
   /** Components contributed to the UI's named outlets ({@link ExtensionSlot}s). */
   extensions?: UiExtension[];
+  /** The app's own login page, replacing the framework's (`/login`). */
+  login?: ComponentType<LoginPageProps>;
 };
 
 type NavItem = ShellNavSection["items"][number];

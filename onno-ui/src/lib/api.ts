@@ -190,7 +190,7 @@ async function doFetch<T>(url: string, init?: RequestInit, opts?: FetchOptions):
     }
     // A 401 here is a lapsed session (the login endpoint's bad-credentials 401 is handled by its
     // own caller and never reaches a logged-in tab). Hand off to the registered recovery handler.
-    if (res.status === 401 && !url.endsWith("/auth/login")) onUnauthorized?.();
+    if (res.status === 401 && !url.includes("/auth/login")) onUnauthorized?.();
     throw error;
   }
   if (res.status === 204) return undefined as T;
@@ -605,11 +605,23 @@ export const api = {
     return fetchJson<T>(normalized, undefined, {silent:true});
   },
   getCurrentUser: () => fetchJson<AuthUser>(`${BASE}/auth/me`),
-  login: (username: string, password: string) =>
+  login: (username: string, password: string, remember?: boolean) =>
     fetchJson<AuthUser>(`${BASE}/auth/login`, {
       method: "POST",
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, remember }),
     }),
+  /** Sign in through an application `LoginMethod` bean (`POST /api/auth/login/{method}`). */
+  loginWith: (method: string, credentials: Record<string, unknown>) =>
+    fetchJson<AuthUser>(`${BASE}/auth/login/${encodeURIComponent(method)}`, {
+      method: "POST",
+      body: JSON.stringify(credentials),
+    }, { silent: true }),
+  /** A `LoginMethod`'s first step, e.g. send a code (`POST /api/auth/login/{method}/challenge`). */
+  loginChallenge: (method: string, input: Record<string, unknown>) =>
+    fetchJson<Record<string, unknown>>(`${BASE}/auth/login/${encodeURIComponent(method)}/challenge`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }, { silent: true }),
   logout: () =>
     fetchJson<void>(`${BASE}/auth/logout`, { method: "POST" }),
   // Database-mode accounts. The caller renders its own error text, so these stay silent.

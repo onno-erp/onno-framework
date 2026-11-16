@@ -117,6 +117,16 @@ export const Setting = SettingImpl as (props: SettingProps) => El;
 export { PeriodClose, type PeriodCloseProps } from "./components/widgets/period-close";
 /** The signed-in user's business-process task inbox. */
 export { TaskInbox } from "./components/widgets/task-inbox";
+/**
+ * The login page and its parts, for an app's own login page (`defineApp({ login: MyLogin })`):
+ * `useSignIn()` signs in by password, an application `LoginMethod` (one-time code, …) or an SSO
+ * redirect; `useLoginMethods()` reads what the server offers.
+ */
+export {
+  DefaultLogin, LoginLayout, SignInMethods, PasswordLogin, SsoButtons, LoginButton,
+  useSignIn, useLoginMethods, SignInError,
+  type LoginPageProps, type LoginMethods, type SignIn, type SsoOption,
+} from "./components/auth/sign-in";
 /** User administration and the signed-in user's password change. */
 export { UserAccounts, ChangePassword } from "./components/auth/user-accounts";
 

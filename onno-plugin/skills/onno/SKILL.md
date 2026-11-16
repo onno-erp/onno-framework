@@ -220,7 +220,8 @@ and permissions, never screens. Write UI only for what differs. The UI is the np
 `@onno/ui`; an app's UI is an ordinary Vite app in `src/main/ui` that imports it:
 
 - **Set up:** apply `id("su.onno.ui")`, run `./gradlew onnoUiInit` (seeds `package.json`,
-  `vite.config.ts` = `plugins: [onno()]`, `main.tsx`, `pages/HomePage.tsx`, …). The build generates
+  `vite.config.ts` = `plugins: [onno()]`, `main.tsx`, `pages/LoginPage.tsx`, `pages/HomePage.tsx`, …;
+  the default login and home are wired explicitly so you extend them by editing those files). The build generates
   `model.gen.ts` from the Java entities (`generateUiModel`) and runs `vite build` into the jar
   (`buildUi`); `npm run dev` in `src/main/ui` hot-reloads against the running backend.
 - **`main.tsx`** is one `defineApp({ pages, navigation, extensions })` call. Entity screens are TSX

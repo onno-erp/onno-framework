@@ -33,7 +33,7 @@ val buildFrontend by tasks.registering(com.github.gradle.node.npm.task.NpmTask::
 }
 
 // `tsc -b` over the tsconfig projects: the package, the Vitest suite (tests/, vite.config.ts and
-// the CRM packages' sources the tests import) and the public API's type-level tests (tests/types). buildFrontend checks only the package, so a type error
+// the CRM packages' sources the tests import) and the public API's type-level tests (tests/types), and the onnoUiInit template. buildFrontend checks only the package, so a type error
 // in a test fails `check`, not packaging.
 val typecheckFrontend by tasks.registering(com.github.gradle.node.npm.task.NpmTask::class) {
     dependsOn(tasks.named("npmInstall"))
@@ -47,6 +47,9 @@ val typecheckFrontend by tasks.registering(com.github.gradle.node.npm.task.NpmTa
     inputs.file("$frontend/tsconfig.app.json")
     inputs.file("$frontend/tsconfig.test.json")
     inputs.file("$frontend/tsconfig.types.json")
+    // The app onnoUiInit seeds, type-checked against the current public API (tsconfig.template.json).
+    inputs.dir("../onno-ui-gradle-plugin/src/main/resources/su/onno/ui/template")
+    inputs.file("$frontend/tsconfig.template.json")
     inputs.file("$frontend/package.json")
     inputs.file("../package-lock.json")
     inputs.file("$frontend/vite.config.ts")

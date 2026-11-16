@@ -52,6 +52,10 @@ change.
 - With password + ≥1 SSO provider configured, the login screen renders a method chooser first —
   extra providers come from `AuthMethodsContributor` beans (Telegram lives in
   onno-enterprise/onno-telegram-starter; broker mode via cloud.onno.su needs no client secret).
+- Custom sign-in (one-time code, magic link, badge): a `su.onno.auth.spi.LoginMethod` bean
+  (`POST /api/auth/login/{id}[/challenge]`, CSRF-protected, password modes only) returns the username;
+  the framework creates the session. The screen is the app's React `defineApp({ login })` page using
+  `useSignIn()` — see `onno-auth-starter/README.md#application-login-methods`.
 - Demo login buttons are `onno.ui.login.demo-accounts` (under `onno.ui`, not `onno.auth`).
 - Public demo auto-login is `onno.auth.demo.auto-login-username`; it bypasses sign-in and is only
   safe for non-sensitive demo data.

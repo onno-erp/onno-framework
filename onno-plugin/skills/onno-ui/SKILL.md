@@ -55,8 +55,11 @@ dependencies {
 ```
 
 `./gradlew onnoUiInit` seeds `src/main/ui` (never overwrites): `package.json` (`@onno/ui`, React,
-Vite, TypeScript), `vite.config.ts`, `tsconfig.json`, `index.html`, `.gitignore`, `main.tsx`,
-`pages/HomePage.tsx`, `entities/README.md`. Without a `src/main/ui/package.json` the plugin does
+Vite, TypeScript), `vite.config.ts`, `tsconfig.json`, `index.html`, `.gitignore`, `main.tsx`
+(`defineApp({ login: LoginPage, pages: [{ path: "/", component: HomePage }] })`),
+`pages/LoginPage.tsx` (`<DefaultLogin>`), `pages/HomePage.tsx` (`<DefaultHome>`), `pages/README.md`,
+`components/README.md`. Extend a default screen by editing its page file. The template lives as real
+files in `onno-ui-gradle-plugin/src/main/resources/su/onno/ui/template` (edit there, not in Kotlin). Without a `src/main/ui/package.json` the plugin does
 nothing and the server serves the starter's default shell.
 
 The plugin's tasks:

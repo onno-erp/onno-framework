@@ -22,6 +22,7 @@ import org.springframework.boot.autoconfigure.condition.AnyNestedCondition;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import su.onno.auth.users.AccountRememberMeServices;
 import su.onno.auth.users.AccountSessionGuardFilter;
+import su.onno.auth.spi.LoginMethod;
 import su.onno.auth.users.AccountUserDetailsService;
 import su.onno.auth.users.JdbcUserStore;
 import su.onno.auth.users.PasswordPolicy;
@@ -103,9 +104,15 @@ public class OnnoAuthAutoConfiguration {
     AuthApiController onnoAuthApiController(ObjectProvider<AuthenticationManager> authenticationManager,
                                             ObjectProvider<TokenBasedRememberMeServices> rememberMeServices,
                                             ObjectProvider<UserAccounts> userAccounts,
+                                            ObjectProvider<UserDetailsService> userDetailsService,
+                                            ObjectProvider<LoginMethod> loginMethods,
                                             OnnoAuthProperties properties) {
-        return new AuthApiController(authenticationManager.getIfAvailable(),
-                rememberMeServices.getIfAvailable(), properties, userAccounts.getIfAvailable());
+        // Application login methods resolve their user through the local account store, so they are
+        // offered only in the password modes (where an AuthenticationManager exists).
+        AuthenticationManager manager = authenticationManager.getIfAvailable();
+        return new AuthApiController(manager, rememberMeServices.getIfAvailable(), properties,
+                userAccounts.getIfAvailable(), manager == null ? null : userDetailsService.getIfAvailable(),
+                loginMethods.orderedStream().toList());
     }
 
     /**

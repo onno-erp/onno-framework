@@ -12,6 +12,7 @@ import type { EntityRecord } from "./lib/types";
 import type { ListDescriptor, ListRendererProps } from "./components/lists/entity-list";
 import type { ShellNavItem, ShellNavSection } from "./lib/view-types";
 import type { UiExtension } from "./lib/extension-types";
+import type { LoginPageProps } from "./components/auth/sign-in";
 import type { StatProps as StatImpl } from "./components/widgets/stat";
 import type { SparklineProps as SparklineImpl } from "./components/widgets/sparkline";
 import type { GaugeProps as GaugeImpl } from "./components/widgets/gauge";
@@ -671,6 +672,13 @@ export interface AppDefinition<P extends PagePath = PagePath> {
    * applies.
    */
   extensions?: UiExtension[];
+  /**
+   * The app's own login page, replacing the framework's at `/login`: a one-time-code form, a
+   * single "Sign in with Keycloak" button, a kiosk badge scan, … Compose it from `LoginLayout`,
+   * `SignInMethods`, `PasswordLogin`, `SsoButtons` and `LoginButton`, and sign in with `useSignIn()`.
+   * It renders before sign-in, so it has no business model and must not use data hooks.
+   */
+  login?: ComponentType<LoginPageProps>;
 }
 
 /** The saved record a record panel renders under. */

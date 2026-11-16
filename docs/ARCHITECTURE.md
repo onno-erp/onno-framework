@@ -474,7 +474,7 @@ cancellation comes from `cancellationAssignment(payload)`; inbox/task authorizat
 | Theme/config | `GET /api/theme`, `GET /api/config`, `GET /api/branding`, `GET /api/ui/login` (web-starter) |
 | Events | `GET /api/events` — SSE stream of CRUD/posting changes, `tasks-changed` inbox invalidations, plus `presence` viewer-set updates (web-starter); filtered per subscriber by entity read access or process-task audience (#190) |
 | Presence | `POST /api/presence` (body `{path, action}`) — mark presence on any route (`enter`/`heartbeat`/`leave`); the server derives the identity from the path (a record, an entity list, or any page/dashboard), gating entity routes on read access while a page is visible to any signed-in user. Identity from the session, heartbeat-kept + TTL-expired, relayed across nodes over the `ClusterEventBus`. `GET /api/presence` — the ambient snapshot (routes the caller may see) that seeds the client store behind the tab/row/sidebar collaborator avatars (the viewer's photo, initials fallback); kept live by `presence` SSE deltas (web-starter) |
-| Auth | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/csrf` (auth-starter) |
+| Auth | `POST /api/auth/login`, `POST /api/auth/login/{method}[/challenge]` (application `LoginMethod` beans), `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/csrf` (auth-starter) |
 | Import | `POST /api/import/{catalogs,documents}/{name}/csv[/preview]` (import-starter) |
 | Desktop | `GET /api/desktop/ready`, `GET /api/desktop/manifest` (desktop-starter) |
 | MCP | `POST /mcp` — streamable-HTTP MCP transport (mcp-starter) |
@@ -610,7 +610,7 @@ cross-site session iframe additionally needs `onno.auth.embedding.cross-site-coo
 `SameSite=None; Secure` servlet-session cookies.
 
 `/api/**` requires authentication (except the public allowlist: `/error`, `/api/theme`,
-`/api/config`, `/api/branding`, `/api/auth/login`, `/api/auth/me`, `/api/auth/csrf`,
+`/api/config`, `/api/branding`, `/api/auth/login`, `/api/auth/login/{method}[/challenge]`, `/api/auth/me`, `/api/auth/csrf`,
 `/api/ui/login`, `/api/desktop/**`). **Per-entity RBAC is deny-by-default**: a
 catalog/document/register is invisible
 and uneditable unless its `@AccessControl` read/write roles grant the caller; the `ADMIN` role is a

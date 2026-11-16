@@ -36,10 +36,15 @@ class OnnoUiPluginTest {
 
         run("onnoUiInit")
 
-        for (f in listOf("package.json", "vite.config.ts", "tsconfig.json", "index.html", "main.tsx", "pages/README.md")) {
+        for (f in listOf("package.json", "vite.config.ts", "tsconfig.json", "index.html", ".gitignore", "main.tsx",
+                "pages/README.md", "pages/LoginPage.tsx", "components/README.md")) {
             assertThat(ui.resolve(f)).exists()
         }
-        assertThat(Files.readString(ui.resolve("package.json"))).contains("\"@onno/ui\"")
+        assertThat(ui.resolve("gitignore")).doesNotExist()
+        assertThat(Files.readString(ui.resolve("package.json")))
+            .contains("\"@onno/ui\"").doesNotContain("{{onnoUiVersion}}")
+        assertThat(Files.readString(ui.resolve("main.tsx"))).contains("login: LoginPage")
+        assertThat(Files.readString(ui.resolve("pages/LoginPage.tsx"))).contains("<DefaultLogin")
         assertThat(Files.readString(ui.resolve("vite.config.ts"))).contains("onno()")
         assertThat(Files.readString(ui.resolve("main.tsx"))).contains("defineApp(")
         assertThat(Files.readString(ui.resolve("pages/HomePage.tsx"))).isEqualTo("// mine\n")

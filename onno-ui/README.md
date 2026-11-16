@@ -19,7 +19,8 @@ Java entities. `./gradlew onnoUiInit` seeds this layout:
 | File | What it is |
 | --- | --- |
 | `package.json`, `vite.config.ts`, `tsconfig.json`, `index.html` | A normal Vite app. The config is `plugins: [onno()]` from `@onno/ui/vite`. |
-| `main.tsx` | One `defineApp({ pages, navigation })` call. |
+| `main.tsx` | One `defineApp({ login, pages, navigation })` call. Every default screen is wired explicitly, so you change one by editing its file. |
+| `pages/LoginPage.tsx`, `pages/HomePage.tsx` | The `/login` screen and the page at `/`, seeded as the framework's `<DefaultLogin>` and `<DefaultHome>`. |
 | `pages/*.tsx`, `components/*.tsx` | The app's own pages and components. |
 | `model.gen.ts` | Generated on every build (git-ignored). Types entity names, fields and enum values. |
 
@@ -112,7 +113,8 @@ Everything an app can import is in [`src/index.ts`](src/index.ts); the types are
 
 | Area | Exports |
 | --- | --- |
-| The app | `defineApp(app)` — `pages` (`path` or `list` or `record`, `component`, `label`, `icon`, `roles`, `when`, `view`), `navigation` (sections of entity names and page paths, or a function of the model), `extensions` (components for named `ExtensionSlot` outlets). |
+| The app | `defineApp(app)` — `pages` (`path` or `list` or `record`, `component`, `label`, `icon`, `roles`, `when`, `view`), `navigation` (sections of entity names and page paths, or a function of the model), `extensions` (components for named `ExtensionSlot` outlets), `login` (the app's own login page). |
+| Login | `useSignIn()` (`password`, `method(id, credentials)`, `challenge(id, input)`, `redirect(provider)`), `useLoginMethods()`, `LoginLayout`, `SignInMethods`, `PasswordLogin`, `SsoButtons`, `LoginButton`, `DefaultLogin`, `SignInError`; types `LoginPageProps`, `LoginMethods`, `SsoOption`. |
 | Navigation UI | `Navigation`, `NavigationSection`, `NavigationGroup`, `NavigationLink`, `DefaultNavigation`; section `actions`, nested `items`, optional `navigationComponent`. |
 | Navigation | `openRecord(entity, id?, prefill?)`, `openRoute(link \| path, { newTab? })`, `RouteLink` (an anchor that opens in the workspace), `links.record` / `newRecord` / `list` / `page` (typed `onno://` links). A command result's `navigateTo` is applied after its feedback and refresh. |
 | Model | `useModel()`, `useHasRole(...roles)`. |
@@ -167,6 +169,47 @@ outlets remain available for actions, side panels, context menus, and chat contr
 **Roles and pages.** `RoleName` is typed from the `@AccessControl` roles in the model; add a
 runtime-only role with `declare module "@onno/ui" { interface OnnoRoles { SUPPORT: true } }`. A page's
 `roles` hide it and its nav link; the server still enforces access on every call.
+
+## Custom login page
+
+`defineApp({ login: MyLogin })` replaces the framework's `/login` screen. The page receives
+`LoginPageProps` (`methods` from `GET /api/ui/login`, a localized `?error=` message, and `from`)
+and signs in with `useSignIn()`; every successful sign-in returns to `from`. Compose it from the
+default parts or write anything else — it renders before sign-in, so it has no model and must not use
+data hooks.
+
+```tsx
+import { Button, Input, LoginLayout, SsoButtons, useSignIn, type LoginPageProps } from "@onno/ui";
+
+function CodeLogin({ methods, error }: LoginPageProps) {
+  const signIn = useSignIn();
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [sent, setSent] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const run = (step: () => Promise<unknown>) => step().catch((e: Error) => setProblem(e.message));
+  return (
+    <LoginLayout error={problem ?? error}>
+      <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Work e-mail" />
+      {sent && <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Code" />}
+      <Button onClick={() => run(sent
+        ? () => signIn.method("code", { email, code })            // POST /api/auth/login/code
+        : () => signIn.challenge("code", { email }).then(() => setSent(true)))}>
+        {sent ? "Sign in" : "Email me a code"}
+      </Button>
+      {methods && <SsoButtons providers={methods.providers} />}  {/* e.g. "Continue with Keycloak" */}
+    </LoginLayout>
+  );
+}
+
+defineApp({ login: CodeLogin, pages: [/* … */] });
+```
+
+`signIn.method`/`challenge` call an application `LoginMethod` bean on the server (see
+[`onno-auth-starter`](../onno-auth-starter/README.md#application-login-methods)); `signIn.redirect`
+starts an SSO provider (OIDC/Keycloak, a connector's own flow); `signIn.password` is the ordinary
+password login. A single "Sign in with Keycloak" page is
+`<LoginLayout><LoginButton primary label="Sign in" onClick={() => signIn.redirect(methods!.providers[0])} /></LoginLayout>`.
 
 ## Replace built-in components
 

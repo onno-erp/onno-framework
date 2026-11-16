@@ -56,7 +56,8 @@ public class OnnoAuthProperties {
      * Legacy configuration: custom values are combined with the mandatory framework paths.
      * Prefer {@code onno.auth.additional-public-paths} for new configurations.
      * The defaults are: {@code /error}, {@code /api/theme}, {@code /api/config}, {@code /api/branding},
-     * {@code /api/auth/login}, {@code /api/auth/me}, {@code /api/auth/csrf}, {@code /api/ui/login},
+     * {@code /api/auth/login}, {@code /api/auth/login/{method}} and {@code /api/auth/login/{method}/challenge}
+     * (application login methods), {@code /api/auth/me}, {@code /api/auth/csrf}, {@code /api/ui/login},
      * {@code /api/desktop/ready}, {@code /api/desktop/manifest}.
      */
     private List<String> publicPaths = new ArrayList<>(FRAMEWORK_PUBLIC_PATHS);
@@ -72,6 +73,11 @@ public class OnnoAuthProperties {
             // screen carries the consumer's brand. Non-sensitive, like theme/config.
             "/api/branding",
             "/api/auth/login",
+            // Application-defined login methods (su.onno.auth.spi.LoginMethod): a one-time code, a
+            // magic link, … Unlike the password login these stay CSRF-protected; the SPA already
+            // holds the XSRF-TOKEN cookie from its /api/auth/me call before it shows the login page.
+            "/api/auth/login/*",
+            "/api/auth/login/*/challenge",
             // Current auth state + the login methods to offer (mode, SSO loginUrl, logoutUrl). Must
             // be reachable unauthenticated so the SPA can decide what to render before sign-in;
             // returns only non-sensitive routing info (anonymous state when not logged in).

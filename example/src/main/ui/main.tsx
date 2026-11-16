@@ -38,6 +38,7 @@ import { BooksPage, BookPage } from "./pages/BooksPage";
  * what differs: how some entities present (entities/), the app's own pages (pages/) and the sidebar.
  */
 import { defineApp } from "@onno/ui";
+import { LoginPage } from "./pages/LoginPage";
 import { crmInboxAvailable } from "./lib/crm";
 import { HomePage } from "./pages/HomePage";
 import { SalesOpsPage } from "./pages/SalesOpsPage";
@@ -53,6 +54,7 @@ import { TasksPage } from "./pages/TasksPage";
 import { TeamPage } from "./pages/TeamPage";
 
 defineApp({
+  login: LoginPage,
   pages: [
     { list: "Books", component: BooksPage, icon: BookOpen },
     { record: "Books", component: BookPage },

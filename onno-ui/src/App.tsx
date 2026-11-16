@@ -112,7 +112,7 @@ export default function App({ app = {} }: { app?: AppDefinition }) {
   return (
     <BrowserRouter basename={BASE_PATH}>
       <Routes>
-        <Route path="/login" element={<WorkspaceProviders><LoginView /></WorkspaceProviders>} />
+        <Route path="/login" element={<WorkspaceProviders><LoginView component={app.login} /></WorkspaceProviders>} />
         <Route path="*" element={<WorkspaceProviders><AppConfigProvider app={app}><ProtectedApp /></AppConfigProvider></WorkspaceProviders>} />
       </Routes>
     </BrowserRouter>

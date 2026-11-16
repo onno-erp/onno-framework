@@ -120,7 +120,10 @@ Descriptors are plain objects that may carry the app's functions and components 
 
 There is no name → component registry: the server never names a component, and nothing registers
 itself on import. Extension outlets (`ExtensionSlot`: a form's actions, a list's context menu, the
-CRM chat header) render the app's `defineApp({ extensions })` contributions from context. Every
+CRM chat header) render the app's `defineApp({ extensions })` contributions from context. The
+`/login` route renders `defineApp({ login })` when given (else `DefaultLogin`), handing it
+`LoginPageProps`; `useSignIn()` (`components/auth/sign-in.tsx`) is the one sign-in path for both,
+covering password, application `LoginMethod` beans (`/api/auth/login/{method}`) and SSO redirects. Every
 component is a plain one: the widgets (`Stat`, `Chart`, `Calendar`, …, one file each in `src/components/`) take
 typed props and read data through `useEntitySource(entity)` and the TanStack hooks in
 `lib/aggregate-data.ts`.
@@ -171,7 +174,8 @@ The Java beans (a `CrmInboxWorkspace`) say what exists and who may use it; the p
 - The root `package.json` is an npm workspace over `@onno/ui`, the starters' packages and the
   example app: one `npm install`, one `node_modules`, the packages symlinked.
 - `onno-ui-gradle-plugin` (`id("su.onno.ui")`) is the only Gradle glue: `generateUiModel` writes
-  `model.gen.ts`, `buildUi` runs `vite build` into the jar's `onno-app/`, `onnoUiInit` seeds a new
+  `model.gen.ts`, `buildUi` runs `vite build` into the jar's `onno-app/`, `onnoUiInit` seeds (from the plugin's
+  `resources/su/onno/ui/template` file tree, login and home wired explicitly) a new
   app. About 150 lines.
 - The starter's own build (`onno-web-starter/build.gradle.kts`) builds the default shell with the
   same preset and runs the frontend tests.

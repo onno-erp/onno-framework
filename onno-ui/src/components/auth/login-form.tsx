@@ -1,9 +1,8 @@
 import { FormEvent, useState } from "react";
-import { useLocation, useNavigate } from "react-router";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { useAuth } from "../../providers/auth-provider";
+import { useSignIn } from "./sign-in";
 import { useMessages } from "../../providers/messages-provider";
 
 /** A one-tap demo sign-in: a button label plus the credentials it submits (server-configured). */
@@ -18,22 +17,18 @@ export type DemoAccount = { label: string; username: string; password: string };
  * with its credentials, so an evaluator never types anything.</p>
  */
 export function LoginForm({ demoAccounts = [] }: { demoAccounts?: DemoAccount[] }) {
-  const { login } = useAuth();
+  const signIn = useSignIn();
   const t = useMessages();
-  const navigate = useNavigate();
-  const location = useLocation();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? "/";
 
-  async function signIn(user: string, pass: string) {
+  async function submit(user: string, pass: string) {
     setSubmitting(true);
     setError("");
     try {
-      await login(user, pass);
-      navigate(from, { replace: true });
+      await signIn.password(user, pass);
     } catch {
       setError(t("login.invalid"));
       setSubmitting(false);
@@ -42,7 +37,7 @@ export function LoginForm({ demoAccounts = [] }: { demoAccounts?: DemoAccount[] 
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void signIn(username, password);
+    void submit(username, password);
   }
 
   return (
@@ -88,7 +83,7 @@ export function LoginForm({ demoAccounts = [] }: { demoAccounts?: DemoAccount[] 
               variant="outline"
               className="w-full"
               disabled={submitting}
-              onClick={() => void signIn(account.username, account.password)}
+              onClick={() => void submit(account.username, account.password)}
             >
               {account.label}
             </Button>

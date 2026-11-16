@@ -40,8 +40,24 @@ val versionResource by tasks.registering {
     doLast { out.get().asFile.apply { parentFile.mkdirs() }.writeText(v) }
 }
 
+// The onnoUiInit template is a plain file tree in resources; a jar cannot list its resources, so
+// write the tree's relative paths to an index the plugin reads (see UiTemplate).
+val templateDir = layout.projectDirectory.dir("src/main/resources/su/onno/ui/template")
+val templateIndex by tasks.registering {
+    val out = layout.buildDirectory.file("template-index/template.index")
+    inputs.dir(templateDir)
+    outputs.file(out)
+    doLast {
+        val root = templateDir.asFile
+        val paths = root.walkTopDown().filter { it.isFile }
+            .map { it.relativeTo(root).invariantSeparatorsPath }.sorted().toList()
+        out.get().asFile.apply { parentFile.mkdirs() }.writeText(paths.joinToString("\n", postfix = "\n"))
+    }
+}
+
 tasks.named<ProcessResources>("processResources") {
     from(versionResource)
+    from(templateIndex) { into("su/onno/ui") }
 }
 
 gradlePlugin {

@@ -177,6 +177,8 @@ CSRF protection is **enabled** using `CookieCsrfTokenRepository.withHttpOnlyFals
 | Method | Path | Auth | Body | Response |
 |--------|------|------|------|----------|
 | `POST` | `/api/auth/login` | public, CSRF-exempt | `{"username":"...","password":"...","remember":true}` | `200` `{"authenticated":true,"username":"...","roles":["ROLE_ADMIN",...]}`; `401` on bad credentials; `400` if username/password missing. `remember` is optional (default `true`) and, when remember-me is enabled, controls whether the persistent cookie is issued |
+| `POST` | `/api/auth/login/{method}/challenge` | public, CSRF-protected | the method's own JSON | The first step of an application [`LoginMethod`](#application-login-methods) (e.g. send a code): `200` with its non-secret result; `401` `{"message":…}` when it refuses; `404` for an unknown method; `409` in `oidc`/`resource-server` mode |
+| `POST` | `/api/auth/login/{method}` | public, CSRF-protected | the method's own JSON (+ optional `remember`) | Signs in the account the `LoginMethod` names: `200` `AuthUser`; `401` (with the method's `message` when it refuses) for wrong credentials and for an unknown, disabled or locked account; `404` for an unknown method; `409` in `oidc`/`resource-server` mode |
 | `GET` | `/api/auth/me` | public | — | Current user, or `{"authenticated":false,"username":"","roles":[]}` when anonymous |
 | `GET` | `/api/auth/csrf` | public | — | This session's CSRF token: `{"token":"...","headerName":"X-XSRF-TOKEN","parameterName":"_csrf"}`. For clients that can't read the `XSRF-TOKEN` cookie; `token` is `null` in `resource-server` mode (CSRF off) |
 | `POST` | `/api/auth/logout` | authenticated (needs CSRF header) | — | `204 No Content`; cancels the remember-me cookie, clears the security context, and invalidates the session |
@@ -494,6 +496,42 @@ The three- and four-argument constructors remain (they default `monochrome = fal
 `buttonLabel = null`), so existing buttons need no change. When a deployment offers both a password
 form and SSO buttons, the login screen splits into two steps — a method picker, then the credentials
 form behind a back link — so it stays uncluttered; single-method screens render inline as before.
+
+### Application login methods
+
+For a sign-in that is neither a password nor an SSO redirect — a one-time code by e-mail/SMS, a
+magic link, a badge scan — register a `su.onno.auth.spi.LoginMethod` bean. The method only decides
+*who* the caller is; the framework then establishes the session exactly like a password login
+(session-id rotation, remember-me, last-login stamp, database-mode session guard). Pair it with the
+app's own React login page (`defineApp({ login })`, see [`@onno/ui`](../onno-ui/README.md#custom-login-page)).
+
+```java
+@Component
+class EmailCodeLogin implements LoginMethod {
+    private final OneTimeCodes codes;                  // the app's service: store, expire, throttle
+    EmailCodeLogin(OneTimeCodes codes) { this.codes = codes; }
+
+    @Override public String id() { return "code"; }   // POST /api/auth/login/code[/challenge]
+
+    @Override public Map<String, Object> challenge(Map<String, Object> input) {
+        codes.send((String) input.get("email"));        // answer the same whether or not it exists
+        return Map.of("sent", true);                    // sent to the browser: never the code
+    }
+
+    @Override public String authenticate(Map<String, Object> credentials) {
+        return codes.verify((String) credentials.get("email"), (String) credentials.get("code"))
+                .orElseThrow(() -> new LoginRejectedException("The code is wrong or has expired"));
+    }
+}
+```
+
+- The returned username must be an account of the configured store (`database` or `in-memory`);
+  unknown, disabled and locked accounts answer the same `401` as wrong credentials. Custom methods
+  are unavailable (`409`) in `oidc`/`resource-server` modes, where the identity provider owns sign-in.
+- Unlike the password login, these endpoints stay **CSRF-protected**; the SPA already holds the
+  `XSRF-TOKEN` cookie from its `/api/auth/me` call. Native clients fetch it from `/api/auth/csrf`.
+- The method owns abuse controls: code expiry, attempt limits and send throttling.
+- Method ids are lower-case letters, digits and dashes; duplicates fail at startup.
 
 ## Gotchas
 

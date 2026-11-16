@@ -1145,6 +1145,13 @@ Use `{ path: "/ops", component: SalesOpsPage }` for ordinary pages. There is no 
   `NavigationProps` provides the resolved tree, active path, mobile flag and desktop header/footer.
   Custom links share model/page gates and the shell dispatcher. The default desktop rail also
   exposes `shell.navigation.actions`. See [onno-ui/README.md](onno-ui/README.md) for examples.
+- **Login page**: `defineApp({ login: MyLogin })` replaces `/login` (the seeded `pages/LoginPage.tsx`
+  starts as `<DefaultLogin {...props} />`) (a one-time code form, a lone
+  "Sign in with Keycloak" button, …). It gets `LoginPageProps` and signs in with `useSignIn()`
+  (`password`, `method(id, credentials)` / `challenge(id, input)` for a Java
+  `su.onno.auth.spi.LoginMethod` bean, `redirect(provider)` for SSO); compose `LoginLayout`,
+  `SignInMethods`, `PasswordLogin`, `SsoButtons`, `LoginButton`. A `LoginMethod` only names the
+  user; the framework creates the session. Do not hand-roll a login controller.
 - **Pages** are React components composed from `@onno/ui` exports: `Page`, `Row`, `EntityList`
   (controllable like an `<input>`: `where`, `defaultGroupBy`, `selection` + `onSelectionChange`, …),
   the widgets `Stat`, `Chart`, `Sparkline`, `Gauge`, `RecentRecords`, `Kanban`, `Calendar`,
