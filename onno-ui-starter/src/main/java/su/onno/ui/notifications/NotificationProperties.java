@@ -22,9 +22,9 @@ public class NotificationProperties {
     private boolean enabled = true;
 
     /**
-     * Rows fetched per timeline window (the bell panel scrolls these keyset windows). Defaults to 30.
+     * Rows fetched per timeline window (the bell panel scrolls these keyset windows). Defaults to 100; the shared hard ceiling is 500.
      */
-    private int pageSize = 30;
+    private int pageSize = 100;
 
     /**
      * How many days a <em>read</em> notification is kept before the daily retention sweep deletes it.

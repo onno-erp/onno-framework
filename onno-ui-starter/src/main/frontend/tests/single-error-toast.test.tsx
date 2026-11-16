@@ -126,7 +126,9 @@ describe("one failed request, one toast", () => {
 
     /** The inbox lists `task`; `route` answers the one action under test. */
     const inbox = (task: ProcessWorkItem, route: Route): Route => (url, method) => {
-      if (url === "/api/tasks" && method === "GET") return response(200, [task]);
+      if (url === "/api/tasks" && method === "GET") {
+        return response(200, { rows: [task], nextCursor: null, hasMore: false });
+      }
       if (url.startsWith("/api/task-assignees")) {
         return response(200, [
           { actorId: "employee-1", username: "mara@example.test", display: "Mara", avatarUrl: null },
@@ -222,7 +224,7 @@ describe("one failed request, one toast", () => {
     describe("add", () => {
       const add = async (create: () => Response) => {
         stubFetch((url, method) => {
-          if (url === related) return response(200, []);
+          if (url === related) return response(200, { rows: [], nextCursor: null, hasMore: false });
           if (url === "/api/catalogs/order_tags" && method === "POST") return create();
           throw new Error(`unexpected ${method} ${url}`);
         });
@@ -246,7 +248,9 @@ describe("one failed request, one toast", () => {
 
     it("remove: shows only its own 'Couldn't remove' toast", async () => {
       stubFetch((url, method) => {
-        if (url === related) return response(200, [{ id: "row-1", tag: "t-1", tagDisplay: "Urgent" }]);
+        if (url === related) return response(200, {
+          rows: [{ id: "row-1", tag: "t-1", tagDisplay: "Urgent" }], nextCursor: null, hasMore: false,
+        });
         if (url === "/api/catalogs/order_tags/row-1" && method === "DELETE") {
           return response(409, { message: "Row is locked" });
         }

@@ -80,7 +80,7 @@ function loadFirstPage(): Promise<void> {
     .then((page) => {
       const types = page.types ?? [];
       set({
-        items: page.items,
+        items: page.rows,
         unreadCount: page.unreadCount,
         nextCursor: page.nextCursor,
         hasMore: page.hasMore,
@@ -106,7 +106,7 @@ export function loadMoreNotifications(): Promise<void> {
     .then((page) => {
       // Drop any id already present (a live delta may have prepended it) before appending.
       const have = new Set(state.items.map((n) => n.id));
-      const fresh = page.items.filter((n) => !have.has(n.id));
+      const fresh = page.rows.filter((n) => !have.has(n.id));
       set({
         items: [...state.items, ...fresh],
         unreadCount: page.unreadCount,

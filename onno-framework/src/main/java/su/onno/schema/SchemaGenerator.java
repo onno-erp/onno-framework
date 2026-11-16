@@ -111,6 +111,10 @@ public class SchemaGenerator {
         statements.add(index("onno_process_tokens", "_status", "_due_at"));
         statements.add(index("onno_process_tokens", "_parent_token_id", "_branch_key"));
         statements.add(index("onno_process_work_items", "_instance_id", "_status"));
+        statements.add(index("onno_process_work_candidates", "_kind", "_value", "_work_item_id"));
+        statements.add(index("onno_process_instances", "_started_at", "_id"));
+        statements.add(index("onno_process_work_items", "_created_at", "_id"));
+        statements.add(index("onno_process_work_items", "_candidates_indexed", "_id"));
         statements.add(index("onno_process_work_items", "_token_id"));
         statements.add(index("onno_process_work_items", "_status", "_created_at"));
         statements.add(index("onno_process_transitions", "_instance_id", "_sequence"));

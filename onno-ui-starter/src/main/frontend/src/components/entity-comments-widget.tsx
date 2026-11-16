@@ -1,3 +1,4 @@
+import { useRequestScope } from "@/hooks/use-request-scope";
 import { useSurfaceRefresh } from "@/lib/surface-refresh";
 import { openRoute } from "@/lib/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -28,7 +29,7 @@ export type CommentTarget = { kind: "catalogs" | "documents"; name: string; id: 
  * `onno://` route on click.
  */
 const MENTION_TOKEN =
-  /([@#])\[([^\]]+)\]\((catalogs|documents)\/([^/)\s]+)\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\)/g;
+  /([@#])\[([^\u005D]+)]\((catalogs|documents)\/([^/)\s]+)\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\)/g;
 
 // A pending `@`/`#` pick in the compose box, recorded the moment a suggestion is chosen. The
 // compose textarea holds clean `@Display`/`#Display` text; at submit time each pick's display run is rewritten
@@ -216,7 +217,10 @@ export function EntityCommentsWidget({ target, composerOnly = false, onPosted, o
   onDraftChange?: (body: string) => void; disabled?: boolean;
 }) {
   const { kind, name, id } = target;
+  const requests = useRequestScope(JSON.stringify([kind, name, id, composerOnly]));
   const [comments, setComments] = useState<CommentView[] | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [body, setBody] = useState("");
   const [picks, setPicks] = useState<Pick[]>([]);
   const [replyTo, setReplyTo] = useState<CommentView | null>(null);
@@ -235,18 +239,36 @@ export function EntityCommentsWidget({ target, composerOnly = false, onPosted, o
   const load = useCallback(() => {
     if (composerOnly) return;
     let cancelled = false;
+    const current = requests.begin();
+    setNextCursor(null); setLoadingMore(false);
     api
       .listComments(kind, name, id)
-      .then((rows) => {
-        if (!cancelled) setComments(rows);
+      .then((page) => {
+        if (!cancelled && current()) { setComments(page.rows); setNextCursor(page.nextCursor); }
       })
       .catch(() => {
-        if (!cancelled) setComments([]);
+        if (!cancelled && current()) setComments([]);
       });
     return () => {
       cancelled = true;
     };
-  }, [kind, name, id, composerOnly]);
+  }, [kind, name, id, composerOnly, requests]);
+
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) return;
+    const current = requests.capture();
+    setLoadingMore(true);
+    try {
+      const page = await api.listComments(kind, name, id, nextCursor);
+      if (!current()) return;
+      setComments(previous => {
+        const have = new Set((previous ?? []).map(row => row.id));
+        return [...(previous ?? []), ...page.rows.filter(row => !have.has(row.id))];
+      });
+      setNextCursor(page.nextCursor);
+    } catch (failure) { if (current()) toast.error(String(failure)); }
+    finally { if (current()) setLoadingMore(false); }
+  };
 
   useEffect(() => load(), [load]);
   useSurfaceRefresh(load);
@@ -413,18 +435,17 @@ export function EntityCommentsWidget({ target, composerOnly = false, onPosted, o
     try {
       await api.deleteComment(commentId);
     } catch {
-      setComments(prev ?? null);
+      setComments(prev);
     }
   };
 
   const toggleReaction = async (commentId: string, emoji: string) => {
-    const prev = comments;
     try {
       const reactions = await api.toggleCommentReaction(commentId, emoji);
       setComments((cur) => (cur ?? []).map((c) => (c.id === commentId ? { ...c, reactions } : c)));
       setOpenReactionFor(null);
     } catch {
-      setComments(prev ?? null);
+      // The request failed before local state changed; keep the current comments.
     }
   };
 
@@ -614,6 +635,8 @@ export function EntityCommentsWidget({ target, composerOnly = false, onPosted, o
         </ul>
       )}
 
+      {nextCursor && <button type="button" disabled={loadingMore} onClick={() => void loadMore()}
+        className="mt-3 rounded-control border px-3 py-1.5 text-sm">Load more</button>}
       </>}
       <div className={composerOnly ? "relative" : "relative mt-4"}>
         {replyTo ? (

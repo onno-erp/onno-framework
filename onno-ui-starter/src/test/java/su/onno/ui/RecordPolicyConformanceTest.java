@@ -394,7 +394,7 @@ class RecordPolicyConformanceTest {
                 .content("{\"targetKind\":\"catalog\",\"targetName\":\"LkTenants\",\"query\":\"\"}")));
         assertThat(ids(options)).first().isEqualTo(tenantA.toString());
         assertThat(ids(options)).doesNotContain(tenantB.toString());
-        assertThat(options.get(0)).containsEntry("_recent", true);
+        assertThat(options.getFirst()).containsEntry("_recent", true);
         assertThat(options.stream().filter(o -> Boolean.TRUE.equals(o.get("_recent")))).hasSize(1);
 
         // The picker dialog (#411): an out-of-scope id is left out exactly like an unknown one, so
@@ -422,11 +422,11 @@ class RecordPolicyConformanceTest {
     }
 
     private void treesPromoteOrphans() throws Exception {
-        List<Map<String, Object>> tree = jsonList(ok(get("/api/catalogs/LkInstances/tree")));
+        List<Map<String, Object>> tree = pageRows(ok(get("/api/catalogs/LkInstances/tree")));
         assertThat(ids(tree)).contains(instanceUnderB.toString());
         assertThat(row(tree, instanceUnderB)).containsEntry("parent", null).containsEntry("parentRestricted", true);
-        assertThat(ids(jsonList(ok(get("/api/catalogs/LkInstances/children"))))).contains(instanceUnderB.toString());
-        assertThat(jsonList(ok(get("/api/catalogs/LkInstances/children").param("parent", instanceB.toString()))))
+        assertThat(ids(pageRows(ok(get("/api/catalogs/LkInstances/children"))))).contains(instanceUnderB.toString());
+        assertThat(pageRows(ok(get("/api/catalogs/LkInstances/children").param("parent", instanceB.toString()))))
                 .allSatisfy(r -> assertThat(r.get("parent")).isNull());
 
         // Picker folder browsing (#411): folders-only children and the pruned path tree are scoped
@@ -440,14 +440,14 @@ class RecordPolicyConformanceTest {
 
     private void registersAreScopedByDimension() throws Exception {
         assertThat((List<?>) jsonMap(ok(get("/api/information-registers/LkTenantFacts/records"))).get("rows")).hasSize(1);
-        List<Map<String, Object>> movements = jsonList(ok(get("/api/registers/LkUsage/movements")));
+        List<Map<String, Object>> movements = pageRows(ok(get("/api/registers/LkUsage/movements")));
         assertThat(movements).hasSize(1);
-        List<Map<String, Object>> balance = jsonList(ok(get("/api/registers/LkUsage/balance")));
+        List<Map<String, Object>> balance = pageRows(ok(get("/api/registers/LkUsage/balance")));
         assertThat(balance).hasSize(1);
         ok(get("/api/registers/LkUsage/turnover").param("from", "2000-01-01T00:00:00").param("to", "2999-01-01T00:00:00"));
-        Map<String, Object> window = jsonMap(ok(get("/api/list/registers/LkUsage/movements")));
+        Map<String, Object> window = jsonMap(ok(get("/api/list/registers/LkUsage/movements").param("count", "exact")));
         assertThat(window.get("total")).isEqualTo(1);
-        assertThat(jsonMap(ok(get("/api/list/registers/LkUsage/balance"))).get("total")).isEqualTo(1);
+        assertThat(jsonMap(ok(get("/api/list/registers/LkUsage/balance").param("count", "exact"))).get("total")).isEqualTo(1);
     }
 
     private void recordSidecarsAreScoped() throws Exception {
@@ -500,10 +500,12 @@ class RecordPolicyConformanceTest {
                 .map(r -> String.valueOf(((Map<?, ?>) r).get("id"))).toList();
         assertThat(presenceIds).containsExactlyInAnyOrder("/catalogs/LkTenants", "new");
 
-        Map<String, Object> feed = jsonMap(ok(get("/api/notifications")));
-        assertThat((List<?>) feed.get("items")).hasSize(1);
-        // The badge counts only what the feed shows.
+        Map<String, Object> feed = jsonMap(ok(get("/api/notifications").param("limit", "1")));
+        assertThat((List<?>) feed.get("rows")).hasSize(1);
+        assertThat(feed).doesNotContainKey("items");
         assertThat(feed.get("unreadCount")).isEqualTo(1);
+        assertThat(feed.get("hasMore")).isEqualTo(false);
+        assertThat(feed.get("nextCursor")).isNull();
 
         ok(get("/api/tasks"));
     }
@@ -614,7 +616,7 @@ class RecordPolicyConformanceTest {
     private void cursorsAreBoundToTheirSubject() throws Exception {
         Map<String, Object> first = jsonMap(ok(get("/api/list/catalogs/LkTenants").param("limit", "1")));
         String cursor = (String) first.get("nextCursor");
-        assertThat(cursor).contains("~");
+        assertThat(cursor).isNotBlank();
         ok(get("/api/list/catalogs/LkTenants").param("limit", "1").param("cursor", cursor));
         int replayed = mvc.perform(get("/api/list/catalogs/LkTenants").principal(STAFF)
                 .param("limit", "1").param("cursor", cursor)).andReturn().getResponse().getStatus();
@@ -698,7 +700,7 @@ class RecordPolicyConformanceTest {
         return status(request, 200);
     }
 
-    private String status(MockHttpServletRequestBuilder request, int expected) throws Exception {
+private String status(MockHttpServletRequestBuilder request, int expected) throws Exception {
         MvcResult result = mvc.perform(request.principal(CUSTOMER_A)).andReturn();
         String body = result.getResponse().getContentAsString();
         assertThat(result.getResponse().getStatus())
@@ -720,6 +722,13 @@ class RecordPolicyConformanceTest {
 
     private Map<String, Object> jsonMap(String body) throws Exception {
         return json.readValue(body, new TypeReference<>() {});
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> pageRows(String body) throws Exception {
+        Map<String, Object> page = jsonMap(body);
+        assertThat(page).containsKeys("rows", "nextCursor", "hasMore");
+        return (List<Map<String, Object>>) page.get("rows");
     }
 
     private List<Map<String, Object>> jsonList(String body) throws Exception {

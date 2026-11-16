@@ -1394,3 +1394,21 @@ recheck rights, and never fall back to sending as the ordinary bot.
 CRM file-only messages rely on conditional text-or-attachments validation: keep the Body attribute
 optional. Gmail/Telegram ingest provider file bytes through CrmAttachments; never persist token-bearing
 provider download URLs. Filesystem media metadata lives under an unservable .metadata directory.
+
+
+## Collection pagination implementation
+
+Forward collection windows use `su.onno.query.KeysetWindow` with typed tuples issued by
+`su.onno.query.Cursor`. Keep access predicates in SQL before LIMIT. Register balances seek by
+the dimension primary key; do not invent an `_id` for totals. Numeric offset pagination and legacy response aliases are removed. Process assignment JSON has a transactional `onno_process_work_candidates`
+projection and resumable backfill; keep it in sync when creating assignments. Notification target
+columns are a normalized projection of internal record links, backfilled at startup, and allow
+record-policy filtering before pagination. Wire contracts live in docs/HEADLESS_READ_API.md.
+
+
+All collection transports now use the context-bound v2 Cursor codec (100 default, 500 maximum).
+Validate cursor JDBC value types before executing seek comparisons; malformed positions restart,
+foreign contexts are 400. Preserve SQL DATE values, not String approximations. CRM projections
+must share the Spring transaction/connection with repository callbacks. SDK register reads expose
+continuations; accounting widgets consume all pages. The cursor-only collection contract
+and bounded-selector exceptions are specified only in docs/HEADLESS_READ_API.md.

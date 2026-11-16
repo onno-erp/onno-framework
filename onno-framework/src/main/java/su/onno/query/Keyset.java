@@ -27,9 +27,9 @@ package su.onno.query;
 public final class Keyset {
 
     /** Default page size when a client doesn't ask for one — small, since keyset favours many cheap pages. */
-    public static final int DEFAULT_LIMIT = 50;
+    public static final int DEFAULT_LIMIT = KeysetWindow.DEFAULT_LIMIT;
     /** Hard ceiling so one request can't pull an unbounded window (mirrors the list API's cap). */
-    public static final int MAX_LIMIT = 500;
+    public static final int MAX_LIMIT = KeysetWindow.MAX_LIMIT;
 
     /** Reserved bind names for the seek comparison — distinctive so they never collide with a column filter. */
     public static final String VALUE_BIND = "ksSeekValue";

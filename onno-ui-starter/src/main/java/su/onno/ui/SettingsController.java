@@ -41,6 +41,8 @@ public class SettingsController {
     @GetMapping
     public List<Map<String, Object>> list(Principal principal) {
         requireAdmin(principal);
+        if (registry.allConstants().size() > 500) throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "Settings exceed the 500-item metadata limit");
         return registry.allConstants().stream()
                 .sorted(Comparator.comparing(ConstantDescriptor::logicalName))
                 .map(d -> {

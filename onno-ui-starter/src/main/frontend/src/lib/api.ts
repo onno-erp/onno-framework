@@ -2,12 +2,7 @@ import { toast } from "@/components/ui/toast";
 import type {
   AppConfig,
   Branding,
-  CatalogMeta,
-  DashboardWidgetMeta,
-  DocumentMeta,
   EntityRecord,
-  LayoutSection,
-  RegisterMeta,
   AuthUser,
   UserAccountView,
   UiEvent,
@@ -468,7 +463,13 @@ export interface NotificationView {
 }
 
 /** One newest-first window of the notification timeline, plus the badge's unread total. */
-export interface NotificationPage {
+export interface CollectionPage<T> {
+  rows: T[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+export interface NotificationPage extends CollectionPage<NotificationView> {
   items: NotificationView[];
   nextCursor: string | null;
   hasMore: boolean;
@@ -608,13 +609,14 @@ export const api = {
     fetchJson<void>(`${BASE}/settings`, { method: "PUT", body: JSON.stringify(values) }, opts),
 
   // Durable business-process work
-  listProcessTasks: () => fetchJson<ProcessWorkItem[]>(`${BASE}/tasks`),
+  listProcessTasks: (cursor?: string | null) =>
+    fetchJson<CollectionPage<ProcessWorkItem>>(`${BASE}/tasks${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`),
   claimProcessTask: (id: string) =>
     fetchJson<ProcessWorkItem>(`${BASE}/tasks/${id}/claim`, { method: "POST" }),
   searchTaskAssignees: (query: string) =>
     fetchJson<TaskAssigneeOption[]>(`${BASE}/task-assignees?q=${encodeURIComponent(query)}`),
-  getProcessTaskHistory: (id: string) =>
-    fetchJson<ProcessWorkItemEvent[]>(`${BASE}/tasks/${id}/history`),
+  getProcessTaskHistory: (id: string, cursor?: string | null) =>
+    fetchJson<CollectionPage<ProcessWorkItemEvent>>(`${BASE}/tasks/${id}/history${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`),
   delegateProcessTask: (id: string, targetActorId: string, reason: string) =>
     fetchJson<ProcessWorkItem>(`${BASE}/tasks/${id}/delegate`, {
       method: "POST",
@@ -669,10 +671,11 @@ export const api = {
    * The folders directly under {@code parent} (the roots without it) of a hierarchical catalog, each
    * flagged {@code hasChildFolders} so a folder tree draws an arrow only where it can expand (#411).
    */
-  getCatalogChildFolders: (name: string, parent: string | null) => {
+  getCatalogChildFolders: (name: string, parent: string | null, cursor?: string | null) => {
     const qs = new URLSearchParams({ folders: "true" });
     if (parent) qs.set("parent", parent);
-    return fetchJson<EntityRecord[]>(`${BASE}/catalogs/${encodeURIComponent(name)}/children?${qs.toString()}`);
+    if (cursor) qs.set("cursor", cursor);
+    return fetchJson<CollectionPage<EntityRecord>>(`${BASE}/catalogs/${encodeURIComponent(name)}/children?${qs.toString()}`);
   },
   /**
    * The catalog tree pruned to the paths from the roots to {@code ids}, nested through `children`;
@@ -694,6 +697,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify(pick),
     }, { silent: true }),
+  listCatalogPage: (name: string, filter?: string, page?: { cursor?: string | null; limit?: number }) => {
+    const params = new URLSearchParams({ limit: String(page?.limit ?? 100) });
+    if (filter) params.set("filter", filter);
+    if (page?.cursor) params.set("cursor", page.cursor);
+    return fetchJson<CollectionPage<EntityRecord>>(`${BASE}/list/catalogs/${toSnakeCase(name)}?${params}`);
+  },
   getCatalogItem: (name: string, id: string) =>
     fetchJson<EntityRecord>(`${BASE}/catalogs/${name}/${id}`),
   createCatalogItem: (name: string, data: EntityRecord, opts?: FetchOptions) =>
@@ -713,8 +722,8 @@ export const api = {
     fetchJson<EntityRecord>(`${BASE}/catalogs/${name}/${id}/duplicate`, { method: "POST" }),
   // Live rows of a related-list panel: the junction rows tied to record {id} (see RelatedListMeta).
   // The owner can be a catalog or a document, so the endpoint kind travels with the call.
-  getRelatedList: (kind: "catalogs" | "documents", name: string, id: string, relatedName: string, opts?: FetchOptions) =>
-    fetchJson<EntityRecord[]>(`${BASE}/${kind}/${name}/${id}/related/${relatedName}`, undefined, opts),
+  getRelatedList: (kind: "catalogs" | "documents", name: string, id: string, relatedName: string, cursor?: string | null, opts?: FetchOptions) =>
+    fetchJson<CollectionPage<EntityRecord>>(`${BASE}/${kind}/${name}/${id}/related/${relatedName}${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`, undefined, opts),
 
   // Document CRUD. Date-ranged widgets read one bounded keyset window from the list feed.
   listDocuments: (name: string, from?: string, to?: string, filter?: string) => {
@@ -727,6 +736,15 @@ export const api = {
     return fetchJson<{ rows?: EntityRecord[] }>(
       `${BASE}/list/documents/${name}?${params.toString()}`
     ).then((page) => page.rows ?? []);
+  },
+  listDocumentsPage: (name: string, from?: string, to?: string, filter?: string,
+      page?: { cursor?: string | null; limit?: number }) => {
+    const params = new URLSearchParams({ limit: String(page?.limit ?? 100) });
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    if (filter) params.set("filter", filter);
+    if (page?.cursor) params.set("cursor", page.cursor);
+    return fetchJson<CollectionPage<EntityRecord>>(`${BASE}/list/documents/${toSnakeCase(name)}?${params}`);
   },
   getDocument: (name: string, id: string) =>
     fetchJson<EntityRecord>(`${BASE}/documents/${name}/${id}`),
@@ -844,8 +862,8 @@ export const api = {
     fetchJson<HistoryPage>(
       `${BASE}/history/${kind}/${name}/${id}${before ? `?before=${encodeURIComponent(before)}` : ""}`
     ),
-  listComments: (kind: "catalogs" | "documents", name: string, id: string) =>
-    fetchJson<CommentView[]>(`${BASE}/comments/${kind}/${name}/${id}`),
+  listComments: (kind: "catalogs" | "documents", name: string, id: string, cursor?: string | null) =>
+    fetchJson<CollectionPage<CommentView>>(`${BASE}/comments/${kind}/${name}/${id}${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`),
   addComment: (kind: "catalogs" | "documents", name: string, id: string, body: string, parentId?: string | null) =>
     fetchJson<CommentView>(`${BASE}/comments/${kind}/${name}/${id}`, {
       method: "POST",
@@ -927,19 +945,23 @@ export const api = {
     fetchJson<EntityRecord>(`${BASE}/documents/${name}/${id}/unpost`, { method: "POST" }),
 
   // Register queries
-  getMovements: (name: string, from?: string, to?: string) => {
+  getMovements: (name: string, from?: string, to?: string, page?: { cursor?: string | null; limit?: number }) => {
     const params = new URLSearchParams();
     if (from) params.set("from", from);
     if (to) params.set("to", to);
+    if (page?.cursor) params.set("cursor", page.cursor);
+    if (page?.limit !== undefined) params.set("limit", String(page.limit));
     const qs = params.toString();
-    return fetchJson<EntityRecord[]>(
+    return fetchJson<CollectionPage<EntityRecord>>(
       `${BASE}/registers/${name}/movements${qs ? "?" + qs : ""}`
     );
   },
-  getBalance: (name: string, filters?: Record<string, string>) => {
+  getBalance: (name: string, filters?: Record<string, string>, page?: { cursor?: string | null; limit?: number }) => {
     const params = new URLSearchParams(filters);
+    if (page?.cursor) params.set("cursor", page.cursor);
+    if (page?.limit !== undefined) params.set("limit", String(page.limit));
     const qs = params.toString();
-    return fetchJson<EntityRecord[]>(
+    return fetchJson<CollectionPage<EntityRecord>>(
       `${BASE}/registers/${name}/balance${qs ? "?" + qs : ""}`
     );
   },
@@ -947,10 +969,13 @@ export const api = {
     name: string,
     from: string,
     to: string,
-    filters?: Record<string, string>
+    filters?: Record<string, string>,
+    page?: { cursor?: string | null; limit?: number }
   ) => {
     const params = new URLSearchParams({ from, to, ...filters });
-    return fetchJson<EntityRecord[]>(
+    if (page?.cursor) params.set("cursor", page.cursor);
+    if (page?.limit !== undefined) params.set("limit", String(page.limit));
+    return fetchJson<CollectionPage<EntityRecord>>(
       `${BASE}/registers/${name}/turnover?${params}`
     );
   },

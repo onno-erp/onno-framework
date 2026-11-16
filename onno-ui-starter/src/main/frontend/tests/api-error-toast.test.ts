@@ -69,7 +69,7 @@ describe("api layer error toast", () => {
 
   describe("an in-flight GET shared by several callers", () => {
     const silentWithContext = () =>
-      api.getRelatedList("catalogs", "orders", "o-1", "tags", { silent: true })
+      api.getRelatedList("catalogs", "orders", "o-1", "tags", undefined, { silent: true })
         .catch((e) => notifyError(e, { format: (m) => `Couldn't load Tags: ${m}` }));
     const byDefault = () => api.getRelatedList("catalogs", "orders", "o-1", "tags").catch(() => undefined);
 

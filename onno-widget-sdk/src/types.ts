@@ -59,6 +59,9 @@ export type ApiPath = `/api/${string}`;
  * reads and renders. Every call is same-origin and rides the app's session + CSRF like the rest of
  * the UI.
  */
+export interface PageRequest { cursor?: string | null; limit?: number }
+export interface CollectionPage<T> { rows: T[]; nextCursor: string | null; hasMore: boolean }
+
 export interface OnnoReadApi {
   /**
    * Authenticated same-origin GET of an extension endpoint. The path must start with `/api/` and may
@@ -70,13 +73,15 @@ export interface OnnoReadApi {
   getJson<T>(path: ApiPath): Promise<T>;
   /** The first bounded keyset window (at most 500 rows), never an unbounded collection read. */
   listCatalog(name: string, filter?: string): Promise<EntityRecord[]>;
+  listCatalogPage(name: string, filter?: string, page?: PageRequest): Promise<CollectionPage<EntityRecord>>;
   getCatalogItem(name: string, id: string): Promise<EntityRecord>;
   /** The first bounded keyset window (at most 500 rows), optionally narrowed by date/filter. */
   listDocuments(name: string, from?: string, to?: string, filter?: string): Promise<EntityRecord[]>;
+  listDocumentsPage(name: string, from?: string, to?: string, filter?: string, page?: PageRequest): Promise<CollectionPage<EntityRecord>>;
   getDocument(name: string, id: string): Promise<EntityRecord>;
-  getBalance(name: string, filters?: Record<string, string>): Promise<unknown>;
-  getTurnover(name: string, from: string, to: string, filters?: Record<string, string>): Promise<unknown>;
-  getMovements(name: string, from?: string, to?: string): Promise<unknown>;
+  getBalance(name: string, filters?: Record<string, string>, page?: PageRequest): Promise<CollectionPage<EntityRecord>>;
+  getTurnover(name: string, from: string, to: string, filters?: Record<string, string>, page?: PageRequest): Promise<CollectionPage<EntityRecord>>;
+  getMovements(name: string, from?: string, to?: string, page?: PageRequest): Promise<CollectionPage<EntityRecord>>;
 }
 
 /** One resolved list column, as the entity's ListSpec/field hints produced it. */
