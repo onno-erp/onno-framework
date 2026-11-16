@@ -29,6 +29,9 @@ Custom UI extensions compile against `@onno/widget-sdk`. Data-backed widgets sho
 stream; `events.subscribe`/`useUiEvents` handle unusual matching. Never create a per-widget
 `EventSource`, which bypasses the host's cross-tab sharing and session recovery.
 
+Use the SDK's `Link`, `navigate` and `openRecord` for in-app transitions that preserve the host
+workspace. See the [SDK navigation guide](../onno-widget-sdk/README.md#in-app-navigation).
+
 If a widget needs a third-party browser library, declare it in the consuming Gradle build with
 `onnoWidgets { npmDependencies.put("package", "version") }` and import it normally from TSX. The
 managed widget build installs and bundles that dependency; the extension author remains responsible
