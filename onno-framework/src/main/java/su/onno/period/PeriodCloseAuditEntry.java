@@ -20,9 +20,10 @@ import java.util.UUID;
  * @param documentType  for an override, the document's logical name
  * @param documentId    for an override, the document id
  * @param documentDate  for an override, the document date inside the closed period
+ * @param hard          for a close, whether it is a hard close
  */
 public record PeriodCloseAuditEntry(UUID id, LocalDateTime at, PeriodCloseAction action, PeriodScope scope,
                                     LocalDate previous, LocalDate closedThrough, String actor, String reason,
                                     PeriodOperation operation, String documentType, UUID documentId,
-                                    LocalDateTime documentDate) {
+                                    LocalDateTime documentDate, boolean hard) {
 }

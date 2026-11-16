@@ -178,6 +178,7 @@ class PeriodCloseUiTest {
                 "reason", "month end"), vera))
                 .containsEntry("scope", "context:Finance")
                 .containsEntry("closedThrough", "2026-01-31")
+                .containsEntry("state", "soft")
                 .containsEntry("updatedBy", "vera");
         assertThat(controller.state(ann)).containsEntry("canManage", false);
         assertThat((List<?>) controller.state(ann).get("locks")).hasSize(1);
@@ -197,6 +198,23 @@ class PeriodCloseUiTest {
     }
 
     @Test
+    void controller_hardClose_isReportedAndBlocksOverrideRoles() {
+        PeriodCloseAccess policy = new PeriodCloseAccess(access, List.of(), List.of("ADMIN"));
+        periods.setOverridePolicy(policy);
+        PeriodCloseController controller = new PeriodCloseController(periods, policy, access, new UiProperties());
+        Authentication root = token("root", "ADMIN");
+        signIn("root", "ADMIN");
+        UUID january = id(commands.create(invoices,
+                Map.of("title", "January", "date", "2026-01-15T10:00:00"), accountant));
+
+        assertThat(controller.close(Map.of("scope", "global", "closedThrough", "2026-01-31", "hard", true), root))
+                .containsEntry("state", "hard");
+        assertThatThrownBy(() -> commands.update(invoices, january, Map.of("title", "Edited"), accountant))
+                .isInstanceOf(PeriodClosedException.class);
+        assertThat(controller.audit(10, root)).singleElement().satisfies(row -> assertThat(row).containsEntry("hard", true));
+    }
+
+    @Test
     void page_showsLocks_andItsActionsCloseAndReopen() {
         PeriodCloseAccess policy = new PeriodCloseAccess(access, List.of("CHIEF_ACCOUNTANT"), List.of());
         PeriodClosePage page = new PeriodClosePage(periods, policy);
@@ -204,8 +222,8 @@ class PeriodCloseUiTest {
         PageBuilder empty = new PageBuilder();
         page.compose(empty);
         assertThat(texts(empty)).contains("No period is closed.");
-        ActionSpec.Action close = empty.pageAction("closePeriod");
-        ActionSpec.Action reopen = empty.pageAction("reopenPeriod");
+        ActionSpec.Action<?> close = empty.pageAction("closePeriod");
+        ActionSpec.Action<?> reopen = empty.pageAction("reopenPeriod");
         assertThat(close.roles()).containsExactly("ADMIN", "CHIEF_ACCOUNTANT");
         assertThat(close.form().getFirst().options())
                 .containsExactly("global", "context:Finance");

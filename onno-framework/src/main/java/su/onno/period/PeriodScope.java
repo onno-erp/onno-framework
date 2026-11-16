@@ -8,7 +8,7 @@ import java.util.Objects;
  * register ({@link #register(String)}).
  *
  * @param kind the scope kind
- * @param key  the context name or the register's logical name; {@code "*"} for the global scope
+ * @param key  the context name, the register's logical name or the organization id; {@code "*"} for the global scope
  */
 public record PeriodScope(Kind kind, String key) {
 
@@ -18,7 +18,8 @@ public record PeriodScope(Kind kind, String key) {
     public enum Kind {
         GLOBAL,
         CONTEXT,
-        REGISTER
+        REGISTER,
+        ORGANIZATION
     }
 
     public PeriodScope {
@@ -48,6 +49,23 @@ public record PeriodScope(Kind kind, String key) {
     }
 
     /**
+     * Documents whose {@link PeriodCloseOrganization} field holds {@code organization} — a reference
+     * (its id is used), a UUID, or any value compared by its string form.
+     */
+    public static PeriodScope organization(Object organization) {
+        return new PeriodScope(Kind.ORGANIZATION, organizationKey(organization));
+    }
+
+    /** The string form an organization value is stored and compared as; {@code null} for none. */
+    public static String organizationKey(Object value) {
+        if (value == null) return null;
+        if (value instanceof su.onno.types.Ref<?> ref) return ref.id() == null ? null : ref.id().toString();
+        if (value instanceof java.util.Map<?, ?> map) return organizationKey(map.get("id"));
+        String text = value.toString().trim();
+        return text.isEmpty() ? null : text;
+    }
+
+    /**
      * Parses the {@code global} / {@code context:Name} / {@code register:Name} form produced by
      * {@link #toString()}.
      */
@@ -62,9 +80,10 @@ public record PeriodScope(Kind kind, String key) {
             String key = value.substring(colon + 1);
             if (kind.equalsIgnoreCase("context")) return context(key);
             if (kind.equalsIgnoreCase("register")) return register(key);
+            if (kind.equalsIgnoreCase("organization")) return organization(key);
         }
         throw new IllegalArgumentException(
-                "Unknown period scope '" + text + "'; use global, context:<name> or register:<name>");
+                "Unknown period scope '" + text + "'; use global, context:<name>, register:<name> or organization:<id>");
     }
 
     /** A phrase for messages: {@code all documents}, {@code context Finance}, {@code register Stock}. */
@@ -73,6 +92,7 @@ public record PeriodScope(Kind kind, String key) {
             case GLOBAL -> "all documents";
             case CONTEXT -> "context " + key;
             case REGISTER -> "register " + key;
+            case ORGANIZATION -> "organization " + key;
         };
     }
 
@@ -82,6 +102,7 @@ public record PeriodScope(Kind kind, String key) {
             case GLOBAL -> "global";
             case CONTEXT -> "context:" + key;
             case REGISTER -> "register:" + key;
+            case ORGANIZATION -> "organization:" + key;
         };
     }
 }

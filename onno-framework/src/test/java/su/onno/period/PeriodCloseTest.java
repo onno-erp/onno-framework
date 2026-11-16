@@ -19,6 +19,7 @@ import su.onno.posting.PostingEngine;
 import su.onno.posting.RegisterPersistence;
 import su.onno.repository.RegisterRepositoryImpl;
 import su.onno.schema.SchemaGenerator;
+import su.onno.types.Ref;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -63,6 +64,8 @@ class PeriodCloseTest {
         registry.registerDocument(scanner.scanDocument(PcReceipt.class));
         registry.registerDocument(scanner.scanDocument(PcIssue.class));
         registry.registerDocument(scanner.scanDocument(PcPayment.class));
+        registry.registerDocument(scanner.scanDocument(PcAdjustment.class));
+        registry.registerDocument(scanner.scanDocument(PcBranchPayment.class));
         registry.registerAccumulation(scanner.scanRegister(PcCost.class));
         registry.registerAccumulation(scanner.scanRegister(PcCash.class));
         new SchemaGenerator(registry).execute(jdbi);
@@ -315,7 +318,7 @@ class PeriodCloseTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> periods.close(PeriodScope.context("Nope"), JANUARY_END, "admin", null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThat(periods.knownContexts()).containsExactly("Finance", "Inventory");
+        assertThat(periods.knownContexts()).containsExactly("Finance", "Inventory", "Treasury");
         assertThat(periods.knownRegisters()).containsExactly("PcCash", "PcCost");
         assertThat(PeriodScope.parse("context:Finance")).isEqualTo(PeriodScope.context("Finance"));
         assertThat(PeriodScope.parse(PeriodScope.register("PcCash").toString()))
@@ -323,7 +326,187 @@ class PeriodCloseTest {
         assertThat(PeriodScope.parse("global")).isEqualTo(PeriodScope.global());
     }
 
+    @Test
+    void organizationClose_appliesOnlyToThatOrganization_andToMovesIntoIt() {
+        UUID north = UUID.randomUUID();
+        UUID south = UUID.randomUUID();
+        periods.close(PeriodScope.organization(north), JANUARY_END, "admin", null);
+        LocalDateTime january = LocalDateTime.of(2026, 1, 20, 10, 0);
+
+        assertThatThrownBy(() -> engine.post(branchPayment(january, north)))
+                .isInstanceOf(PeriodClosedException.class)
+                .hasMessageContaining("organization " + north);
+        PcBranchPayment southern = branchPayment(january, south);
+        engine.post(southern);
+        assertThat(storedPosted(southern)).isTrue();
+        engine.post(payment(january, "10")); // documents without the field are not covered
+
+        DocumentDescriptor descriptor = registry.getDocumentDescriptor(PcBranchPayment.class);
+        // Moving a southern document into the closed organization is rejected; the stored
+        // organization counts too, so a northern one cannot be moved out.
+        PcBranchPayment draft = branchPayment(january, south);
+        assertThatThrownBy(() -> periods.requireDocumentOpen(descriptor, draft.getId(), null,
+                Ref.of(Object.class, north), PeriodOperation.UPDATE))
+                .isInstanceOf(PeriodClosedException.class);
+        PcBranchPayment northern = branchPayment(january, north);
+        assertThatThrownBy(() -> periods.requireDocumentOpen(descriptor, northern.getId(), null,
+                south, PeriodOperation.UPDATE))
+                .isInstanceOf(PeriodClosedException.class);
+        periods.requireDocumentOpen(descriptor, draft.getId(), null, south.toString(), PeriodOperation.UPDATE);
+
+        assertThat(PeriodScope.parse("organization:" + north)).isEqualTo(PeriodScope.organization(north));
+        assertThat(periods.organizationFieldName(descriptor)).isEqualTo("branch");
+    }
+
+    @Test
+    void organizationClose_needsADocumentDeclaringTheField() {
+        MetadataRegistry bare = new MetadataRegistry();
+        bare.registerDocument(new MetadataScanner(new DefaultNamingStrategy()).scanDocument(PcPayment.class));
+        PeriodCloseService service = new PeriodCloseService(jdbi, bare);
+        assertThatThrownBy(() -> service.close(PeriodScope.organization(UUID.randomUUID()), JANUARY_END,
+                "admin", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("@PeriodCloseOrganization");
+    }
+
+    @Test
+    void softClose_admitsAdjustmentDocuments_onlyThem_andAuditsEach() {
+        periods.close(PeriodScope.global(), JANUARY_END, "admin", null);
+        periods.setOverridePolicy(new PeriodCloseOverridePolicy() {
+            @Override
+            public Optional<PeriodOverride> current() {
+                return Optional.empty();
+            }
+
+            @Override
+            public String actor() {
+                return "accountant";
+            }
+        });
+        LocalDateTime january = LocalDateTime.of(2026, 1, 20, 10, 0);
+
+        PcAdjustment adjustment = adjustment(january, "-5");
+        engine.post(adjustment);
+        engine.unpost(adjustment);
+        periods.requireDocumentOpen(registry.getDocumentDescriptor(PcAdjustment.class), UUID.randomUUID(),
+                january, PeriodOperation.CREATE);
+        assertThatThrownBy(() -> engine.post(payment(january, "10"))).isInstanceOf(PeriodClosedException.class);
+
+        assertThat(periods.audit(10)).filteredOn(e -> e.action() == PeriodCloseAction.ADJUSTMENT)
+                .hasSize(3)
+                .allSatisfy(entry -> {
+                    assertThat(entry.actor()).isEqualTo("accountant");
+                    assertThat(entry.documentType()).isEqualTo("PcAdjustments");
+                })
+                .extracting(PeriodCloseAuditEntry::operation)
+                .containsExactlyInAnyOrder(PeriodOperation.POST, PeriodOperation.UNPOST, PeriodOperation.CREATE);
+    }
+
+    @Test
+    void hardClose_admitsNeitherAdjustmentsNorOverrides() {
+        periods.close(PeriodScope.context("Finance"), JANUARY_END, true, "admin", "audited");
+        LocalDateTime january = LocalDateTime.of(2026, 1, 20, 10, 0);
+
+        assertThatThrownBy(() -> engine.post(adjustment(january, "-5")))
+                .isInstanceOf(PeriodClosedException.class)
+                .hasMessageContaining("context Finance");
+        PcPayment payment = payment(january, "10");
+        assertThatThrownBy(() -> periods.override(new PeriodOverride("chief", "fix"), () -> engine.post(payment)))
+                .isInstanceOf(PeriodClosedException.class);
+        assertThat(storedPosted(payment)).isFalse();
+
+        // A soft global close covering the same day does not soften the hard context close.
+        periods.close(PeriodScope.global(), LocalDate.of(2026, 2, 28), "admin", null);
+        assertThatThrownBy(() -> periods.override(new PeriodOverride("chief", "fix"), () -> engine.post(payment)))
+                .isInstanceOf(PeriodClosedException.class)
+                .hasMessageContaining("context Finance");
+        assertThat(periods.locks()).filteredOn(PeriodLock::hard).singleElement()
+                .satisfies(lock -> assertThat(lock.state()).isEqualTo("hard"));
+        assertThat(periods.audit(10)).filteredOn(e -> e.action() == PeriodCloseAction.CLOSE)
+                .anySatisfy(entry -> assertThat(entry.hard()).isTrue());
+    }
+
+    @Test
+    void hardClose_turnsSoftOnlyThroughAReopen() {
+        PeriodScope finance = PeriodScope.context("Finance");
+        periods.close(finance, JANUARY_END, true, "admin", null);
+
+        assertThatThrownBy(() -> periods.close(finance, JANUARY_END, "admin", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("reopen");
+        assertThatThrownBy(() -> periods.close(finance, LocalDate.of(2026, 2, 28), false, "admin", null))
+                .isInstanceOf(IllegalArgumentException.class);
+        // Hardening forward is a close.
+        periods.close(finance, LocalDate.of(2026, 2, 28), true, "admin", null);
+
+        assertThat(periods.reopen(finance, LocalDate.of(2026, 2, 28), "admin", "late invoices"))
+                .hasValueSatisfying(lock -> assertThat(lock.hard()).isFalse());
+        assertThatThrownBy(() -> periods.reopen(finance, LocalDate.of(2026, 2, 28), "admin", "again"))
+                .isInstanceOf(IllegalArgumentException.class);
+        engine.post(adjustment(LocalDateTime.of(2026, 2, 10, 10, 0), "1"));
+    }
+
+    @Test
+    void concurrentCloses_ofOneScope_serialize() throws Exception {
+        periods.close(PeriodScope.global(), LocalDate.of(2026, 1, 1), "admin", null);
+        int threads = 8;
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(threads);
+        java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        List<java.util.concurrent.Future<Boolean>> results = new java.util.ArrayList<>();
+        for (int i = 1; i <= threads; i++) {
+            LocalDate date = LocalDate.of(2026, 1, 1).plusDays(i);
+            results.add(pool.submit(() -> {
+                start.await();
+                try {
+                    periods.close(PeriodScope.global(), date, "admin", null);
+                    return true;
+                } catch (IllegalArgumentException movedBack) {
+                    return false; // a later date committed first
+                }
+            }));
+        }
+        start.countDown();
+        int succeeded = 0;
+        for (java.util.concurrent.Future<Boolean> result : results) {
+            if (result.get(30, java.util.concurrent.TimeUnit.SECONDS)) succeeded++;
+        }
+        pool.shutdown();
+
+        assertThat(periods.closedThrough(PeriodScope.global())).contains(LocalDate.of(2026, 1, 1).plusDays(threads));
+        List<PeriodCloseAuditEntry> closes = periods.audit(100).stream()
+                .filter(e -> e.action() == PeriodCloseAction.CLOSE).toList();
+        assertThat(closes).hasSize(succeeded + 1);
+        // Each audited close starts from the date the previous one left: no lost update.
+        assertThat(closes.stream().filter(e -> e.previous() != null).map(PeriodCloseAuditEntry::previous))
+                .doesNotHaveDuplicates();
+    }
+
     // --- fixtures ---------------------------------------------------------------------------
+
+    private PcAdjustment adjustment(LocalDateTime date, String amount) {
+        PcAdjustment adjustment = new PcAdjustment();
+        adjustment.setId(UUID.randomUUID());
+        adjustment.setNumber("ADJ");
+        adjustment.setDate(date);
+        adjustment.setAmount(new BigDecimal(amount));
+        insert(adjustment, "amount", adjustment.getAmount());
+        persisted.put(adjustment.getId(), adjustment);
+        return adjustment;
+    }
+
+    private PcBranchPayment branchPayment(LocalDateTime date, UUID branch) {
+        PcBranchPayment payment = new PcBranchPayment();
+        payment.setId(UUID.randomUUID());
+        payment.setNumber("BPAY");
+        payment.setDate(date);
+        payment.setBranch(branch);
+        payment.setAmount(BigDecimal.TEN);
+        insert(payment, "amount", payment.getAmount());
+        String table = registry.getDocumentDescriptor(PcBranchPayment.class).tableName();
+        jdbi.useHandle(h -> h.createUpdate("UPDATE " + table + " SET branch = :branch WHERE _id = :id")
+                .bind("branch", branch).bind("id", payment.getId()).execute());
+        return payment;
+    }
 
     private PcPayment payment(LocalDateTime date, String amount) {
         PcPayment payment = new PcPayment();
@@ -435,6 +618,42 @@ class PeriodCloseTest {
     @Getter
     @Setter
     public static class PcPayment extends DocumentObject implements Postable {
+        @Attribute(precision = 15, scale = 2)
+        private BigDecimal amount;
+
+        @Override
+        public void handlePosting(PostingContext context) {
+            context.movements(PcCash.class).addReceipt(movement -> {
+                movement.setAccount(ACCOUNT);
+                movement.setAmount(amount);
+            });
+        }
+    }
+
+    @Document(name = "PcAdjustments", context = "Finance")
+    @PeriodAdjustment
+    @Getter
+    @Setter
+    public static class PcAdjustment extends DocumentObject implements Postable {
+        @Attribute(precision = 15, scale = 2)
+        private BigDecimal amount;
+
+        @Override
+        public void handlePosting(PostingContext context) {
+            context.movements(PcCash.class).addReceipt(movement -> {
+                movement.setAccount(ACCOUNT);
+                movement.setAmount(amount);
+            });
+        }
+    }
+
+    @Document(name = "PcBranchPayments", context = "Treasury")
+    @Getter
+    @Setter
+    public static class PcBranchPayment extends DocumentObject implements Postable {
+        @PeriodCloseOrganization
+        @Attribute
+        private UUID branch;
         @Attribute(precision = 15, scale = 2)
         private BigDecimal amount;
 

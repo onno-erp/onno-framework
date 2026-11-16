@@ -680,8 +680,11 @@ periods.close(PeriodScope.context("Finance"), LocalDate.of(2026, 11, 30), "admin
 periods.reopen(PeriodScope.global(), LocalDate.of(2026, 9, 30), "admin", "late invoice"); // reason required
 ```
 
-Scopes are global, per `context`, or per accumulation register; the latest applicable date wins and
-the date is inclusive. Enforcement is in core posting (including every later document a
+Scopes are global, per `context`, per accumulation register, or per organization (the
+`@PeriodCloseOrganization` field of a document); the date is inclusive. Closes are soft by default —
+`@PeriodAdjustment` documents may still be written and posted into the period (audited) while every
+other document stays locked; `close(scope, date, true, actor, reason)` is a hard close that admits
+nothing until reopened. Enforcement is in core posting (including every later document a
 `CHRONOLOGICAL` restoration would repost), repository saves and the generic UI/REST/import/MCP
 command path; a rejection is a `PeriodClosedException` (HTTP 409, also from `posting-preview`).
 `ADMIN` and `onno.period-close.manage-roles` close and reopen; `onno.period-close.override-roles`

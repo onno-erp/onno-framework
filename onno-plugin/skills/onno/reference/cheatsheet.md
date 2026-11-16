@@ -218,11 +218,15 @@ validation exception/payload.
 ## Period close (package `su.onno.period`)
 
 - `PeriodCloseService` bean (off with `onno.period-close.enabled=false`):
-  `close(scope, closedThrough, actor, reason)`, `reopen(scope, closedThroughOrNull, actor, reason)`
+  `close(scope, closedThrough, actor, reason)` (soft), `close(scope, closedThrough, hard, actor, reason)`,
+  `reopen(scope, closedThroughOrNull, actor, reason)`
   (reason required), `locks()`, `closedThrough(scope)`, `audit(limit)`,
   `override(new PeriodOverride(actor, reason), action)`.
-- `PeriodScope.global()` / `.context("Finance")` / `.register("Cash")`; text form `global`,
-  `context:<name>`, `register:<name>`. Close date is inclusive; latest applicable scope wins.
+- `PeriodScope.global()` / `.context("Finance")` / `.register("Cash")` / `.organization(orgRef)`;
+  text form `global`, `context:<name>`, `register:<name>`, `organization:<id>`. Close date is
+  inclusive. Organization scope needs `@PeriodCloseOrganization` on the document's org field.
+- Soft close (default) admits `@PeriodAdjustment` document types (audited `ADJUSTMENT`) and
+  overrides; hard close admits nothing. Turning hard into soft is a `reopen` at the same date.
 - Rejects create/update/delete/post/repost/unpost of documents dated on or before the close date
   with `PeriodClosedException` (HTTP 409 `period-closed`) — in `PostingEngine` (incl. later
   documents of a `CHRONOLOGICAL` restoration), repository saves, and the generic command path.

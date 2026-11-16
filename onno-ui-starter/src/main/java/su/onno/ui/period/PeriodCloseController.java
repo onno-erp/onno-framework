@@ -29,13 +29,14 @@ import java.util.Map;
  * role from {@code onno.period-close.manage-roles}.
  *
  * <pre>
- * GET  /api/period-close                 → {locks: [{scope, closedThrough, updatedAt, updatedBy}], canManage}
+ * GET  /api/period-close                 → {locks: [{scope, label, closedThrough, state, updatedAt, updatedBy}], canManage}
  * GET  /api/period-close/audit?limit=100 → [{at, action, scope, previous, closedThrough, actor, reason, …}]
- * POST /api/period-close/close   {scope, closedThrough, reason?}
+ * POST /api/period-close/close   {scope, closedThrough, hard?, reason?}
  * POST /api/period-close/reopen  {scope, closedThrough?, reason}   (no closedThrough = fully open)
  * </pre>
  *
- * {@code scope} is {@code global}, {@code context:<name>} or {@code register:<name>}.
+ * {@code scope} is {@code global}, {@code context:<name>}, {@code register:<name>} or
+ * {@code organization:<id>}.
  */
 @RestController
 @RequestMapping("/api/period-close")
@@ -57,7 +58,7 @@ public class PeriodCloseController {
     @GetMapping
     public Map<String, Object> state(Principal principal) {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("locks", periods.locks().stream().map(PeriodCloseController::lockJson).toList());
+        body.put("locks", periods.locks().stream().map(this::lockJson).toList());
         body.put("canManage", periodAccess.canManage(principal));
         return body;
     }
@@ -77,8 +78,8 @@ public class PeriodCloseController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "closedThrough is required");
         }
         try {
-            return lockJson(periods.close(scope(body), closedThrough, access.username(principal),
-                    text(body.get("reason"))));
+            return lockJson(periods.close(scope(body), closedThrough, Boolean.parseBoolean(text(body.get("hard"))),
+                    access.username(principal), text(body.get("reason"))));
         } catch (IllegalArgumentException invalid) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, invalid.getMessage());
         }
@@ -92,7 +93,7 @@ public class PeriodCloseController {
         try {
             return periods.reopen(scope, date(body.get("closedThrough")), access.username(principal),
                             text(body.get("reason")))
-                    .map(PeriodCloseController::lockJson)
+                    .map(this::lockJson)
                     .orElseGet(() -> {
                         Map<String, Object> open = new LinkedHashMap<>();
                         open.put("scope", scope.toString());
@@ -141,10 +142,12 @@ public class PeriodCloseController {
         return text.isEmpty() ? null : text;
     }
 
-    static Map<String, Object> lockJson(PeriodLock lock) {
+    private Map<String, Object> lockJson(PeriodLock lock) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("scope", lock.scope().toString());
+        m.put("label", periods.describe(lock.scope()));
         m.put("closedThrough", lock.closedThrough().toString());
+        m.put("state", lock.state());
         m.put("updatedAt", lock.updatedAt() == null ? null : lock.updatedAt().toString());
         m.put("updatedBy", lock.updatedBy());
         return m;
@@ -160,6 +163,7 @@ public class PeriodCloseController {
         m.put("closedThrough", entry.closedThrough() == null ? null : entry.closedThrough().toString());
         m.put("actor", entry.actor());
         m.put("reason", entry.reason());
+        if (entry.action() == su.onno.period.PeriodCloseAction.CLOSE) m.put("hard", entry.hard());
         if (entry.operation() != null) {
             m.put("operation", entry.operation().name());
             m.put("documentType", entry.documentType());

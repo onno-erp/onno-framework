@@ -14,4 +14,12 @@ public interface PeriodCloseOverridePolicy {
 
     /** The override the current caller holds, or empty when the close applies to them. */
     Optional<PeriodOverride> current();
+
+    /**
+     * Who is acting in the current operation, for audit entries that are not overrides (an
+     * {@linkplain PeriodAdjustment adjustment}); {@code null} when unknown.
+     */
+    default String actor() {
+        return current().map(PeriodOverride::actor).orElse(null);
+    }
 }

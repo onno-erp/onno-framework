@@ -372,7 +372,8 @@ movements without writing them.
 ### Period close
 
 `PeriodCloseService` (`su.onno.period`) holds change-prohibition dates per scope — global, bounded
-context, or accumulation register — in the framework-owned `onno_period_close` table. A document
+context, accumulation register, or organization (`@PeriodCloseOrganization` field) — soft or hard,
+in the framework-owned `onno_period_close` table. A document
 dated on or before the latest applicable close date cannot be created, changed, delete-marked,
 posted, reposted or unposted. The check is authoritative below controllers: `PostingEngine` runs it
 inside the posting transaction (and for every later document a chronological restoration would
@@ -382,8 +383,9 @@ Rejections throw `PeriodClosedException` (HTTP 409 `period-closed`, including fr
 `posting-preview`). Close/reopen (`ADMIN` + `onno.period-close.manage-roles`; reopen needs a
 reason) and overrides (`onno.period-close.override-roles`, or an explicit
 `PeriodCloseService.override(...)` block) are audited in `onno_period_close_audit`. The UI starter
-serves `/api/period-close` and a built-in `/period-close` page. `@PeriodCloseExempt` opts a
-document type out. Full contract: [PERIOD_CLOSE.md](PERIOD_CLOSE.md).
+serves `/api/period-close` and a built-in `/period-close` page; the MCP starter adds the read-only
+`period_close_status` tool. `@PeriodCloseExempt` opts a document type out; `@PeriodAdjustment`
+document types may still change a soft-closed period (audited as adjustments). Full contract: [PERIOD_CLOSE.md](PERIOD_CLOSE.md).
 
 ## Query paths
 

@@ -488,7 +488,8 @@ public class PostingEngine {
                                    PeriodOperation operation) {
         if (periodClose == null) return;
         periodClose.requirePostingOpen(handle, registry.getDocumentDescriptor(document.getClass()),
-                document.getId(), document.getDate(), stagedRegisters(context), operation, true);
+                document.getId(), document.getDate(), periodClose.organizationOf(document),
+                stagedRegisters(context), operation, true);
     }
 
     /** A preview changes nothing, so a granted override is not audited. */
@@ -496,7 +497,7 @@ public class PostingEngine {
         if (periodClose == null) return;
         jdbi.useHandle(handle -> periodClose.requirePostingOpen(handle,
                 registry.getDocumentDescriptor(document.getClass()), document.getId(),
-                document.getDate(), stagedRegisters(context),
+                document.getDate(), periodClose.organizationOf(document), stagedRegisters(context),
                 document.isPosted() ? PeriodOperation.REPOST : PeriodOperation.POST, false));
     }
 

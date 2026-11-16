@@ -7,6 +7,7 @@ import su.onno.metadata.MetadataRegistry;
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
 
+import java.lang.reflect.Field;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -17,18 +18,24 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**
  * Period close ("change-prohibition date"): documents dated on or before a scope's close date
  * cannot be created, changed, delete-marked, posted, reposted or unposted.
  *
- * <p>A close date is set per {@link PeriodScope}: globally, for one bounded context, or for one
- * accumulation register. Several scopes may apply to a document; the latest close date wins. The
+ * <p>A close date is set per {@link PeriodScope}: globally, for one bounded context, for one
+ * accumulation register, or for one organization ({@link PeriodCloseOrganization}). Several scopes
+ * may apply to a document; the latest close date names the period.
+ *
+ * <p>A close is <em>soft</em> by default: {@linkplain PeriodAdjustment adjustment documents} and
+ * audited overrides still pass. A <em>hard</em> close admits nothing until it is reopened. The
  * posting engine, the repository save path and the generic UI/REST/import/MCP command path all
  * consult this service, so the rule holds below controllers. Chronological register restoration
  * checks every later document it would repost, so a backdated change cannot cascade into a period
@@ -42,14 +49,16 @@ import java.util.function.Supplier;
  * operation.
  *
  * <p>Close dates are read from the database on every guarded operation, so a close made on one
- * node applies on all of them. The check runs inside the posting transaction but does not lock
- * the close row: an operation already past its check when a close commits still completes.
+ * node applies on all of them. Close and reopen lock their scope's row, so concurrent changes to
+ * one scope serialize. The guard runs inside the posting transaction but does not lock the close
+ * row: an operation already past its check when a close commits still completes.
  */
 public class PeriodCloseService {
 
     private static final String LOCKS = "onno_period_close";
     private static final String AUDIT = "onno_period_close_audit";
     private static final ThreadLocal<PeriodOverride> OVERRIDE = new ThreadLocal<>();
+    private final Map<Class<?>, Optional<Field>> ORGANIZATION_FIELDS = new ConcurrentHashMap<>();
 
     private final Jdbi jdbi;
     private final MetadataRegistry registry;
@@ -71,13 +80,14 @@ public class PeriodCloseService {
             handle.execute("CREATE TABLE IF NOT EXISTS " + LOCKS + " ("
                     + "_scope_kind VARCHAR(16) NOT NULL, _scope_key VARCHAR(255) NOT NULL, "
                     + "_closed_through DATE NOT NULL, _updated_at TIMESTAMP NOT NULL, "
-                    + "_updated_by VARCHAR(255), PRIMARY KEY (_scope_kind, _scope_key))");
+                    + "_updated_by VARCHAR(255), _hard BOOLEAN DEFAULT FALSE NOT NULL, "
+                    + "PRIMARY KEY (_scope_kind, _scope_key))");
             handle.execute("CREATE TABLE IF NOT EXISTS " + AUDIT + " ("
                     + "_id UUID PRIMARY KEY, _at TIMESTAMP NOT NULL, _action VARCHAR(16) NOT NULL, "
                     + "_scope_kind VARCHAR(16) NOT NULL, _scope_key VARCHAR(255) NOT NULL, "
                     + "_previous DATE, _closed_through DATE, _actor VARCHAR(255), "
                     + "_reason VARCHAR(2000), _operation VARCHAR(16), _document_type VARCHAR(255), "
-                    + "_document_id UUID, _document_date TIMESTAMP)");
+                    + "_document_id UUID, _document_date TIMESTAMP, _hard BOOLEAN)");
             handle.execute("CREATE INDEX IF NOT EXISTS idx_" + AUDIT + "_at ON " + AUDIT + " (_at)");
         });
     }
@@ -99,36 +109,51 @@ public class PeriodCloseService {
                 .findFirst();
     }
 
+    /** Soft-closes {@code scope} through {@code closedThrough}; see {@link #close(PeriodScope, LocalDate, boolean, String, String)}. */
+    public PeriodLock close(PeriodScope scope, LocalDate closedThrough, String actor, String reason) {
+        return close(scope, closedThrough, false, actor, reason);
+    }
+
     /**
-     * Closes {@code scope} through {@code closedThrough} (inclusive). Moving an existing close
-     * date back is a {@link #reopen}, not a close, and is rejected here.
+     * Closes {@code scope} through {@code closedThrough} (inclusive). A soft close still admits
+     * {@linkplain PeriodAdjustment adjustment documents} and audited overrides; a hard close admits
+     * nothing until the period is reopened. Moving an existing close date back, or turning a hard
+     * close soft, is a {@link #reopen}, not a close, and is rejected here.
      *
+     * @param hard   whether nothing — not even adjustments or overrides — may change the period
      * @param actor  who closes the period, for the audit trail
      * @param reason an optional note
      */
-    public PeriodLock close(PeriodScope scope, LocalDate closedThrough, String actor, String reason) {
+    public PeriodLock close(PeriodScope scope, LocalDate closedThrough, boolean hard, String actor, String reason) {
         if (closedThrough == null) {
             throw new IllegalArgumentException("A close date is required");
         }
         requireKnown(scope);
         return jdbi.inTransaction(handle -> {
-            LocalDate previous = currentClose(handle, scope);
+            PeriodLock current = currentLock(handle, scope);
+            LocalDate previous = current == null ? null : current.closedThrough();
             if (previous != null && closedThrough.isBefore(previous)) {
                 throw new IllegalArgumentException("Period for " + scope.describe()
                         + " is already closed through " + previous
                         + "; moving the close date back to " + closedThrough + " is a reopen and needs a reason");
             }
+            if (current != null && current.hard() && !hard) {
+                throw new IllegalArgumentException("Period for " + scope.describe()
+                        + " is hard-closed through " + previous
+                        + "; making it soft is a reopen and needs a reason");
+            }
             LocalDateTime now = LocalDateTime.now();
-            store(handle, scope, previous, closedThrough, now, actor);
+            store(handle, scope, previous, closedThrough, hard, now, actor);
             audit(handle, now, PeriodCloseAction.CLOSE, scope, previous, closedThrough, actor, reason,
-                    null, null, null, null);
-            return new PeriodLock(scope, closedThrough, now, actor);
+                    null, null, null, null, hard);
+            return new PeriodLock(scope, closedThrough, now, actor, hard);
         });
     }
 
     /**
      * Reopens {@code scope}: moves its close date back to {@code closedThrough}, or removes the
-     * close entirely when {@code closedThrough} is {@code null}.
+     * close entirely when {@code closedThrough} is {@code null}. What remains is a soft close, so
+     * reopening a hard close at its own date turns it soft.
      *
      * @param actor  who reopens the period, for the audit trail
      * @param reason why — required
@@ -139,11 +164,13 @@ public class PeriodCloseService {
             throw new IllegalArgumentException("Reopening a period requires a reason");
         }
         return jdbi.inTransaction(handle -> {
-            LocalDate previous = currentClose(handle, scope);
-            if (previous == null) {
+            PeriodLock current = currentLock(handle, scope);
+            if (current == null) {
                 throw new IllegalArgumentException("Period for " + scope.describe() + " is not closed");
             }
-            if (closedThrough != null && !closedThrough.isBefore(previous)) {
+            LocalDate previous = current.closedThrough();
+            boolean softening = current.hard() && closedThrough != null && closedThrough.equals(previous);
+            if (closedThrough != null && !closedThrough.isBefore(previous) && !softening) {
                 throw new IllegalArgumentException("Period for " + scope.describe()
                         + " is closed through " + previous + "; a reopen must move the close date back");
             }
@@ -155,10 +182,10 @@ public class PeriodCloseService {
                         .bind("key", scope.key())
                         .execute();
             } else {
-                store(handle, scope, previous, closedThrough, now, actor);
+                store(handle, scope, previous, closedThrough, false, now, actor);
             }
             audit(handle, now, PeriodCloseAction.REOPEN, scope, previous, closedThrough, actor,
-                    reason.trim(), null, null, null, null);
+                    reason.trim(), null, null, null, null, false);
             return closedThrough == null
                     ? Optional.<PeriodLock>empty()
                     : Optional.of(new PeriodLock(scope, closedThrough, now, actor));
@@ -184,7 +211,8 @@ public class PeriodCloseService {
                                 ? null : PeriodOperation.valueOf(rs.getString("_operation")),
                         rs.getString("_document_type"),
                         rs.getObject("_document_id", UUID.class),
-                        dateTime(rs, "_document_date")))
+                        dateTime(rs, "_document_date"),
+                        rs.getBoolean("_hard")))
                 .list());
     }
 
@@ -198,6 +226,46 @@ public class PeriodCloseService {
             if (hasText(register.context())) contexts.add(register.context());
         }
         return contexts;
+    }
+
+    /**
+     * The entity class organizations reference — the type argument of the first
+     * {@code Ref<…>} {@link PeriodCloseOrganization} field — or empty when no document declares one
+     * or the field is not a typed reference.
+     */
+    public Optional<Class<?>> organizationType() {
+        for (DocumentDescriptor document : registry.allDocuments()) {
+            Field field = document.javaClass() == null ? null : organizationField(document.javaClass());
+            if (field != null
+                    && field.getGenericType() instanceof java.lang.reflect.ParameterizedType parameterized
+                    && parameterized.getActualTypeArguments()[0] instanceof Class<?> target) {
+                return Optional.of(target);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * A human label for {@code scope}: {@link PeriodScope#describe()}, with an organization's id
+     * replaced by its catalog description when {@link #organizationType()} is a catalog.
+     */
+    public String describe(PeriodScope scope) {
+        if (scope.kind() != PeriodScope.Kind.ORGANIZATION) return scope.describe();
+        Optional<String> name = organizationType()
+                .flatMap(type -> registry.allCatalogs().stream().filter(c -> type.equals(c.javaClass())).findFirst())
+                .flatMap(catalog -> {
+                    try {
+                        UUID id = UUID.fromString(scope.key());
+                        return jdbi.withHandle(handle -> handle.createQuery(
+                                        "SELECT _description FROM " + catalog.tableName() + " WHERE _id = :id")
+                                .bind("id", id)
+                                .mapTo(String.class)
+                                .findOne());
+                    } catch (IllegalArgumentException notAnId) {
+                        return Optional.empty();
+                    }
+                });
+        return name.map(n -> "organization " + n).orElseGet(scope::describe);
     }
 
     /** The logical names of the accumulation registers, sorted. */
@@ -255,7 +323,17 @@ public class PeriodCloseService {
      */
     public void requireDocumentOpen(DocumentDescriptor descriptor, UUID id, LocalDateTime date,
                                     PeriodOperation operation) {
-        jdbi.useHandle(handle -> check(handle, descriptor, id, date, null, operation, true));
+        requireDocumentOpen(descriptor, id, date, null, operation);
+    }
+
+    /**
+     * {@link #requireDocumentOpen(DocumentDescriptor, UUID, LocalDateTime, PeriodOperation)} that
+     * also checks {@code organization}, the {@link PeriodCloseOrganization} value being written
+     * ({@code null} when it is not changing or the document has no such field).
+     */
+    public void requireDocumentOpen(DocumentDescriptor descriptor, UUID id, LocalDateTime date,
+                                    Object organization, PeriodOperation operation) {
+        jdbi.useHandle(handle -> check(handle, descriptor, id, date, organization, null, operation, true));
     }
 
     /**
@@ -274,7 +352,66 @@ public class PeriodCloseService {
     public void requirePostingOpen(Handle handle, DocumentDescriptor descriptor, UUID id, LocalDateTime date,
                                    Collection<AccumulationRegisterDescriptor> staged,
                                    PeriodOperation operation, boolean audit) {
-        check(handle, descriptor, id, date, staged == null ? List.of() : staged, operation, audit);
+        requirePostingOpen(handle, descriptor, id, date, null, staged, operation, audit);
+    }
+
+    /**
+     * {@link #requirePostingOpen(Handle, DocumentDescriptor, UUID, LocalDateTime, Collection,
+     * PeriodOperation, boolean)} that also checks {@code organization}, the document instance's
+     * {@link PeriodCloseOrganization} value.
+     */
+    public void requirePostingOpen(Handle handle, DocumentDescriptor descriptor, UUID id, LocalDateTime date,
+                                   Object organization, Collection<AccumulationRegisterDescriptor> staged,
+                                   PeriodOperation operation, boolean audit) {
+        check(handle, descriptor, id, date, organization, staged == null ? List.of() : staged, operation, audit);
+    }
+
+    /**
+     * The value of {@code document}'s {@link PeriodCloseOrganization} field, or {@code null} when
+     * its type has none.
+     */
+    public Object organizationOf(Object document) {
+        if (document == null) return null;
+        Field field = organizationField(document.getClass());
+        if (field == null) return null;
+        try {
+            return field.get(document);
+        } catch (IllegalAccessException unreadable) {
+            throw new IllegalStateException("Cannot read " + field, unreadable);
+        }
+    }
+
+    /** The {@link PeriodCloseOrganization} field name of {@code descriptor}, or {@code null}. */
+    public String organizationFieldName(DocumentDescriptor descriptor) {
+        Field field = descriptor.javaClass() == null ? null : organizationField(descriptor.javaClass());
+        return field == null ? null : field.getName();
+    }
+
+    private Field organizationField(Class<?> type) {
+        return ORGANIZATION_FIELDS.computeIfAbsent(type, PeriodCloseService::findOrganizationField)
+                .orElse(null);
+    }
+
+    private static Optional<Field> findOrganizationField(Class<?> type) {
+        for (Class<?> c = type; c != null && c != Object.class; c = c.getSuperclass()) {
+            for (Field field : c.getDeclaredFields()) {
+                if (field.isAnnotationPresent(PeriodCloseOrganization.class)) {
+                    field.setAccessible(true);
+                    return Optional.of(field);
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    private String organizationColumn(DocumentDescriptor descriptor) {
+        String name = organizationFieldName(descriptor);
+        if (name == null) return null;
+        return descriptor.attributes().stream()
+                .filter(attribute -> attribute.fieldName().equals(name))
+                .map(su.onno.metadata.AttributeDescriptor::columnName)
+                .findFirst()
+                .orElse(null);
     }
 
     /**
@@ -282,8 +419,8 @@ public class PeriodCloseService {
      *               the registers a posting stages
      */
     private void check(Handle handle, DocumentDescriptor descriptor, UUID id, LocalDateTime date,
-                       Collection<AccumulationRegisterDescriptor> staged, PeriodOperation operation,
-                       boolean audit) {
+                       Object organization, Collection<AccumulationRegisterDescriptor> staged,
+                       PeriodOperation operation, boolean audit) {
         if (descriptor.javaClass() != null
                 && descriptor.javaClass().isAnnotationPresent(PeriodCloseExempt.class)) {
             return;
@@ -293,14 +430,26 @@ public class PeriodCloseService {
 
         List<LocalDateTime> dates = new ArrayList<>(2);
         if (date != null) dates.add(date);
+        Set<String> organizations = new LinkedHashSet<>(2);
+        String written = PeriodScope.organizationKey(organization);
+        if (written != null) organizations.add(written);
+        boolean byOrganization = locks.stream()
+                .anyMatch(lock -> lock.scope().kind() == PeriodScope.Kind.ORGANIZATION);
+        String organizationColumn = byOrganization ? organizationColumn(descriptor) : null;
         if (id != null && operation != PeriodOperation.CREATE) {
-            handle.createQuery("SELECT _date FROM " + descriptor.tableName() + " WHERE _id = :id")
+            String columns = organizationColumn == null ? "_date" : "_date, " + organizationColumn;
+            handle.createQuery("SELECT " + columns + " FROM " + descriptor.tableName() + " WHERE _id = :id")
                     .bind("id", id)
-                    .map((rs, ctx) -> dateTime(rs, "_date"))
-                    .findOne()
-                    .ifPresent(stored -> {
+                    .map((rs, ctx) -> {
+                        LocalDateTime stored = dateTime(rs, "_date");
                         if (stored != null) dates.add(stored);
-                    });
+                        if (organizationColumn != null) {
+                            String key = PeriodScope.organizationKey(rs.getObject(organizationColumn));
+                            if (key != null) organizations.add(key);
+                        }
+                        return Boolean.TRUE;
+                    })
+                    .findOne();
         }
         if (dates.isEmpty()) return;
 
@@ -308,20 +457,37 @@ public class PeriodCloseService {
         Collection<AccumulationRegisterDescriptor> registers =
                 scoped && staged != null ? touchedRegisters(handle, id, staged) : List.of();
 
+        // The latest violated close names the period; any violated hard close admits nothing.
         PeriodLock violated = null;
         LocalDateTime violatingDate = null;
+        PeriodLock hard = null;
+        LocalDateTime hardDate = null;
         for (PeriodLock lock : locks) {
-            if (!applies(lock.scope(), descriptor, registers)) continue;
-            if (violated != null && !lock.closedThrough().isAfter(violated.closedThrough())) continue;
-            for (LocalDateTime candidate : dates) {
-                if (lock.covers(candidate)) {
-                    violated = lock;
-                    violatingDate = candidate;
-                    break;
-                }
+            if (!applies(lock.scope(), descriptor, registers, organizations)) continue;
+            LocalDateTime covered = dates.stream().filter(lock::covers).findFirst().orElse(null);
+            if (covered == null) continue;
+            if (violated == null || lock.closedThrough().isAfter(violated.closedThrough())) {
+                violated = lock;
+                violatingDate = covered;
+            }
+            if (lock.hard() && (hard == null || lock.closedThrough().isAfter(hard.closedThrough()))) {
+                hard = lock;
+                hardDate = covered;
             }
         }
         if (violated == null) return;
+        if (hard != null) {
+            throw new PeriodClosedException(hard, operation, descriptor.logicalName(), id, hardDate);
+        }
+
+        if (isAdjustment(descriptor)) {
+            if (audit) {
+                audit(handle, LocalDateTime.now(), PeriodCloseAction.ADJUSTMENT, violated.scope(), null,
+                        violated.closedThrough(), overridePolicy.actor(), null, operation,
+                        descriptor.logicalName(), id, violatingDate, false);
+            }
+            return;
+        }
 
         PeriodOverride override = currentOverride();
         if (override == null) {
@@ -330,8 +496,12 @@ public class PeriodCloseService {
         if (audit) {
             audit(handle, LocalDateTime.now(), PeriodCloseAction.OVERRIDE, violated.scope(), null,
                     violated.closedThrough(), override.actor(), override.reason(), operation,
-                    descriptor.logicalName(), id, violatingDate);
+                    descriptor.logicalName(), id, violatingDate, false);
         }
+    }
+
+    private static boolean isAdjustment(DocumentDescriptor descriptor) {
+        return descriptor.javaClass() != null && descriptor.javaClass().isAnnotationPresent(PeriodAdjustment.class);
     }
 
     private PeriodOverride currentOverride() {
@@ -341,12 +511,14 @@ public class PeriodCloseService {
     }
 
     private static boolean applies(PeriodScope scope, DocumentDescriptor document,
-                                   Collection<AccumulationRegisterDescriptor> registers) {
+                                   Collection<AccumulationRegisterDescriptor> registers,
+                                   Set<String> organizations) {
         return switch (scope.kind()) {
             case GLOBAL -> true;
             case CONTEXT -> scope.key().equalsIgnoreCase(document.context())
                     || registers.stream().anyMatch(r -> scope.key().equalsIgnoreCase(r.context()));
             case REGISTER -> registers.stream().anyMatch(r -> scope.key().equalsIgnoreCase(r.logicalName()));
+            case ORGANIZATION -> organizations.stream().anyMatch(scope.key()::equalsIgnoreCase);
         };
     }
 
@@ -378,7 +550,8 @@ public class PeriodCloseService {
                                 rs.getString("_scope_key")),
                         rs.getObject("_closed_through", LocalDate.class),
                         dateTime(rs, "_updated_at"),
-                        rs.getString("_updated_by")))
+                        rs.getString("_updated_by"),
+                        rs.getBoolean("_hard")))
                 .list();
         List<PeriodLock> sorted = new ArrayList<>(locks);
         sorted.sort(Comparator.comparing((PeriodLock lock) -> lock.scope().kind())
@@ -386,27 +559,30 @@ public class PeriodCloseService {
         return sorted;
     }
 
-    private static LocalDate currentClose(Handle handle, PeriodScope scope) {
-        return handle.createQuery("SELECT _closed_through FROM " + LOCKS
-                        + " WHERE _scope_kind = :kind AND _scope_key = :key")
+    /** The close of exactly {@code scope}, row-locked for the rest of the transaction; {@code null} when open. */
+    private static PeriodLock currentLock(Handle handle, PeriodScope scope) {
+        return handle.createQuery("SELECT * FROM " + LOCKS
+                        + " WHERE _scope_kind = :kind AND _scope_key = :key FOR UPDATE")
                 .bind("kind", scope.kind().name())
                 .bind("key", scope.key())
-                .map((rs, ctx) -> rs.getObject("_closed_through", LocalDate.class))
+                .map((rs, ctx) -> new PeriodLock(scope, rs.getObject("_closed_through", LocalDate.class),
+                        dateTime(rs, "_updated_at"), rs.getString("_updated_by"), rs.getBoolean("_hard")))
                 .findOne()
                 .orElse(null);
     }
 
     private static void store(Handle handle, PeriodScope scope, LocalDate previous, LocalDate closedThrough,
-                              LocalDateTime now, String actor) {
+                              boolean hard, LocalDateTime now, String actor) {
         String sql = previous == null
-                ? "INSERT INTO " + LOCKS + " (_scope_kind, _scope_key, _closed_through, _updated_at, _updated_by)"
-                        + " VALUES (:kind, :key, :closed, :now, :actor)"
-                : "UPDATE " + LOCKS + " SET _closed_through = :closed, _updated_at = :now, _updated_by = :actor"
-                        + " WHERE _scope_kind = :kind AND _scope_key = :key";
+                ? "INSERT INTO " + LOCKS + " (_scope_kind, _scope_key, _closed_through, _hard, _updated_at, _updated_by)"
+                        + " VALUES (:kind, :key, :closed, :hard, :now, :actor)"
+                : "UPDATE " + LOCKS + " SET _closed_through = :closed, _hard = :hard, _updated_at = :now,"
+                        + " _updated_by = :actor WHERE _scope_kind = :kind AND _scope_key = :key";
         handle.createUpdate(sql)
                 .bind("kind", scope.kind().name())
                 .bind("key", scope.key())
                 .bind("closed", closedThrough)
+                .bind("hard", hard)
                 .bind("now", now)
                 .bind("actor", actor)
                 .execute();
@@ -415,11 +591,11 @@ public class PeriodCloseService {
     private static void audit(Handle handle, LocalDateTime at, PeriodCloseAction action, PeriodScope scope,
                               LocalDate previous, LocalDate closedThrough, String actor, String reason,
                               PeriodOperation operation, String documentType, UUID documentId,
-                              LocalDateTime documentDate) {
+                              LocalDateTime documentDate, boolean hard) {
         handle.createUpdate("INSERT INTO " + AUDIT + " (_id, _at, _action, _scope_kind, _scope_key, _previous,"
                         + " _closed_through, _actor, _reason, _operation, _document_type, _document_id,"
-                        + " _document_date) VALUES (:id, :at, :action, :kind, :key, :previous, :closed, :actor,"
-                        + " :reason, :operation, :documentType, :documentId, :documentDate)")
+                        + " _document_date, _hard) VALUES (:id, :at, :action, :kind, :key, :previous, :closed,"
+                        + " :actor, :reason, :operation, :documentType, CAST(:documentId AS UUID), :documentDate, :hard)")
                 .bind("id", UUID.randomUUID())
                 .bind("at", at)
                 .bind("action", action.name())
@@ -433,6 +609,7 @@ public class PeriodCloseService {
                 .bindByType("documentType", documentType, String.class)
                 .bindByType("documentId", documentId, UUID.class)
                 .bindByType("documentDate", documentDate, LocalDateTime.class)
+                .bind("hard", hard)
                 .execute();
     }
 
@@ -449,6 +626,12 @@ public class PeriodCloseService {
                 if (knownRegisters().stream().noneMatch(scope.key()::equalsIgnoreCase)) {
                     throw new IllegalArgumentException("Unknown accumulation register '" + scope.key()
                             + "'; known registers: " + knownRegisters());
+                }
+            }
+            case ORGANIZATION -> {
+                if (registry.allDocuments().stream().noneMatch(d -> organizationFieldName(d) != null)) {
+                    throw new IllegalArgumentException("No document declares a @PeriodCloseOrganization field;"
+                            + " an organization close would apply to nothing");
                 }
             }
         }

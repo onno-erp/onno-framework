@@ -227,12 +227,12 @@ Writes, post/unpost and `posting-preview` on a document inside a closed period r
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/` | `{locks: [{scope, closedThrough, updatedAt, updatedBy}], canManage}` — any signed-in user. |
-| GET | `/audit?limit=100` | Close / reopen / override audit trail. Manage roles. |
-| POST | `/close` | `{scope, closedThrough, reason?}`. Manage roles. |
+| GET | `/` | `{locks: [{scope, label, closedThrough, state, updatedAt, updatedBy}], canManage}` — any signed-in user; `state` is `soft` or `hard`. |
+| GET | `/audit?limit=100` | Close / reopen / override / adjustment audit trail. Manage roles. |
+| POST | `/close` | `{scope, closedThrough, hard?, reason?}`. Manage roles. |
 | POST | `/reopen` | `{scope, closedThrough?, reason}` — no `closedThrough` fully reopens; `reason` required. Manage roles. |
 
-`scope` is `global`, `context:<name>` or `register:<name>`. Manage roles are `ADMIN` plus
+`scope` is `global`, `context:<name>`, `register:<name>` or `organization:<id>`. Manage roles are `ADMIN` plus
 `onno.period-close.manage-roles`. The built-in admin page is served at `/period-close`
 (`PeriodClosePage.ROUTE`); link it from a `Layout` section. See
 [docs/PERIOD_CLOSE.md](../docs/PERIOD_CLOSE.md).

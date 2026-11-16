@@ -88,11 +88,14 @@ public class DocumentCommandService {
         this.periodClose = periodClose;
     }
 
-    private void requirePeriodOpen(DocumentDescriptor desc, UUID id, Object writtenDate,
+    private void requirePeriodOpen(DocumentDescriptor desc, UUID id, Map<String, Object> body,
                                    su.onno.period.PeriodOperation operation) {
         if (periodClose == null) return;
+        Object writtenDate = body == null ? null : body.get("date");
+        String organizationField = periodClose.organizationFieldName(desc);
+        Object organization = body == null || organizationField == null ? null : body.get(organizationField);
         periodClose.requireDocumentOpen(desc, id,
-                writtenDate == null ? null : requireWriteDate(writtenDate), operation);
+                writtenDate == null ? null : requireWriteDate(writtenDate), organization, operation);
     }
 
     public Map<String, Object> create(DocumentDescriptor desc, Map<String, Object> requestBody, AccessSubject subject) {
@@ -129,7 +132,7 @@ public class DocumentCommandService {
             }
         }
         errors.throwIfAny();
-        requirePeriodOpen(desc, id, body.get("date"), su.onno.period.PeriodOperation.CREATE);
+        requirePeriodOpen(desc, id, body, su.onno.period.PeriodOperation.CREATE);
 
         List<String> columns = new ArrayList<>(List.of(
                 "_id", "_number", "_date", "_posted", "_deletion_mark", "_version"));
@@ -208,7 +211,7 @@ public class DocumentCommandService {
             }
         }
         errors.throwIfAny();
-        requirePeriodOpen(desc, id, body.get("date"), su.onno.period.PeriodOperation.UPDATE);
+        requirePeriodOpen(desc, id, body, su.onno.period.PeriodOperation.UPDATE);
 
         List<String> setClauses = new ArrayList<>();
         if (body.containsKey("number")) setClauses.add("_number = :_number");

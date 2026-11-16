@@ -85,9 +85,10 @@ tables, and register filters/typed reads convert it in both directions.
 
 Post, repost and unpost are rejected with `PeriodClosedException` when the document (its own or its
 stored date) falls on or before a close date set through `PeriodCloseService` for all documents,
-its context, or a register it moves. A `CHRONOLOGICAL` restoration also checks every later document
+its context, a register it moves, or its `@PeriodCloseOrganization` organization. A `CHRONOLOGICAL` restoration also checks every later document
 it would repost and rolls back entirely if one is closed. `posting-preview` reports the same
-rejection. Do not add date-lock checks to `beforePost`; close the period instead. Trusted jobs that
+rejection. Do not add date-lock checks to `beforePost`; close the period instead. Corrections of a
+closed period go through a `@PeriodAdjustment` document type, admitted by soft closes only. Trusted jobs that
 must write into a closed period wrap the call in
 `periods.override(new PeriodOverride(actor, reason), () -> posting.repost(doc))` (audited). See
 `docs/PERIOD_CLOSE.md`.

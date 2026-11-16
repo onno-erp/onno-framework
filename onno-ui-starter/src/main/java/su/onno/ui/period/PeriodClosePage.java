@@ -36,6 +36,9 @@ public class PeriodClosePage implements Page {
 
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final int AUDIT_ROWS = 20;
+    private static final String ORGANIZATION = "organization";
+    private static final String SOFT = "soft";
+    private static final String HARD = "hard";
 
     private final PeriodCloseService periods;
     private final PeriodCloseAccess access;
@@ -61,23 +64,34 @@ public class PeriodClosePage implements Page {
             b.text("No period is closed.");
         }
         for (PeriodLock lock : locks) {
-            b.text(capitalize(lock.scope().describe()) + ": closed through " + lock.closedThrough()
+            b.text(capitalize(periods.describe(lock.scope())) + ": " + (lock.hard() ? "hard-closed" : "closed")
+                    + " through " + lock.closedThrough()
                     + by(lock.updatedBy()) + (lock.updatedAt() == null ? "" : ", " + TIME.format(lock.updatedAt())));
         }
 
         String[] scopes = scopeOptions();
         String[] roles = access.manageRoleNames();
+        Class<?> organizationType = periods.organizationType().orElse(null);
         b.actions("Manage", actions -> {
             actions.action("closePeriod").label("Close period").icon("lock").roles(roles)
                     .form(f -> {
                         f.input("scope").label("Applies to").type(InputType.SELECT).options(scopes).value("global");
+                        if (organizationType != null) {
+                            f.input("organization").label("Organization (when applies to organization)")
+                                    .reference(organizationType);
+                        }
                         f.input("closedThrough").label("Closed through (inclusive)").type(InputType.DATE).required();
+                        f.input("state").label("Close").type(InputType.SELECT).options(SOFT, HARD).value(SOFT);
                         f.input("reason").label("Note").type(InputType.TEXTAREA);
                     })
                     .handler(this::close);
             actions.action("reopenPeriod").label("Reopen period").icon("lock-open").roles(roles)
                     .form(f -> {
                         f.input("scope").label("Applies to").type(InputType.SELECT).options(scopes).value("global");
+                        if (organizationType != null) {
+                            f.input("organization").label("Organization (when applies to organization)")
+                                    .reference(organizationType);
+                        }
                         f.input("closedThrough").label("New close date (empty = fully open)").type(InputType.DATE);
                         f.input("reason").label("Reason").type(InputType.TEXTAREA).required();
                     })
@@ -97,10 +111,10 @@ public class PeriodClosePage implements Page {
         try {
             LocalDate date = date(ctx.input("closedThrough"));
             if (date == null) return ActionResult.toast(ActionToast.error("Pick a close date"));
-            PeriodLock lock = periods.close(PeriodScope.parse(ctx.input("scope")), date, ctx.user(),
+            PeriodLock lock = periods.close(scope(ctx), date, HARD.equals(ctx.input("state")), ctx.user(),
                     blankToNull(ctx.input("reason")));
             return ActionResult.refresh(ActionToast.success(
-                    capitalize(lock.scope().describe()) + " closed through " + lock.closedThrough()));
+                    capitalize(periods.describe(lock.scope())) + " closed through " + lock.closedThrough()));
         } catch (IllegalArgumentException invalid) {
             return ActionResult.toast(ActionToast.error(invalid.getMessage()));
         }
@@ -108,7 +122,7 @@ public class PeriodClosePage implements Page {
 
     private ActionResult reopen(ActionContext ctx) {
         try {
-            PeriodScope scope = PeriodScope.parse(ctx.input("scope"));
+            PeriodScope scope = scope(ctx);
             return periods.reopen(scope, date(ctx.input("closedThrough")), ctx.user(), ctx.input("reason"))
                     .map(lock -> ActionResult.refresh(ActionToast.success(
                             capitalize(scope.describe()) + " now closed through " + lock.closedThrough())))
@@ -119,24 +133,36 @@ public class PeriodClosePage implements Page {
         }
     }
 
+    /** The picked scope; {@value #ORGANIZATION} takes its id from the organization picker. */
+    private static PeriodScope scope(ActionContext ctx) {
+        if (ORGANIZATION.equals(ctx.input("scope"))) {
+            String organization = blankToNull(ctx.input("organization"));
+            if (organization == null) throw new IllegalArgumentException("Pick an organization");
+            return PeriodScope.organization(organization);
+        }
+        return PeriodScope.parse(ctx.input("scope"));
+    }
+
     private String[] scopeOptions() {
         List<String> options = new ArrayList<>();
         options.add(PeriodScope.global().toString());
+        if (periods.organizationType().isPresent()) options.add(ORGANIZATION);
         periods.knownContexts().forEach(context -> options.add(PeriodScope.context(context).toString()));
         periods.knownRegisters().forEach(register -> options.add(PeriodScope.register(register).toString()));
         return options.toArray(String[]::new);
     }
 
-    private static String describe(PeriodCloseAuditEntry entry) {
+    private String describe(PeriodCloseAuditEntry entry) {
         StringBuilder line = new StringBuilder(TIME.format(entry.at())).append(" — ");
-        String scope = entry.scope().describe();
-        if (entry.action() == PeriodCloseAction.OVERRIDE) {
-            line.append("override: ").append(entry.operation() == null ? "change" : entry.operation().verb())
+        String scope = periods.describe(entry.scope());
+        if (entry.action() == PeriodCloseAction.OVERRIDE || entry.action() == PeriodCloseAction.ADJUSTMENT) {
+            line.append(entry.action() == PeriodCloseAction.OVERRIDE ? "override: " : "adjustment: ").append(entry.operation() == null ? "change" : entry.operation().verb())
                     .append(' ').append(entry.documentType());
             if (entry.documentDate() != null) line.append(" dated ").append(entry.documentDate().toLocalDate());
             line.append(" (").append(scope).append(" closed through ").append(entry.closedThrough()).append(')');
         } else if (entry.action() == PeriodCloseAction.CLOSE) {
-            line.append("closed ").append(scope).append(" through ").append(entry.closedThrough());
+            line.append(entry.hard() ? "hard-closed " : "closed ").append(scope)
+                    .append(" through ").append(entry.closedThrough());
         } else {
             line.append("reopened ").append(scope)
                     .append(entry.closedThrough() == null

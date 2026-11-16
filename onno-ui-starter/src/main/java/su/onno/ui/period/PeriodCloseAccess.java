@@ -40,6 +40,12 @@ public class PeriodCloseAccess implements PeriodCloseOverridePolicy {
         return roles.toArray(String[]::new);
     }
 
+    /** The signed-in user of the current request, for adjustment audit entries. */
+    @Override
+    public String actor() {
+        return access.username(null);
+    }
+
     @Override
     public Optional<PeriodOverride> current() {
         if (overrideRoles.isEmpty()) return Optional.empty();

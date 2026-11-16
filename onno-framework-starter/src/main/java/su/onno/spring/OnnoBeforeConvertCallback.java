@@ -94,6 +94,7 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
             if (periodClose != null) {
                 // The stored date and the date being written must both be outside closed periods.
                 periodClose.requireDocumentOpen(desc, document.getId(), document.getDate(),
+                        periodClose.organizationOf(document),
                         document.isNew() ? PeriodOperation.CREATE
                                 : document.isDeletionMark() ? PeriodOperation.DELETE : PeriodOperation.UPDATE);
             }
