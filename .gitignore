@@ -24,9 +24,8 @@ onno-ui/dist/
 onno-ui/node_modules/
 *.tsbuildinfo
 
-# Editor config and the generated model written by the su.onno.ui Gradle plugin
+# Widget editor config and the generated models written by the su.onno.ui / su.onno.widgets Gradle plugins
 **/src/main/widgets/tsconfig.json
-**/src/main/ui/tsconfig.json
 **/src/main/ui/model.gen.ts
 **/src/main/widgets/model.gen.ts
 

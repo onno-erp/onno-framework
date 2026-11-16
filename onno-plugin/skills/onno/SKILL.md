@@ -145,14 +145,14 @@ public class SalesRegister extends AccumulationRecord {
 ```
 
 ```ts
-// 4. src/main/ui/entities/salesOrders.ts — optional: every readable entity already has a list and
+// 4. src/main/ui/entities/SalesOrders.ts — optional: every readable entity already has a list and
 //    form; customize only what differs (registered in main.tsx: entities: { "Sales Orders": salesOrders }).
 import type { EntityCustomization } from "@onno/ui";
 
-export const salesOrders: EntityCustomization<"Sales Orders"> = {
-  list: { columns: ["number", "date", "customer", "total"], sort: "-date" },
-  fields: { total: { format: { money: "USD" }, hideInForm: true } },
-};
+export const salesOrders = {
+  list: { columns: ["number", "date", "customer", "total"], sort: "-date" },  // which columns, in order
+  fields: { total: { format: { money: "USD" }, hideInForm: true } },          // how fields look
+} satisfies EntityCustomization<"Sales Orders">;
 ```
 
 Implement in this order: catalogs + enums → documents + tabular sections → registers + posting →
@@ -224,8 +224,10 @@ and permissions, never screens. Write UI only for what differs. The UI is the np
   the default login and home are wired explicitly so you extend them by editing those files). The build generates
   `model.gen.ts` from the Java entities (`generateUiModel`) and runs `vite build` into the jar
   (`buildUi`); `npm run dev` in `src/main/ui` hot-reloads against the running backend.
-- **`main.tsx`** is one `defineApp({ pages, navigation, extensions })` call. Entity screens are TSX
-  pages registered as `{ list: "Orders", component: OrdersPage, icon: ClipboardList }` /
+- **`main.tsx`** is one `defineApp({ entities, pages, navigation, extensions })` call. How an
+  entity presents is one `EntityCustomization<E>` per entity in `entities/` (columns via
+  `list.columns`, form fields via `form.fields`, presentation in `fields`). Entity screens with a
+  different layout are TSX pages registered as `{ list: "Orders", component: OrdersPage }` /
   `{ record: "Orders", component: OrderPage }` (`ListPageProps<E>` / `RecordPageProps<E>`);
   ordinary pages are `{ path, component, label, icon, roles, when }`;
   `navigation: [{ title, icon, items: ["Orders", "/ops"] }]`. Icons are imported Lucide components.

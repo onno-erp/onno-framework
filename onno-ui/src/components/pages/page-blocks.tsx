@@ -102,8 +102,10 @@ export function DefaultView({ path }: { path: string }) {
   return view ? <RouteView view={view} /> : null;
 }
 
-export type EntityListProps = Omit<ListCustomization, "selection"> & Omit<EntityCustomization, "list"> & {
+export type EntityListProps = Omit<ListCustomization, "selection"> & Pick<EntityCustomization, "commands" | "rowStyle"> & {
   list?: ListDescriptor | null;
+  /** Restyle fields in this list only, on top of the entity's `fields` customization. */
+  overrides?: EntityCustomization["fields"];
   selectionToolbar?: ListCustomization["selection"];
   /** The catalog/document, by logical name (`"Orders"`). */
   entity?: string;
@@ -170,16 +172,18 @@ export function EntityList(props: EntityListProps) {
       aggregates: props.aggregates,
       filters: props.filters,
       map: props.map,
+      calendar: props.calendar,
+      timeline: props.timeline,
       custom: props.custom,
       selection: props.selectionToolbar,
       selectionCheckboxes: props.selectionCheckboxes,
       groupsExpanded: props.groupsExpanded,
     };
     return {
-      ...customization, fields: props.fields ?? customization?.fields, commands: props.commands ?? customization?.commands, rowStyle: props.rowStyle ?? customization?.rowStyle,
+      ...customization, fields: props.overrides ?? customization?.fields, commands: props.commands ?? customization?.commands, rowStyle: props.rowStyle ?? customization?.rowStyle,
       list: { ...customization?.list, ...Object.fromEntries(Object.entries(listOptions).filter(([, v]) => v !== undefined)) },
     };
-  }, [customization, columns, labels, whereKey, title, props.fields, props.commands, props.rowStyle, props.sort, props.groupBy, props.groupable, props.aggregates, props.filters, props.map, props.custom, props.selectionCheckboxes, props.groupsExpanded, props.selectionToolbar, props.onSortChange, props.onGroupByChange]);
+  }, [customization, columns, labels, whereKey, title, props.overrides, props.commands, props.rowStyle, props.sort, props.groupBy, props.groupable, props.aggregates, props.filters, props.map, props.calendar, props.timeline, props.custom, props.selectionCheckboxes, props.groupsExpanded, props.selectionToolbar, props.onSortChange, props.onGroupByChange]);
   const customized = useCustomizedList(base, own);
 
   const list = useMemo(() => {

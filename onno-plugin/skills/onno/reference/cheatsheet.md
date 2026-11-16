@@ -339,7 +339,9 @@ because they are not Java field references.
   `onnoUi { sourceDir; npmProjectDir; nodeVersion; modelPackages }`. `vite.config.ts`:
   `plugins: [onno()]` from `@onno/ui/vite` (`onno({ backend })` for the dev proxy target).
 - `defineApp({ entities, pages, navigation, extensions })` — once, in `main.tsx`:
-  - `entities: { [logicalName]: EntityCustomization<E> }` — `icon`, `comments`, `list`, `fields`,
+  - `entities: { [logicalName]: EntityCustomization<E> }` — one per entity (`entities/Orders.ts`,
+    `satisfies EntityCustomization<"Orders">`), applied wherever it shows — `icon`, `comments`,
+    `list`, `form`, `fields`,
     `rowStyle(record) → "danger"|"warning"|"success"|"accent"|"muted"|null`,
     `commands: { key: { placement: "primary"|"menu"|"row"|"hidden", icon, title } | placement }`
     (keys: server commands, built-ins `post`/`unpost`/`duplicate`/`delete`/`openInList`,
@@ -349,9 +351,11 @@ because they are not Java field references.
     (`{ field, label, type?: "options"|"multiOptions"|"contains"|"startsWith"|"dateRange"|
     "numberRange", options?, optionsFrom? }`), `where`, `title`, `map` (`{ lat, lng, label?,
     defaultView? }`), `custom` (`{ component: ListRendererProps → node, label, defaultView }`),
-    `selection` (component `{ ids, complete }`), `selectionCheckboxes`.
-  - `fields[field | "section.field"]`: `label`, `hidden`, `hideInList`, `hideInForm`, `order`,
-    `group`, `width: "full"|"half"`, `input: "textarea"|"switch"|"image"|"images"|"file"|"color"|
+    `selection` (component `{ ids, complete }`), `selectionCheckboxes`, `calendar`, `timeline`.
+  - `form`: `fields` — header fields shown, in order. Selection/order is only ever an array
+    (`list.columns`, `form.fields`).
+  - `fields[field | "section.field"]` (presentation only; key order means nothing): `label`,
+    `hidden`, `hideInList`, `hideInForm`, `group`, `width: "full"|"half"`, `input: "textarea"|"switch"|"image"|"images"|"file"|"color"|
     "avatar"|"map"`, `format: { money: "USD" } | { number: { decimals, grouping } } | { percent:
     { decimals } } | { date: "short"|"medium"|"long"|"full" | Intl options }`, `render(value,
     record)`, `placeholder`, `hint`, `refSecondary`, `filterBy: { targetField: formField }`,
@@ -365,7 +369,7 @@ because they are not Java field references.
     `entity.list.actions`, `entity.list.selection`, `entity.form.actions`, `entity.form.aside`,
     `crm.chat.*`, `crm.contact.actions|profile`, `crm.inbox.toolbar`.
 - Typed model (`model.gen.ts`): `EntityName`, `CatalogName`/`DocumentName`/`RegisterName`,
-  `RecordOf<E>` (with `<f>Display`, `<f>Ref` companions), `FieldOf<E>`, `TopField<E>`, enum
+  `RecordOf<E>` (with `<f>Display`, `<f>Ref` companions), `FieldOf<E>`, `TopField<E>`, `FormField<E>` (form-layout fields: no sections, no document `number`/`date`/`posted`), enum
   constants + `…Labels`, `RoleName` (extend: `declare module "@onno/ui" { interface OnnoRoles {
   X: true } }`), `InformationRegisterName`, `ConstantName`.
 - `Where<E>`: `{ field: value | null | { eq, not, in, notIn, gt, gte, lt, lte, contains,
@@ -374,8 +378,10 @@ because they are not Java field references.
 - Measures: `count(entity, where?)`, `sum|avg|min|max(entity, numericField, where?)`; `By<E>` =
   field or `{ dateField: "minute"|"hour"|"day"|"week"|"month" }`.
 - Page blocks: `Page` (`title`, `subtitle`, `actions`), `Row` (`widths: (number | { px })[]`),
-  `EntityList` (`entity`, `where`, `columns`, `labels`, `customization`, `fill`, `defaultView|
-  GroupBy|Sort`, controlled `view|groupBy|sort|search|selection` + `on…Change`), `DefaultView`
+  `EntityList` (`entity`, `where`, `columns`, `labels`, `overrides`, `customization`, `fill`,
+  `defaultView|GroupBy|Sort`, controlled `view|groupBy|sort|search|selection` + `on…Change`),
+  `RecordPage`, `RecordFields` (`fields: FormField[]`, `overrides`), `RecordLines` (`section`,
+  `overrides`), `DefaultView`
   (`path`), `DefaultHome`, `PageHeader`, `EntityListView` (+ `applyListOptions`) over an own feed.
 - Widgets (all `title`, `hint`): `Stat` (`measure`, `compare`, `trend`, `sparkline`, `ratioTo`,
   `currency`, `unit`, `format`), `Sparkline`, `Gauge` (`target`), `Chart` (`measure`+`by` or

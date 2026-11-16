@@ -23,7 +23,8 @@ plumbing; it is the files any Vite + React app has, plus the app's own code:
 | File | What it is |
 | --- | --- |
 | `package.json`, `vite.config.ts`, `tsconfig.json`, `index.html` | A normal Vite app. The config is one line: `plugins: [onno()]`. |
-| `main.tsx` | One `defineApp({ pages, navigation })` call. |
+| `main.tsx` | One `defineApp({ login, entities, pages, navigation })` call. |
+| `entities/*.ts` | How each entity presents, one `EntityCustomization<E>` per file (`Orders.ts`: columns, filters, row tint, field formats, command icons, comments) — applied to its default list and form, embedded lists and custom pages. |
 | `pages/*.tsx` | The app's own pages, composed from `@onno/ui` components (`Page`, `Row`, `Stat`, `Chart`, `EntityList`) and the starters' (`CrmInbox`, `PrintTemplates`). |
 | `components/*.tsx` | The app's own components. `OrderActivity.tsx` shows data access (`useRecords`); `BookTiles.tsx` a custom list view. |
 | `model.gen.ts` | Generated on every build from the Java entities (git-ignored). Gives entity names, fields and enum values their types. |
@@ -32,8 +33,9 @@ Server behaviour stays in Java, as ordinary beans in `example/src/main/java/com/
 `commands/OrderCommands` (what can be done with an order — on every surface: UI, REST, MCP),
 `checks/ScheduleEventChecks` (live form checks), `pickers/EmployeeAvailability` (picker options).
 How a command is offered (row button, header button, menu, icon) is the entity's `commands`
-props on `EntityList` and `RecordPage` in `pages/*.tsx`; so are the built-in record actions and the print starter's
-`print-*` actions. The list registration supplies its imported Lucide `icon`; `<RecordPage comments>` enables the record discussion.
+customization in `entities/*.ts`; so are the built-in record actions and the print starter's
+`print-*` actions. The same file supplies the entity's imported Lucide `icon`, and `comments: true`
+enables the record discussion.
 
 ## 2. The contract between server and browser
 
@@ -186,10 +188,11 @@ Opening `/ui/documents/orders`:
 
 1. The server returns the app's `index.html`; `main.tsx` runs `defineApp`, which mounts the shell.
 2. `app-shell.tsx` loads `/api/ui/model`, so the sidebar shows "Orders".
-3. `content-pane.tsx` resolves the registered list page and fetches `/api/ui/view/documents/orders`.
+3. `content-pane.tsx` finds no registered list page for Orders, so it fetches
+   `/api/ui/view/documents/orders` for the default screen.
 4. `UiViewController` checks access and returns `{list}`, the list descriptor.
-5. The registered `OrdersPage` supplies columns, filters and row tint directly to `EntityList`,
-   whose grid pages through `/api/list/documents/Orders`. An SSE event for
+5. The app's `entities/Orders.ts` customization supplies columns, filters and row tint
+   (`useCustomizedList`); `EntityListView`'s grid pages through `/api/list/documents/Orders`. An SSE event for
    Orders invalidates it in the query cache: the list patches the changed rows or reloads its window.
 
 Opening `/ui/ops` instead stops at step 3: the app's pages (in context) have `SalesOpsPage`.
@@ -199,7 +202,7 @@ Opening `/ui/ops` instead stops at step 3: the app's pages (in context) have `Sa
 | To… | Edit |
 | --- | --- |
 | add a page or nav entry in an app | `src/main/ui/main.tsx` |
-| change how an entity lists or edits | `src/main/ui/pages/<Entity>Page.tsx` |
+| change how an entity lists or edits | `src/main/ui/entities/<Entity>.ts`; a `pages/` component only when the layout differs |
 | add something apps can import | its implementation in `@onno/ui`, then one line in `src/index.ts` |
 | add an option to entity customizations | `lib/entity-customizations.ts` + `public-types.ts` |
 | let pages control more list state | `ListStateProps` in `entity-list.tsx` (`useControllable`), then `EntityList` in `page-blocks.tsx` |
@@ -240,17 +243,22 @@ npm run test:run --workspace=@onno/ui
 
 ## Composing entity pages
 
-Register list and record components by logical name in `defineApp({ pages })`:
-`{ list: "Books", component: BooksPage, icon: BookOpen }` and
-`{ record: "Books", component: BookPage }`. Icons are imported components from `@onno/ui/icons`.
-`BooksPage({ list }: ListPageProps<"Books">)` renders `<EntityList list={list} columns={…}
-fields={…} filters={…} custom={…} />`. The descriptor is injected without another view request.
-`BookPage({ form }: RecordPageProps<"Books">)` composes `RecordPage`, `RecordFields`, `RecordLines`,
-and custom React controls. `form.values` and `form.set` share the standard validation, save/post,
-dirty guard and refresh pipeline. Field names, values, sections, and columns are checked against
-the generated model. See [the package examples](../onno-ui/README.md) and
-[StockReceiptsPage.tsx](../example/src/main/ui/pages/StockReceiptsPage.tsx), including a custom notes
-editor beside the standard fields and line editor. The desktop rail has a
+How an entity presents is one `EntityCustomization<E>` per entity in `entities/` —
+`export const books = { … } satisfies EntityCustomization<"Books">` — registered with
+`defineApp({ entities })`. It holds the `icon`, `list` (columns, filters, grouping, custom views),
+`form` (`fields`: the header fields shown, in order), `fields` (presentation only, keyed by field;
+its key order selects and orders nothing), `rowStyle`, `commands`, `recordPanels` and `comments`,
+and applies wherever the entity shows. Icons are imported components from `@onno/ui/icons`.
+
+Register a list or record component by logical name in `defineApp({ pages })` only when the layout
+differs from the default: `{ list: "Suppliers", component: SuppliersPage }` puts a stat above
+`<EntityList list={list} />`; `{ record: "Stock Receipts", component: StockReceiptPage }` composes
+`RecordPage`, `<RecordFields form={form} fields={["supplier"]} />`, `RecordLines` and a custom notes
+editor in a side column. Those blocks take page-only `overrides`. `form.values` and `form.set` share
+the standard validation, save/post, dirty guard and refresh pipeline. Field names, values, sections,
+and columns are checked against the generated model. See [the package examples](../onno-ui/README.md),
+[entities/Orders.ts](../example/src/main/ui/entities/Orders.ts) and
+[StockReceiptPage.tsx](../example/src/main/ui/pages/StockReceiptPage.tsx). The desktop rail has a
 `shell.navigation.actions` extension outlet for custom buttons.
 
 List selection: the header checkbox and ⌘A/Ctrl+A select every record matching the current search, filters and workspace constraints, including unloaded rows and collapsed groups. Selection loads through the scoped feed without changing the visible window. A failed request preserves the previous selection; changing the query or clearing the selection cancels a pending select-all. Shift-range selection follows loaded rows.

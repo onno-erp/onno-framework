@@ -21,22 +21,22 @@ From the reference app, `example/src/main/ui/` (`pages/`, `components/`, `lib/`)
 ```tsx
 import { defineApp } from "@onno/ui";
 import { Activity, ListChecks, Users, Settings, Inbox, Plug, ShoppingCart, Book, Package, ChartColumn, MessagesSquare } from "@onno/ui/icons";
-import { OrdersPage, OrderPage } from "./pages/OrdersPage";
+import { entities } from "./entities";
 import { crmInboxAvailable } from "./lib/crm";
 import { HomePage } from "./pages/HomePage";
 import { SalesOpsPage } from "./pages/SalesOpsPage";
 import { SalesReportPage } from "./pages/SalesReportPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ConnectionsPage, ConversationPage, SupportPage } from "./pages/SupportPage";
+import { StockReceiptPage } from "./pages/StockReceiptPage";
 import { SuppliersPage } from "./pages/SuppliersPage";
 import { TasksPage } from "./pages/TasksPage";
 import { TeamPage } from "./pages/TeamPage";
 
 defineApp({
+  entities, // one EntityCustomization per entity, in entities/
   pages: [
     { path: "/", component: HomePage },
-    { list: "Orders", component: OrdersPage },
-    { record: "Orders", component: OrderPage },
     { path: "/ops", component: SalesOpsPage, label: "Sales Ops", icon: Activity },
     { path: "/tasks", component: TasksPage, label: "My tasks", icon: ListChecks },
     { path: "/team", component: TeamPage, label: "Team", icon: Users },
@@ -45,8 +45,9 @@ defineApp({
     { path: "/support", component: SupportPage, label: "Inbox", icon: Inbox, when: crmInboxAvailable },
     { path: "/support/connections", component: ConnectionsPage, label: "Connections", icon: Plug, roles: ["ADMIN"], when: crmInboxAvailable },
     { path: "/catalogs/crm_conversations/:id", component: ConversationPage, view: false, when: crmInboxAvailable },
-    // Pages that replace an entity's default screen.
+    // Pages that replace an entity's default screen (only where the layout differs).
     { list: "Suppliers", component: SuppliersPage },
+    { record: "Stock Receipts", component: StockReceiptPage },
     { path: "/registers/book_sales", component: SalesReportPage, view: false },
   ],
   // Entities the user cannot read, pages they cannot use and sections left empty are dropped.

@@ -152,14 +152,15 @@ application command/service that changes status.
 
 ## UI Customization
 
-`src/main/ui/entities/salesOrders.ts`, registered in `main.tsx` as
+`src/main/ui/entities/SalesOrders.ts`, registered in `main.tsx` as
 `entities: { "Sales Orders": salesOrders }`. Line columns are `"section.field"`; every name is
-checked against the generated model.
+checked against the generated model. `list.columns` / `form.fields` choose which fields show and in
+what order; `fields` is presentation only.
 
 ```ts
 import type { EntityCustomization } from "@onno/ui";
 
-export const salesOrders: EntityCustomization<"Sales Orders"> = {
+export const salesOrders = {
   list: {
     columns: ["number", "date", "customer", "status", "total"],
     sort: "-date",
@@ -173,7 +174,7 @@ export const salesOrders: EntityCustomization<"Sales Orders"> = {
     "items.unitPrice": { label: "Unit price", format: { money: "USD" } },
     "items.amount": { label: "Amount", format: { money: "USD" } },
   },
-};
+} satisfies EntityCustomization<"Sales Orders">;
 ```
 
 Status transitions ("Approve", "Cancel") are `Commands<SalesOrder>` with `availableWhen` — see

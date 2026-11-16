@@ -522,14 +522,18 @@ context. Its full API is [onno-ui/README.md](../onno-ui/README.md); the code is 
   columns, filters, field metadata (names, types, references, constraints), commands and record
   actions with their per-record state — never icons, widths, widgets or English titles. The data
   itself flows through the generic REST API; live changes through `/api/events`.
-- **`defineApp`.** `main.tsx` registers `pages` (`path` for ordinary pages, typed logical `list`
-  or `record` for entity screens), navigation and extensions. Presentation belongs in TSX pages:
-  `ListPageProps<E>` injects the list descriptor; `RecordPageProps<E>` injects the live form.
-  `EntityList` accepts columns, filters, grouping, field presentation and commands directly.
-  `RecordPage`, `RecordFields` and `RecordLines` compose the standard form with arbitrary React
-  controls, preserving validation, save/post, picker cascades, dirty guards and live refresh.
-  The same record page handles saved, new and duplicate records. The older `entities` map remains
-  compatible. `roles` and `when` gate pages and navigation; backend authorization still applies.
+- **`defineApp`.** `main.tsx` registers `entities`, `pages` (`path` for ordinary pages, typed
+  logical `list` or `record` for entity screens), navigation and extensions. Entity presentation is
+  one `EntityCustomization<E>` per entity (`entities/Orders.ts`), applied wherever the entity shows:
+  its default list and form, embedded lists and custom pages. Which fields show is always an
+  explicit array (`list.columns`, `form.fields`); `fields` is presentation only. An entity page is
+  registered only when its layout differs: `ListPageProps<E>` injects the list descriptor;
+  `RecordPageProps<E>` injects the live form. `RecordPage`, `RecordFields` (`fields` picks and
+  orders) and `RecordLines` compose the standard form with arbitrary React controls, preserving
+  validation, save/post, picker cascades, dirty guards and live refresh; `EntityList`,
+  `RecordFields` and `RecordLines` take page-only `overrides`. The same record page handles saved,
+  new and duplicate records. `roles` and `when` gate pages and navigation; backend authorization
+  still applies.
   `shell.navigation.actions` is the desktop rail outlet for custom React controls.
 
 Navigation sections and nested groups accept React `actions` and recursive `items`; `roles`
@@ -561,7 +565,7 @@ header/footer. Custom links share model/page gates and the shell dispatcher. See
   `<RouteLink to>` and `openRoute(route, { newTab: true })` open app paths or `onno://` links in the
   workspace; a command's `navigateTo` goes through the same dispatcher.
 - **Feature panels.** Record pages show `<RecordHistory />` for entities the model marks
-  `history: true`; `EntityList` takes `calendar`/`timeline` props for date-ranged records (read from
+  `history: true`; an entity's `list` customization (or `EntityList` props) takes `calendar`/`timeline` for date-ranged records (read from
   the list feed, drag saved as an ordinary record update); `<PeriodClose />` is the period-close
   admin screen. `LocalTime` fields edit with `TimePicker`, `Instant` fields with `InstantPicker`, and
   instants display in the zone `/api/config` reports (`onno.ui.time-zone`, else the browser's).

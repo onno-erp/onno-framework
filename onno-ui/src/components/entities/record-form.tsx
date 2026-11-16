@@ -65,6 +65,8 @@ const NO_SELECTION_VALUE = "__onno_no_selection__";
 export type FormDescriptor = {
   /** Components shown under the saved record's form (the app's record panels). */
   panels?: RecordPanel[];
+  /** The header fields the default layout shows, in order (the entity's `form.fields` customization). */
+  fieldOrder?: string[];
   kind: "documents" | "catalogs";
   name: string;
   id: string | null;
@@ -334,8 +336,8 @@ export type RecordFormState = {
   save: (post?: boolean) => Promise<void>;
   defaultLayout: ReactNode;
   renderPage: (children?: ReactNode, options?: RecordPageOptions) => ReactNode;
-  renderFields: (fields?: string[] | Record<string, FieldCustomization>) => ReactNode;
-  renderLines: (section: string, fields?: Record<string, FieldCustomization>) => ReactNode;
+  renderFields: (fields?: string[], overrides?: Record<string, FieldCustomization>) => ReactNode;
+  renderLines: (section: string, overrides?: Record<string, FieldCustomization>) => ReactNode;
 };
 
 type RecordPageOptions = {
@@ -349,12 +351,18 @@ export function RecordPage({ form, children, className, ...options }: { form: Re
   return <div className={cn("w-full p-4", className)}>{form.renderPage(children, options)}</div>;
 }
 
-export function RecordFields({ form, fields }: { form: RecordFormState; fields?: string[] | Record<string, FieldCustomization> }) {
-  return form.renderFields(fields);
+/**
+ * The record's header fields. `fields` picks which show, in order (default: the entity's
+ * `form.fields`, else every visible field); `overrides` restyles fields on this page only, on top
+ * of the entity's customization.
+ */
+export function RecordFields({ form, fields, overrides }: { form: RecordFormState; fields?: string[]; overrides?: Record<string, FieldCustomization> }) {
+  return form.renderFields(fields, overrides);
 }
 
-export function RecordLines({ form, section, fields }: { form: RecordFormState; section: string; fields?: Record<string, FieldCustomization> }) {
-  return form.renderLines(section, fields);
+/** One tabular section's editor; `overrides` restyles its columns (keyed by column) on this page only. */
+export function RecordLines({ form, section, overrides }: { form: RecordFormState; section: string; overrides?: Record<string, FieldCustomization> }) {
+  return form.renderLines(section, overrides);
 }
 
 /** The default host uses the same controller custom record hosts import from the SDK. */
@@ -417,15 +425,20 @@ export function useRecordForm(form: FormDescriptor): RecordFormState {
     // resolved displayName in meta.systemColumns, so read it instead of hardcoding English (#154).
     const sysLabel = (fieldName: string, fallback: string) =>
       meta.systemColumns?.find((c) => c.fieldName === fieldName)?.displayName || fallback;
+    // The entity's `fields` customization hides a system field too (`code: { hideInForm: true }`).
+    const sysShown = (fieldName: string) =>
+      meta.systemColumns?.find((c) => c.fieldName === fieldName)?.visibleInDetail !== false;
     if (kind === "catalogs") {
-      if (!meta.autoNumber) {
+      if (!meta.autoNumber && sysShown("code")) {
         out.push({ kind: "system", key: "code", label: sysLabel("code", "Code") });
       }
-      out.push({
-        kind: "system",
-        key: "description",
-        label: sysLabel("description", "Description"),
-      });
+      if (sysShown("description")) {
+        out.push({
+          kind: "system",
+          key: "description",
+          label: sysLabel("description", "Description"),
+        });
+      }
     }
     const attrs = meta.attributes
       .filter((a) => a.visibleInForm !== false)
@@ -843,10 +856,10 @@ export function useRecordForm(form: FormDescriptor): RecordFormState {
     restricted={isRestrictedRef(record, field.key) && data[field.key] == null}
     onChange={(value) => { if (!readOnly) set(field.key, value); }}
   />;
-  const renderFields = (options?: string[] | Record<string, FieldCustomization>) => {
-    if (options && !Array.isArray(options)) Object.assign(presentation, options);
+  const renderFields = (selection?: string[], overrides?: Record<string, FieldCustomization>) => {
+    if (overrides) Object.assign(presentation, overrides);
     const customized = presentedMeta();
-    const selected = Array.isArray(options) ? options : options ? Object.keys(options) : null;
+    const selected = selection ?? form.fieldOrder ?? null;
     const visible = fields.filter((f) => !selected || selected.includes(f.key)).map((f): Field => {
       if (f.kind === "system") return { ...f, label: presentation[f.key]?.label ?? f.label };
       const attr = customized.attributes.find((a) => a.fieldName === f.key) ?? f.attr;
@@ -878,8 +891,8 @@ export function useRecordForm(form: FormDescriptor): RecordFormState {
         </div>
       ))}</fieldset>;
   };
-  const renderLines = (section?: string, options?: Record<string, FieldCustomization>) => {
-    if (section && options) for (const [key, value] of Object.entries(options)) presentation[`${section}.${key}`] = value;
+  const renderLines = (section?: string, overrides?: Record<string, FieldCustomization>) => {
+    if (section && overrides) for (const [key, value] of Object.entries(overrides)) presentation[`${section}.${key}`] = value;
     const selectedSections = (presentedMeta().tabularSections ?? []).filter((ts) => !section || ts.name === section);
     return <>{selectedSections.map((ts) => (
         <TabularSectionEditor

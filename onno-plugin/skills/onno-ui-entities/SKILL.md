@@ -1,13 +1,13 @@
 ---
 name: onno-ui-entities
 description: >-
-  Customize how an onno-framework entity's default list and record form present, with an
-  TSX list and record page in src/main/ui/pages/ registered through defineApp({ pages }).
+  Customize how an onno-framework entity's default list and record form present, with one
+  EntityCustomization per entity in src/main/ui/entities/ registered through defineApp({ entities }).
   Use for list columns, list header labels, default sort, grouping (groupable, date buckets),
   per-group aggregates, toolbar filters (options, optionsFrom, date/number ranges), a fixed list
   where, map, calendar, timeline (resource lanes) and custom list views, selection checkboxes and selection toolbar components, row
   tint (rowStyle), field labels (including system columns code/description/number/date/posted),
-  form order/group/width, inputs (textarea, switch, image, avatar, color, map), value formats
+  form field selection/order (form.fields), group/width, inputs (textarea, switch, image, avatar, color, map), value formats
   (money, number, percent, date), custom cell render functions, placeholders and hints, reference
   pickers (refSecondary, filterBy cascades, open/clear buttons, uniqueWithinSection), how server
   commands and built-in actions are offered (commands: placement/icon/title), record panels under a
@@ -18,22 +18,43 @@ description: >-
 # onno UI: entity customizations
 
 Every entity the user can read already has a default list and record form, built from the model.
-Use TSX components in `src/main/ui/pages/`, registered by logical name in `defineApp({ pages })`:
-`{ list: "Orders", component: OrdersPage, icon: ClipboardList }` and
-`{ record: "Orders", component: OrderPage }`. Import icons from `@onno/ui/icons`; use components,
-never icon name strings. No `definePage` wrapper or separate entity configuration file is needed.
+Change how it presents with one `EntityCustomization<E>` per entity, in its own file
+`src/main/ui/entities/<Entity>.ts`, registered by logical name in `defineApp({ entities })`:
 
-`OrdersPage({ list }: ListPageProps<"Orders">)` renders `<EntityList list={list} columns={…}
-filters={…} fields={…} commands={…} />`. The list presentation options below are direct props.
-Use `selectionToolbar` for the toolbar component and `selection` for controlled selected ids.
-`OrderPage({ form }: RecordPageProps<"Orders">)` renders `<RecordPage form={form}>` with
-`RecordFields`, `RecordLines` and ordinary React components. Fields and sections are typed by the
-model. `RecordFields` takes an ordered field array or a field-to-options map; `RecordLines` takes
-`section="items"` and a map of column options. Custom controls read `form.values` and call
+```ts
+// entities/Orders.ts
+import { ClipboardList } from "@onno/ui/icons";
+import type { EntityCustomization } from "@onno/ui";
+
+export const orders = {
+  icon: ClipboardList,
+  list: { columns: ["number", "date", "customer", "total"], sort: "-date" },
+  form: { fields: ["customer", "status", "note"] },
+  fields: { total: { format: { money: "USD" } }, note: { input: "textarea" } },
+} satisfies EntityCustomization<"Orders">;
+
+// main.tsx: defineApp({ entities: { Orders: orders }, … })
+```
+
+It applies wherever the entity shows: its default list and form, an embedded
+`<EntityList entity="Orders" />`, custom pages. Keys: `icon` (an imported component from
+`@onno/ui/icons`, never a name string), `list`, `form`, `fields`, `rowStyle`, `commands`,
+`recordPanels`, `comments`. **Selection is an array, presentation is a map:** `list.columns` and
+`form.fields` choose which fields show and in what order; `fields` only says how each looks — its
+key order selects and orders nothing.
+
+Register a TSX page only when the layout differs from the default, by logical name in
+`defineApp({ pages })`: `{ list: "Orders", component: OrdersPage }` gets `ListPageProps<"Orders">`
+and renders `<EntityList list={list} />` inside its own layout; `{ record: "Orders", component:
+OrderPage }` gets `RecordPageProps<"Orders">` and renders `<RecordPage form={form}>` with
+`<RecordFields form={form} fields={["customer", "note"]} />` (`fields` picks and orders; default
+the entity's `form.fields`), `<RecordLines form={form} section="items" />` and ordinary React
+components. A page passes only what differs there: `overrides` on `EntityList`, `RecordFields` and
+`RecordLines` restyles fields on that page only. `selectionToolbar` is the toolbar component and
+`selection` the controlled selected ids. Custom controls read `form.values` and call
 `form.set(field, value)`. Saving, posting, validation, dirty guards, picker cascades and live
 refresh remain shared. `RecordPage` takes `commands`, `panels`, `comments`, and `history`.
-The older `EntityCustomization`/`entities` API remains for compatibility; prefer components for
-new work. See [the package examples](../../../onno-ui/README.md).
+See [the package examples](../../../onno-ui/README.md).
 
 ## `list`
 
@@ -60,13 +81,13 @@ record on click and — only with write access — save a drag (move, resize, la
 ordinary record update, so `beforeWrite`, rules and record access apply. Don't build a bespoke
 scheduler component or reschedule endpoint for one entity:
 
-```tsx
-<EntityList
-  list={list}
-  calendar={{ start: "startsAt", end: "endsAt", title: "subject", mode: "week" }}
-  timeline={{ start: "startsAt", end: "endsAt", lane: "organizer", laneEntity: "Employees",
-              title: "subject", slotMinutes: 30, startHour: 7, endHour: 22 }}
-/>
+```ts
+// inside EntityCustomization<"Schedule Events">
+list: {
+  calendar: { start: "startsAt", end: "endsAt", title: "subject", mode: "week" },
+  timeline: { start: "startsAt", end: "endsAt", lane: "organizer", laneEntity: "Employees",
+              title: "subject", slotMinutes: 30, startHour: 7, endHour: 22 },
+},
 ```
 
 Filters: `{ field, label, type?, options?, optionsFrom? }`. Omit `type` and the control follows
@@ -79,13 +100,22 @@ Selection runs the entity's record commands over every selected row (batch) and 
 starter's selection downloads; a `selection` component does its own batch work and calls
 `complete()` (clear + reload) when done. The server still authorizes every command.
 
+## `form`
+
+`form: { fields: ["customer", "status", "note"] }` — the header fields the record form shows, in
+order (tabular sections render below them). Omitted: every visible field in model order. A
+document's `number`, `date` and `posted` live in the form header, so the type rejects them here.
+
 ## `fields`
+
+Presentation only, keyed by field name (`"items.book"` for a line column). Listing a field here
+neither shows it nor orders it.
 
 | Key | Meaning |
 | --- | --- |
 | `label` | Display label on form and list. The only way to relabel system columns `code`/`description`/`number`/`date`/`posted`. |
-| `hidden` / `hideInList` / `hideInForm` | Suppress everywhere / in the list / in the form. |
-| `order`, `group` | Form order; fields sharing a `group` render as their own card. |
+| `hidden` / `hideInList` / `hideInForm` | Suppress everywhere / in the list / in the form (`code: { hideInForm: true }` hides a catalog's code). |
+| `group` | Fields sharing a `group` render as their own card. |
 | `width` | `"full"` (default) or `"half"`; two half fields share a row. Form layout only. |
 | `input` | Edit control: `"textarea"`, `"switch"`, `"image"`, `"images"`, `"file"`, `"avatar"`, `"color"`, `"map"`. Media/colour inputs also drive the list cell. |
 | `format` | Display in lists and subtotals: `{ money: "USD" }`, `{ number: { decimals: 0 } }`, `{ percent: { decimals: 1 } }`, `{ date: "medium" }` or `Intl.DateTimeFormatOptions`. |

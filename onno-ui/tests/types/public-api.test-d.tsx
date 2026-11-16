@@ -155,22 +155,45 @@ function OrderPage({ form }: RecordPageProps<"Orders">) {
   form.set("typo", "hello");
   // @ts-expect-error incorrect value type
   form.set("total", "hello");
-  const fields = <RecordFields form={form} fields={{ note: { input: "textarea" } }} />;
+  const fields = <RecordFields form={form} fields={["customer", "note"]} overrides={{ note: { input: "textarea" } }} />;
   // @ts-expect-error wrong field
   const badFields = <RecordFields form={form} fields={["email"]} />;
-  const lines = <RecordLines form={form} section="items" fields={{ quantity: { label: "Qty" } }} />;
+  // @ts-expect-error selection is an array; restyling goes in `overrides`
+  const objectFields = <RecordFields form={form} fields={{ note: { input: "textarea" } }} />;
+  // @ts-expect-error wrong override field
+  const badOverride = <RecordFields form={form} overrides={{ email: {} }} />;
+  const lines = <RecordLines form={form} section="items" overrides={{ quantity: { label: "Qty" } }} />;
   // @ts-expect-error wrong section
   const badSection = <RecordLines form={form} section="lines" />;
   // @ts-expect-error wrong section column
-  const badColumn = <RecordLines form={form} section="items" fields={{ email: {} }} />;
+  const badColumn = <RecordLines form={form} section="items" overrides={{ email: {} }} />;
   return <RecordPage form={form}>{fields}{lines}</RecordPage>;
 }
 function OrdersPage({ list }: ListPageProps<"Orders">) {
   // @ts-expect-error wrong list field
   const bad = <EntityList list={list} columns={["email"]} />;
-  return <EntityList list={list} columns={["number", "total"]} sort="-date" fields={{ total: { format: { money: "USD" } } }} />;
+  return <EntityList list={list} columns={["number", "total"]} sort="-date" overrides={{ total: { format: { money: "USD" } } }} />;
 }
 defineAppTyped({ pages: [{ list: "Orders", component: OrdersPage, icon: Truck }, { record: "Orders", component: OrderPage }] });
+
+// ---- One customization per entity: selection is an array, `fields` is presentation only ---------
+const ordersCustomization = {
+  icon: Truck,
+  list: { columns: ["number", "date", "total"] },
+  form: { fields: ["customer", "note"] },
+  fields: { total: { format: { money: "USD" } }, "items.quantity": { label: "Qty" } },
+} satisfies EntityCustomization<"Orders">;
+defineAppTyped({ entities: { Orders: ordersCustomization } });
+// @ts-expect-error form fields are the entity's own (header) fields
+const badFormField: EntityCustomization<"Orders"> = { form: { fields: ["email"] } };
+// @ts-expect-error a document's number/date sit in the form header, not among its fields
+const headerInForm: EntityCustomization<"Orders"> = { form: { fields: ["date"] } };
+// @ts-expect-error a tabular section renders below the fields, not among them
+const sectionInForm: EntityCustomization<"Orders"> = { form: { fields: ["items"] } };
+// @ts-expect-error a line column is not a header field
+const lineInForm: EntityCustomization<"Orders"> = { form: { fields: ["items.quantity"] } };
+// @ts-expect-error order is chosen by `list.columns` / `form.fields`, not per field
+const perFieldOrder: EntityCustomization<"Orders"> = { fields: { note: { order: 1 } } };
 // @ts-expect-error component is bound to another entity
 const wrongRecordPage: AppDefinition = { pages: [{ record: "Customers", component: OrderPage }] };
 // @ts-expect-error registration must choose one addressing mode

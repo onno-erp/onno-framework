@@ -1,4 +1,10 @@
-import { NewOrderButton } from "./components/NewOrderButton";
+/**
+ * Onno Books — the app's UI.
+ *
+ * The server exposes the business model and a default screen for every entity; this declares only
+ * what differs: how each entity presents (entities/, one file per entity), the app's own pages
+ * (pages/) and the sidebar.
+ */
 import {
   Activity,
   ListChecks,
@@ -12,39 +18,20 @@ import {
   Truck,
   ChartColumn,
   MessagesSquare,
-  BookOpen,
-  Tag,
-  User,
-  ClipboardList,
-  Calendar,
-  Receipt,
   Lock,
 } from "@onno/ui/icons";
-import { SuppliersPage, SupplierPage } from "./pages/SuppliersPage";
-import { StockReceiptsPage, StockReceiptPage } from "./pages/StockReceiptsPage";
-import {
-  ScheduleEventsPage,
-  ScheduleEventPage,
-} from "./pages/ScheduleEventsPage";
-import { OrdersPage, OrderPage } from "./pages/OrdersPage";
-import { EmployeesPage, EmployeePage } from "./pages/EmployeesPage";
-import { CustomersPage, CustomerPage } from "./pages/CustomersPage";
-import { CategoriesPage, CategoryPage } from "./pages/CategoriesPage";
-import { BooksPage, BookPage } from "./pages/BooksPage";
-/**
- * Onno Books — the app's UI.
- *
- * The server exposes the business model and a default screen for every entity; this declares only
- * what differs: how some entities present (entities/), the app's own pages (pages/) and the sidebar.
- */
 import { defineApp } from "@onno/ui";
-import { LoginPage } from "./pages/LoginPage";
+import { NewOrderButton } from "./components/NewOrderButton";
+import { entities } from "./entities";
 import { crmInboxAvailable } from "./lib/crm";
+import { LoginPage } from "./pages/LoginPage";
 import { HomePage } from "./pages/HomePage";
 import { SalesOpsPage } from "./pages/SalesOpsPage";
 import { SalesReportPage } from "./pages/SalesReportPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { PeriodClosePage } from "./pages/PeriodClosePage";
+import { StockReceiptPage } from "./pages/StockReceiptPage";
+import { SuppliersPage } from "./pages/SuppliersPage";
 import {
   ConnectionsPage,
   ConversationPage,
@@ -55,23 +42,11 @@ import { TeamPage } from "./pages/TeamPage";
 
 defineApp({
   login: LoginPage,
+  entities,
   pages: [
-    { list: "Books", component: BooksPage, icon: BookOpen },
-    { record: "Books", component: BookPage },
-    { list: "Categories", component: CategoriesPage, icon: Tag },
-    { record: "Categories", component: CategoryPage },
-    { list: "Customers", component: CustomersPage, icon: Users },
-    { record: "Customers", component: CustomerPage },
-    { list: "Employees", component: EmployeesPage, icon: User },
-    { record: "Employees", component: EmployeePage },
-    { list: "Orders", component: OrdersPage, icon: ClipboardList },
-    { record: "Orders", component: OrderPage },
-    { list: "Schedule Events", component: ScheduleEventsPage, icon: Calendar },
-    { record: "Schedule Events", component: ScheduleEventPage },
-    { list: "Stock Receipts", component: StockReceiptsPage, icon: Receipt },
+    // Entity screens whose layout differs from the default (presentation lives in entities/).
+    { list: "Suppliers", component: SuppliersPage },
     { record: "Stock Receipts", component: StockReceiptPage },
-    { list: "Suppliers", component: SuppliersPage, icon: Truck },
-    { record: "Suppliers", component: SupplierPage },
     { path: "/", component: HomePage },
     {
       path: "/ops",

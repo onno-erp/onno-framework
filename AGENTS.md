@@ -1114,21 +1114,28 @@ wants its own pages adds `id("su.onno.ui")` (the `onno-ui-gradle-plugin`) and an
 fields and enum values type-check. The reference app is `example/src/main/ui`; the code tour is
 [docs/UI_TOUR.md](docs/UI_TOUR.md); the package README is [onno-ui/README.md](onno-ui/README.md).
 
-`main.tsx` registers React pages and navigation with `defineApp`. Entity presentation belongs in
-TSX components, not separate `entities/*.ts` configuration files. Register `{ list: "Orders",
-component: OrdersPage, icon: ClipboardList }` and `{ record: "Orders", component: OrderPage }`;
-logical entity names are checked against the generated model and resolved through its routes.
-Use `{ path: "/ops", component: SalesOpsPage }` for ordinary pages. There is no `definePage`.
+`main.tsx` registers entities, pages and navigation with `defineApp`. **Entity presentation lives
+in one `EntityCustomization<E>` per entity**, its own file `entities/Orders.ts`
+(`export const orders = { … } satisfies EntityCustomization<"Orders">`), registered as
+`defineApp({ entities: { Orders: orders } })`. It applies wherever the entity shows — its default
+list and form, embedded `<EntityList entity="Orders" />`, custom pages: `icon`, `list` (columns,
+filters, grouping, calendar, timeline, …), `form`, `fields`, `rowStyle`, `commands`, `recordPanels`,
+`comments`. Selection and order are always explicit arrays (`list.columns`, `form.fields`); `fields`
+is presentation only, keyed by field (`"items.book"` for line columns) — its key order selects and
+orders nothing. Logical entity names are checked against the generated model.
 
-- **Entity pages** receive `ListPageProps<E>` (`list`, the server descriptor) or
-  `RecordPageProps<E>` (`form`, the live values, typed setter, save method, flags and default
-  layout). Put list presentation directly on `<EntityList list={list} columns={…} fields={…}
-  commands={…} />`; `selectionToolbar` is the toolbar component and `selection` the selected ids.
-  Compose records with `<RecordPage form={form}>`, `<RecordFields form={form} fields={…} />`,
-  `<RecordLines form={form} section="items" fields={…} />`, and arbitrary React components.
-  The framework retains validation, posting, saving, dirty guards, picker cascades and live
-  refresh. New and duplicate forms use the same record page. `RecordPage` accepts `commands`,
-  `panels`, and `comments`. The older `entities` option remains for compatibility.
+- **Entity pages** exist only when the layout differs from the default: `{ list: "Orders",
+  component: OrdersPage }` receives `ListPageProps<E>` (`list`, the server descriptor), `{ record:
+  "Orders", component: OrderPage }` receives `RecordPageProps<E>` (`form`, the live values, typed
+  setter, save method, flags and default layout). A page that would only configure columns or
+  field formats belongs in the entity's customization instead. Pages pass only what differs there:
+  `<EntityList list={list} overrides={…} />`, `<RecordPage form={form}>`,
+  `<RecordFields form={form} fields={["customer", "note"]} overrides={…} />` (`fields` picks and
+  orders; default the entity's `form.fields`), `<RecordLines form={form} section="items"
+  overrides={…} />`, and arbitrary React components. `selectionToolbar` is the toolbar component
+  and `selection` the selected ids. The framework retains validation, posting, saving, dirty
+  guards, picker cascades and live refresh. New and duplicate forms use the same record page.
+  Use `{ path: "/ops", component: SalesOpsPage }` for ordinary pages. There is no `definePage`.
 - **Replaceable UI SDK.** Default components and replacements should share public controllers,
   bindings and types. `useRecordForm` is the default record host's controller; injected record
   pages already have it. `useRecordField`/`RecordField` expose typed editor bindings and resolved
@@ -1164,8 +1171,8 @@ Use `{ path: "/ops", component: SalesOpsPage }` for ordinary pages. There is no 
   `count`/`sum`/`avg`/`min`/`max` (`sum("Orders", "total", { posted: true })`). Which records is
   always a typed `where` object (`{ status: { in: [OrderStatus.NEW] }, total: { gte: 100 } }`),
   sent to the server as JSON. Everything refreshes from the server's live events.
-- **Calendar and timeline** list views for date-ranged records are `EntityList` props (or the
-  `list` customization): `calendar={{ start: "startsAt", end: "endsAt", mode: "week" }}` and
+- **Calendar and timeline** list views for date-ranged records are the entity's `list`
+  customization (or `EntityList` props for one list): `calendar={{ start: "startsAt", end: "endsAt", mode: "week" }}` and
   `timeline={{ start: "startsAt", end: "endsAt", lane: "organizer", laneEntity: "Employees",
   slotMinutes: 30, startHour: 7, endHour: 22 }}`. They read the ordinary list feed with its search
   and filters, refresh live, open the record on click and — only with write access — save a drag as

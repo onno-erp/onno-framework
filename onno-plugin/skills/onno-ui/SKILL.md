@@ -87,7 +87,8 @@ export default defineConfig({ plugins: [onno()] });   // onno({ backend: "http:/
 
 ```tsx
 import { defineApp } from "@onno/ui";
-import { orders } from "./entities/orders";
+import { Activity, Settings, ShoppingCart } from "@onno/ui/icons";
+import { orders } from "./entities/Orders";
 import { HomePage } from "./pages/HomePage";
 import { SalesOpsPage } from "./pages/SalesOpsPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -96,12 +97,12 @@ defineApp({
   entities: { Orders: orders },
   pages: [
     { path: "/", component: HomePage },
-    { path: "/ops", component: SalesOpsPage, label: "Sales Ops", icon: "activity" },
-    { path: "/settings", component: SettingsPage, label: "Settings", icon: "settings", roles: ["ADMIN"] },
+    { path: "/ops", component: SalesOpsPage, label: "Sales Ops", icon: Activity },
+    { path: "/settings", component: SettingsPage, label: "Settings", icon: Settings, roles: ["ADMIN"] },
   ],
   navigation: [
-    { title: "Sales", icon: "shopping-cart", items: ["Orders", "Customers", "/ops"] },
-    { title: "System", icon: "settings", items: ["/settings"] },
+    { title: "Sales", icon: ShoppingCart, items: ["Orders", "Customers", "/ops"] },
+    { title: "System", icon: Settings, items: ["/settings"] },
   ],
 });
 ```

@@ -34,6 +34,7 @@ import {
   type FormDescriptor,
 } from "@/components/entities/record-form";
 import { Icon } from "@/lib/icons";
+import { applyForm } from "@/lib/entity-customizations";
 import {
   DirtyFormsProvider,
   useDirtyForms,
@@ -72,11 +73,11 @@ const descriptor = (readOnly = false): FormDescriptor => ({
 function CustomPage({ form }: { form: RecordFormState }) {
   return (
     <RecordPage form={form}>
-      <RecordFields form={form} fields={{ supplier: { label: "Vendor" } }} />
+      <RecordFields form={form} fields={["supplier"]} overrides={{ supplier: { label: "Vendor" } }} />
       <RecordLines
         form={form}
         section="lines"
-        fields={{
+        overrides={{
           book: { label: "Title", filterBy: { supplier: "supplier" } },
         }}
       />
@@ -187,3 +188,52 @@ describe("composed record pages", () => {
     expect(container.querySelector("svg.lucide-truck")).toBeInTheDocument();
   });
 });
+
+describe("field selection and presentation are separate", () => {
+  const headerLabels = () =>
+    screen.getAllByText(/^(supplier|note|Vendor)$/).map((el) => el.textContent);
+
+  it("orders and limits the default layout by the entity's form.fields", () => {
+    render(<RecordForm form={applyForm(descriptor(), [{ form: { fields: ["note", "supplier"] } }])} />);
+    expect(headerLabels()).toEqual(["note", "supplier"]);
+  });
+
+  it("does not let a fields customization's key order reorder or select fields", () => {
+    render(<RecordForm form={applyForm(descriptor(), [{ fields: { note: { hint: "x" }, supplier: { label: "Vendor" } } }])} />);
+    expect(headerLabels()).toEqual(["Vendor", "note"]);
+  });
+
+  it("restyles without selecting when a page passes only overrides", () => {
+    function Page({ form }: { form: RecordFormState }) {
+      return <RecordPage form={form}><RecordFields form={form} overrides={{ supplier: { label: "Vendor" } }} /></RecordPage>;
+    }
+    render(<RecordForm form={descriptor()} component={Page} />);
+    expect(headerLabels()).toEqual(["Vendor", "note"]);
+  });
+
+  it("lets a page's selection win over the entity's form.fields", () => {
+    function Page({ form }: { form: RecordFormState }) {
+      return <RecordPage form={form}><RecordFields form={form} fields={["supplier"]} /></RecordPage>;
+    }
+    render(<RecordForm form={applyForm(descriptor(), [{ form: { fields: ["note", "supplier"] } }])} component={Page} />);
+    expect(headerLabels()).toEqual(["supplier"]);
+  });
+
+  it("hides and relabels catalog system fields from the entity's fields customization", () => {
+    const catalog: FormDescriptor = {
+      kind: "catalogs", name: "suppliers", id: null,
+      meta: {
+        name: "Suppliers", autoNumber: false, attributes: [attr("note")], tabularSections: [],
+        systemColumns: [
+          { fieldName: "code", displayName: "Code", columnName: "_code" },
+          { fieldName: "description", displayName: "Description", columnName: "_description" },
+        ],
+      } as never,
+      initial: null,
+    } as FormDescriptor;
+    render(<RecordForm form={applyForm(catalog, [{ fields: { code: { hideInForm: true }, description: { label: "Name" } } }])} />);
+    expect(screen.queryByText("Code")).toBeNull();
+    expect(screen.getByText("Name")).toBeInTheDocument();
+  });
+});
+

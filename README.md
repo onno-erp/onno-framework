@@ -180,22 +180,22 @@ Vite app on [`@onno/ui`](onno-ui/README.md), typed from the Java model, that dec
 differs.
 
 ```tsx
-import { defineApp, EntityList, type ListPageProps } from "@onno/ui";
+import { defineApp, type EntityCustomization } from "@onno/ui";
 import { Check, ClipboardList } from "@onno/ui/icons";
 import { Dashboard } from "./pages/Dashboard";
-import { SalesOrderPage } from "./pages/SalesOrderPage";
 
-function SalesOrdersPage({ list }: ListPageProps<"Sales Orders">) {
-  return <EntityList list={list} columns={["number", "date", "customer", "total"]}
-    sort="-date" fields={{ total: { format: { money: "USD" } } }}
-    commands={{ approve: { placement: "row", icon: Check } }} />;
-}
+// entities/SalesOrders.ts: how the entity presents, wherever it shows.
+const salesOrders = {
+  icon: ClipboardList,
+  list: { columns: ["number", "date", "customer", "total"], sort: "-date" },
+  fields: { total: { format: { money: "USD" } } },
+  commands: { approve: { placement: "row", icon: Check } },
+} satisfies EntityCustomization<"Sales Orders">;
 
-defineApp({ pages: [
-  { path: "/", component: Dashboard },
-  { list: "Sales Orders", component: SalesOrdersPage, icon: ClipboardList },
-  { record: "Sales Orders", component: SalesOrderPage },
-] });
+defineApp({
+  entities: { "Sales Orders": salesOrders },
+  pages: [{ path: "/", component: Dashboard }],
+});
 ```
 
 Default components are optional: the [UI SDK](docs/UI_SDK.md) exposes the shared record controller,

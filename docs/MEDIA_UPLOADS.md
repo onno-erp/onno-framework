@@ -35,15 +35,15 @@ the record form then streams the file on drop/select and stores the returned URL
 an image as a thumbnail:
 
 ```ts
-export const books: EntityCustomization<"Books"> = {
+export const books = {
   fields: {
     coverUrl: { label: "Cover", input: "image" },   // single image
-    avatarUrl: { input: "avatar" },                 // small round image
-    gallery: { input: "images" },                   // several images, newline-joined URLs
-    contract: { input: "file" },                    // any file type
   },
-};
+} satisfies EntityCustomization<"Books">;
 ```
+
+The other upload inputs are `"avatar"` (small round image), `"images"` (several images,
+newline-joined URLs) and `"file"` (any file type).
 
 Base64 `data:` image values are not rendered; store images through the media upload endpoint.
 

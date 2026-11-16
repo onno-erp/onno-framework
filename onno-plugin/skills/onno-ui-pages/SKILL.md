@@ -41,10 +41,13 @@ consumer apps run Vite in their own `src/main/ui`. See
 
 ## Pages
 
-Entity presentation belongs in TSX components. Register `{ list: "Books", component: BooksPage,
-icon: BookOpen }` and `{ record: "Books", component: BookPage }`. The injected `list` is a descriptor
-(`ListPageProps<E>`); the injected `form` is live state (`RecordPageProps<E>`). Compose `EntityList`,
-`RecordPage`, `RecordFields`, `RecordLines`, and normal React controls. See
+How an entity presents (columns, filters, field formats, command icons, its nav `icon`) is its
+`EntityCustomization` in `entities/` (`onno-ui-entities`), not a page. Register `{ list: "Suppliers",
+component: SuppliersPage }` or `{ record: "Stock Receipts", component: StockReceiptPage }` only when
+the layout differs from the default. The injected `list` is a descriptor (`ListPageProps<E>`); the
+injected `form` is live state (`RecordPageProps<E>`). Compose `EntityList`, `RecordPage`,
+`RecordFields` (`fields={["supplier"]}` picks and orders), `RecordLines`, and normal React
+controls; pass `overrides` only for what differs on that page. See
 [the package examples](../../../onno-ui/README.md). Icons below are imports from `@onno/ui/icons`,
 not strings. The desktop rail exposes `shell.navigation.actions` for custom React buttons.
 
@@ -139,7 +142,7 @@ page.
 | --- | --- |
 | `entity` | Logical name (required). |
 | `where` | Records it always shows, typed: `{ open: true }`. |
-| `columns`, `labels`, `title`, `customization` | Per-instance presentation over the app's customization. |
+| `columns`, `labels`, `title`, `overrides` (field presentation), `customization` | Per-instance presentation over the app's customization. |
 | `fill` | Grow to the page height and scroll inside (full-height workspaces). |
 | `calendar`, `timeline` | Calendar / resource-lane timeline views of date-ranged records (see `onno-ui-entities`). |
 | `defaultView`, `defaultGroupBy`, `defaultSort` | Initial state (`"table" \| "map" \| "calendar" \| "timeline" \| "custom"`, a field, `"-date"`). |

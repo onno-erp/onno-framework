@@ -19,23 +19,43 @@ Java entities. `./gradlew onnoUiInit` seeds this layout:
 | File | What it is |
 | --- | --- |
 | `package.json`, `vite.config.ts`, `tsconfig.json`, `index.html` | A normal Vite app. The config is `plugins: [onno()]` from `@onno/ui/vite`. |
-| `main.tsx` | One `defineApp({ login, pages, navigation })` call. Every default screen is wired explicitly, so you change one by editing its file. |
+| `main.tsx` | One `defineApp({ login, entities, pages, navigation })` call. |
+| `entities/*.ts` | How each entity presents, one `EntityCustomization<E>` per file — applied to its default list and form, embedded lists and custom pages. |
 | `pages/LoginPage.tsx`, `pages/HomePage.tsx` | The `/login` screen and the page at `/`, seeded as the framework's `<DefaultLogin>` and `<DefaultHome>`. |
-| `pages/*.tsx`, `components/*.tsx` | The app's own pages and components. |
+| `pages/*.tsx`, `components/*.tsx` | The app's own pages and components, and entity screens whose layout differs from the default. |
 | `model.gen.ts` | Generated on every build (git-ignored). Types entity names, fields and enum values. |
+
+```ts
+// entities/Orders.ts
+import { ClipboardList } from "@onno/ui/icons";
+import type { EntityCustomization } from "@onno/ui";
+
+export const orders = {
+  icon: ClipboardList,
+  list: { columns: ["number", "date", "customer", "total"], sort: "-date", groupable: ["customer", { date: "month" }] },
+  form: { fields: ["customer", "status", "note"] },
+  fields: {
+    customer: { width: "half" },
+    total: { format: { money: "USD" } },
+    "items.book": { label: "Book" },
+  },
+  comments: true,
+} satisfies EntityCustomization<"Orders">;
+```
 
 ```tsx
 // main.tsx
 import { defineApp } from "@onno/ui";
-import { Activity, ClipboardList, ShoppingCart } from "@onno/ui/icons";
-import { OrdersPage, OrderPage } from "./pages/OrdersPage";
+import { Activity, ShoppingCart } from "@onno/ui/icons";
+import { orders } from "./entities/Orders";
+import { OrderPage } from "./pages/OrderPage";
 import { HomePage } from "./pages/HomePage";
 import { SalesOpsPage } from "./pages/SalesOpsPage";
 
 defineApp({
+  entities: { Orders: orders },
   pages: [
     { path: "/", component: HomePage },
-    { list: "Orders", component: OrdersPage, icon: ClipboardList },
     { record: "Orders", component: OrderPage },
     { path: "/ops", component: SalesOpsPage, label: "Sales Ops", icon: Activity },
   ],
@@ -44,39 +64,39 @@ defineApp({
 ```
 
 ```tsx
-// pages/OrdersPage.tsx
-import { EntityList, RecordPage, RecordFields, RecordLines, type ListPageProps, type RecordPageProps } from "@onno/ui";
-
-export function OrdersPage({ list }: ListPageProps<"Orders">) {
-  return <EntityList list={list}
-    columns={["number", "date", "customer", "total"]}
-    sort="-date"
-    groupable={["customer", { date: "month" }]}
-    fields={{ total: { format: { money: "USD" } } }}
-  />;
-}
+// pages/OrderPage.tsx — registered only because its layout differs from the default
+import { RecordPage, RecordFields, RecordLines, type RecordPageProps } from "@onno/ui";
 
 export function OrderPage({ form }: RecordPageProps<"Orders">) {
-  return <RecordPage form={form} comments>
-    <RecordFields form={form} fields={{ customer: { width: "half" }, date: { width: "half" } }} />
-    <RecordLines form={form} section="items" fields={{ book: { label: "Book" } }} />
+  return <RecordPage form={form}>
+    <RecordFields form={form} fields={["customer", "status"]} />
+    <RecordLines form={form} section="items" />
     <textarea value={form.values.note ?? ""} onChange={(event) => form.set("note", event.target.value)} />
   </RecordPage>;
 }
 ```
 
+**Selection is an array, presentation is a map.** `list.columns` and `form.fields` choose which
+fields show and in what order; `fields` only says how each looks (its key order means nothing).
+The entity's customization applies wherever it shows — its default list and form, an embedded
+`<EntityList entity="Orders" />`, a custom page — so a page passes only what differs there:
+`<EntityList overrides={…}>`, `<RecordFields fields={[…]} overrides={…}>`,
+`<RecordLines section="items" overrides={…}>`. Register a `{ list }` / `{ record }` page only when
+its layout differs from the default.
+
 Entity pages resolve their routes from the readable model; missing optional entities create no route.
 `ListPageProps<E>` injects the list descriptor, so `EntityList` needs no second view request.
-Put columns, filters, grouping, aggregates, field formats, `rowStyle`, `commands`, map and custom
-views directly on `EntityList`. `sort` and `groupBy` set initial presentation; pair them with their
-`on…Change` callback for controlled state. `selectionToolbar` is a component; `selection` is the
-controlled array of selected ids.
+`EntityList` also takes the list options as props (columns, filters, grouping, aggregates, map,
+calendar, timeline, custom view) for this list only. `sort` and `groupBy` set initial presentation;
+pair them with their `on…Change` callback for controlled state. `selectionToolbar` is a component;
+`selection` is the controlled array of selected ids.
 
 `RecordPageProps<E>` injects the live form: `values`, typed `set(field, value)`, `save(post?)`,
 `isNew`, `readOnly`, `saving`, `errors`, `feedback`, and `defaultLayout`. Custom editors can display
 `form.errors.note` and the field-scoped `form.feedback` messages. `RecordPage` retains the header, actions,
-validation feedback, save/post footer, dirty guard, and live refresh. `RecordFields` selects and
-customizes header fields; `RecordLines` selects a section and customizes its columns. Picker
+validation feedback, save/post footer, dirty guard, and live refresh. `RecordFields` renders header
+fields (`fields` picks and orders them, default the entity's `form.fields`); `RecordLines` renders
+one section; both take page-only `overrides`. Picker
 cascades apply across both. Render `{form.defaultLayout}` to extend the default arrangement, or
 use `<RecordPage form={form} />` for the complete default form. Saved, new and duplicate records
 use the same registered component. `RecordPage` also accepts `commands`, `panels`, and `comments`.
@@ -113,7 +133,7 @@ Everything an app can import is in [`src/index.ts`](src/index.ts); the types are
 
 | Area | Exports |
 | --- | --- |
-| The app | `defineApp(app)` — `pages` (`path` or `list` or `record`, `component`, `label`, `icon`, `roles`, `when`, `view`), `navigation` (sections of entity names and page paths, or a function of the model), `extensions` (components for named `ExtensionSlot` outlets), `login` (the app's own login page). |
+| The app | `defineApp(app)` — `entities` (one `EntityCustomization<E>` per entity name), `pages` (`path` or `list` or `record`, `component`, `label`, `icon`, `roles`, `when`, `view`), `navigation` (sections of entity names and page paths, or a function of the model), `extensions` (components for named `ExtensionSlot` outlets), `login` (the app's own login page). |
 | Login | `useSignIn()` (`password`, `method(id, credentials)`, `challenge(id, input)`, `redirect(provider)`), `useLoginMethods()`, `LoginLayout`, `SignInMethods`, `PasswordLogin`, `SsoButtons`, `LoginButton`, `DefaultLogin`, `SignInError`; types `LoginPageProps`, `LoginMethods`, `SsoOption`. |
 | Navigation UI | `Navigation`, `NavigationSection`, `NavigationGroup`, `NavigationLink`, `DefaultNavigation`; section `actions`, nested `items`, optional `navigationComponent`. |
 | Navigation | `openRecord(entity, id?, prefill?)`, `openRoute(link \| path, { newTab? })`, `RouteLink` (an anchor that opens in the workspace), `links.record` / `newRecord` / `list` / `page` (typed `onno://` links). A command result's `navigateTo` is applied after its feedback and refresh. |
@@ -135,9 +155,11 @@ JSON); formats `{ money: "USD" }`, `{ number: { decimals: 0 } }`, `{ date: "medi
 imported Lucide components (see Icons below); groupings `"status"` or `{ date: "month" }`; subtotals
 `{ sum: "total", label, format }`. With the generated model all of it is checked per entity.
 
-**Presentation options** (passed directly to page components; the older `entities`/`EntityCustomization<E>` API remains available for existing apps): `list` (columns, labels, `where`, sort,
+**Entity customization** (`EntityCustomization<E>`, one per entity in `defineApp({ entities })`): `list` (columns, labels, `where`, sort,
 `groupBy`, `groupable`, `aggregates`, `filters`, `map`, `calendar` (`{ start, end?, title?, color?, mode? }`), `timeline` (`{ start, end, lane?, laneEntity?, slotMinutes?, startHour?, endHour?, … }`; drags save as ordinary record updates), `custom` view component, `selection` toolbar
-component, `selectionCheckboxes`, `groupsExpanded`), `fields` (label, hidden/hideInList/hideInForm, order, group,
+component, `selectionCheckboxes`, `groupsExpanded`), `form` (`fields`: the header fields shown, in order),
+`fields` — presentation only, keyed by field (`"section.field"` for line columns; `code`/`description`
+too): label, hidden/hideInList/hideInForm, group,
 width, input, format, `render`, placeholder, hint, `refSecondary`, `filterBy` for a cascading
 picker, openButton/clearButton, `commandGroup` for a cell's right-click menu), `rowStyle`, `commands` (placement `"primary" | "menu" | "row" |
 "hidden"`, icon — also for the built-ins `post`, `unpost`, `duplicate`, `delete`, `openInList` and

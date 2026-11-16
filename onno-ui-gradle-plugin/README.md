@@ -53,8 +53,10 @@ continuous application compilation for Java reloads; its own development build c
 `buildUi` task while Vite serves the frontend. Leave production packaging and verification intact.
 The repository's root npm scripts are not generated into consumer applications.
 
-The generated app registers screens in `defineApp({ pages })`. Put presentation in TSX components:
-`{ list: "Orders", component: OrdersPage }` injects `ListPageProps<"Orders">`; `{ record: "Orders",
-component: OrderPage }` injects `RecordPageProps<"Orders">`. Compose `EntityList`, `RecordPage`,
-`RecordFields`, and `RecordLines` with custom React controls. Icons are imported Lucide components
+The generated app declares how each entity presents in `entities/<Entity>.ts` (one
+`EntityCustomization<E>`, registered with `defineApp({ entities })`) and registers screens in
+`defineApp({ pages })` only where the layout differs: `{ list: "Orders", component: OrdersPage }`
+injects `ListPageProps<"Orders">`; `{ record: "Orders", component: OrderPage }` injects
+`RecordPageProps<"Orders">`. Compose `EntityList`, `RecordPage`, `RecordFields`, and `RecordLines`
+with custom React controls. Icons are imported Lucide components
 from `@onno/ui/icons`. See [the UI package](../onno-ui/README.md) for complete examples.

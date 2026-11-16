@@ -19,11 +19,14 @@ import {
  *
  *   const orders: EntityCustomization = {
  *     list: { columns: ["number", "date", "customer", "total"], groupBy: "status" },
- *     fields: { notes: { input: "textarea" }, total: { format: { money: "USD" } } },
+ *     form: { fields: ["customer", "date", "status", "note"] },
+ *     fields: { note: { input: "textarea" }, total: { format: { money: "USD" } } },
  *     rowStyle: (row) => (row.status === "CANCELLED" ? "muted" : null),
  *     commands: { advance: { placement: "row", icon: ArrowRight }, cancel: { icon: Ban } },
  *   };
  *
+ * Which fields show, and in what order, is always an explicit array (`list.columns`,
+ * `form.fields`); `fields` only says how each one looks, so its key order means nothing.
  * The server still decides what exists and what the user may do; customizations only change
  * presentation (and which predicate a ref picker asks the server for).
  * `public-types.ts` declares the same shapes typed per entity from the generated model.
@@ -39,7 +42,6 @@ export type FieldCustomization = {
   /** Hide in the list only / in the form only. */
   hideInList?: boolean;
   hideInForm?: boolean;
-  order?: number;
   group?: string;
   /** The field's share of the form row (default `"full"`); two `"half"` fields pair up. */
   width?: FieldWidth;
@@ -70,7 +72,12 @@ export type RowTone = "danger" | "warning" | "success" | "accent" | "muted" | nu
 export type EntityCustomization = {
   /** List defaults: the same options as `<EntityList>`. */
   list?: ListCustomization;
-  /** Field presentation, keyed by field name (`"section.field"` for tabular-section columns). */
+  /** Record-form defaults: which header fields the form shows, in order. */
+  form?: FormCustomization;
+  /**
+   * How each field presents, keyed by field name (`"section.field"` for tabular-section columns).
+   * Presentation only: listing a field here neither shows it nor orders it.
+   */
   fields?: Record<string, FieldCustomization>;
   /** Conditional row tint, evaluated per list row. */
   rowStyle?: (row: EntityRecord) => RowTone;
@@ -86,6 +93,11 @@ export type EntityCustomization = {
   icon?: IconSource;
   /** Show the record's comments thread under its form (needs the comments module; default off). */
   comments?: boolean;
+};
+
+export type FormCustomization = {
+  /** Show only these header fields, in order (tabular sections render below them). */
+  fields?: string[];
 };
 
 /** How the list's "Group by" picker buckets a date field. */
@@ -367,10 +379,11 @@ function applyListFields(list: ListDescriptor, fields: Record<string, FieldCusto
   return { ...list, columns };
 }
 
-/** Apply customizations' fields, command presentation and record panels to an entity's default record form. */
+/** Apply customizations' field selection, presentation, command presentation and record panels to an entity's default record form. */
 export function applyForm(form: FormDescriptor, customizations: EntityCustomization[]): FormDescriptor {
   let d = form;
   for (const c of customizations) {
+    if (c.form?.fields?.length) d = { ...d, fieldOrder: c.form.fields };
     if (c.fields) d = applyFormFields(d, c.fields);
     if (c.commands) d = applyCommandPresentation(d, c.commands);
     if (c.recordPanels?.length) d = { ...d, panels: [...(d.panels ?? []), ...c.recordPanels] };
@@ -378,34 +391,15 @@ export function applyForm(form: FormDescriptor, customizations: EntityCustomizat
   return d;
 }
 
-/**
- * Fields display in the order the customization lists them (ahead of unlisted ones), unless any
- * field sets an explicit `order`. Tabular-section columns (`"items.book"`) order within their section.
- */
-function implicitOrder(fields: Record<string, FieldCustomization>): (key: string) => number | undefined {
-  if (Object.values(fields).some((f) => f?.order !== undefined)) return () => undefined;
-  const position = new Map<string, number>();
-  const counters = new Map<string, number>();
-  for (const k of Object.keys(fields)) {
-    const scope = k.includes(".") ? k.slice(0, k.indexOf(".")) : "";
-    const i = counters.get(scope) ?? 0;
-    counters.set(scope, i + 1);
-    position.set(k, i - 1000);
-  }
-  return (k) => position.get(k);
-}
-
-function applyAttribute(a: AttributeMeta, f: FieldCustomization | undefined, order?: number): AttributeMeta {
+function applyAttribute(a: AttributeMeta, f: FieldCustomization | undefined): AttributeMeta {
   if (!f) return a;
   const out: AttributeMeta = { ...a };
-  if (order !== undefined) out.order = order;
   if (f.label !== undefined) out.displayName = f.label;
   if (f.hidden || f.hideInForm) {
     out.visibleInForm = false;
     out.visibleInDetail = false;
   }
   if (f.hidden || f.hideInList) out.visibleInList = false;
-  if (f.order !== undefined) out.order = f.order;
   if (f.group !== undefined) out.group = f.group;
   if (f.width !== undefined) out.width = f.width;
   if (f.input !== undefined) out.input = f.input;
@@ -421,19 +415,17 @@ function applyAttribute(a: AttributeMeta, f: FieldCustomization | undefined, ord
 
 function applyFormFields(form: FormDescriptor, fields: Record<string, FieldCustomization>): FormDescriptor {
   const meta = form.meta;
-  const order = implicitOrder(fields);
   return {
     ...form,
     meta: {
       ...meta,
-      attributes: meta.attributes.map((a) => applyAttribute(a, fields[a.fieldName], order(a.fieldName))),
+      attributes: meta.attributes.map((a) => applyAttribute(a, fields[a.fieldName])),
       systemColumns: meta.systemColumns?.map((s) => {
         const f = fields[s.fieldName];
         if (!f) return s;
         return {
           ...s,
           displayName: f.label ?? s.displayName,
-          order: f.order ?? order(s.fieldName) ?? s.order,
           visibleInDetail: f.hidden || f.hideInForm ? false : s.visibleInDetail,
           visibleInList: f.hidden || f.hideInList ? false : s.visibleInList,
         };
@@ -441,7 +433,7 @@ function applyFormFields(form: FormDescriptor, fields: Record<string, FieldCusto
       tabularSections: meta.tabularSections?.map((section) => ({
         ...section,
         label: fields[section.name]?.label ?? section.label,
-        attributes: section.attributes.map((a) => applyAttribute(a, fields[`${section.name}.${a.fieldName}`], order(`${section.name}.${a.fieldName}`))),
+        attributes: section.attributes.map((a) => applyAttribute(a, fields[`${section.name}.${a.fieldName}`])),
       })),
     },
   };

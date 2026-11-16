@@ -90,6 +90,13 @@ export type RecordOf<E> = [EntryOf<E>] extends [never] ? EntityRecord : EntryOf<
 export type FieldOf<E> = [EntryOf<E>] extends [never] ? string : EntryOf<E> extends { field: infer F } ? F & string : string;
 /** An entity's own fields (not tabular-section columns). */
 export type TopField<E> = Exclude<FieldOf<E>, `${string}.${string}`>;
+/**
+ * The fields a record form lays out: the entity's own fields, minus its tabular sections (they
+ * render below) and a document's `number`, `date` and `posted` (the form header shows those).
+ */
+export type FormField<E> = [EntryOf<E>] extends [never]
+  ? string
+  : Exclude<TopField<E>, SectionOf<E> | (EntryOf<E> extends { kind: "documents" } ? "number" | "date" | "posted" : never)>;
 /** What a create/update body may carry: the record's own fields (companions like `…Display` excluded). */
 export type ValuesOf<E> = [EntryOf<E>] extends [never]
   ? EntityRecord
@@ -140,14 +147,16 @@ export type ListView = "table" | "map" | "custom" | "calendar" | "timeline";
 
 /**
  * An entity's list. Pass an injected `list` or an `entity` to fetch its descriptor.
- * Presentation is owned by the page component. `defaultX` sets where it starts; `x` with `onXChange` hands that
- * state to the parent (controlled, like `<input value onChange>`).
+ * It starts from the app's customization of the entity (`defineApp({ entities })`); props change
+ * this list only. `defaultX` sets where it starts; `x` with `onXChange` hands that state to the
+ * parent (controlled, like `<input value onChange>`).
  */
 interface EntityListOptions<E extends EntityName = EntityName> extends Omit<ListCustomization<E>, "sort" | "groupBy" | "selection"> {
   selectionToolbar?: ComponentType<ListSelectionProps>;
   /** Descriptor injected into an entity list page; no second view request. */
   list?: ListPageProps<E>["list"];
-  fields?: EntityCustomization<E>["fields"];
+  /** Restyle fields in this list only, on top of the entity's `fields` customization. */
+  overrides?: EntityCustomization<E>["fields"];
   commands?: EntityCustomization<E>["commands"];
   rowStyle?: EntityCustomization<E>["rowStyle"];
   /** The entity, by logical name (`"Orders"`). */
@@ -202,7 +211,6 @@ export interface FieldCustomization<E extends EntityName = EntityName, F extends
   hidden?: boolean;
   hideInList?: boolean;
   hideInForm?: boolean;
-  order?: number;
   group?: string;
   /** The field's share of the form row (default `"full"`); two `"half"` fields pair up. */
   width?: FieldWidth;
@@ -355,9 +363,23 @@ export interface CommandPresentation<E extends EntityName = EntityName> {
   title?: string;
 }
 
-/** Per-entity tweaks of the model's default surfaces. */
+/** Record-form defaults, by field name. */
+export interface FormCustomization<E extends EntityName = EntityName> {
+  /** Show only these header fields, in order (tabular sections render below them). */
+  fields?: FormField<E>[];
+}
+
+/**
+ * Per-entity tweaks of the model's default surfaces — one per entity, usually its own file
+ * (`entities/Orders.ts`: `export const orders = { … } satisfies EntityCustomization<"Orders">`),
+ * applied wherever the entity shows: its default list and form, embedded lists, custom pages.
+ * Which fields show is an explicit array (`list.columns`, `form.fields`); `fields` only says how
+ * each looks, so its key order means nothing.
+ */
 export interface EntityCustomization<E extends EntityName = EntityName> {
   list?: ListCustomization<E>;
+  form?: FormCustomization<E>;
+  /** How each field presents, keyed by field name (`"section.field"` for line columns). */
   fields?: { [F in FieldOf<E>]?: FieldCustomization<E, F> };
   rowStyle?: (row: RecordOf<E>) => RowTone;
   /**
@@ -616,13 +638,17 @@ export type RecordPageLayoutProps<E extends EntityName = EntityName> = RecordPag
   /** The record's change history under the form (default: when the entity records history). */
   history?: boolean };
 export type RecordFieldsProps<E extends EntityName = EntityName> = RecordPageProps<E> & {
-  fields?: NoInfer<TopField<E>>[] | { [F in NoInfer<TopField<E>>]?: FieldCustomization<E, F> };
+  /** Which header fields show, in order (default: the entity's `form.fields`, else all visible). */
+  fields?: NoInfer<FormField<E>>[];
+  /** Restyle fields on this page only, on top of the entity's `fields` customization. */
+  overrides?: { [F in NoInfer<TopField<E>>]?: FieldCustomization<E, F> };
 };
 export type SectionOf<E> = [EntryOf<E>] extends [never] ? string : FieldOf<E> extends infer F ? F extends `${infer S}.${string}` ? S : never : never;
 export type SectionField<E, S extends string> = [EntryOf<E>] extends [never] ? string : FieldOf<E> extends infer F ? F extends `${S}.${infer C}` ? C : never : never;
 export type RecordLinesProps<E extends EntityName = EntityName, S extends SectionOf<E> = SectionOf<E>> = RecordPageProps<E> & {
   section: S;
-  fields?: { [F in SectionField<E, NoInfer<S>>]?: FieldCustomization<E> };
+  /** Restyle this section's columns on this page only, keyed by column. */
+  overrides?: { [F in SectionField<E, NoInfer<S>>]?: FieldCustomization<E> };
 };
 
 /** Explicit route or a model-resolved entity list/record screen. */
