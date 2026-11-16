@@ -623,6 +623,9 @@ export function ListTimelineView({ kind, name, feedBase, query, canWrite, config
                     const movable = canWrite && original.realStart >= bounds.start && original.realEnd <= bounds.end;
                     const title = rowTitle(b.row, config.titleField);
                     const times = `${hhmm(dragging ? preview!.start : b.realStart)}–${hhmm(dragging ? preview!.end : b.realEnd)}`;
+                    const blockHeight = Math.max(16, (b.end - b.start) * pxPerMinute - 2);
+                    // Too short for two lines: title and time share one line so neither is cut in half.
+                    const compact = blockHeight < 32;
                     return (
                       <div key={b.id} role="button" tabIndex={0} data-onno-block={b.id}
                         aria-label={`${title} ${times}`}
@@ -634,21 +637,30 @@ export function ListTimelineView({ kind, name, feedBase, query, canWrite, config
                         onPointerUp={(e) => onPointerUp(e, original)}
                         onPointerCancel={onPointerCancel}
                         className={cn(
-                          "absolute select-none overflow-hidden rounded-control border-l-[3px] px-1.5 py-0.5 text-left text-[11px] leading-tight outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          "absolute select-none overflow-hidden rounded-[4px] px-1.5 py-0.5 text-left text-[11px] leading-tight outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          compact && "flex items-baseline gap-1.5",
                           movable ? "cursor-grab" : "cursor-pointer",
                           dragging && "z-10 cursor-grabbing shadow-md ring-1 ring-ring/50",
                         )}
                         style={{
                           top: (b.start - bounds.start) * pxPerMinute + 1,
-                          height: Math.max(16, (b.end - b.start) * pxPerMinute - 2),
+                          height: blockHeight,
                           left: `calc(${(place.column / place.columns) * 100}% + 2px)`,
                           width: `calc(${100 / place.columns}% - 4px)`,
-                          borderLeftColor: accent,
-                          backgroundColor: `color-mix(in srgb, ${accent} ${dragging ? 30 : 18}%, hsl(var(--card)))`,
+                          backgroundColor: `color-mix(in srgb, ${accent} ${dragging ? 34 : 24}%, hsl(var(--card)))`,
                           touchAction: "manipulation",
                         }}>
-                        <div className="truncate font-medium text-foreground">{title}</div>
-                        <div className="truncate tabular-nums text-muted-foreground">{times}</div>
+                        {compact ? (
+                          <>
+                            <span className="shrink-0 tabular-nums text-muted-foreground">{hhmm(dragging ? preview!.start : b.realStart)}</span>
+                            <span className="min-w-0 truncate font-medium text-foreground">{title}</span>
+                          </>
+                        ) : (
+                          <>
+                            <div className="truncate font-medium text-foreground">{title}</div>
+                            <div className="truncate tabular-nums text-muted-foreground">{times}</div>
+                          </>
+                        )}
                         {movable ? (
                           <div role="separator" aria-label={t("schedule.resize")} data-onno-resize=""
                             className="absolute inset-x-0 bottom-0 h-1.5 cursor-ns-resize"
