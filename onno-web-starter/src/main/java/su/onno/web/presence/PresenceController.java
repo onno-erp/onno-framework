@@ -2,11 +2,11 @@ package su.onno.web.presence;
 
 import su.onno.access.AccessSubject;
 import su.onno.cluster.ClusterEvent;
-import su.onno.web.RecordAccess;
-import su.onno.web.RecordRoute;
-import su.onno.web.CurrentUserResolver;
-import su.onno.web.CurrentUserResolver.CurrentUser;
-import su.onno.web.AccessService;
+import su.onno.service.RecordAccess;
+import su.onno.service.RecordRoute;
+import su.onno.service.CurrentUserResolver;
+import su.onno.service.CurrentUserResolver.CurrentUser;
+import su.onno.service.AccessService;
 import su.onno.web.comments.CommentAuthorAvatars;
 
 import org.springframework.http.HttpStatus;

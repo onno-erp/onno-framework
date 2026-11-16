@@ -1,5 +1,6 @@
 package su.onno.web;
 
+import su.onno.service.WebProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.util.LinkedHashMap;

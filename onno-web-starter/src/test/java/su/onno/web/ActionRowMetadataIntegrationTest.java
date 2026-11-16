@@ -1,12 +1,19 @@
 package su.onno.web;
 
+import su.onno.service.AccessService;
+import su.onno.service.BatchRunner;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.CommandService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.KeysetPage;
+import su.onno.service.WebProperties;
 import su.onno.command.CommandRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
+import su.onno.service.ServiceException;
 import su.onno.access.AccessMode;
 import su.onno.access.AccessSubject;
 import su.onno.annotations.Attribute;
@@ -140,13 +147,13 @@ class ActionRowMetadataIntegrationTest {
             assertThat(controller.run(kind, "orders", "approve", ID, Map.of(), subject)).isNotNull();
             row.put("approval_flag", false);
             assertThatThrownBy(() -> controller.run(kind, "orders", "approve", ID, Map.of(), subject))
-                    .isInstanceOfSatisfying(ResponseStatusException.class,
-                            error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+                    .isInstanceOfSatisfying(ServiceException.class,
+                            error -> assertThat(error.status()).isEqualTo(ServiceException.Status.CONFLICT));
             when(catalogs.inScope(subject, catalog, ID, AccessMode.WRITE)).thenReturn(false);
             when(documents.inScope(subject, doc, ID, AccessMode.WRITE)).thenReturn(false);
             assertThatThrownBy(() -> controller.run(kind, "orders", "approve", ID, Map.of(), subject))
-                    .isInstanceOfSatisfying(ResponseStatusException.class,
-                            error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+                    .isInstanceOfSatisfying(ServiceException.class,
+                            error -> assertThat(error.status()).isEqualTo(ServiceException.Status.NOT_FOUND));
         } finally {
             batch.destroy();
         }

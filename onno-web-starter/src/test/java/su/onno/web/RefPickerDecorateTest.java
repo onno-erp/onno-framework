@@ -1,5 +1,9 @@
 package su.onno.web;
 
+import su.onno.service.AccessService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.RecordScopeCompiler;
 import su.onno.picker.PickerOptionsService;
 import su.onno.access.AccessSubject;
 import su.onno.access.RecordAccessPolicy;
@@ -24,7 +28,7 @@ import org.h2.jdbcx.JdbcDataSource;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.web.server.ResponseStatusException;
+import su.onno.service.ServiceException;
 
 import java.util.List;
 import java.util.Map;
@@ -138,7 +142,7 @@ class RefPickerDecorateTest {
         assertThat(decorate(CLERK, null, null).get("offered")).isEqualTo(List.of());
         UUID gold = insert("Gold", "gold", false);
         assertThatThrownBy(() -> decorate(OUTSIDER, null, null, gold))
-                .isInstanceOf(ResponseStatusException.class);
+                .isInstanceOf(ServiceException.class);
     }
 
     /** {@code owner}: the catalog whose form holds {@code lines.client} ({@code null} = undecorated). */

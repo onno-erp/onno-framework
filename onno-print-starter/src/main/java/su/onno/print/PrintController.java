@@ -6,9 +6,9 @@ import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.types.Ref;
 import su.onno.types.RefResolver;
-import su.onno.web.CatalogQueryService;
-import su.onno.web.DocumentQueryService;
-import su.onno.web.AccessService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.AccessService;
 
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;

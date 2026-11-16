@@ -1,5 +1,12 @@
 package su.onno.web;
 
+import su.onno.service.AccessService;
+import su.onno.service.CatalogCommandService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentCommandService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.EntityJsonRepresentation;
+import su.onno.service.WebProperties;
 import su.onno.access.AccessSubject;
 import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
@@ -296,9 +303,9 @@ class WriteLifecycleCommandServiceTest {
         catalogCommands.update(widgetDesc, id, Map.of("label", "Updated"), admin);
         assertThatThrownBy(() -> catalogCommands.update(widgetDesc, id,
                 Map.of("version", created.get("_version"), "lines", List.of()), admin))
-                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
-                .satisfies(error -> assertThat(((org.springframework.web.server.ResponseStatusException) error)
-                        .getStatusCode().value()).isEqualTo(409));
+                .isInstanceOf(su.onno.service.ServiceException.class)
+                .satisfies(error -> assertThat(((su.onno.service.ServiceException) error)
+                        .status().code()).isEqualTo(409));
         assertThat((List<?>) catalogQuery.get(admin, widgetDesc, id).get("lines")).hasSize(1);
     }
 

@@ -1,5 +1,6 @@
 package su.onno.web;
 
+import su.onno.service.AccessSubjectResolver;
 import su.onno.access.AccessSubject;
 
 import org.springframework.beans.factory.ObjectProvider;

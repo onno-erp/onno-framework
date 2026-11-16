@@ -8,6 +8,7 @@ import org.springframework.web.server.ResponseStatusException;
 import su.onno.crm.domain.Conversation;
 import su.onno.crm.service.*;
 import su.onno.web.*;
+import su.onno.service.*;
 import su.onno.web.comments.*;
 
 /** Scoped inbox reads; generic conversation exports remain unavailable to non-admin workspace users. */

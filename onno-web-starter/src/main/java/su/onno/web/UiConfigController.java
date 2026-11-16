@@ -1,5 +1,6 @@
 package su.onno.web;
 
+import su.onno.service.WebProperties;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

@@ -4,7 +4,7 @@ import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.identity.IdentityLink;
-import su.onno.web.IdentityBinding;
+import su.onno.service.IdentityBinding;
 
 import org.jdbi.v3.core.Jdbi;
 
@@ -83,7 +83,7 @@ public class CommentAuthorAvatars {
         if (desc == null) {
             return null;
         }
-        AttributeDescriptor avatar = su.onno.web.IdentityAvatars.attribute(desc).orElse(null);
+        AttributeDescriptor avatar = su.onno.service.IdentityAvatars.attribute(desc).orElse(null);
         return avatar == null ? null : new Source(desc.tableName(), avatar.columnName());
     }
 

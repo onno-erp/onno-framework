@@ -3,7 +3,7 @@ package su.onno.importer;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.TabularSectionDescriptor;
-import su.onno.web.DocumentCommandService;
+import su.onno.service.DocumentCommandService;
 
 import org.h2.jdbcx.JdbcDataSource;
 import org.jdbi.v3.core.Jdbi;

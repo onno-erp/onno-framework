@@ -1,5 +1,24 @@
 package su.onno.web;
 
+import su.onno.service.AccessService;
+import su.onno.service.AccessSubjectResolver;
+import su.onno.service.BatchRunner;
+import su.onno.service.CatalogCommandService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.CommandService;
+import su.onno.service.CurrentUserResolver;
+import su.onno.service.DocumentCommandService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.EntityAccessPolicy;
+import su.onno.service.IdentityBinding;
+import su.onno.service.InformationRegisterQueryService;
+import su.onno.service.RecordAccess;
+import su.onno.service.RecordAccessProperties;
+import su.onno.service.RecordScopeCompiler;
+import su.onno.service.RecordScopeIndexes;
+import su.onno.service.RegisterQueryService;
+import su.onno.service.OnnoServicesAutoConfiguration;
+import su.onno.service.WebProperties;
 import su.onno.picker.PickerOptionsService;
 import su.onno.validation.CheckRegistry;
 import su.onno.command.CommandRegistry;
@@ -20,9 +39,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-@AutoConfiguration(after = OnnoAutoConfiguration.class)
-@EnableConfigurationProperties({WebProperties.class, UiProperties.class, UpdateProperties.class,
-        RecordAccessProperties.class})
+@AutoConfiguration(after = {OnnoAutoConfiguration.class, OnnoServicesAutoConfiguration.class})
+@EnableConfigurationProperties({UiProperties.class, UpdateProperties.class})
 @ConditionalOnBean(MetadataRegistry.class)
 @ConditionalOnProperty(prefix = "onno.web", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class UiAutoConfiguration implements WebMvcConfigurer {
@@ -130,23 +148,6 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    public BatchRunner batchRunner(WebProperties webProperties) {
-        return new BatchRunner(webProperties.getBatch().getParallelism());
-    }
-
-    /** The one command execution path shared by REST, MCP and module endpoints. */
-    @Bean
-    public CommandService commandService(CatalogQueryService catalogQueryService,
-                                         DocumentQueryService documentQueryService,
-                                         AccessService access,
-                                         CommandRegistry commandRegistry,
-                                         WebProperties webProperties,
-                                         BatchRunner batchRunner) {
-        return new CommandService(catalogQueryService, documentQueryService, access, commandRegistry,
-                webProperties, batchRunner);
-    }
-
-    @Bean
     public CommandController commandController(CommandService commandService) {
         return new CommandController(commandService);
     }
@@ -188,6 +189,12 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
 
     @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+    public ServiceExceptionHandler serviceExceptionHandler() {
+        return new ServiceExceptionHandler();
+    }
+
+    @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
     public CommandRejectedExceptionHandler commandRejectedExceptionHandler() {
         return new CommandRejectedExceptionHandler();
     }
@@ -220,11 +227,6 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
             UiMessages uiMessages,
             UiProperties properties) {
         return new UiLoginController(authMethods, contributors, uiMessages, properties);
-    }
-
-    @Bean
-    public AccessService uiAccessService(MetadataRegistry registry, org.springframework.beans.factory.ObjectProvider<EntityAccessPolicy> policies) {
-        return new AccessService(registry, () -> policies.orderedStream().toList());
     }
 
     @Bean
@@ -308,53 +310,6 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
         return new ResolvedMetadataService(registry, checkRegistry);
     }
 
-    /** The validated record policies; boot fails here on an invalid {@code RecordAccessPolicy}. */
-    @Bean
-    public su.onno.access.RecordPolicies recordPolicies(
-            MetadataRegistry registry,
-            org.springframework.beans.factory.ObjectProvider<su.onno.access.RecordAccessPolicy> policies) {
-        return new su.onno.access.RecordPolicies(registry, policies.orderedStream().toList());
-    }
-
-    @Bean
-    public RecordScopeCompiler recordScopeCompiler(su.onno.access.RecordPolicies recordPolicies) {
-        return new RecordScopeCompiler(recordPolicies);
-    }
-
-    @Bean
-    public RecordAccess recordAccess(RecordScopeCompiler recordScopeCompiler, AccessService access, Jdbi jdbi,
-                                     RecordAccessProperties properties) {
-        return new RecordAccess(recordScopeCompiler, access, jdbi, properties.isLogDenials());
-    }
-
-    @Bean
-    public RecordScopeIndexes recordScopeIndexes(su.onno.access.RecordPolicies recordPolicies, Jdbi jdbi,
-                                                 RecordAccessProperties properties,
-                                                 OnnoProperties onnoProperties) {
-        // The typed property, not the Environment: its "apply" default lives on the field (#460).
-        return new RecordScopeIndexes(recordPolicies, jdbi, properties.isCreateIndexes(),
-                onnoProperties.getSchema().getMode());
-    }
-
-    @Bean
-    public AccessSubjectResolver accessSubjectResolver(
-            AccessService access, CurrentUserResolver currentUserResolver,
-            org.springframework.beans.factory.ObjectProvider<su.onno.access.AccessSubjectContributor> contributors) {
-        return new AccessSubjectResolver(access, currentUserResolver, () -> contributors.orderedStream().toList());
-    }
-
-    @Bean
-    public CatalogQueryService catalogQueryService(MetadataRegistry registry, Jdbi jdbi,
-                                                   RecordScopeCompiler recordScopeCompiler, AccessService access) {
-        return new CatalogQueryService(registry, jdbi, recordScopeCompiler, access);
-    }
-
-    @Bean
-    public DocumentQueryService documentQueryService(MetadataRegistry registry, Jdbi jdbi,
-                                                     RecordScopeCompiler recordScopeCompiler, AccessService access) {
-        return new DocumentQueryService(registry, jdbi, recordScopeCompiler, access);
-    }
-
     /** Per-user recently picked ref values, offered first by the ref picker (#409). */
     @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -378,52 +333,6 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                            AccessService access,
                                            CheckRegistry checkRegistry) {
         return new CheckController(catalogQueryService, documentQueryService, access, checkRegistry);
-    }
-
-    @Bean
-    public RegisterQueryService registerQueryService(MetadataRegistry registry, Jdbi jdbi,
-                                                     RecordScopeCompiler recordScopeCompiler, AccessService access) {
-        return new RegisterQueryService(registry, jdbi, recordScopeCompiler, access);
-    }
-
-    @Bean
-    public InformationRegisterQueryService informationRegisterQueryService(MetadataRegistry registry, Jdbi jdbi,
-                                                                           RecordScopeCompiler recordScopeCompiler,
-                                                                           AccessService access) {
-        return new InformationRegisterQueryService(registry, jdbi, recordScopeCompiler, access);
-    }
-
-    @Bean
-    public CatalogCommandService catalogCommandService(MetadataRegistry registry, Jdbi jdbi,
-                                                       WebProperties properties,
-                                                       NumberGenerator numberGenerator,
-                                                       CatalogQueryService catalogQueryService,
-                                                       AccessService access,
-                                                       org.springframework.context.ApplicationEventPublisher events,
-                                                       su.onno.security.SecretCipher secretCipher,
-                                                       org.springframework.beans.factory.ObjectProvider<su.onno.history.RecordHistory> recordHistory) {
-        CatalogCommandService service = new CatalogCommandService(registry, jdbi, properties, numberGenerator,
-                catalogQueryService, access, events, secretCipher);
-        service.setHistory(recordHistory.getIfAvailable());
-        return service;
-    }
-
-    @Bean
-    public DocumentCommandService documentCommandService(MetadataRegistry registry, Jdbi jdbi,
-                                                         WebProperties properties,
-                                                         NumberGenerator numberGenerator,
-                                                         PostingService postingService,
-                                                         DocumentQueryService documentQueryService,
-                                                         AccessService access,
-                                                         org.springframework.context.ApplicationEventPublisher events,
-                                                         su.onno.security.SecretCipher secretCipher,
-                                                         org.springframework.beans.factory.ObjectProvider<su.onno.period.PeriodCloseService> periodClose,
-                                                         org.springframework.beans.factory.ObjectProvider<su.onno.history.RecordHistory> recordHistory) {
-        DocumentCommandService service = new DocumentCommandService(registry, jdbi, properties,
-                numberGenerator, postingService, documentQueryService, access, events, secretCipher);
-        service.setPeriodCloseService(periodClose.getIfAvailable());
-        service.setHistory(recordHistory.getIfAvailable());
-        return service;
     }
 
     /** Period-close roles ({@code onno.period-close.manage-roles} / {@code override-roles}) and override policy. */
@@ -451,27 +360,6 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
             su.onno.period.PeriodCloseService periods, su.onno.web.period.PeriodCloseAccess periodAccess,
             AccessService access, WebProperties properties) {
         return new su.onno.web.period.PeriodCloseController(periods, periodAccess, access, properties);
-    }
-
-    /**
-     * Attributes record-history rows written outside a generic command (typed repository saves,
-     * {@code PostingService} calls from application code) to the request's authenticated user and
-     * their {@code Layout.identity(...)} record. Off a request thread it resolves nothing and the
-     * change is recorded as {@code system}.
-     */
-    @Bean
-    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
-    public su.onno.history.HistoryActorResolver historyActorResolver(AccessService access,
-                                                                    CurrentUserResolver currentUserResolver) {
-        return () -> {
-            String username = access.username(null);
-            if (username == null || username.isBlank()) {
-                return null;
-            }
-            String recordId = currentUserResolver.resolve(() -> username).recordId();
-            return new su.onno.history.HistoryActor(username,
-                    recordId == null || recordId.isBlank() ? null : java.util.UUID.fromString(recordId));
-        };
     }
 
     /** The {@code /api/history} read endpoint; 404s for entities that have not opted in. */
@@ -523,24 +411,9 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    public CurrentUserResolver currentUserResolver(IdentityBinding identityBinding,
-                                                   MetadataRegistry registry, Jdbi jdbi) {
-        return new CurrentUserResolver(identityBinding, registry, jdbi);
-    }
-
-    @Bean
     public DefaultListViews defaultListViews(ResolvedMetadataService resolvedMetadata,
                                          WebProperties properties) {
         return new DefaultListViews(resolvedMetadata, properties.getList().getPageSize());
-    }
-
-    /**
-     * The app's identity binding — which catalog record a login is — from an optional
-     * {@code @Bean IdentityLink} (e.g. {@code IdentityLink.of(Employee.class, "email")}).
-     */
-    @Bean
-    public IdentityBinding identityBinding(org.springframework.beans.factory.ObjectProvider<su.onno.identity.IdentityLink> link) {
-        return new IdentityBinding(link.getIfAvailable());
     }
 
     @Bean

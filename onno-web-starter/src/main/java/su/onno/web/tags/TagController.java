@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import su.onno.web.*;
+import su.onno.service.*;
 
 @RestController
 @RequestMapping("/api/tags/{kind}/{name}")

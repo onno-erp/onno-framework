@@ -8,7 +8,7 @@ import java.util.UUID;
  * is the route kind ({@code "catalogs"}/{@code "documents"}), {@code entityName} the logical name
  * ({@code "Properties"}), and {@code entityId} the target record — together they scope a thread.
  * {@code authorId} is the commenter's catalog record id when the login links to one (see
- * {@link su.onno.web.CurrentUserResolver}); it is null for an unlinked principal, in which case
+ * {@link su.onno.service.CurrentUserResolver}); it is null for an unlinked principal, in which case
  * only {@code authorName} carries identity. {@code editedAt} is null until the comment is edited.
  *
  * <p>{@code createdAt}/{@code editedAt} are {@link Instant}s (points on the timeline, not wall

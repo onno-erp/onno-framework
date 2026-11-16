@@ -1,6 +1,6 @@
 package su.onno.web.notifications;
 
-import su.onno.web.CurrentUserResolver.CurrentUser;
+import su.onno.service.CurrentUserResolver.CurrentUser;
 
 /**
  * A request to raise one notification, built fluently and handed to {@link NotificationService#notify}.

@@ -1,5 +1,9 @@
 package su.onno.web;
 
+import su.onno.service.AccessService;
+import su.onno.service.DocumentCommandService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.WebProperties;
 import su.onno.access.AccessSubject;
 import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;

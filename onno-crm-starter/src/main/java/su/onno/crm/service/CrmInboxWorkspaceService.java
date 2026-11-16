@@ -7,7 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import su.onno.crm.domain.Conversation;
 import su.onno.crm.repository.ConversationRepository;
-import su.onno.web.AccessService;
+import su.onno.service.AccessService;
 
 /** Membership and permission checks shared by all dedicated CRM conversation endpoints. */
 @Service

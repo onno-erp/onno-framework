@@ -10,7 +10,7 @@ import su.onno.metadata.MetadataScanner;
 import su.onno.model.CatalogObject;
 import su.onno.schema.SchemaGenerator;
 import su.onno.identity.IdentityLink;
-import su.onno.web.IdentityBinding;
+import su.onno.service.IdentityBinding;
 
 import org.h2.jdbcx.JdbcDataSource;
 import org.jdbi.v3.core.Jdbi;

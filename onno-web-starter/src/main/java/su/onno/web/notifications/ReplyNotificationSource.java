@@ -1,6 +1,6 @@
 package su.onno.web.notifications;
 
-import su.onno.web.CurrentUserResolver.CurrentUser;
+import su.onno.service.CurrentUserResolver.CurrentUser;
 import su.onno.web.comments.Comment;
 import su.onno.web.comments.CommentRepliedEvent;
 import su.onno.web.comments.Mentions;

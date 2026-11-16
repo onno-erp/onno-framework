@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 import su.onno.cluster.ClusterEvent;
 import su.onno.cluster.ClusterEventBus;
 import su.onno.metadata.MetadataRegistry;
-import su.onno.web.AccessService;
+import su.onno.service.AccessService;
 import su.onno.web.EventPublisher;
 
 import java.util.ArrayList;

@@ -2,7 +2,7 @@ package su.onno.web.presence;
 
 import su.onno.cluster.ClusterEvent;
 import su.onno.cluster.ClusterEventBus;
-import su.onno.web.AccessService;
+import su.onno.service.AccessService;
 import su.onno.web.EventPublisher;
 
 import org.junit.jupiter.api.Test;

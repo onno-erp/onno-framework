@@ -9,6 +9,7 @@ import su.onno.crm.domain.*;
 import su.onno.crm.repository.*;
 import su.onno.crm.service.*;
 import su.onno.web.*;
+import su.onno.service.*;
 import su.onno.web.comments.CommentService;
 import su.onno.types.Ref;
 class CrmActivityControllerTest {

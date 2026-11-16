@@ -1,7 +1,7 @@
 package su.onno.web.notifications;
 
-import su.onno.web.CurrentUserResolver;
-import su.onno.web.CurrentUserResolver.CurrentUser;
+import su.onno.service.CurrentUserResolver;
+import su.onno.service.CurrentUserResolver.CurrentUser;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -40,7 +40,7 @@ public class NotificationController {
 
     private final NotificationService notifications;
     private final CurrentUserResolver currentUser;
-    private final su.onno.web.RecordAccess recordAccess;
+    private final su.onno.service.RecordAccess recordAccess;
 
     public NotificationController(NotificationService notifications, CurrentUserResolver currentUser) {
         this(notifications, currentUser, null);
@@ -48,7 +48,7 @@ public class NotificationController {
 
     @org.springframework.beans.factory.annotation.Autowired
     public NotificationController(NotificationService notifications, CurrentUserResolver currentUser,
-                                  su.onno.web.RecordAccess recordAccess) {
+                                  su.onno.service.RecordAccess recordAccess) {
         this.notifications = notifications;
         this.currentUser = currentUser;
         this.recordAccess = recordAccess;
@@ -69,7 +69,7 @@ public class NotificationController {
             out.put("types", List.of());
             return out;
         }
-        var visibility = recordAccess == null ? su.onno.web.ScopeClause.ALL : recordAccess.notificationScope(subject);
+        var visibility = recordAccess == null ? su.onno.service.ScopeClause.ALL : recordAccess.notificationScope(subject);
         NotificationStore.Page page = notifications.list(recipient, unread, cursor, limit == null ? notifications.pageSize() : limit, visibility);
         // A notification about a record the viewer can no longer read (outside its record scope) is
         // withheld — its title snapshots the record's label.
@@ -91,7 +91,7 @@ public class NotificationController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
         notifications.markRead(id, recipient);
-        return Map.of("unreadCount", notifications.unreadCount(recipient, recordAccess == null ? su.onno.web.ScopeClause.ALL : recordAccess.notificationScope(subject)));
+        return Map.of("unreadCount", notifications.unreadCount(recipient, recordAccess == null ? su.onno.service.ScopeClause.ALL : recordAccess.notificationScope(subject)));
     }
 
     @PostMapping("/read-all")
@@ -101,7 +101,7 @@ public class NotificationController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
         int marked = notifications.markAllRead(recipient);
-        return Map.of("marked", marked, "unreadCount", notifications.unreadCount(recipient, recordAccess == null ? su.onno.web.ScopeClause.ALL : recordAccess.notificationScope(subject)));
+        return Map.of("marked", marked, "unreadCount", notifications.unreadCount(recipient, recordAccess == null ? su.onno.service.ScopeClause.ALL : recordAccess.notificationScope(subject)));
     }
 
     /** The caller's notification-routing id: their identity record id, or username when unlinked, or null for a guest. */

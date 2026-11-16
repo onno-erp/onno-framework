@@ -11,8 +11,8 @@ import su.onno.crm.repository.ConversationMessageRepository;
 import su.onno.crm.repository.ConversationRepository;
 import su.onno.crm.service.ConversationService;
 import su.onno.crm.web.CrmInboxController;
-import su.onno.web.CurrentUserResolver;
-import su.onno.web.AccessService;
+import su.onno.service.CurrentUserResolver;
+import su.onno.service.AccessService;
 
 class OnnoCrmAutoConfigurationTest {
 
@@ -25,14 +25,14 @@ class OnnoCrmAutoConfigurationTest {
             .withBean(su.onno.crm.web.CrmFeedQuery.class, () -> mock(su.onno.crm.web.CrmFeedQuery.class))
             .withBean(ConversationRepository.class, () -> mock(ConversationRepository.class))
             .withBean(ConversationMessageRepository.class, () -> mock(ConversationMessageRepository.class))
-            .withBean(su.onno.web.CatalogQueryService.class, () -> mock(su.onno.web.CatalogQueryService.class))
+            .withBean(su.onno.service.CatalogQueryService.class, () -> mock(su.onno.service.CatalogQueryService.class))
             .withBean(su.onno.command.CommandRegistry.class, () -> mock(su.onno.command.CommandRegistry.class))
             .withBean(su.onno.web.DefaultListViews.class, () -> mock(su.onno.web.DefaultListViews.class))
             .withBean(su.onno.web.EventPublisher.class, () -> mock(su.onno.web.EventPublisher.class))
-            .withBean(su.onno.web.WebProperties.class, su.onno.web.WebProperties::new)
+            .withBean(su.onno.service.WebProperties.class, su.onno.service.WebProperties::new)
             .withBean(su.onno.web.comments.CommentService.class, () -> mock(su.onno.web.comments.CommentService.class))
             .withBean(su.onno.web.comments.CommentAuthorAvatars.class, () -> mock(su.onno.web.comments.CommentAuthorAvatars.class))
-            .withBean(su.onno.web.AccessSubjectResolver.class, () -> mock(su.onno.web.AccessSubjectResolver.class))
+            .withBean(su.onno.service.AccessSubjectResolver.class, () -> mock(su.onno.service.AccessSubjectResolver.class))
             .withBean(CurrentUserResolver.class, () -> mock(CurrentUserResolver.class))
             .withBean(AccessService.class, () -> mock(AccessService.class));
 

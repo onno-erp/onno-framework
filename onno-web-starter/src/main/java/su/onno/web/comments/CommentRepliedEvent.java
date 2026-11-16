@@ -1,6 +1,6 @@
 package su.onno.web.comments;
 
-import su.onno.web.CurrentUserResolver.CurrentUser;
+import su.onno.service.CurrentUserResolver.CurrentUser;
 
 /**
  * Published when a freshly posted comment replies to another comment — the reply counterpart of

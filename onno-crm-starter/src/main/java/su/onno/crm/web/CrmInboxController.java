@@ -18,8 +18,8 @@ import su.onno.crm.domain.Conversation;
 import su.onno.crm.domain.ConversationMessage;
 import su.onno.crm.service.ConversationService;
 import su.onno.crm.service.CrmAgentIdentityResolver;
-import su.onno.web.CurrentUserResolver;
-import su.onno.web.AccessService;
+import su.onno.service.CurrentUserResolver;
+import su.onno.service.AccessService;
 import su.onno.web.comments.CommentAuthorAvatars;
 
 import java.util.Map;

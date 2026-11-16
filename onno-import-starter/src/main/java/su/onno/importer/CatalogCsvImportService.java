@@ -2,7 +2,7 @@ package su.onno.importer;
 
 import su.onno.access.AccessSubject;
 import su.onno.metadata.CatalogDescriptor;
-import su.onno.web.CatalogCommandService;
+import su.onno.service.CatalogCommandService;
 
 import org.apache.commons.csv.CSVParser;
 import org.jdbi.v3.core.Jdbi;

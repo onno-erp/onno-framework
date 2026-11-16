@@ -1,5 +1,9 @@
 package su.onno.web;
 
+import su.onno.service.AccessService;
+import su.onno.service.BatchRunner;
+import su.onno.service.CatalogCommandService;
+import su.onno.service.CatalogQueryService;
 import su.onno.access.AccessSubject;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -45,6 +49,7 @@ class GenericCatalogControllerRepresentationTest {
     void setUp() {
         mvc = MockMvcBuilders.standaloneSetup(
                 new GenericCatalogController(query, access, commands, messages, batch))
+                .setControllerAdvice(new ServiceExceptionHandler())
                 .setCustomArgumentResolvers(AccessSubjectArgumentResolver.fixed(AccessSubject.system()))
                 .build();
     }

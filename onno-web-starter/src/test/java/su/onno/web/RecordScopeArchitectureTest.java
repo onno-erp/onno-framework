@@ -1,5 +1,7 @@
 package su.onno.web;
 
+import su.onno.service.RecordScopeCompiler;
+
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -14,8 +16,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Architecture guard for record policies (design §7): entity tables are only queried through the
- * scoped query/command services and the few audited classes below. Any other class in the UI or MCP
- * starters that reads an entity table with JDBI, or injects a typed repository, bypasses record
+ * scoped query/command services and the few audited classes below. Any other class in the service
+ * layer (onno-framework-starter's su.onno.service), the web starter or the MCP starter that reads an entity table with JDBI, or injects a typed repository, bypasses record
  * scopes — add it to the allowlist only after making it apply {@link RecordScopeCompiler} (or
  * documenting why it serves trusted/system data).
  */
@@ -40,7 +42,9 @@ class RecordScopeArchitectureTest {
     @Test
     void onlyAuditedClassesQueryEntityTables() throws IOException {
         Set<String> offenders = new TreeSet<>();
-        for (Path root : List.of(Path.of("src/main/java"), Path.of("../onno-mcp-starter/src/main/java"))) {
+        for (Path root : List.of(Path.of("src/main/java"),
+                Path.of("../onno-framework-starter/src/main/java/su/onno/service"),
+                Path.of("../onno-mcp-starter/src/main/java"))) {
             if (!Files.isDirectory(root)) continue;
             try (Stream<Path> files = Files.walk(root)) {
                 for (Path file : files.filter(f -> f.toString().endsWith(".java")).toList()) {

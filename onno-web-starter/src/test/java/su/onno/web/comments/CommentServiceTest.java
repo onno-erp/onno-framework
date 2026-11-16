@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import su.onno.access.AccessSubject;
 import su.onno.events.EntityChangedEvent;
-import su.onno.web.CurrentUserResolver.CurrentUser;
+import su.onno.service.CurrentUserResolver.CurrentUser;
 
 import java.time.Instant;
 import java.util.ArrayList;

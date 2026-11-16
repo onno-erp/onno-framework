@@ -1,11 +1,11 @@
 package su.onno.web.comments;
 
 import su.onno.metadata.MetadataRegistry;
-import su.onno.web.CatalogQueryService;
-import su.onno.web.CurrentUserResolver;
-import su.onno.web.DocumentQueryService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.CurrentUserResolver;
+import su.onno.service.DocumentQueryService;
 import su.onno.validation.CheckRegistry;
-import su.onno.web.AccessService;
+import su.onno.service.AccessService;
 import su.onno.web.UiAutoConfiguration;
 import su.onno.web.DefaultListViews;
 
@@ -67,14 +67,14 @@ public class CommentsAutoConfiguration {
 
     @Bean
     public MentionResolver mentionResolver(MetadataRegistry registry, AccessService access, Jdbi jdbi,
-                                           su.onno.web.RecordScopeCompiler recordScopeCompiler) {
+                                           su.onno.service.RecordScopeCompiler recordScopeCompiler) {
         return new MentionResolver(registry, access, jdbi, recordScopeCompiler);
     }
 
     @Bean
     public MentionController mentionController(MetadataRegistry registry, CatalogQueryService catalogQuery,
                                               DocumentQueryService documentQuery, AccessService access,
-                                              CommentProperties properties, su.onno.web.IdentityBinding identityBinding,
+                                              CommentProperties properties, su.onno.service.IdentityBinding identityBinding,
                                               MentionResolver mentionResolver) {
         return new MentionController(registry, catalogQuery, documentQuery, access, properties, identityBinding,
                 mentionResolver);

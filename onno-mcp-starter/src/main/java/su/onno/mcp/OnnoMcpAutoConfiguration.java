@@ -5,14 +5,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.process.ProcessDefinitions;
-import su.onno.web.CatalogCommandService;
-import su.onno.web.CatalogQueryService;
-import su.onno.web.DocumentCommandService;
-import su.onno.web.DocumentQueryService;
-import su.onno.web.RegisterQueryService;
-import su.onno.web.AccessService;
-import su.onno.web.WebProperties;
-import su.onno.web.UiAutoConfiguration;
+import su.onno.service.CatalogCommandService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentCommandService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.RegisterQueryService;
+import su.onno.service.AccessService;
+import su.onno.service.WebProperties;
+import su.onno.service.OnnoServicesAutoConfiguration;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper;
@@ -51,7 +51,7 @@ import java.util.Map;
  * without it); the {@code /mcp} HTTP Basic filter chain is contributed by
  * {@link McpSecurityConfiguration}.
  */
-@AutoConfiguration(after = UiAutoConfiguration.class,
+@AutoConfiguration(after = OnnoServicesAutoConfiguration.class,
         afterName = "su.onno.auth.OnnoAuthAutoConfiguration")
 @ConditionalOnClass({McpServer.class, HttpServletStreamableServerTransportProvider.class,
         SecurityContextHolder.class})
@@ -90,9 +90,9 @@ public class OnnoMcpAutoConfiguration {
 
     /** Every static entity command as a tool, run through the shared {@code CommandService}. */
     @Bean
-    @ConditionalOnBean(su.onno.web.CommandService.class)
+    @ConditionalOnBean(su.onno.service.CommandService.class)
     public CommandToolProvider commandToolProvider(MetadataRegistry registry,
-                                                   su.onno.web.CommandService commandService,
+                                                   su.onno.service.CommandService commandService,
                                                    OnnoMcpProperties properties, McpJsonMapper json) {
         return new CommandToolProvider(registry, commandService, properties, json);
     }
@@ -116,7 +116,7 @@ public class OnnoMcpAutoConfiguration {
     @ConditionalOnMissingBean
     public HttpServletStreamableServerTransportProvider onnoMcpTransportProvider(
             McpJsonMapper json, OnnoMcpProperties properties,
-            org.springframework.beans.factory.ObjectProvider<su.onno.web.AccessSubjectResolver> subjects) {
+            org.springframework.beans.factory.ObjectProvider<su.onno.service.AccessSubjectResolver> subjects) {
         return HttpServletStreamableServerTransportProvider.builder()
                 .jsonMapper(json)
                 .mcpEndpoint(properties.getEndpoint())

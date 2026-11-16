@@ -12,6 +12,7 @@ import su.onno.command.CommandResult;
 import su.onno.crm.domain.Conversation;
 import su.onno.crm.service.CrmInboxWorkspaceService;
 import su.onno.web.*;
+import su.onno.service.*;
 
 /**
  * Runs the host's record {@link su.onno.command.Commands commands} for {@link Conversation} inside the

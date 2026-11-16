@@ -12,9 +12,9 @@ import su.onno.crm.domain.*;
 import su.onno.crm.repository.*;
 import su.onno.crm.service.*;
 import su.onno.types.Ref;
-import su.onno.web.CurrentUserResolver;
-import su.onno.web.AccessService;
-import su.onno.web.WebProperties;
+import su.onno.service.CurrentUserResolver;
+import su.onno.service.AccessService;
+import su.onno.service.WebProperties;
 import su.onno.web.comments.CommentService;
 import su.onno.web.comments.CommentAuthorAvatars;
 

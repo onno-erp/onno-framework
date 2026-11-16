@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import su.onno.crm.domain.Conversation;
 import su.onno.crm.service.*;
 import su.onno.web.*;
+import su.onno.service.*;
 import su.onno.command.*;
 import su.onno.metadata.CatalogDescriptor;
 import static org.assertj.core.api.Assertions.*;

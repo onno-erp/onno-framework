@@ -10,7 +10,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 import su.onno.crm.domain.*;
 import su.onno.crm.repository.*;
-import su.onno.web.AccessService;
+import su.onno.service.AccessService;
 
 /** String identities and CRM links around a host-owned customer catalog. Never writes host fields. */
 public class CrmContactService {
@@ -20,8 +20,8 @@ public class CrmContactService {
     private final CrmWorkspaceService workspace;
     private final JdbcTemplate jdbc;
     private final AccessService access;
-    private org.springframework.beans.factory.ObjectProvider<su.onno.web.RecordAccess> recordAccess;
-    private org.springframework.beans.factory.ObjectProvider<su.onno.web.AccessSubjectResolver> subjects;
+    private org.springframework.beans.factory.ObjectProvider<su.onno.service.RecordAccess> recordAccess;
+    private org.springframework.beans.factory.ObjectProvider<su.onno.service.AccessSubjectResolver> subjects;
 
     /**
      * Apply the bound customer catalog's {@code RecordAccessPolicy} on top of {@code readableWhen}:
@@ -29,7 +29,7 @@ public class CrmContactService {
      * panel and merge commands never surface it.
      */
     /** Manual wiring (tests, non-Spring use); Spring injects lazily through {@link #lazyRecordAccess}. */
-    public void setRecordAccess(su.onno.web.RecordAccess recordAccess, su.onno.web.AccessSubjectResolver subjects) {
+    public void setRecordAccess(su.onno.service.RecordAccess recordAccess, su.onno.service.AccessSubjectResolver subjects) {
         this.recordAccess = provider(recordAccess);
         this.subjects = provider(subjects);
     }
@@ -39,8 +39,8 @@ public class CrmContactService {
      * and host views commonly depend on CRM services, which would otherwise form a creation cycle.
      */
     @org.springframework.beans.factory.annotation.Autowired
-    void lazyRecordAccess(org.springframework.beans.factory.ObjectProvider<su.onno.web.RecordAccess> recordAccess,
-                          org.springframework.beans.factory.ObjectProvider<su.onno.web.AccessSubjectResolver> subjects) {
+    void lazyRecordAccess(org.springframework.beans.factory.ObjectProvider<su.onno.service.RecordAccess> recordAccess,
+                          org.springframework.beans.factory.ObjectProvider<su.onno.service.AccessSubjectResolver> subjects) {
         this.recordAccess = recordAccess;
         this.subjects = subjects;
     }

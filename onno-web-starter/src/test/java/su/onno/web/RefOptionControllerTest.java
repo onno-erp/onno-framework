@@ -1,5 +1,8 @@
 package su.onno.web;
 
+import su.onno.service.AccessService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentQueryService;
 import su.onno.picker.PickerOptionsService;
 import su.onno.access.AccessSubject;
 import su.onno.annotations.Catalog;

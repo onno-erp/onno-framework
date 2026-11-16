@@ -33,8 +33,8 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The UI Gradle plug
 | Module | Group | Role |
 | --- | --- | --- |
 | `onno-framework` | `su.onno` | Core: annotations, metadata scanners + registry, schema diff/migration, JDBI persistence, posting engine, complete typed process graph/runtime/schema, repository contracts, events, outbox, and the behaviour beans the web layer serves: commands (`su.onno.command`), live checks (`su.onno.validation`), picker options (`su.onno.picker`) and the login identity link (`su.onno.identity`). |
-| `onno-framework-starter` | `su.onno` | Spring Boot auto-configuration that wires the core: metadata registry, repositories, schema initializer, posting and process services, timer/subprocess polling, number generation, secret cipher, background jobs, and the cross-node `ClusterEventBus` (Postgres `LISTEN`/`NOTIFY` on a Postgres datasource, no-op on H2) that keeps SSE live UI, task inboxes, presence and notifications in sync across instances. |
-| `onno-web-starter` | `su.onno` (package `su.onno.web`) | The web layer: generic REST controllers under `/api/**`, access control and record policies, commands/checks/picker endpoints, media uploads, SSE event stream, comment threads, per-user notifications; serves the bundled default UI and the `/api/ui` model. |
+| `onno-framework-starter` | `su.onno` | Spring Boot auto-configuration that wires the core: metadata registry, repositories, schema initializer, posting and process services, timer/subprocess polling, number generation, secret cipher, background jobs, the transport-neutral service layer (`su.onno.service`: generic catalog/document/register query and command services, `CommandService`, `AccessService`, record-policy enforcement — `RecordAccess`, `RecordScopeCompiler`, `RecordWriteGuard` — and `AccessSubjectResolver`; refusals are a `ServiceException` carrying a status), and the cross-node `ClusterEventBus` (Postgres `LISTEN`/`NOTIFY` on a Postgres datasource, no-op on H2) that keeps SSE live UI, task inboxes, presence and notifications in sync across instances. |
+| `onno-web-starter` | `su.onno` (package `su.onno.web`) | The web layer over the service layer: generic REST controllers under `/api/**` (mapping `ServiceException` to HTTP statuses), commands/checks/picker endpoints, media uploads, SSE event stream, comment threads, per-user notifications; serves the bundled default UI and the `/api/ui` model. |
 | `onno-ui` | (npm `@onno/ui`) | The UI: the React shell, default screens, page building blocks and typed data hooks apps import. `onno-web-starter` builds it into the default shell. |
 | `onno-crm-starter` | `su.onno` | Composable messaging: inboxes, conversations/messages, channel identities, and the `@onno/crm` React components. Explicit host customer bindings enable it; customers, employees, sales models and navigation remain host-owned. |
 | `onno-auth-starter` | `su.onno` | Spring Security: database (runtime-managed accounts), in-memory, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
@@ -386,7 +386,7 @@ There is no universal query DSL. Catalog and document API reads use the web star
 resolution. Typed business reads of accumulation registers use `RegisterRepository.query()`;
 generic UI and MCP register projections use `RegisterQueryService`. The small
 `su.onno.query` package contains only shared cursor/keyset and SQL-rendering utilities used by those
-runtime paths. Every web-starter query service method takes the `AccessSubject` it reads for and
+runtime paths. Every query service method (`su.onno.service`) takes the `AccessSubject` it reads for and
 applies that subject's record scope inside the query (see
 [Record-level access policies](#record-level-access-policies)); typed repositories are trusted code
 and unscoped.
@@ -647,7 +647,7 @@ RecordAccessPolicy tenantsByOwner() {
   `AccessSubject` parameter; the subject is captured explicitly into aggregate pools, batches, SSE
   subscriptions and MCP exchanges.
 - **Compilation.** `RecordPolicies` (core) validates every policy at boot and resolves the scope for
-  a subject; `RecordScopeCompiler` (web starter) turns it into a `ScopeClause` (SQL + bindings,
+  a subject; `RecordScopeCompiler` (service layer) turns it into a `ScopeClause` (SQL + bindings,
   three-valued logic, `via` as a correlated `EXISTS`) that the query services AND into every
   `WHERE` — lists, counts, groups, aggregates, search (whose ref `EXISTS` carries the
   target's scope), trees and `get` (404 outside the scope).

@@ -1,5 +1,14 @@
 package su.onno.web;
 
+import su.onno.service.AccessService;
+import su.onno.service.AccessSubjectResolver;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.CommandService;
+import su.onno.service.CurrentUserResolver;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.EntityJsonRepresentation;
+import su.onno.service.RegisterQueryService;
+import su.onno.service.WebProperties;
 import su.onno.metadata.AccumulationRegisterDescriptor;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;

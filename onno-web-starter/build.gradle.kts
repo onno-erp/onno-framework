@@ -94,7 +94,9 @@ tasks.named<ProcessResources>("processResources") {
 
 dependencies {
     api(project(":onno-framework"))
-    implementation(project(":onno-framework-starter"))
+    // The service layer (su.onno.service) is part of this starter's API: controllers here and every
+    // module built on it (import, print, CRM) call those beans.
+    api(project(":onno-framework-starter"))
 
     implementation(libs.spring.boot.autoconfigure)
     implementation(libs.spring.boot.starter.web)

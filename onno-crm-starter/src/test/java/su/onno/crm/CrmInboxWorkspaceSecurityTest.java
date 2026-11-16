@@ -11,6 +11,7 @@ import su.onno.crm.repository.ConversationRepository;
 import su.onno.crm.service.*;
 import su.onno.crm.web.*;
 import su.onno.web.*;
+import su.onno.service.*;
 import su.onno.web.comments.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;

@@ -2,11 +2,11 @@ package su.onno.importer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import su.onno.metadata.MetadataRegistry;
-import su.onno.web.CatalogCommandService;
-import su.onno.web.CatalogQueryService;
-import su.onno.web.DocumentCommandService;
-import su.onno.web.DocumentQueryService;
-import su.onno.web.AccessService;
+import su.onno.service.CatalogCommandService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentCommandService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.AccessService;
 import su.onno.web.UiAutoConfiguration;
 
 import org.jdbi.v3.core.Jdbi;

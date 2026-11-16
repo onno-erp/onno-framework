@@ -6,9 +6,9 @@ import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.MetadataRegistry;
-import su.onno.web.RecordScopeCompiler;
-import su.onno.web.ScopeClause;
-import su.onno.web.AccessService;
+import su.onno.service.RecordScopeCompiler;
+import su.onno.service.ScopeClause;
+import su.onno.service.AccessService;
 
 import org.jdbi.v3.core.Jdbi;
 
@@ -24,7 +24,7 @@ import java.util.UUID;
 
 /**
  * Resolves the entity mentions in a comment thread to {@code {display, avatarUrl, readable}}, live
- * and per-viewer — the mention counterpart of {@link su.onno.web.RefResolver}, batched the way
+ * and per-viewer — the mention counterpart of {@link su.onno.service.RefResolver}, batched the way
  * {@link CommentAuthorAvatars} batches author avatars. For each viewer:
  *
  * <ul>

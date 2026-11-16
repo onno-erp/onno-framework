@@ -2,7 +2,7 @@ package su.onno.web.period;
 
 import su.onno.period.PeriodCloseOverridePolicy;
 import su.onno.period.PeriodOverride;
-import su.onno.web.AccessService;
+import su.onno.service.AccessService;
 
 import java.security.Principal;
 import java.util.ArrayList;

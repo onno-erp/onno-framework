@@ -1,5 +1,8 @@
 package su.onno.web;
 
+import su.onno.service.AccessService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentQueryService;
 import su.onno.validation.CheckRegistry;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PathVariable;

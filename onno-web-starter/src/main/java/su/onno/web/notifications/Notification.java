@@ -13,7 +13,7 @@ import java.util.UUID;
  *
  * @param id           the notification's own id.
  * @param recipientId  the target user's identity record id (the {@code recordId} of their
- *                     {@link su.onno.web.CurrentUserResolver.CurrentUser}), or their username for an
+ *                     {@link su.onno.service.CurrentUserResolver.CurrentUser}), or their username for an
  *                     unlinked in-memory login. This is what the delivery layer routes on.
  * @param type         a short machine tag for the source ({@code mention}, {@code assignment}, …); the
  *                     UI maps it to an icon and the producers set it. Never null.

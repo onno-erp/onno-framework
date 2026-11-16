@@ -9,6 +9,7 @@ import su.onno.events.EntityChangePublisher;
 import su.onno.events.EntityChangedEvent;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.web.*;
+import su.onno.service.*;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -39,5 +40,5 @@ public class TagsAutoConfiguration {
                 scope -> names.getOrDefault(scope, TagService.nameFromScope(scope)));
     }
     @SuppressWarnings("deprecation")
-    @Bean public TagController tagController(TagService tags,AccessService access,CatalogQueryService catalogs,DocumentQueryService documents, org.springframework.beans.factory.ObjectProvider<TagAccessPolicy> policies, org.springframework.beans.factory.ObjectProvider<su.onno.web.RecordAccess> recordAccess) { return new TagController(tags,access,catalogs,documents,policies.orderedStream().toList(),recordAccess.getIfAvailable()); }
+    @Bean public TagController tagController(TagService tags,AccessService access,CatalogQueryService catalogs,DocumentQueryService documents, org.springframework.beans.factory.ObjectProvider<TagAccessPolicy> policies, org.springframework.beans.factory.ObjectProvider<su.onno.service.RecordAccess> recordAccess) { return new TagController(tags,access,catalogs,documents,policies.orderedStream().toList(),recordAccess.getIfAvailable()); }
 }

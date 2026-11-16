@@ -1,5 +1,9 @@
 package su.onno.web;
 
+import su.onno.service.AccessService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.RecordScopeCompiler;
 import su.onno.picker.PickerOptionsService;
 import su.onno.access.AccessSubject;
 import su.onno.access.RecordAccessPolicy;
@@ -23,7 +27,7 @@ import org.h2.jdbcx.JdbcDataSource;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.web.server.ResponseStatusException;
+import su.onno.service.ServiceException;
 
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
@@ -206,9 +210,9 @@ class RefRecentOptionsTest {
         var request = new RefOptionController.RecentRequest("catalog", catalog.logicalName(), id);
 
         assertThatThrownBy(() -> controller.recent(request, OUTSIDER))
-                .isInstanceOf(ResponseStatusException.class);
+                .isInstanceOf(ServiceException.class);
         assertThatThrownBy(() -> search(OUTSIDER, "", null, 30))
-                .isInstanceOf(ResponseStatusException.class);
+                .isInstanceOf(ServiceException.class);
         assertThat(store.recent("x@fw.test", "catalog", catalog.logicalName(), 20)).isEmpty();
     }
 

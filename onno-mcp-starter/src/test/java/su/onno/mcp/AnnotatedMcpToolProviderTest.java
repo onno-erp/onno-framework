@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import su.onno.web.WebProperties;
+import su.onno.service.WebProperties;
 
 import java.security.Principal;
 import java.util.List;

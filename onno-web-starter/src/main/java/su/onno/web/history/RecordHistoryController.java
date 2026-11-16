@@ -11,9 +11,9 @@ import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.TabularSectionDescriptor;
 import su.onno.query.Cursor;
 import su.onno.query.KeysetWindow;
-import su.onno.web.CatalogQueryService;
-import su.onno.web.DocumentQueryService;
-import su.onno.web.AccessService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.AccessService;
 import su.onno.web.UiMessages;
 
 import org.springframework.http.HttpStatus;
@@ -100,7 +100,7 @@ public class RecordHistoryController {
             json.put("changes", changes);
             out.add(json);
         }
-        return su.onno.web.KeysetWindow.envelope(new KeysetWindow.Page<>(out, page.nextCursor(), page.hasMore()));
+        return su.onno.service.KeysetWindow.envelope(new KeysetWindow.Page<>(out, page.nextCursor(), page.hasMore()));
     }
 
     /**

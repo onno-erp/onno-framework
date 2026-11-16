@@ -153,7 +153,7 @@ in depth in [ARCHITECTURE.md](ARCHITECTURE.md):
 - **Serve users inside their record scope.** A connector endpoint, command handler or
   `@McpTool` that returns or changes host records on a user's behalf takes the caller's
   `AccessSubject` (controller parameter, `CommandContext.subject()`, `McpToolContext.subject()`) and
-  either reads through the web starter's query services or checks with `RecordAccess`
+  either reads through the service layer's query services (`su.onno.service`) or checks with `RecordAccess`
   (`require`/`can`/`filter`/`clause`). Typed repositories are unscoped trusted code. Contribute
   subject attributes for host policies with an `AccessSubjectContributor` bean. See
   [Record access policies](RECORD_ACCESS_POLICIES.md).

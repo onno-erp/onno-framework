@@ -1,5 +1,6 @@
 package su.onno.web;
 
+import su.onno.service.WebProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
 

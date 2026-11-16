@@ -1,7 +1,7 @@
 package su.onno.mcp;
 
 import su.onno.access.AccessSubject;
-import su.onno.web.AccessSubjectResolver;
+import su.onno.service.AccessSubjectResolver;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpSyncServerExchange;

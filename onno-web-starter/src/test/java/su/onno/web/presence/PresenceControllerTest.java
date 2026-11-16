@@ -1,9 +1,9 @@
 package su.onno.web.presence;
 
 import su.onno.cluster.NoOpClusterEventBus;
-import su.onno.web.CurrentUserResolver;
-import su.onno.web.CurrentUserResolver.CurrentUser;
-import su.onno.web.AccessService;
+import su.onno.service.CurrentUserResolver;
+import su.onno.service.CurrentUserResolver.CurrentUser;
+import su.onno.service.AccessService;
 import su.onno.web.EventPublisher;
 import su.onno.web.comments.CommentAuthorAvatars;
 

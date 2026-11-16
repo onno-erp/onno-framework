@@ -3,6 +3,7 @@ package su.onno.web.tags;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 import su.onno.web.*;
+import su.onno.service.*;
 import java.util.List;
 import java.util.UUID;
 import static org.assertj.core.api.Assertions.*;

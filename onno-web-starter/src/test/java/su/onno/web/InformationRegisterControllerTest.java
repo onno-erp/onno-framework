@@ -1,5 +1,8 @@
 package su.onno.web;
 
+import su.onno.service.AccessService;
+import su.onno.service.InformationRegisterQueryService;
+import su.onno.service.RecordScopeCompiler;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import su.onno.access.*;
@@ -210,6 +213,7 @@ class InformationRegisterControllerTest {
 
     private MockMvc mvc(AccessSubject caller) {
         return MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new ServiceExceptionHandler())
                 .setCustomArgumentResolvers(AccessSubjectArgumentResolver.fixed(caller)).build();
     }
 

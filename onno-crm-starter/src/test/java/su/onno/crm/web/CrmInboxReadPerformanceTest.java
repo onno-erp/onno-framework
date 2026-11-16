@@ -10,6 +10,7 @@ import su.onno.crm.domain.Conversation;
 import su.onno.crm.service.*;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.web.*;
+import su.onno.service.*;
 import su.onno.web.comments.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;

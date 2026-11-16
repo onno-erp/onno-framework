@@ -1,5 +1,10 @@
 package su.onno.web;
 
+import su.onno.service.AccessService;
+import su.onno.service.AggregateBuckets;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.RecordScopeCompiler;
 import su.onno.picker.PickerOptionsService;
 import su.onno.command.CommandRegistry;
 import su.onno.access.AccessSubject;
@@ -29,7 +34,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.web.server.ResponseStatusException;
+import su.onno.service.ServiceException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -168,8 +173,8 @@ class WhereEndpointsTest {
     void unknownFieldIsA400() {
         assertThatThrownBy(() -> list.documentPage(orders.logicalName(), 100, null, null, null, null, null, null,
                 request(Map.of("where", "{\"discount\":1}")), CLERK))
-                .isInstanceOfSatisfying(ResponseStatusException.class, e -> {
-                    assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+                .isInstanceOfSatisfying(ServiceException.class, e -> {
+                    assertThat(e.status()).isEqualTo(ServiceException.Status.BAD_REQUEST);
                     assertThat(e.getReason()).contains("discount");
                 });
     }
@@ -195,8 +200,8 @@ class WhereEndpointsTest {
 
         assertThatThrownBy(() -> list.documentAggregate(orders.logicalName(), new AggregateBuckets.Request(
                 "count", null, null, null, null, null, null, null, "{\"nope\":1}", null, null, null), CLERK))
-                .isInstanceOfSatisfying(ResponseStatusException.class,
-                        e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+                .isInstanceOfSatisfying(ServiceException.class,
+                        e -> assertThat(e.status()).isEqualTo(ServiceException.Status.BAD_REQUEST));
     }
 
     @Test

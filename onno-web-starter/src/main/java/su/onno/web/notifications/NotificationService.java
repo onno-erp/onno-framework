@@ -125,14 +125,14 @@ public class NotificationService {
     }
 
     public NotificationStore.Page list(String recipientId, boolean unreadOnly, String cursor, int limit,
-            su.onno.web.ScopeClause visibility) {
+            su.onno.service.ScopeClause visibility) {
         return store.list(recipientId, unreadOnly, cursor, limit, visibility);
     }
 
-    public int unreadCount(String recipientId, su.onno.web.ScopeClause visibility) {
+    public int unreadCount(String recipientId, su.onno.service.ScopeClause visibility) {
         return store.unreadCount(recipientId, visibility);
     }
-    public java.util.List<String> types(String recipientId, su.onno.web.ScopeClause visibility) {
+    public java.util.List<String> types(String recipientId, su.onno.service.ScopeClause visibility) {
         return store.distinctTypes(recipientId, visibility);
     }
 

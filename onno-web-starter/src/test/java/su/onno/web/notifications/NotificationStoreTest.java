@@ -47,7 +47,7 @@ class NotificationStoreTest {
             h.execute("INSERT INTO onno_notifications (_id,_recipient,_type,_title,_link,_created_at) VALUES (?,?, 'hidden','secret',?, CURRENT_TIMESTAMP)",
                     UUID.randomUUID(), alice, "catalogs/Clients/" + hidden);
         });
-        var scope = new su.onno.web.ScopeClause("(_target_id IS NULL OR _target_id = :allowed)", java.util.Map.of("allowed", allowed));
+        var scope = new su.onno.service.ScopeClause("(_target_id IS NULL OR _target_id = :allowed)", java.util.Map.of("allowed", allowed));
         assertThat(store.list(alice, false, null, 1, scope).items()).extracting(Notification::title).containsExactly("visible");
         assertThat(store.unreadCount(alice, scope)).isEqualTo(1);
         assertThat(store.distinctTypes(alice, scope)).containsExactly("mention");

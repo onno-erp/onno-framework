@@ -12,6 +12,9 @@ dependencies {
     implementation(libs.jdbi3.spring5)
     implementation(libs.micrometer.core)
     implementation(libs.jackson.databind)
+    // The service layer (su.onno.service) caches the resolved AccessSubject on the current request
+    // when spring-web is present; it is optional so a non-web app does not need it.
+    compileOnly(libs.spring.web)
 
     api(libs.jobrunr.spring.boot3.starter)
 
@@ -34,6 +37,8 @@ dependencies {
     testImplementation(libs.testcontainers.junit.jupiter)
     testImplementation(libs.postgresql)
     testImplementation(libs.mockito.core)
+    // Service-layer tests: AccessService reads roles from the Spring Security context.
+    testImplementation(libs.spring.security.core)
     testImplementation(libs.jackson.datatype.jsr310)
     testRuntimeOnly(libs.junit.platform.launcher)
 }

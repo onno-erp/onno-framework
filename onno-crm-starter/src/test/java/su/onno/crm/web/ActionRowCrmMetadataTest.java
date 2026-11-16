@@ -10,6 +10,7 @@ import su.onno.metadata.DefaultNamingStrategy;
 import su.onno.metadata.MetadataScanner;
 import su.onno.command.*;
 import su.onno.web.*;
+import su.onno.service.*;
 
 import java.security.Principal;
 import java.util.List;

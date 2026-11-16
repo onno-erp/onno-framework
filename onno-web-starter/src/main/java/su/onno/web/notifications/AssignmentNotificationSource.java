@@ -6,7 +6,7 @@ import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.MetadataRegistry;
-import su.onno.web.IdentityBinding;
+import su.onno.service.IdentityBinding;
 import su.onno.web.comments.Mentions;
 
 import org.jdbi.v3.core.Jdbi;

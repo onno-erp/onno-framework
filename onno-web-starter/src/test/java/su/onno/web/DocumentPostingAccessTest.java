@@ -1,5 +1,9 @@
 package su.onno.web;
 
+import su.onno.service.AccessService;
+import su.onno.service.DocumentCommandService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.WebProperties;
 import su.onno.access.AccessSubject;
 import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
@@ -21,7 +25,7 @@ import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
+import su.onno.service.ServiceException;
 
 import java.util.Map;
 import java.util.Set;
@@ -178,8 +182,8 @@ class DocumentPostingAccessTest {
 
         // ...and still only with writers: a read-only role gets the ordinary write denial.
         assertThatThrownBy(() -> commands.post(open, id, VIEWER))
-                .isInstanceOfSatisfying(ResponseStatusException.class,
-                        e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+                .isInstanceOfSatisfying(ServiceException.class,
+                        e -> assertThat(e.status()).isEqualTo(ServiceException.Status.FORBIDDEN));
     }
 
     @Test
@@ -217,8 +221,8 @@ class DocumentPostingAccessTest {
 
     private static void assertForbidden(Runnable call, String operation) {
         assertThatThrownBy(call::run)
-                .isInstanceOfSatisfying(ResponseStatusException.class, e -> {
-                    assertThat(e.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+                .isInstanceOfSatisfying(ServiceException.class, e -> {
+                    assertThat(e.status()).isEqualTo(ServiceException.Status.FORBIDDEN);
                     assertThat(e.getReason()).contains("not allowed to " + operation);
                 });
     }

@@ -13,7 +13,7 @@ import su.onno.metadata.MetadataScanner;
 import su.onno.model.CatalogObject;
 import su.onno.model.DocumentObject;
 import su.onno.schema.SchemaGenerator;
-import su.onno.web.AccessService;
+import su.onno.service.AccessService;
 import su.onno.web.comments.MentionResolver.ResolvedMention;
 
 import org.h2.jdbcx.JdbcDataSource;

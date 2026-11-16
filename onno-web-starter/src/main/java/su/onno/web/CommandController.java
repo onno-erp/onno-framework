@@ -1,5 +1,6 @@
 package su.onno.web;
 
+import su.onno.service.CommandService;
 import su.onno.access.AccessSubject;
 import su.onno.command.CommandDefaults;
 import su.onno.command.CommandResult;

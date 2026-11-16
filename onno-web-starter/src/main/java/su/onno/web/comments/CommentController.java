@@ -2,11 +2,11 @@ package su.onno.web.comments;
 
 import su.onno.access.AccessMode;
 import su.onno.access.AccessSubject;
-import su.onno.web.CatalogQueryService;
-import su.onno.web.CurrentUserResolver;
-import su.onno.web.CurrentUserResolver.CurrentUser;
-import su.onno.web.DocumentQueryService;
-import su.onno.web.AccessService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.CurrentUserResolver;
+import su.onno.service.CurrentUserResolver.CurrentUser;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.AccessService;
 import su.onno.web.DefaultListViews;
 
 import su.onno.web.comments.MentionResolver.ResolvedMention;
@@ -107,7 +107,7 @@ public class CommentController {
                 .map(c -> toJson(c, me, admin, c.authorId() == null ? null : avatars.get(c.authorId()),
                         mentionsFor(c.body(), resolved), reactions.getOrDefault(c.id(), List.of())))
                 .toList();
-        return su.onno.web.KeysetWindow.envelope(new su.onno.query.KeysetWindow.Page<>(rows,
+        return su.onno.service.KeysetWindow.envelope(new su.onno.query.KeysetWindow.Page<>(rows,
                 page.nextCursor(), page.hasMore()));
     }
 

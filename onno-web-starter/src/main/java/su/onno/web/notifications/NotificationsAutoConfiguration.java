@@ -2,7 +2,7 @@ package su.onno.web.notifications;
 
 import su.onno.cluster.ClusterEventBus;
 import su.onno.metadata.MetadataRegistry;
-import su.onno.web.CurrentUserResolver;
+import su.onno.service.CurrentUserResolver;
 import su.onno.validation.CheckRegistry;
 import su.onno.web.UiAutoConfiguration;
 import su.onno.web.EventPublisher;
@@ -50,7 +50,7 @@ public class NotificationsAutoConfiguration {
     @Bean
     public NotificationController notificationController(NotificationService notificationService,
                                                         CurrentUserResolver currentUserResolver,
-                                                        su.onno.web.RecordAccess recordAccess) {
+                                                        su.onno.service.RecordAccess recordAccess) {
         return new NotificationController(notificationService, currentUserResolver, recordAccess);
     }
 
@@ -58,7 +58,7 @@ public class NotificationsAutoConfiguration {
     @ConditionalOnProperty(prefix = "onno.notifications.mentions", name = "enabled",
             havingValue = "true", matchIfMissing = true)
     public MentionNotificationSource mentionNotificationSource(NotificationService notificationService,
-                                                              su.onno.web.IdentityBinding identityBinding,
+                                                              su.onno.service.IdentityBinding identityBinding,
                                                               MetadataRegistry registry) {
         return new MentionNotificationSource(notificationService, identityBinding, registry);
     }
@@ -67,7 +67,7 @@ public class NotificationsAutoConfiguration {
     @ConditionalOnProperty(prefix = "onno.notifications.assignments", name = "enabled",
             havingValue = "true", matchIfMissing = true)
     public AssignmentNotificationSource assignmentNotificationSource(NotificationService notificationService,
-                                                                    su.onno.web.IdentityBinding identityBinding,
+                                                                    su.onno.service.IdentityBinding identityBinding,
                                                                     MetadataRegistry registry, Jdbi jdbi) {
         return new AssignmentNotificationSource(notificationService, identityBinding, registry, jdbi);
     }

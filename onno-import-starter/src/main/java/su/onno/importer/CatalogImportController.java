@@ -4,9 +4,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
-import su.onno.web.CatalogQueryService;
-import su.onno.web.DocumentQueryService;
-import su.onno.web.AccessService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.AccessService;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;

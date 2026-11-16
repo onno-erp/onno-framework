@@ -5,9 +5,9 @@ import org.springframework.context.ApplicationEventPublisher;
 
 import su.onno.access.AccessSubject;
 import su.onno.events.EntityChangedEvent;
-import su.onno.web.CurrentUserResolver.CurrentUser;
+import su.onno.service.CurrentUserResolver.CurrentUser;
 import su.onno.web.JdbiCommitCallbacks;
-import su.onno.web.SqlBind;
+import su.onno.service.SqlBind;
 
 import java.sql.Timestamp;
 import java.time.Instant;

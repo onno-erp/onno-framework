@@ -4,10 +4,10 @@ import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.MetadataRegistry;
-import su.onno.web.CatalogQueryService;
-import su.onno.web.DocumentQueryService;
-import su.onno.web.AccessService;
-import su.onno.web.IdentityBinding;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.AccessService;
+import su.onno.service.IdentityBinding;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;

@@ -7,6 +7,7 @@ import su.onno.crm.domain.*;
 import su.onno.crm.repository.ConversationRepository;
 import su.onno.crm.service.*;
 import su.onno.web.*;
+import su.onno.service.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -21,7 +22,7 @@ class CrmConversationWorkspaceTest {
   var workspaces=new CrmInboxWorkspaceService(List.of(new CrmInboxWorkspace("sales","Sales",Set.of("SALES"),c->Channel.TELEGRAM.equals(c.getChannel())),
       new CrmInboxWorkspace("support","Support",Set.of("SALES"),c->Channel.EMAIL.equals(c.getChannel()))),
       repository,access,mock(CrmWorkspaceService.class),su.onno.crm.TestBindings.readableContacts(),mock(CrmConnectionAccounts.class));
-  var scoped=new CrmInboxWorkspaceController(workspaces,mock(CatalogQueryService.class),mock(CurrentUserResolver.class),mock(su.onno.web.comments.CommentService.class),mock(su.onno.web.comments.CommentAuthorAvatars.class),mock(su.onno.web.AccessSubjectResolver.class),su.onno.crm.TestBindings.readableContacts(),su.onno.crm.TestBindings.noAgents(),access);
+  var scoped=new CrmInboxWorkspaceController(workspaces,mock(CatalogQueryService.class),mock(CurrentUserResolver.class),mock(su.onno.web.comments.CommentService.class),mock(su.onno.web.comments.CommentAuthorAvatars.class),mock(su.onno.service.AccessSubjectResolver.class),su.onno.crm.TestBindings.readableContacts(),su.onno.crm.TestBindings.noAgents(),access);
   var http=MockMvcBuilders.standaloneSetup(scoped).build();
   http.perform(get("/api/crm/inbox-workspaces").param("conversation",visible.getId().toString()).principal(alice)).andExpect(status().isOk())
       .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].key").value("sales"));

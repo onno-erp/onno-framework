@@ -11,7 +11,7 @@ import su.onno.crm.repository.*;
 import su.onno.crm.web.*;
 import su.onno.spring.OnnoAutoConfiguration;
 import su.onno.spring.OnnoRepositoriesAutoConfiguration;
-import su.onno.web.EntityAccessPolicy;
+import su.onno.service.EntityAccessPolicy;
 
 /** Installs messaging only when the host explicitly binds its customer catalog. */
 @AutoConfiguration(before = {OnnoAutoConfiguration.class, OnnoRepositoriesAutoConfiguration.class})
@@ -37,7 +37,7 @@ public class OnnoCrmAutoConfiguration {
     public CrmStateConfiguration crmStateConfiguration() { return CrmStateConfiguration.empty(); }
 
     @Bean @ConditionalOnMissingBean
-    public CrmChannelAccess crmChannelAccess(su.onno.web.AccessService access) {
+    public CrmChannelAccess crmChannelAccess(su.onno.service.AccessService access) {
         return principal -> access.roles(principal).contains("ADMIN");
     }
     @Bean @ConditionalOnMissingBean

@@ -9,14 +9,14 @@ import su.onno.metadata.EnumerationDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.TabularSectionDescriptor;
 import su.onno.process.ProcessDefinitions;
-import su.onno.web.CatalogCommandService;
-import su.onno.web.CatalogQueryService;
-import su.onno.web.DocumentCommandService;
-import su.onno.web.DocumentQueryService;
-import su.onno.web.KeysetPage;
-import su.onno.web.RegisterQueryService;
-import su.onno.web.AccessService;
-import su.onno.web.WebProperties;
+import su.onno.service.CatalogCommandService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentCommandService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.KeysetPage;
+import su.onno.service.RegisterQueryService;
+import su.onno.service.AccessService;
+import su.onno.service.WebProperties;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpServerFeatures.SyncToolSpecification;
@@ -504,6 +504,8 @@ public class MetadataToolFactory implements McpToolProvider {
             Map<String, Object> args = request.arguments() == null ? Map.of() : request.arguments();
             try {
                 return body.apply(exchange, args);
+            } catch (su.onno.service.ServiceException refused) {
+                return error(refused.getMessage() == null ? refused.status().name() : refused.getMessage());
             } catch (org.springframework.web.server.ResponseStatusException e) {
                 return error(e.getReason() == null ? e.getMessage() : e.getReason());
             } catch (IllegalArgumentException e) {
@@ -590,7 +592,7 @@ public class MetadataToolFactory implements McpToolProvider {
     /** A register keyset window with its rows in the logical vocabulary. */
     private static Map<String, Object> logicalPage(AccumulationRegisterDescriptor desc,
                                                    su.onno.query.KeysetWindow.Page<Map<String, Object>> page) {
-        Map<String, Object> out = su.onno.web.KeysetWindow.envelope(page);
+        Map<String, Object> out = su.onno.service.KeysetWindow.envelope(page);
         out.put("rows", RegisterQueryService.logical(desc, page.rows()));
         return out;
     }

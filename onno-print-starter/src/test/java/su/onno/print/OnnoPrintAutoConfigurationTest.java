@@ -2,10 +2,10 @@ package su.onno.print;
 
 import su.onno.metadata.MetadataRegistry;
 import su.onno.types.RefResolver;
-import su.onno.web.CatalogQueryService;
-import su.onno.web.DocumentQueryService;
-import su.onno.web.AccessService;
-import su.onno.web.WebProperties;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.AccessService;
+import su.onno.service.WebProperties;
 
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.Test;

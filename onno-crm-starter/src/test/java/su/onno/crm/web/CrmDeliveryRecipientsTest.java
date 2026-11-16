@@ -12,8 +12,8 @@ import su.onno.crm.domain.Conversation;
 import su.onno.crm.repository.ContactIdentityRepository;
 import su.onno.crm.repository.ConversationRepository;
 import su.onno.crm.service.*;
-import su.onno.web.CurrentUserResolver;
-import su.onno.web.AccessService;
+import su.onno.service.CurrentUserResolver;
+import su.onno.service.AccessService;
 import su.onno.web.comments.CommentAuthorAvatars;
 
 import static org.assertj.core.api.Assertions.assertThat;

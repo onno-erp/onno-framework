@@ -20,7 +20,7 @@ import su.onno.crm.service.CrmContactService;
 import su.onno.crm.service.CrmInboxWorkspace;
 import su.onno.crm.service.CrmInboxWorkspaceService;
 import su.onno.crm.service.CrmWorkspaceService;
-import su.onno.web.AccessService;
+import su.onno.service.AccessService;
 
 /**
  * The batch access filter has to answer exactly what asking row by row answers — it is the inbox's

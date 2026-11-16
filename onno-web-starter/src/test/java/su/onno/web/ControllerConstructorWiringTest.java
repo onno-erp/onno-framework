@@ -1,5 +1,8 @@
 package su.onno.web;
 
+import su.onno.service.AccessService;
+import su.onno.service.CurrentUserResolver;
+import su.onno.service.RecordAccess;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;

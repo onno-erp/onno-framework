@@ -5,9 +5,9 @@ import org.junit.jupiter.api.Test;
 
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.MetadataRegistry;
-import su.onno.web.CurrentUserResolver.CurrentUser;
+import su.onno.service.CurrentUserResolver.CurrentUser;
 import su.onno.identity.IdentityLink;
-import su.onno.web.IdentityBinding;
+import su.onno.service.IdentityBinding;
 import su.onno.web.comments.Comment;
 import su.onno.web.comments.EntityMentionedEvent;
 import su.onno.web.comments.MentionRef;

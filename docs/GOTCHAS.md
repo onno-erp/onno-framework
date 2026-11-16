@@ -28,7 +28,7 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
 ## Record-level access
 
 - **Typed repositories are not record-scoped.** `RecordAccessPolicy` is enforced by the generic
-  REST/UI/MCP surfaces and the web starter's query/command services. `CatalogRepository`,
+  REST/UI/MCP surfaces and the service layer's query/command services (`su.onno.service`). `CatalogRepository`,
   `DocumentRepository` and `RegisterRepository` are trusted code (posting, jobs, processes) and see
   every record. A custom controller, command handler or `@McpTool` that serves an external user from a
   repository must check with `RecordAccess.require(subject, Type.class, id, AccessMode.READ)` (or

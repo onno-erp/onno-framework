@@ -12,7 +12,7 @@ import su.onno.model.CatalogObject;
 import su.onno.crm.TestBindings;
 import su.onno.crm.domain.*;
 import su.onno.crm.repository.*;
-import su.onno.web.AccessService;
+import su.onno.service.AccessService;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 

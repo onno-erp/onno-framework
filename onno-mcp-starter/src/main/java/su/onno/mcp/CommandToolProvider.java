@@ -10,7 +10,7 @@ import su.onno.command.CommandResult;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.MetadataRegistry;
-import su.onno.web.CommandService;
+import su.onno.service.CommandService;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpServerFeatures.SyncToolSpecification;
@@ -237,6 +237,8 @@ public class CommandToolProvider implements McpToolProvider {
                 return body.apply(exchange, args);
             } catch (CommandRejectedException e) {
                 return error(e.getMessage(), e.feedback());
+            } catch (su.onno.service.ServiceException refused) {
+                return error(refused.getMessage() == null ? refused.status().name() : refused.getMessage(), null);
             } catch (ResponseStatusException e) {
                 return error(e.getReason() == null ? e.getMessage() : e.getReason(), null);
             } catch (IllegalArgumentException e) {

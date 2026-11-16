@@ -1,5 +1,14 @@
 package su.onno.web;
 
+import su.onno.service.AccessService;
+import su.onno.service.AccessSubjectResolver;
+import su.onno.service.CatalogCommandService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentCommandService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.RecordScopeCompiler;
+import su.onno.service.RecordScopeIndexes;
+import su.onno.service.RefResolver;
 import su.onno.access.AccessSubject;
 import su.onno.events.EntityChangedEvent;
 import su.onno.metadata.CatalogDescriptor;

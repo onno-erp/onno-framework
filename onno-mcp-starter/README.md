@@ -38,8 +38,9 @@ security filter chain scoped to that endpoint that reuses your existing
 
 ## Usage
 
-Add the dependency (alongside `onno-web-starter` and a security provider such as
-`onno-auth-starter`):
+Add the dependency (alongside a security provider such as `onno-auth-starter`). The query/command
+services it exposes come from `onno-framework-starter` (`su.onno.service`), so `onno-web-starter` is
+not required:
 
 ```kotlin
 dependencies {
@@ -85,7 +86,7 @@ Add `@McpTool` to a public instance method on any Spring bean. Ordinary paramete
 JSON-schema inputs and are converted to their declared Java types. `Principal`, `AccessSubject`,
 `McpToolContext`, and `McpSyncServerExchange` parameters are injected and do not appear in the
 schema. A tool that reads or changes records on the caller's behalf passes the `AccessSubject`
-(also `McpToolContext.subject()`) to the web starter's query services or checks with `RecordAccess` —
+(also `McpToolContext.subject()`) to the service layer's query services (`su.onno.service`) or checks with `RecordAccess` —
 typed repositories are not record-scoped.
 
 ```java

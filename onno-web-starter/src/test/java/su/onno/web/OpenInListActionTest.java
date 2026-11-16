@@ -1,5 +1,9 @@
 package su.onno.web;
 
+import su.onno.service.CatalogCommandService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentCommandService;
+import su.onno.service.DocumentQueryService;
 import su.onno.access.AccessSubject;
 import su.onno.web.openinlist.OpenInListTestApp;
 

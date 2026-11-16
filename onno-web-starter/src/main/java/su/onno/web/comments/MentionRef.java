@@ -28,7 +28,7 @@ public record MentionRef(String kind, String name, UUID id) {
         }
     }
 
-    /** The {@link su.onno.web.AccessService} entity type for this kind: {@code "catalog"}/{@code "document"}. */
+    /** The {@link su.onno.service.AccessService} entity type for this kind: {@code "catalog"}/{@code "document"}. */
     public String accessType() {
         return "catalogs".equals(kind) ? "catalog" : "document";
     }

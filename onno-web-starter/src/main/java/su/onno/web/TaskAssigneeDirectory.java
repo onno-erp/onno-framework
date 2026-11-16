@@ -1,5 +1,9 @@
 package su.onno.web;
 
+import su.onno.service.AccessService;
+import su.onno.service.AccessSubjectResolver;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.IdentityBinding;
 import su.onno.identity.IdentityLink;
 
 import su.onno.metadata.AttributeDescriptor;

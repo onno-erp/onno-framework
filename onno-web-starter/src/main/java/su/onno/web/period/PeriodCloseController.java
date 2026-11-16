@@ -4,8 +4,8 @@ import su.onno.period.PeriodCloseAuditEntry;
 import su.onno.period.PeriodCloseService;
 import su.onno.period.PeriodLock;
 import su.onno.period.PeriodScope;
-import su.onno.web.AccessService;
-import su.onno.web.WebProperties;
+import su.onno.service.AccessService;
+import su.onno.service.WebProperties;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;

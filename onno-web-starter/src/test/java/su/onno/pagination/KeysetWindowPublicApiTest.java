@@ -4,9 +4,9 @@ import org.h2.jdbcx.JdbcDataSource;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
+import su.onno.service.ServiceException;
 import su.onno.query.Cursor;
-import su.onno.web.KeysetWindow;
+import su.onno.service.KeysetWindow;
 
 import java.util.UUID;
 
@@ -39,8 +39,8 @@ class KeysetWindowPublicApiTest {
         assertThat(fetch(jdbi, "broken~alice").rows()).isEqualTo(first.rows());
         String foreign = Cursor.from("sort_value", false, first.rows().getFirst()).encode("bob");
         assertThatThrownBy(() -> fetch(jdbi, foreign))
-                .isInstanceOfSatisfying(ResponseStatusException.class,
-                        e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+                .isInstanceOfSatisfying(ServiceException.class,
+                        e -> assertThat(e.status()).isEqualTo(ServiceException.Status.BAD_REQUEST));
     }
 
     private KeysetWindow.Raw fetch(Jdbi jdbi, String cursor) {

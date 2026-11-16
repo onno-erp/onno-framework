@@ -678,7 +678,7 @@ the read scope; `write(RecordScope.none())` allows changes only through trusted 
 `exemptRoles(...)` are exempt; several applicable policies are OR'ed. Register policies scope by
 dimensions. Startup fails on an invalid policy.
 
-Every web-starter query/command service method takes an `AccessSubject`. Request code receives it
+Every service-layer query/command method (`su.onno.service`, in `onno-framework-starter`) takes an `AccessSubject`. Request code receives it
 as a controller parameter (`AccessSubject subject`), from `CommandContext.subject()` or
 `McpToolContext.subject()`; only trusted background code passes `AccessSubject.system()`. **Typed
 repositories are unscoped** — custom code serving a user from a repository must check with

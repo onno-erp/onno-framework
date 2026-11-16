@@ -1,5 +1,7 @@
 package su.onno.web;
 
+import su.onno.service.ListFilter;
+import su.onno.service.Where;
 import su.onno.command.CommandRegistry;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -196,7 +198,7 @@ public final class ViewDescriptors {
     /**
      * The movements tab's built-in filter facets: a {@code _period} date range, a
      * {@code _movement_type} Receipt/Expense choice and a from–to number range per numeric resource.
-     * All compile server-side through {@link su.onno.web.ListFilter} like any authored list filter
+     * All compile server-side through {@link su.onno.service.ListFilter} like any authored list filter
      * (ge/le on the period and the resources, eq on the type), so the register no longer forces
      * scrolling the whole log to find a window of activity.
      */

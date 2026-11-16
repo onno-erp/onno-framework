@@ -3,7 +3,7 @@ package su.onno.web.notifications;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.identity.IdentityLink;
-import su.onno.web.IdentityBinding;
+import su.onno.service.IdentityBinding;
 import su.onno.web.comments.Mentions;
 
 import java.lang.reflect.Field;

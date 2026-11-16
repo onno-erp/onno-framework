@@ -6,7 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import su.onno.crm.service.*;
-import su.onno.web.AccessService;
+import su.onno.service.AccessService;
 
 /** User-owned organization never expands a workspace's conversation access. */
 @RestController

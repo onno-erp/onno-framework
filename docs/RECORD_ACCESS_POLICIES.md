@@ -199,7 +199,7 @@ ends. On a large table, let the build finish (the log shows `Built record-scope 
 deploying a schema change to it.
 
 On other databases the plain `CREATE INDEX IF NOT EXISTS` statements run during startup.
-`onno.access.records.log-denials=true` logs every scope-based 404 at DEBUG on `su.onno.web.RecordAccess`.
+`onno.access.records.log-denials=true` logs every scope-based 404 at DEBUG on `su.onno.service.RecordAccess`.
 
 ## Verifying a policy
 

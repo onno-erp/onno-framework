@@ -1,6 +1,6 @@
 package su.onno.web.comments;
 
-import su.onno.web.CurrentUserResolver.CurrentUser;
+import su.onno.service.CurrentUserResolver.CurrentUser;
 
 /**
  * Published once for every readable entity mention in a freshly posted comment — the mention

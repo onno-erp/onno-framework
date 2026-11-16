@@ -5,7 +5,7 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 import su.onno.crm.service.*;
-import su.onno.web.AccessService;
+import su.onno.service.AccessService;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 

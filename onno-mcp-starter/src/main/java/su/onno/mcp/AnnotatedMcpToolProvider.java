@@ -13,7 +13,7 @@ import org.springframework.core.MethodIntrospector;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.server.ResponseStatusException;
-import su.onno.web.WebProperties;
+import su.onno.service.WebProperties;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -319,6 +319,9 @@ final class AnnotatedMcpToolProvider implements McpToolProvider {
     }
 
     private static CallToolResult invocationError(Throwable exception) {
+        if (exception instanceof su.onno.service.ServiceException refused) {
+            return error(refused.getMessage() == null ? refused.status().name() : refused.getMessage());
+        }
         if (exception instanceof ResponseStatusException status) {
             return error(status.getReason() == null ? status.getMessage() : status.getReason());
         }

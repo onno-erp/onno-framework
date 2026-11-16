@@ -1,8 +1,8 @@
 package su.onno.web.notifications;
 
 import su.onno.metadata.MetadataRegistry;
-import su.onno.web.CurrentUserResolver.CurrentUser;
-import su.onno.web.IdentityBinding;
+import su.onno.service.CurrentUserResolver.CurrentUser;
+import su.onno.service.IdentityBinding;
 import su.onno.web.comments.Comment;
 import su.onno.web.comments.EntityMentionedEvent;
 import su.onno.web.comments.MentionRef;

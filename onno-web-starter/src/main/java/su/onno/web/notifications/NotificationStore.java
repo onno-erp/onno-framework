@@ -2,7 +2,7 @@ package su.onno.web.notifications;
 
 import org.jdbi.v3.core.Jdbi;
 
-import su.onno.web.SqlBind;
+import su.onno.service.SqlBind;
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -74,7 +74,7 @@ public class NotificationStore {
             var old = query.mapToMap().list();
             if (old.isEmpty()) break;
             for (var row : old) {
-                var target = su.onno.web.RecordAccess.routeTarget((String) row.get("_link"));
+                var target = su.onno.service.RecordAccess.routeTarget((String) row.get("_link"));
                 var q = h.createUpdate("UPDATE " + TABLE + " SET _target_kind = :kind, _target_name = :name,"
                         + " _target_id = :target, _target_indexed = true WHERE _id = :id").bind("id", row.get("_id"));
                 SqlBind.nullable(q, "kind", target == null ? null : target.kind());
@@ -90,7 +90,7 @@ public class NotificationStore {
                                String actorId, String actorName, String actorAvatar) {
         UUID id = UUID.randomUUID();
         Instant now = Instant.now();
-        var target = su.onno.web.RecordAccess.routeTarget(link);
+        var target = su.onno.service.RecordAccess.routeTarget(link);
         jdbi.useHandle(h -> {
             var update = h.createUpdate("INSERT INTO " + TABLE +
                             " (_id, _recipient, _type, _title, _body, _link, _actor_id, _actor_name," +
@@ -121,11 +121,11 @@ public class NotificationStore {
      * {@code limit} caps the window. Never returns another user's rows.
      */
     public Page list(String recipientId, boolean unreadOnly, String cursor, int limit) {
-        return list(recipientId, unreadOnly, cursor, limit, su.onno.web.ScopeClause.ALL);
+        return list(recipientId, unreadOnly, cursor, limit, su.onno.service.ScopeClause.ALL);
     }
 
     public Page list(String recipientId, boolean unreadOnly, String cursor, int limit,
-                     su.onno.web.ScopeClause visibility) {
+                     su.onno.service.ScopeClause visibility) {
         try {
             jdbi.useHandle(h -> normalizeTargets(h, recipientId));
             var page = jdbi.withHandle(h -> su.onno.query.KeysetWindow.fetch(h, TABLE, "*",
@@ -143,9 +143,9 @@ public class NotificationStore {
     }
 
     /** How many of a recipient's notifications are still unread — the badge count. */
-    public int unreadCount(String recipientId) { return unreadCount(recipientId, su.onno.web.ScopeClause.ALL); }
+    public int unreadCount(String recipientId) { return unreadCount(recipientId, su.onno.service.ScopeClause.ALL); }
 
-    public int unreadCount(String recipientId, su.onno.web.ScopeClause visibility) {
+    public int unreadCount(String recipientId, su.onno.service.ScopeClause visibility) {
         if (!visibility.isAll()) jdbi.useHandle(h -> normalizeTargets(h, recipientId));
         return jdbi.withHandle(h -> visibility.bind(h.createQuery("SELECT COUNT(*) FROM " + TABLE +
                         " WHERE _recipient = :recipient AND _read_at IS NULL" + visibility.and()))
@@ -172,9 +172,9 @@ public class NotificationStore {
      * fully modular — a custom producer's type gets a tab with no config, and a disabled built-in source
      * (its type no longer produced) drops out as its old notifications age out.
      */
-    public List<String> distinctTypes(String recipientId) { return distinctTypes(recipientId, su.onno.web.ScopeClause.ALL); }
+    public List<String> distinctTypes(String recipientId) { return distinctTypes(recipientId, su.onno.service.ScopeClause.ALL); }
 
-    public List<String> distinctTypes(String recipientId, su.onno.web.ScopeClause visibility) {
+    public List<String> distinctTypes(String recipientId, su.onno.service.ScopeClause visibility) {
         if (!visibility.isAll()) jdbi.useHandle(h -> normalizeTargets(h, recipientId));
         return jdbi.withHandle(h -> visibility.bind(h.createQuery("SELECT _type FROM " + TABLE +
                         " WHERE _recipient = :recipient" + visibility.and() + " GROUP BY _type ORDER BY MAX(_created_at) DESC LIMIT 100"))

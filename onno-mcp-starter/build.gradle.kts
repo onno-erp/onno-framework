@@ -4,8 +4,8 @@ plugins {
 
 dependencies {
     api(project(":onno-framework"))
-    // Query + command services and the AccessService authz chokepoint live here.
-    implementation(project(":onno-web-starter"))
+    // Query + command services and the AccessService authz chokepoint (su.onno.service) live here.
+    implementation(project(":onno-framework-starter"))
 
     implementation(libs.spring.boot.autoconfigure)
     implementation(libs.spring.boot.starter.web)
