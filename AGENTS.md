@@ -694,6 +694,42 @@ and bypass is audited. Mark non-accounting documents `@PeriodCloseExempt`. The a
 at `/period-close` (`PeriodClosePage.ROUTE`); link it from a `Layout` section. See
 [docs/PERIOD_CLOSE.md](docs/PERIOD_CLOSE.md).
 
+### Record Change History (Audit Log)
+
+When the business needs to know who changed what and when (a medical record, a contract, a price),
+opt the entity in on its annotation. Do not model a hand-written audit table or log register.
+
+```java
+@Document(name = "Visits", numberPrefix = "V-", history = true)
+public class Visit extends DocumentObject { … }
+
+@Catalog(name = "Patients", history = true)
+public class Patient extends CatalogObject { … }
+```
+
+Every write of an opted-in record then appends to the framework-managed `onno_record_history`
+table, in the write's own transaction: `CREATED` / `UPDATED` / `DELETED` (deletion mark) /
+`RESTORED` with one row per changed field (old and new value, tabular-section rows compared by
+line), plus `POSTED` / `UNPOSTED` for documents. It is recorded at the storage level, so the
+generic command path (REST, UI, import, MCP, actions) and typed `repository.save(...)` /
+`delete(...)` produce the same entries. `secret` attributes are recorded as changed without values.
+Entities that have not opted in cost nothing; `onno.history.enabled=false` turns recording off
+everywhere.
+
+Attribution: a generic command is attributed to its `AccessSubject`. A typed repository save or
+`PostingService` call is attributed to the request's authenticated user, else `system`; trusted code
+acting for someone else binds the actor explicitly:
+
+```java
+HistoryActors.runAs(HistoryActor.named("lab-import"), () -> visits.save(visit));
+```
+
+The record surface shows a collapsed **History** panel and `GET /api/history/{kind}/{name}/{id}`
+returns the entries. Reading history needs exactly what reading the record needs (`@AccessControl`
+plus `RecordAccessPolicy`); references the viewer may not read are masked. Trusted Java reads the
+raw entries with `RecordHistory.list(recordId, before, limit)`. Writes that bypass both paths
+(hand-written SQL against an entity table) are not recorded.
+
 ### Contexts And Future Services
 
 Use `context` on annotations to mark bounded contexts. At first, contexts live in one monolith.

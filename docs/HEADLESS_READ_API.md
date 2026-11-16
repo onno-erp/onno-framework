@@ -365,6 +365,55 @@ Secret attributes are also excluded from every catalog/document list-query allow
 filter, sort, group, or aggregate by them. This prevents row membership or counts from becoming a
 blind oracle for encrypted values.
 
+## Record history
+
+`GET /api/history/{kind}/{name}/{id}` returns the change history of one catalog item
+(`kind = catalogs`) or document (`kind = documents`) whose entity opted in with
+`@Catalog(history = true)` / `@Document(history = true)`. Query parameters: `limit` (default 50,
+max 200) and `before` (the previous page's `nextBefore`, for older entries).
+
+```json
+{
+  "entries": [
+    {
+      "id": "0f6f…",
+      "event": "UPDATED",
+      "at": "2026-11-13T09:41:07.120394Z",
+      "actor": "vet@clinic.example",
+      "actorId": "5a0c…",
+      "changes": [
+        { "section": null, "line": null, "rowChange": null,
+          "field": "owner", "label": "Owner", "type": "ref", "secret": false,
+          "old": "9d2e…", "new": "41b7…", "oldDisplay": "Ann Lee", "newDisplay": "Bob Stone" },
+        { "section": "procedures", "line": 2, "rowChange": "ADDED",
+          "field": "title", "label": "Title", "type": "text", "secret": false,
+          "old": null, "new": "Bandage" }
+      ]
+    }
+  ],
+  "nextBefore": null
+}
+```
+
+- Entries are newest first. `event` is `CREATED`, `UPDATED`, `DELETED` (deletion mark set),
+  `RESTORED`, `POSTED` or `UNPOSTED`; post/unpost/delete entries usually have no `changes`. A
+  `CREATED` entry lists the initial values with `old: null`.
+- `actor` is the login the change is attributed to (`system` for trusted code); `actorId` is the
+  `Layout.identity(...)` record id when known. `at` is a zone-qualified instant.
+- `field` is the logical name (`code`, `description`, `parent`, `folder`, `number`, `date`, or an
+  attribute's field name). `section` / `line` / `rowChange` (`ADDED` / `REMOVED` / `CHANGED`)
+  describe a tabular-section row; rows are compared by line position, so inserting a line in the
+  middle reads as changes to the lines after it.
+- `old` / `new` are the stored values as text: reference and enumeration ids, ISO-8601 dates,
+  plain decimals, `true`/`false`. `type` (`text`, `number`, `boolean`, `date`, `datetime`, `ref`,
+  `enum`) tells a client how to format them. `oldDisplay` / `newDisplay` carry the resolved
+  reference description or enumeration label.
+- **Access.** The endpoint needs what reading the record needs: no read grant on the entity is
+  `403`; an entity without history, or a record outside the caller's record scope, is `404`. A
+  reference the caller may not read has its id withheld (`null`) and display `—`, as on the record
+  itself. A `secret` attribute reports `"secret": true` with `old` and `new` both `null`; its
+  values are never stored in the history table.
+
 ## Writes (partial, logical names plus storage aliases)
 
 Writes mirror the default logical reads:

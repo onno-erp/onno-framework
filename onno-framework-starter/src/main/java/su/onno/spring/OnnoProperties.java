@@ -23,6 +23,7 @@ public class OnnoProperties {
     private final Repository repository = new Repository();
 
     private final PeriodClose periodClose = new PeriodClose();
+    private final History history = new History();
 
     public List<String> getScanPackages() {
         return scanPackages;
@@ -42,6 +43,31 @@ public class OnnoProperties {
 
     public Repository getRepository() {
         return repository;
+    }
+
+    public History getHistory() {
+        return history;
+    }
+
+    /** Record change history ({@code onno.history.*}). */
+    public static class History {
+
+        /**
+         * Whether field-level change history is recorded for catalogs and documents that opt in with
+         * {@code @Catalog(history = true)} / {@code @Document(history = true)}. Entities that have
+         * not opted in are never recorded. Set to {@code false} to stop recording everywhere (the
+         * {@code onno_record_history} table is then not created and the history panel and
+         * {@code /api/history} endpoint disappear) without touching the model.
+         */
+        private boolean enabled = true;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
     }
 
     public PeriodClose getPeriodClose() {

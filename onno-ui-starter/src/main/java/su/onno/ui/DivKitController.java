@@ -190,6 +190,13 @@ public class DivKitController implements DisposableBean {
         }
     }
 
+    private su.onno.history.RecordHistory recordHistory = su.onno.history.RecordHistory.disabled();
+
+    /** The change-history recorder; decides which record surfaces get the history panel. */
+    public void setRecordHistory(su.onno.history.RecordHistory recordHistory) {
+        this.recordHistory = recordHistory == null ? su.onno.history.RecordHistory.disabled() : recordHistory;
+    }
+
     /** Whether the comments module is wired and enabled — decided per request (see the field). */
     private boolean commentsEnabled() {
         CommentProperties cp = commentProperties.getIfAvailable();
@@ -1013,6 +1020,9 @@ public class DivKitController implements DisposableBean {
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
             SurfaceDivBuilder.withComments(content, "catalogs", name, id.toString());
         }
+        if (recordHistory.tracks(desc.javaClass())) {
+            SurfaceDivBuilder.withHistory(content, "catalogs", name, id.toString());
+        }
         return DivCard.of("onno-content", content);
     }
 
@@ -1189,6 +1199,9 @@ public class DivKitController implements DisposableBean {
                 new RecordRefreshContext(profileId, viewport));
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
             SurfaceDivBuilder.withComments(content, "documents", name, id.toString());
+        }
+        if (recordHistory.tracks(desc.javaClass())) {
+            SurfaceDivBuilder.withHistory(content, "documents", name, id.toString());
         }
         return DivCard.of("onno-content", content);
     }

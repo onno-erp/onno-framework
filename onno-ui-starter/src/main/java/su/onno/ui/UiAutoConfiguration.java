@@ -457,9 +457,12 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                                        CatalogQueryService catalogQueryService,
                                                        UiAccessService access,
                                                        org.springframework.context.ApplicationEventPublisher events,
-                                                       su.onno.security.SecretCipher secretCipher) {
-        return new CatalogCommandService(registry, jdbi, properties, numberGenerator, catalogQueryService,
-                access, events, secretCipher);
+                                                       su.onno.security.SecretCipher secretCipher,
+                                                       org.springframework.beans.factory.ObjectProvider<su.onno.history.RecordHistory> recordHistory) {
+        CatalogCommandService service = new CatalogCommandService(registry, jdbi, properties, numberGenerator,
+                catalogQueryService, access, events, secretCipher);
+        service.setHistory(recordHistory.getIfAvailable());
+        return service;
     }
 
     @Bean
@@ -471,10 +474,12 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                                          UiAccessService access,
                                                          org.springframework.context.ApplicationEventPublisher events,
                                                          su.onno.security.SecretCipher secretCipher,
-                                                         org.springframework.beans.factory.ObjectProvider<su.onno.period.PeriodCloseService> periodClose) {
+                                                         org.springframework.beans.factory.ObjectProvider<su.onno.period.PeriodCloseService> periodClose,
+                                                         org.springframework.beans.factory.ObjectProvider<su.onno.history.RecordHistory> recordHistory) {
         DocumentCommandService service = new DocumentCommandService(registry, jdbi, properties,
                 numberGenerator, postingService, documentQueryService, access, events, secretCipher);
         service.setPeriodCloseService(periodClose.getIfAvailable());
+        service.setHistory(recordHistory.getIfAvailable());
         return service;
     }
 
@@ -512,6 +517,39 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     public su.onno.ui.period.PeriodClosePage periodClosePage(
             su.onno.period.PeriodCloseService periods, su.onno.ui.period.PeriodCloseAccess periodAccess) {
         return new su.onno.ui.period.PeriodClosePage(periods, periodAccess);
+
+    }
+
+    /**
+     * Attributes record-history rows written outside a generic command (typed repository saves,
+     * {@code PostingService} calls from application code) to the request's authenticated user and
+     * their {@code Layout.identity(...)} record. Off a request thread it resolves nothing and the
+     * change is recorded as {@code system}.
+     */
+    @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+    public su.onno.history.HistoryActorResolver historyActorResolver(UiAccessService access,
+                                                                    CurrentUserResolver currentUserResolver) {
+        return () -> {
+            String username = access.username(null);
+            if (username == null || username.isBlank()) {
+                return null;
+            }
+            String recordId = currentUserResolver.resolve(() -> username).recordId();
+            return new su.onno.history.HistoryActor(username,
+                    recordId == null || recordId.isBlank() ? null : java.util.UUID.fromString(recordId));
+        };
+    }
+
+    /** The {@code /api/history} read endpoint; 404s for entities that have not opted in. */
+    @Bean
+    @ConditionalOnBean(su.onno.history.RecordHistory.class)
+    public su.onno.ui.history.RecordHistoryController recordHistoryController(
+            su.onno.history.RecordHistory recordHistory, UiAccessService access,
+            CatalogQueryService catalogQueryService, DocumentQueryService documentQueryService,
+            FieldHintResolver fieldHintResolver, UiMessages uiMessages) {
+        return new su.onno.ui.history.RecordHistoryController(recordHistory, access, catalogQueryService,
+                documentQueryService, fieldHintResolver, uiMessages);
     }
 
     @Bean
@@ -594,7 +632,8 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                              org.springframework.beans.factory.ObjectProvider<su.onno.ui.notifications.NotificationProperties> notificationProperties,
                                              AccessSubjectResolver accessSubjectResolver,
                                              org.springframework.beans.factory.ObjectProvider<RecordActionContributor> recordActionContributors,
-                                             org.springframework.beans.factory.ObjectProvider<SelectionDownloadContributor> selectionDownloadContributors) {
+                                             org.springframework.beans.factory.ObjectProvider<SelectionDownloadContributor> selectionDownloadContributors,
+                                             org.springframework.beans.factory.ObjectProvider<su.onno.history.RecordHistory> recordHistory) {
         DivKitController controller = new DivKitController(layoutSet, layoutResolver, profileResolver, access,
                 currentUserResolver, resolvedMetadata, uiViewResolver, pageResolver, catalogQueryService,
                 documentQueryService, registerQueryService, uiActionResolver, relatedListReader, uiProperties,
@@ -602,6 +641,7 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
         controller.setAccessSubjectResolver(accessSubjectResolver);
         controller.setRecordActionContributors(recordActionContributors.orderedStream().toList());
         controller.setSelectionDownloadContributors(selectionDownloadContributors.orderedStream().toList());
+        controller.setRecordHistory(recordHistory.getIfAvailable());
         return controller;
     }
 

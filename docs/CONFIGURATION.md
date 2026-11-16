@@ -20,6 +20,7 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 
 | Property | Type | Default | Meaning |
 | --- | --- | --- | --- |
+| `onno.history.enabled` | `Boolean` | `true` | Whether field-level change history is recorded for catalogs and documents that opt in with `@Catalog(history = true)` / `@Document(history = true)`. Entities that have not opted in are never recorded. Set to `false` to stop recording everywhere (the `onno_record_history` table is then not created and the history panel and `/api/history` endpoint disappear) without touching the model. |
 | `onno.period-close.enabled` | `Boolean` | `true` | Enables period close: documents dated on or before a closed date cannot be created, changed, deleted, posted, reposted or unposted. With no period closed nothing is rejected. Set to `false` to remove the service and every check. |
 | `onno.period-close.manage-roles` | `List<String>` | — | Roles allowed to close and reopen periods through the UI page and `/api/period-close`. `ADMIN` is always allowed. |
 | `onno.period-close.override-roles` | `List<String>` | — | Roles whose signed-in holders may change documents inside a closed period without reopening it. Each bypassed operation is written to the audit trail. Empty by default: nobody is exempt, not even `ADMIN` — list `ADMIN` here to exempt administrators. |

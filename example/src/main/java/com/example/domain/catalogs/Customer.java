@@ -19,7 +19,7 @@ import java.math.BigDecimal;
  * map view (a Table⇄Map toggle — see {@link com.example.ui.views.CustomerView}). The coordinates are
  * plain decimal attributes; the framework's map widget plots one marker per row.</p>
  */
-@Catalog(name = "Customers", title = "Customer", codePrefix = "CU-", context = "Sales")
+@Catalog(name = "Customers", title = "Customer", codePrefix = "CU-", context = "Sales", history = true)
 @AccessControl(readRoles = {"MANAGER"}, writeRoles = {"MANAGER"})
 @Getter
 @Setter

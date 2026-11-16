@@ -17,10 +17,13 @@ if something looks off — the code wins, and you should fix this file if it has
 | `autoNumber` | boolean | `true` | Auto-generate codes. |
 | `codePrefix` | String | `""` | Fixed code prefix. |
 | `context` | String | `""` | Bounded-context grouping / future service split point. |
+| `history` | boolean | `false` | Record a field-level change history (who/when/old → new) in `onno_record_history` on every write path; shows the History panel and serves `GET /api/history/catalogs/{name}/{id}`. |
 
 ### `@Document` (on a class extending `DocumentObject`)
 `name` (required), `title=""`, `tableName=""`, `previousNames={}` (covers doc + tabular section
-table renames), `numberLength=11`, `autoNumber=true`, `numberPrefix=""`, `context=""`.
+table renames), `numberLength=11`, `autoNumber=true`, `numberPrefix=""`, `context=""`, `history=false` (field-level
+change history incl. tabular rows and post/unpost events; attribute typed saves from trusted code
+with `HistoryActors.runAs(HistoryActor.named("…"), …)`; global switch `onno.history.enabled`).
 
 ### `@TabularSection` (on a `List<Row>` field of a catalog or document; `Row extends TabularSectionRow`)
 `name=""` (child table name; derived from the field name if empty). Each section must use a
