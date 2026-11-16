@@ -2,7 +2,6 @@ package su.onno.ui.comments;
 
 import su.onno.access.AccessMode;
 import su.onno.access.AccessSubject;
-import su.onno.events.EntityChangedEvent;
 import su.onno.ui.CatalogQueryService;
 import su.onno.ui.CurrentUserResolver;
 import su.onno.ui.CurrentUserResolver.CurrentUser;
@@ -12,7 +11,6 @@ import su.onno.ui.UiViewResolver;
 
 import su.onno.ui.comments.MentionResolver.ResolvedMention;
 
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -48,13 +46,6 @@ public class CommentController {
 
     private static final String SUPERUSER_ROLE = "ADMIN";
 
-    /**
-     * The {@link EntityChangedEvent#entityType()} stamped on a comment-thread change. It is its own
-     * kind (not {@code catalog}/{@code document}) so the live stream carries comment posts/deletes
-     * without the list, map, or content-pane surfaces — which only react to the modelled kinds —
-     * mistaking it for a row edit and refetching. Only the comments widget listens for it.
-     */
-    private static final String COMMENT_ENTITY_TYPE = "comment";
     private static final Set<String> ALLOWED_REACTIONS = Set.of("👍", "❤️", "🎉", "👀", "✅");
 
     private final CommentService comments;
@@ -66,13 +57,12 @@ public class CommentController {
     private final CatalogQueryService catalogQuery;
     private final DocumentQueryService documentQuery;
     private final MentionResolver mentions;
-    private final ApplicationEventPublisher events;
 
     public CommentController(CommentService comments, UiAccessService access,
                              CurrentUserResolver currentUser, CommentAuthorAvatars authorAvatars,
                              CommentProperties properties, UiViewResolver viewResolver,
                              CatalogQueryService catalogQuery, DocumentQueryService documentQuery,
-                             MentionResolver mentions, ApplicationEventPublisher events) {
+                             MentionResolver mentions) {
         this.comments = comments;
         this.access = access;
         this.currentUser = currentUser;
@@ -82,7 +72,6 @@ public class CommentController {
         this.catalogQuery = catalogQuery;
         this.documentQuery = documentQuery;
         this.mentions = mentions;
-        this.events = events;
     }
 
     /** The request body for posting a comment. */
@@ -128,53 +117,15 @@ public class CommentController {
                                    Principal principal, AccessSubject subject) {
         requireRead(kind, name, id, subject);
         String body = request == null ? null : request.body();
-        if (body == null || body.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Comment cannot be empty");
-        }
-        body = body.strip();
-        if (body.length() > properties.getMaxLength()) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                    "Comment must be at most " + properties.getMaxLength() + " characters");
-        }
+        UUID parentId = request == null ? null : request.parentId();
         CurrentUser me = currentUser.resolve(principal);
-        // Strip any mention the author can't read before storing — no smuggling a clickable link to
-        // a hidden record (it degrades to the token's plain label text instead).
-        if (mentionsEnabled()) {
-            body = Mentions.degrade(body, ref -> !mentions.canRead(subject, ref));
+        Comment saved;
+        try {
+            saved = comments.add(kind, name, id, me, body, parentId, subject);
+        } catch (CommentService.InvalidCommentException e) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage(), e);
         }
-        UUID parentId = request.parentId();
-        Comment parent = null;
-        if (parentId != null) {
-            parent = comments.find(parentId)
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                            "Reply target does not exist"));
-            if (parent.parentId() != null || !sameThread(parent, kind, name, id)) {
-                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                        "Reply target is not in this thread");
-            }
-        }
-        Comment saved = comments.add(kind, name, id, me.recordId(), me.displayName(), body, parentId);
-        // Live-sync the thread: announce the post on the same EntityChangedEvent stream the SSE
-        // bridge fans to browsers, scoped to the target's (name, id) so only this thread's open
-        // panels refetch. The insert has already committed (its own JDBI transaction), so a viewer
-        // reacting to this event reads the new comment back, not a phantom (issues #28, #29).
-        events.publishEvent(new EntityChangedEvent(EntityChangedEvent.CREATED, COMMENT_ENTITY_TYPE, name, id, null));
         Map<MentionRef, ResolvedMention> resolved = resolveThreadMentions(List.of(saved), subject);
-        if (mentionsEnabled()) {
-            // Announce each surviving (author-readable) mention. No consumers ship with the framework;
-            // delivery (in-app, cross-node bus, mail) is purely additive via an @EventListener.
-            for (MentionRef ref : Mentions.parse(saved.body(), '@')) {
-                ResolvedMention r = resolved.get(ref);
-                if (r != null && r.readable()) {
-                    events.publishEvent(new EntityMentionedEvent(saved, ref, me));
-                }
-            }
-        }
-        if (parent != null) {
-            // Announce the reply — same additive-delivery contract as the mention event above; the
-            // built-in ReplyNotificationSource notifies the parent comment's author off this.
-            events.publishEvent(new CommentRepliedEvent(saved, parent, me));
-        }
         return toJson(saved, me, isAdmin(principal), authorAvatars.avatarFor(saved.authorId()),
                 mentionsFor(saved.body(), resolved), List.of());
     }
@@ -191,9 +142,7 @@ public class CommentController {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Unsupported reaction");
         }
         CurrentUser me = currentUser.resolve(principal);
-        comments.toggleReaction(commentId, reactionUserKey(me), emoji);
-        events.publishEvent(new EntityChangedEvent(
-                EntityChangedEvent.UPDATED, COMMENT_ENTITY_TYPE, comment.entityName(), comment.entityId(), null));
+        comments.toggleReaction(comment, reactionUserKey(me), emoji);
         return reactionsJson(comments.reactionsFor(List.of(commentId), reactionUserKey(me))
                 .getOrDefault(commentId, List.of()));
     }
@@ -207,10 +156,7 @@ public class CommentController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Only the author or an administrator can delete this comment");
         }
-        comments.softDelete(commentId);
-        // Same live-sync signal as a post, so the deleted comment vanishes from other open threads.
-        events.publishEvent(new EntityChangedEvent(
-                EntityChangedEvent.DELETED, COMMENT_ENTITY_TYPE, comment.entityName(), comment.entityId(), null));
+        comments.softDelete(comment);
         return ResponseEntity.noContent().build();
     }
 
@@ -314,10 +260,6 @@ public class CommentController {
         out.put("mine", c.authorId() != null && c.authorId().equals(me.recordId()));
         out.put("canDelete", canDelete(c, me, admin));
         return out;
-    }
-
-    private static boolean sameThread(Comment comment, String kind, String name, UUID id) {
-        return comment.entityType().equals(kind) && comment.entityName().equals(name) && comment.entityId().equals(id);
     }
 
     private static List<Map<String, Object>> reactionsJson(List<CommentService.CommentReaction> reactions) {

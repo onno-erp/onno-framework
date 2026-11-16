@@ -4,7 +4,6 @@ import java.security.Principal;
 import java.util.*;
 import org.junit.jupiter.api.*;
 import org.mockito.ArgumentCaptor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.util.LinkedMultiValueMap;
 import su.onno.crm.domain.Conversation;
@@ -44,7 +43,7 @@ class CrmInboxReadPerformanceTest {
         when(views.catalogList(eq(descriptor),any(ListSpec.class))).thenReturn(view);
         when(view.title()).thenReturn("Inbox");when(view.columns()).thenReturn(List.of());when(view.filters()).thenReturn(List.of());
         controller=new CrmInboxWorkspaceController(workspaces,catalogs,mock(CurrentUserResolver.class),mock(CommentService.class),
-            mock(CommentAuthorAvatars.class),mock(ApplicationEventPublisher.class),contacts,new org.springframework.beans.factory.support.StaticListableBeanFactory().getBeanProvider(org.springframework.core.ResolvableType.forClassWithGenerics(CrmAgentBinding.class, org.springframework.core.ResolvableType.forClass(Object.class))),mock(UiAccessService.class));
+            mock(CommentAuthorAvatars.class),mock(AccessSubjectResolver.class),contacts,new org.springframework.beans.factory.support.StaticListableBeanFactory().getBeanProvider(org.springframework.core.ResolvableType.forClassWithGenerics(CrmAgentBinding.class, org.springframework.core.ResolvableType.forClass(Object.class))),mock(UiAccessService.class));
         var dataSource=new org.h2.jdbcx.JdbcDataSource();dataSource.setURL("jdbc:h2:mem:"+UUID.randomUUID()+";DB_CLOSE_DELAY=-1");
         var metadata=new su.onno.metadata.MetadataRegistry();var scanner=new su.onno.metadata.MetadataScanner(new su.onno.metadata.DefaultNamingStrategy());
         metadata.registerCatalog(scanner.scan(Conversation.class));metadata.registerCatalog(scanner.scan(su.onno.crm.domain.ConversationMessage.class));

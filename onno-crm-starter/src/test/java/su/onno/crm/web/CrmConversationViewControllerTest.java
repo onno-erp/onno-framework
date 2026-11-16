@@ -21,7 +21,7 @@ class CrmConversationViewControllerTest {
   var workspaces=new CrmInboxWorkspaceService(List.of(new CrmInboxWorkspace("sales","Sales",Set.of("SALES"),c->Channel.TELEGRAM.equals(c.getChannel()))),repository,access,mock(CrmWorkspaceService.class),su.onno.crm.TestBindings.readableContacts(),org.mockito.Mockito.mock(su.onno.crm.service.CrmConnectionAccounts.class));
   ObjectProvider<DivKitController> generic=mock(ObjectProvider.class);
   var controller=new CrmConversationViewController(workspaces,access,generic);
-  var scoped=new CrmInboxWorkspaceController(workspaces,mock(CatalogQueryService.class),mock(CurrentUserResolver.class),mock(su.onno.ui.comments.CommentService.class),mock(su.onno.ui.comments.CommentAuthorAvatars.class),mock(org.springframework.context.ApplicationEventPublisher.class),su.onno.crm.TestBindings.readableContacts(),su.onno.crm.TestBindings.noAgents(),access);
+  var scoped=new CrmInboxWorkspaceController(workspaces,mock(CatalogQueryService.class),mock(CurrentUserResolver.class),mock(su.onno.ui.comments.CommentService.class),mock(su.onno.ui.comments.CommentAuthorAvatars.class),mock(su.onno.ui.AccessSubjectResolver.class),su.onno.crm.TestBindings.readableContacts(),su.onno.crm.TestBindings.noAgents(),access);
   var http=MockMvcBuilders.standaloneSetup(controller,scoped).build();
   http.perform(get("/api/divkit/catalogs/crm_conversations/"+visible.getId()).principal(alice)).andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("crmInboxWorkspaces"))).andExpect(content().string(org.hamcrest.Matchers.containsString(visible.getId().toString())));
   http.perform(get("/api/divkit/catalogs/crm_conversations/"+hidden.getId()).principal(alice)).andExpect(status().isForbidden());

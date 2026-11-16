@@ -12,18 +12,14 @@ import su.onno.ui.*;
 @SuppressWarnings("deprecation") // still runs the deprecated TagAccessPolicy hooks in addition
 public class TagController {
     private final java.util.List<TagAccessPolicy> policies;
-    private final org.springframework.context.ApplicationEventPublisher events;
     private final TagService tags;
     private final UiAccessService access;
     private final CatalogQueryService catalogs;
     private final DocumentQueryService documents;
     /** Null when record policies are not configured; then no subject is record-restricted. */
     private final RecordAccess recordAccess;
-    public TagController(TagService tags, UiAccessService access, CatalogQueryService catalogs, DocumentQueryService documents, java.util.List<TagAccessPolicy> policies, org.springframework.context.ApplicationEventPublisher events) {
-        this(tags,access,catalogs,documents,policies,events,null);
-    }
-    public TagController(TagService tags, UiAccessService access, CatalogQueryService catalogs, DocumentQueryService documents, java.util.List<TagAccessPolicy> policies, org.springframework.context.ApplicationEventPublisher events, RecordAccess recordAccess) {
-        this.policies=policies; this.events=events; this.tags=tags; this.access=access; this.catalogs=catalogs; this.documents=documents; this.recordAccess=recordAccess;
+    public TagController(TagService tags, UiAccessService access, CatalogQueryService catalogs, DocumentQueryService documents, java.util.List<TagAccessPolicy> policies, RecordAccess recordAccess) {
+        this.policies=policies; this.tags=tags; this.access=access; this.catalogs=catalogs; this.documents=documents; this.recordAccess=recordAccess;
     }
     /**
      * Entity grant, then — for a record — that it is live and inside the caller's record scope (read
@@ -55,22 +51,17 @@ public class TagController {
         if(recordAccess!=null && subject!=null && recordAccess.policies().restricts(subject)) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         var bound=tags.catalogFor(scope);
         if(bound.isPresent() && !access.canWrite(user,"catalog",bound.get().catalogName())) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-        var created=tags.create(scope,tag==null?null:tag.name(),tag==null?null:tag.color());
-        events.publishEvent(new su.onno.events.EntityChangedEvent("updated","tag",name,null,null));
-        return created;
+        return tags.create(scope,tag==null?null:tag.name(),tag==null?null:tag.color());
     }
     @GetMapping("/{id}") public List<TagService.Tag> assigned(@PathVariable String kind,@PathVariable String name,@PathVariable UUID id,Principal user,su.onno.access.AccessSubject subject) {
         return tags.assigned(require(kind,name,id,user,subject,false),id);
     }
     @PostMapping("/{id}/{tag}") public void assign(@PathVariable String kind,@PathVariable String name,@PathVariable UUID id,@PathVariable UUID tag,Principal user,su.onno.access.AccessSubject subject) {
         tags.assign(require(kind,name,id,user,subject,true),id,tag);
-        changed(name,id);
     }
     @DeleteMapping("/{id}/{tag}") public void remove(@PathVariable String kind,@PathVariable String name,@PathVariable UUID id,@PathVariable UUID tag,Principal user,su.onno.access.AccessSubject subject) {
         tags.remove(require(kind,name,id,user,subject,true),id,tag);
-        changed(name,id);
     }
-    private void changed(String name,UUID id) { events.publishEvent(new su.onno.events.EntityChangedEvent("updated","tag",name,id,null)); }
     @ExceptionHandler(IllegalArgumentException.class) @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Map<String,String> invalid(IllegalArgumentException error) { return Map.of("message",error.getMessage()); }
 }

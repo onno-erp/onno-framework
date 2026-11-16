@@ -651,7 +651,8 @@ checked; missing scope, an inaccessible workspace, a foreign chat or read-only m
 The CRM workspace feed accepts `ids` (comma-separated or repeated UUIDs, at most 500) for live row refreshes. It intersects these IDs with workspace membership and read authorization before returning rows or counts. Reading a conversation therefore refreshes that conversation without replacing it with the first inbox row.
 
 `GET|POST /api/crm/inbox-workspaces/{key}/conversations/{id}/comments` accesses the existing internal
-notes. GET accepts `cursor`/`limit` and returns the common page envelope; POST accepts `{body}` of 1–8000 characters. These routes use normal session CSRF protection.
+notes. GET accepts `cursor`/`limit` and returns the common page envelope; POST accepts `{body}` of 1–8000 characters, also subject to the shared
+`onno.comments.max-length` limit (4000 by default). These routes use normal session CSRF protection.
 
 Business merging and any undo are host commands; see the [CRM composition guide](../onno-crm-starter/README.md).
 
