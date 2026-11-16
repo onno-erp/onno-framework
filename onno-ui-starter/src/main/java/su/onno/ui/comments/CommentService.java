@@ -18,7 +18,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -131,10 +130,14 @@ public class CommentService {
         return add(entityType, entityName, entityId, actor, body, parentId);
     }
 
+    /**
+     * Append a comment from trusted application code. Mentions are validated as
+     * {@link AccessSubject#system()}, so they are kept as written (no request user to scope them to);
+     * request paths must pass the caller's {@link AccessSubject} to the overload below.
+     */
     public Comment add(String entityType, String entityName, UUID entityId,
                        CurrentUser actor, String body, UUID parentId) {
-        return add(entityType, entityName, entityId, actor, body, parentId,
-                AccessSubject.user(actor.username(), Set.of()));
+        return add(entityType, entityName, entityId, actor, body, parentId, AccessSubject.system());
     }
 
     /** Append a comment using the author's access subject to validate mentions. */
