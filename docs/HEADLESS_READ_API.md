@@ -143,7 +143,7 @@ Action handlers use the successful response `{refresh, feedback, navigateTo}`.
 `navigateTo` is optional and carries an application route for a single successful action. Feedback has `severity`
 (`info|success|warning|error`) and `presentation` (`toast|dialog|inline`). Text is structured through
 `ActionToast`, `ActionDialog`, or `ActionFeedback`. `ActionResult.open(ref)` returns the referenced
-catalog/document's route; `ActionResult.navigate(route)` chooses a page or `onno://...` destination.
+catalog/document's route; `ActionResult.navigate(route)` chooses a page or record destination. Only navigation targets are accepted — an application path or `onno://` / `onno://{catalogs|documents|registers|information-registers}/{name}[/{id}]`; command URLs (`logout`, `delete/`, `action/`, `redirect/`, `open/`, `download/`) and external URLs are rejected by `ActionResult` and ignored by the SPA, so a route built from stored or user data cannot trigger a side effect or leave the app.
 Clients apply feedback and source refresh before navigating; the destination's normal access
 checks still apply. Fixed navigation remains available as action declaration metadata. Batch
 responses retain their count/feedback summary without per-record navigation. An expected

@@ -1569,6 +1569,8 @@ doing the work, for example creating an invoice:
 })
 ```
 
+Only navigation targets are accepted — an application path or `onno://` / `onno://{catalogs|documents|registers|information-registers}/{name}[/{id}]`; command URLs (`logout`, `delete/`, `action/`, `redirect/`, `open/`, `download/`) and external URLs are rejected by `ActionResult` and ignored by the SPA, so a route built from stored or user data cannot trigger a side effect or leave the app.
+
 The successful wire response is `{refresh, feedback, navigateTo}`; `navigateTo` is optional/null
 for existing results. `open(ref)` uses the target's `@Catalog`/`@Document` logical name, not its
 Java class name, display title or storage table override. `navigate(route)` accepts `onno://...`

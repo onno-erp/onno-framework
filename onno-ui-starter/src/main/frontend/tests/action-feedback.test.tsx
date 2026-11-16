@@ -81,9 +81,16 @@ describe("typed action feedback (#273)", () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
-  it("does not turn an unsupported response URL into an external redirect", () => {
+  it.each([
+    "https://example.com",
+    "onno://redirect/https://evil.example",
+    "onno://open/https://evil.example",
+    "onno://logout",
+    "onno://delete/documents/invoices/i-1",
+    "onno://action/documents/invoices/approve/i-1",
+  ])("refuses the command or external URL %s from a server result", (route) => {
     const dispatch = vi.spyOn(window, "dispatchEvent");
-    applyActionResult({ navigateTo: "https://example.com" });
+    applyActionResult({ navigateTo: route });
     expect(dispatch).not.toHaveBeenCalled();
   });
 });

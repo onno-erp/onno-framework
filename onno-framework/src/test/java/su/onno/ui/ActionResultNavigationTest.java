@@ -40,7 +40,10 @@ class ActionResultNavigationTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"", "reports/sales", "https://example.com", "//example.com", "/\\example.com"})
+    @ValueSource(strings = {"", "reports/sales", "https://example.com", "//example.com", "/\\example.com",
+            "onno://redirect/https://evil.example", "onno://open/https://evil.example", "onno://logout",
+            "onno://delete/documents/sales_invoices/x", "onno://action/documents/sales_invoices/approve/x",
+            "onno://download/files/x", "onno://theme/toggle", "onno://documents/a/b/c"})
     void rejectsRoutesThatTheWorkspaceCannotNavigate(String route) {
         assertThatThrownBy(() -> ActionResult.navigate(route)).isInstanceOf(IllegalArgumentException.class);
     }

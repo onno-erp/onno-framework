@@ -14,11 +14,27 @@ import java.util.Objects;
  */
 public record ActionResult(boolean refresh, ActionFeedback feedback, String navigateTo) {
 
+    /**
+     * The only {@code onno://} targets a handler result may navigate to: home ({@code onno://}) or a
+     * catalog, document or register surface. Command URLs ({@code logout}, {@code delete/…}, {@code action/…},
+     * {@code redirect/…}, {@code open/…}, {@code download/…}) are rejected, so a route built from
+     * stored or user-entered data can never post, delete, sign out or leave the application.
+     */
+    private static final java.util.regex.Pattern RECORD_URL = java.util.regex.Pattern.compile(
+            "onno://(catalogs|documents|registers|information-registers)/[^/?#\\\\]+(/[^/?#\\\\]+)?");
+
     public ActionResult {
-        if (navigateTo != null && !navigateTo.startsWith("onno://")
-                && !(navigateTo.startsWith("/") && !navigateTo.startsWith("//") && !navigateTo.contains("\\"))) {
-            throw new IllegalArgumentException("navigateTo must be an onno:// URL or an application path starting with /");
+        if (navigateTo != null && !isNavigationTarget(navigateTo)) {
+            throw new IllegalArgumentException("navigateTo must be an application path starting with / or an "
+                    + "onno://{catalogs|documents|registers|information-registers}/… record URL: " + navigateTo);
         }
+    }
+
+    /** Whether {@code route} is a pure navigation target (an app path or a record/surface URL). */
+    public static boolean isNavigationTarget(String route) {
+        if (route.equals("onno://")) return true; // home
+        if (route.startsWith("onno://")) return RECORD_URL.matcher(route).matches();
+        return route.startsWith("/") && !route.startsWith("//") && !route.contains("\\");
     }
 
     /** Constructor for a result without navigation. */
