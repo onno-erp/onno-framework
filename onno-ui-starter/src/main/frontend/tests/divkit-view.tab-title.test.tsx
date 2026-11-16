@@ -4,6 +4,7 @@ import { MemoryRouter, useLocation } from "react-router";
 import { DivKitView, workspaceTabState } from "@/views/divkit-view";
 import { openRoute } from "@/lib/navigation";
 import { PageActionsBar } from "@/components/page-actions-bar";
+import { api } from "@/lib/api";
 
 function CurrentRoute() {
   const location = useLocation();
@@ -298,6 +299,25 @@ describe("DivKitView tab titles", () => {
     await screen.findByTestId("content-/catalogs/customers");
     act(() => openRoute("/documentation"));
     expect(await screen.findByTestId("content-/documentation")).toBeInTheDocument();
+  });
+
+  it("opens the record returned by a server page action without discarding another tab's draft", async () => {
+    const route = "/documents/invoices/created-invoice";
+    const run = vi.spyOn(api, "runPageAction").mockResolvedValue({ navigateTo: route });
+    render(<MemoryRouter initialEntries={["/catalogs/customers"]}>
+      <DivKitView />
+      <CurrentRoute />
+      <PageActionsBar route="/billing" buttons={[
+        { key: "createInvoice", label: "Create invoice", server: true },
+      ]} />
+    </MemoryRouter>);
+    const editor = await screen.findByRole("textbox", { name: "Editor /catalogs/customers" });
+    fireEvent.change(editor, { target: { value: "Unsaved draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create invoice" }));
+    await waitFor(() => expect(screen.getByTestId("current-route")).toHaveTextContent(route));
+    expect(run).toHaveBeenCalledOnce();
+    expect(screen.getAllByTestId("content-" + route)).toHaveLength(1);
+    expect(editor).toHaveValue("Unsaved draft");
   });
 
 });
