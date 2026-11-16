@@ -28,7 +28,6 @@ class OnnoCrmAutoConfigurationTest {
             .withBean(su.onno.ui.UiActionResolver.class, () -> mock(su.onno.ui.UiActionResolver.class))
             .withBean(su.onno.ui.UiViewResolver.class, () -> mock(su.onno.ui.UiViewResolver.class))
             .withBean(su.onno.ui.UiEventPublisher.class, () -> mock(su.onno.ui.UiEventPublisher.class))
-            .withBean(su.onno.ui.UiProperties.class, su.onno.ui.UiProperties::new)
             .withBean(su.onno.ui.comments.CommentService.class, () -> mock(su.onno.ui.comments.CommentService.class))
             .withBean(su.onno.ui.comments.CommentAuthorAvatars.class, () -> mock(su.onno.ui.comments.CommentAuthorAvatars.class))
             .withBean(CurrentUserResolver.class, () -> mock(CurrentUserResolver.class))
