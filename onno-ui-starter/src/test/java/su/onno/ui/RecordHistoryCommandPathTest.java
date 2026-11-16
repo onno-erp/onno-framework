@@ -229,9 +229,9 @@ class RecordHistoryCommandPathTest {
 
         UUID plain = id(catalogs.create(untrackedDesc, Map.of("description", "x", "label", "a"), VET));
         catalogs.update(untrackedDesc, plain, Map.of("label", "b"), VET);
-        assertThat(history.list(plain, null, 10)).isEmpty();
+        assertThat(history.list(plain)).isEmpty();
         assertThat(history.tracks(Untracked.class)).isFalse();
-        assertThatThrownBy(() -> controller.list("catalogs", "HistUntracked", plain, null, null, VET))
+        assertThatThrownBy(() -> controller.list("catalogs", "HistUntracked", plain, null, 100, VET))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
     }
@@ -285,10 +285,10 @@ class RecordHistoryCommandPathTest {
         UUID foreign = id(catalogs.create(patientDesc, Map.of("description", "Tom", "tier", "staff"), VET));
 
         // No entity read grant → 403; outside the record policy → 404, like a missing record.
-        assertThatThrownBy(() -> controller.list("catalogs", "HistPatients", own, null, null, OUTSIDER))
+        assertThatThrownBy(() -> controller.list("catalogs", "HistPatients", own, null, 100, OUTSIDER))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
-        assertThatThrownBy(() -> controller.list("catalogs", "HistPatients", foreign, null, null, CLIENT))
+        assertThatThrownBy(() -> controller.list("catalogs", "HistPatients", foreign, null, 100, CLIENT))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
 
@@ -308,13 +308,20 @@ class RecordHistoryCommandPathTest {
         catalogs.update(patientDesc, id, Map.of("name", "b"), VET);
         catalogs.update(patientDesc, id, Map.of("name", "c"), VET);
 
-        Map<String, Object> first = controller.list("catalogs", "HistPatients", id, 2, null, VET);
+        Map<String, Object> first = controller.list("catalogs", "HistPatients", id, null, 2, VET);
         assertThat(list(first)).extracting(e -> e.get("event")).containsExactly("UPDATED", "UPDATED");
-        assertThat(first.get("nextBefore")).isNotNull();
-        Map<String, Object> second = controller.list("catalogs", "HistPatients", id, 2,
-                first.get("nextBefore").toString(), VET);
+        assertThat(first.get("hasMore")).isEqualTo(true);
+        assertThat(first.get("nextCursor")).isNotNull();
+        Map<String, Object> second = controller.list("catalogs", "HistPatients", id,
+                first.get("nextCursor").toString(), 2, VET);
         assertThat(list(second)).extracting(e -> e.get("event")).containsExactly("CREATED");
-        assertThat(second.get("nextBefore")).isNull();
+        assertThat(second.get("nextCursor")).isNull();
+        assertThat(second.get("hasMore")).isEqualTo(false);
+        // A cursor is bound to the record it was minted for.
+        UUID other = id(catalogs.create(patientDesc, Map.of("description", "Max", "name", "x"), VET));
+        assertThatThrownBy(() -> controller.list("catalogs", "HistPatients", other,
+                first.get("nextCursor").toString(), 2, VET))
+                .isInstanceOf(su.onno.query.Cursor.ScopeMismatchException.class);
     }
 
     @Test
@@ -336,12 +343,12 @@ class RecordHistoryCommandPathTest {
     }
 
     private List<Map<String, Object>> entries(String kind, String name, UUID id, AccessSubject subject) {
-        return list(controller.list(kind, name, id, null, null, subject));
+        return list(controller.list(kind, name, id, null, 100, subject));
     }
 
     @SuppressWarnings("unchecked")
     private static List<Map<String, Object>> list(Map<String, Object> response) {
-        return (List<Map<String, Object>>) response.get("entries");
+        return (List<Map<String, Object>>) response.get("rows");
     }
 
     @SuppressWarnings("unchecked")

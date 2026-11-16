@@ -1410,5 +1410,14 @@ All collection transports now use the context-bound v2 Cursor codec (100 default
 Validate cursor JDBC value types before executing seek comparisons; malformed positions restart,
 foreign contexts are 400. Preserve SQL DATE values, not String approximations. CRM projections
 must share the Spring transaction/connection with repository callbacks. SDK register reads expose
-continuations; accounting widgets consume all pages. The cursor-only collection contract
+continuations; accounting widgets consume all pages. Every new collection endpoint returns
+`{rows, nextCursor, hasMore}` (wrap with `su.onno.ui.KeysetWindow.envelope`); never add a
+bespoke `entries`/`items`/`before` shape. A Java method returning a plain `List` must stay
+complete: implement it as `KeysetWindow.drain(c -> page(..., c, KeysetWindow.MAX_LIMIT))`, never
+as the first window's `.rows()`. Declare ordering columns the schema makes `NOT NULL` with `KeysetWindow.Order.notNull(...)`
+and give them one direction: the window then emits a bare ORDER BY and a row-value seek that a
+matching composite index serves (nullable columns need a `CASE` NULLS-LAST key no index can use).
+Every tuple cursor needs a unique trailing tiebreaker (id), and
+its feed context must include only filter values, never transport params (`cursor`, `limit`).
+The cursor-only collection contract
 and bounded-selector exceptions are specified only in docs/HEADLESS_READ_API.md.

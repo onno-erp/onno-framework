@@ -207,11 +207,17 @@ No SQL OFFSET or full-result in-memory slicing is used for pagination. SQL COUNT
 | `/api/crm/inbox-workspaces/{key}/conversations/{id}/comments` | Shared comment page after workspace authorization |
 | `/api/processes`, `/api/tasks` | Start/creation time + UUID; instance participation or task assignment applied in SQL |
 | Process history, executions, task history | Requested instance/task authorization; sequence or entry time + UUID |
+| `/api/history/{kind}/{name}/{id}` | Change time DESC + change id DESC; record read access (entity grant + record scope); cursor bound to record and caller |
 
 **Breaking release.** Numeric `offset` pagination and the notification `items` / CRM activity
 `entries` aliases are removed. Use `cursor` and read `rows`; no positional traversal helper is
-retained. Legacy bounded Java preview methods remain explicitly bounded and reject accounting
-result overflow rather than returning apparently complete partial totals. Register SDK methods
+retained. Record history uses the same envelope (its earlier `entries` / `nextBefore` / `before`
+shape is gone). Java methods that return a plain `List` (for example `ProcessEngine.inbox(actor)`,
+`CatalogQueryService.tree(...)`, `CommentService.list(...)`, `RegisterQueryService.turnover(...)`,
+`RecordHistory.list(id)`) return the **complete** result: they follow the cursor through bounded
+windows with `su.onno.query.KeysetWindow.drain(...)` and never silently truncate. Request paths
+must use the paged variants. The explicitly bounded `*Bounded` register previews keep their
+`truncated` flag. Register SDK methods
 return `CollectionPage<EntityRecord>` and accept `PageRequest`; widgets follow `nextCursor`.
 Catalog/document previews remain capped at 500; use `listCatalogPage` / `listDocumentsPage`
 for continuation. Aggregate widgets consume every turnover page before computing totals.
@@ -443,12 +449,14 @@ blind oracle for encrypted values.
 
 `GET /api/history/{kind}/{name}/{id}` returns the change history of one catalog item
 (`kind = catalogs`) or document (`kind = documents`) whose entity opted in with
-`@Catalog(history = true)` / `@Document(history = true)`. Query parameters: `limit` (default 50,
-max 200) and `before` (the previous page's `nextBefore`, for older entries).
+`@Catalog(history = true)` / `@Document(history = true)`, as one window of the shared collection
+envelope: `limit` (default 100, max 500) and `cursor` (the previous window's `nextCursor`). Entries
+are ordered by change time, then change id, so events stamped at the same instant are neither
+skipped nor repeated. The cursor is bound to the record and the caller; a foreign one is `400`.
 
 ```json
 {
-  "entries": [
+  "rows": [
     {
       "id": "0f6f…",
       "event": "UPDATED",
@@ -465,7 +473,8 @@ max 200) and `before` (the previous page's `nextBefore`, for older entries).
       ]
     }
   ],
-  "nextBefore": null
+  "nextCursor": null,
+  "hasMore": false
 }
 ```
 

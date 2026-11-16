@@ -21,14 +21,15 @@ afterEach(() => {
 
 it("loads on first expand and shows who changed what, with secrets and rows", async () => {
   mocks.list.mockResolvedValueOnce({
-    entries: [
+    rows: [
       { id: "e2", event: "UPDATED", at: "2026-11-16T10:00:00Z", actor: "vet@clinic.test", actorId: null, changes: [
         change({ old: "limping", new: "limping badly" }),
         change({ field: "accessCode", label: "Access code", secret: true }),
         change({ section: "procedures", line: 2, rowChange: "ADDED", field: "title", label: "Title", new: "Bandage" }),
       ] },
     ],
-    nextBefore: "2026-11-16T10:00:00Z",
+    nextCursor: "cursor-2",
+    hasMore: true,
   });
   render(<EntityHistoryWidget target={target} />);
   expect(mocks.list).not.toHaveBeenCalled();
@@ -44,13 +45,14 @@ it("loads on first expand and shows who changed what, with secrets and rows", as
   expect(screen.getByText("Bandage")).toBeTruthy();
 
   mocks.list.mockResolvedValueOnce({
-    entries: [{ id: "e1", event: "CREATED", at: "2026-11-15T09:00:00Z", actor: "system", actorId: null, changes: [] }],
-    nextBefore: null,
+    rows: [{ id: "e1", event: "CREATED", at: "2026-11-15T09:00:00Z", actor: "system", actorId: null, changes: [] }],
+    nextCursor: null,
+    hasMore: false,
   });
   fireEvent.click(screen.getByRole("button", { name: "Show older changes" }));
   expect(await screen.findByText("Created")).toBeTruthy();
   expect(screen.getByText("System")).toBeTruthy();
-  expect(mocks.list).toHaveBeenLastCalledWith("documents", "visits", id, "2026-11-16T10:00:00Z");
+  expect(mocks.list).toHaveBeenLastCalledWith("documents", "visits", id, "cursor-2");
   await waitFor(() => expect(screen.queryByRole("button", { name: "Show older changes" })).toBeNull());
 });
 

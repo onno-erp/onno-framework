@@ -79,9 +79,8 @@ public class RegisterQueryService {
 
     public List<Map<String, Object>> movements(AccessSubject subject, AccumulationRegisterDescriptor desc,
                                                String from, String to) {
-        var result = movementsBounded(subject, desc, from, to);
-        if (result.truncated()) throw new IllegalStateException("Movements exceed the preview limit; use movementsPage");
-        return result.rows();
+        // Complete result, newest first — the same order as the bounded preview.
+        return su.onno.query.KeysetWindow.drain(c -> movementsPage(subject, desc, from, to, null, "_period", true, c, su.onno.query.KeysetWindow.MAX_LIMIT));
     }
 
     /**
@@ -308,14 +307,13 @@ public class RegisterQueryService {
 
     public List<Map<String, Object>> balance(AccessSubject subject, AccumulationRegisterDescriptor desc,
                                              Map<String, String> filters) {
-        var result = balanceBounded(subject, desc, filters);
-        if (result.truncated()) throw new IllegalStateException("Balances exceed the preview limit; use balancePage");
-        return result.rows();
+        return balance(subject, desc, filters, null);
     }
 
     public List<Map<String, Object>> balance(AccessSubject subject, AccumulationRegisterDescriptor desc,
                                              Map<String, String> filters, String asOf) {
-        return balanceBounded(subject, desc, filters, asOf).rows();
+        ListFilter.Result dims = dimensionFilters(desc, filters == null ? Map.of() : filters);
+        return su.onno.query.KeysetWindow.drain(c -> balancePage(subject, desc, dims, null, false, c, su.onno.query.KeysetWindow.MAX_LIMIT, asOf));
     }
 
     /**
@@ -424,9 +422,7 @@ public class RegisterQueryService {
     public List<Map<String, Object>> turnover(AccessSubject subject, AccumulationRegisterDescriptor desc,
                                               String from, String to,
                                               Map<String, String> filters) {
-        var page = turnoverPage(subject, desc, from, to, filters, null, 500);
-        if (page.hasMore()) throw new IllegalStateException("Turnover exceeds 500 rows; use turnoverPage and follow nextCursor");
-        return page.rows();
+        return su.onno.query.KeysetWindow.drain(c -> turnoverPage(subject, desc, from, to, filters, c, su.onno.query.KeysetWindow.MAX_LIMIT));
     }
 
     public su.onno.query.KeysetWindow.Page<Map<String, Object>> turnoverPage(AccessSubject subject,

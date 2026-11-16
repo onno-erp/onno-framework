@@ -386,11 +386,8 @@ export interface HistoryEntryView {
   changes: HistoryChangeView[];
 }
 
-export interface HistoryPage {
-  entries: HistoryEntryView[];
-  /** Pass as `before` to load the next (older) page; null when there is none. */
-  nextBefore: string | null;
-}
+/** One keyset window of a record's history, newest first — the shared collection envelope. */
+export type HistoryPage = CollectionPage<HistoryEntryView>;
 
 /** One comment in an entity's discussion thread (see CommentController). */
 export interface CommentView {
@@ -858,9 +855,9 @@ export const api = {
   // and posts are gated server-side on read access to the owning entity; the author is stamped
   // from the session, never sent by the client.
   // Record change history — read-only, gated server-side like a read of the record itself.
-  listHistory: (kind: "catalogs" | "documents", name: string, id: string, before?: string | null) =>
+  listHistory: (kind: "catalogs" | "documents", name: string, id: string, cursor?: string | null) =>
     fetchJson<HistoryPage>(
-      `${BASE}/history/${kind}/${name}/${id}${before ? `?before=${encodeURIComponent(before)}` : ""}`
+      `${BASE}/history/${kind}/${name}/${id}${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`
     ),
   listComments: (kind: "catalogs" | "documents", name: string, id: string, cursor?: string | null) =>
     fetchJson<CollectionPage<CommentView>>(`${BASE}/comments/${kind}/${name}/${id}${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`),

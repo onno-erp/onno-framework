@@ -652,5 +652,6 @@ Existing `page.list(...)` and widget config remain valid.
 Collection reads: use limit/cursor and `{rows,nextCursor,hasMore}` (100 default, 500 max).
 Only su.onno.query.Cursor issues context-bound typed positions; use KeysetWindow for SQL seek.
 SQL DATE values must remain typed. Count only by explicit request; never compute a report from
-a silently capped preview. Register SDK reads return pages. See docs/HEADLESS_READ_API.md,
+a silently capped preview. A plain-`List` Java method drains the cursor
+(`KeysetWindow.drain`) instead of returning the first window. Register SDK reads return pages. See docs/HEADLESS_READ_API.md,
 Collection pagination, for the cursor-only contract, bounded selectors and CRM callback limits.

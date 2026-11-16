@@ -68,7 +68,7 @@ class PostingHistoryTest {
         engine.repost(visit);
         engine.unpost(visit);
 
-        List<HistoryEntry> entries = history.list(visit.getId(), null, 10);
+        List<HistoryEntry> entries = history.list(visit.getId());
         assertThat(entries).extracting(HistoryEntry::event).containsExactly(
                 RecordHistory.UNPOSTED, RecordHistory.POSTED, RecordHistory.POSTED);
         assertThat(entries).extracting(HistoryEntry::actor)
@@ -87,7 +87,7 @@ class PostingHistoryTest {
             engine.unpost(visit);
         }).isInstanceOf(IllegalStateException.class);
 
-        assertThat(history.list(visit.getId(), null, 10)).extracting(HistoryEntry::event)
+        assertThat(history.list(visit.getId())).extracting(HistoryEntry::event)
                 .containsExactly(RecordHistory.UNPOSTED, RecordHistory.POSTED);
     }
 

@@ -131,8 +131,8 @@ public class NotificationStore {
             var page = jdbi.withHandle(h -> su.onno.query.KeysetWindow.fetch(h, TABLE, "*",
                     "_recipient = :recipient" + (unreadOnly ? " AND _read_at IS NULL" : "") + visibility.and(),
                     q -> { q.bind("recipient", recipientId); visibility.bind(q); },
-                    List.of(new su.onno.query.KeysetWindow.Order("_created_at", true),
-                            new su.onno.query.KeysetWindow.Order("_id", true)), cursor, limit,
+                    List.of(su.onno.query.KeysetWindow.Order.notNull("_created_at", true),
+                            su.onno.query.KeysetWindow.Order.notNull("_id", true)), cursor, limit,
                     "notifications:" + recipientId + ":" + unreadOnly + ":" + visibility,
                     (rs, ctx) -> map(rs)));
             return new Page(page.rows(), page.nextCursor(), page.hasMore());

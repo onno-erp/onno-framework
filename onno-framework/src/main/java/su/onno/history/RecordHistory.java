@@ -7,6 +7,7 @@ import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.TabularSectionDescriptor;
+import su.onno.query.KeysetWindow;
 import su.onno.security.SecretCipher;
 
 import org.jdbi.v3.core.Handle;
@@ -49,7 +50,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * stored as canonical text; {@code secret} attributes are recorded as changed <em>without</em>
  * values. An entity that has not opted in costs one cached map lookup per write.
  *
- * <p>This class does not authorize reads: {@link #list} returns raw entries for trusted code. The
+ * <p>This class does not authorize reads: {@link #list} and {@link #page} return raw entries for trusted code. The
  * UI starter's {@code /api/history} endpoint applies {@code @AccessControl}, record policies and
  * reference visibility on top.
  */
@@ -426,60 +427,75 @@ public class RecordHistory {
     }
 
     /**
-     * The recorded events for record {@code recordId}, newest first, unauthorized and unredacted
+     * Every recorded event for record {@code recordId}, newest first, unauthorized and unredacted
      * (beyond secrets, which are never stored). History follows the record id, so it survives an
-     * entity rename.
-     *
-     * @param before only events strictly older than this instant (keyset paging), or {@code null}
-     * @param limit  the largest number of events returned
+     * entity rename. For request paths, use {@link #page} instead.
      */
-    public List<HistoryEntry> list(UUID recordId, Instant before, int limit) {
-        if (!enabled || recordId == null || limit <= 0) {
-            return List.of();
+    public List<HistoryEntry> list(UUID recordId) {
+        return KeysetWindow.drain(cursor -> page(recordId, cursor, KeysetWindow.MAX_LIMIT, "trusted"));
+    }
+
+    /**
+     * One keyset window of record {@code recordId}'s events, newest first, in the shared
+     * {@code {rows, nextCursor, hasMore}} shape. Events are ordered by {@code (at, change id)}, so
+     * two events stamped at the same instant (another node, a clock tie) are neither skipped nor
+     * repeated across windows.
+     *
+     * @param cursor  the previous window's {@code nextCursor}, or {@code null} for the newest
+     * @param limit   the window size, clamped to {@link KeysetWindow#MAX_LIMIT}
+     * @param context the caller's access-scope fingerprint; a cursor minted for another record or
+     *                scope is rejected with {@link su.onno.query.Cursor.ScopeMismatchException}
+     */
+    public KeysetWindow.Page<HistoryEntry> page(UUID recordId, String cursor, int limit, String context) {
+        if (!enabled || recordId == null) {
+            return new KeysetWindow.Page<>(List.of(), null, false);
         }
         return jdbi.withHandle(h -> {
-            var changeQuery = h.createQuery("SELECT _change_id FROM " + TABLE +
-                    " WHERE _record_id = :id" + (before == null ? "" : " AND _at < :before") +
-                    " GROUP BY _change_id ORDER BY MAX(_at) DESC LIMIT :limit")
-                    .bind("id", recordId)
-                    .bind("limit", limit);
-            if (before != null) {
-                changeQuery.bind("before", Timestamp.from(before));
-            }
-            List<UUID> changeIds = changeQuery.mapTo(UUID.class).list();
-            if (changeIds.isEmpty()) {
-                return List.<HistoryEntry>of();
-            }
-            Map<UUID, HistoryEntry> entries = new LinkedHashMap<>();
-            for (UUID changeId : changeIds) {
-                entries.put(changeId, null);
-            }
-            h.createQuery("SELECT * FROM " + TABLE + " WHERE _change_id IN (<ids>) ORDER BY _seq")
-                    .bindList("ids", changeIds)
-                    .map((rs, ctx) -> {
-                        UUID changeId = rs.getObject("_change_id", UUID.class);
-                        HistoryEntry entry = entries.get(changeId);
-                        if (entry == null) {
-                            entry = new HistoryEntry(changeId, rs.getString("_entity_type"),
-                                    rs.getString("_entity_name"), rs.getObject("_record_id", UUID.class),
-                                    rs.getString("_event"), rs.getTimestamp("_at").toInstant(),
-                                    rs.getString("_actor"), rs.getObject("_actor_id", UUID.class),
-                                    new ArrayList<>());
-                            entries.put(changeId, entry);
-                        }
-                        String field = rs.getString("_field");
-                        String section = rs.getString("_section");
-                        if (field != null || section != null) {
-                            int line = rs.getInt("_line");
-                            entry.changes().add(new HistoryChange(section, rs.wasNull() ? null : line,
-                                    rs.getString("_row_change"), field, rs.getString("_old_value"),
-                                    rs.getString("_new_value"), rs.getBoolean("_secret")));
-                        }
-                        return changeId;
-                    })
-                    .list();
-            return entries.values().stream().filter(Objects::nonNull).toList();
+            KeysetWindow.Page<UUID> ids = KeysetWindow.fetch(h,
+                    "(SELECT _change_id, MAX(_at) AS _at FROM " + TABLE
+                            + " WHERE _record_id = :id GROUP BY _change_id) changes",
+                    "_change_id, _at", "1 = 1", q -> q.bind("id", recordId),
+                    List.of(KeysetWindow.Order.notNull("_at", true), KeysetWindow.Order.notNull("_change_id", true)),
+                    cursor, limit, "history:" + recordId + ":" + context,
+                    (rs, ctx) -> rs.getObject("_change_id", UUID.class));
+            return new KeysetWindow.Page<>(load(h, ids.rows()), ids.nextCursor(), ids.hasMore());
         });
+    }
+
+    /** The full entries for {@code changeIds}, in that order. */
+    private static List<HistoryEntry> load(Handle h, List<UUID> changeIds) {
+        if (changeIds.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, HistoryEntry> entries = new LinkedHashMap<>();
+        for (UUID changeId : changeIds) {
+            entries.put(changeId, null);
+        }
+        h.createQuery("SELECT * FROM " + TABLE + " WHERE _change_id IN (<ids>) ORDER BY _seq")
+                .bindList("ids", changeIds)
+                .map((rs, ctx) -> {
+                    UUID changeId = rs.getObject("_change_id", UUID.class);
+                    HistoryEntry entry = entries.get(changeId);
+                    if (entry == null) {
+                        entry = new HistoryEntry(changeId, rs.getString("_entity_type"),
+                                rs.getString("_entity_name"), rs.getObject("_record_id", UUID.class),
+                                rs.getString("_event"), rs.getTimestamp("_at").toInstant(),
+                                rs.getString("_actor"), rs.getObject("_actor_id", UUID.class),
+                                new ArrayList<>());
+                        entries.put(changeId, entry);
+                    }
+                    String field = rs.getString("_field");
+                    String section = rs.getString("_section");
+                    if (field != null || section != null) {
+                        int line = rs.getInt("_line");
+                        entry.changes().add(new HistoryChange(section, rs.wasNull() ? null : line,
+                                rs.getString("_row_change"), field, rs.getString("_old_value"),
+                                rs.getString("_new_value"), rs.getBoolean("_secret")));
+                    }
+                    return changeId;
+                })
+                .list();
+        return entries.values().stream().filter(Objects::nonNull).toList();
     }
 
     /** Canonical text for a stored value, so equal values compare equal across drivers. */

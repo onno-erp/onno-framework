@@ -89,7 +89,7 @@ class RecordHistoryRepositoryIT {
 
         visits.delete(visits.findById(id).orElseThrow());
 
-        List<HistoryEntry> entries = history.list(id, null, 10);
+        List<HistoryEntry> entries = history.list(id);
         assertThat(entries).extracting(HistoryEntry::event)
                 .containsExactly(RecordHistory.DELETED, RecordHistory.UPDATED, RecordHistory.CREATED);
         assertThat(entries.get(2).actor()).isEqualTo("vet@clinic.test");
@@ -115,7 +115,7 @@ class RecordHistoryRepositoryIT {
             status.setRollbackOnly();
         });
 
-        assertThat(history.list(id, null, 10)).extracting(HistoryEntry::event)
+        assertThat(history.list(id)).extracting(HistoryEntry::event)
                 .containsExactly(RecordHistory.CREATED);
         assertThat(visits.findById(id).orElseThrow().getComplaint()).isEqualTo("cough");
     }

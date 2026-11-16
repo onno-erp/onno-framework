@@ -23,13 +23,50 @@ public final class KeysetWindow {
 
     private KeysetWindow() {}
 
-    /** One component of the total ordering; nulls always follow non-null values. */
-    public record Order(String column, boolean descending) {}
+    /**
+     * One component of the total ordering; nulls always follow non-null values.
+     *
+     * @param notNull the column is declared {@code NOT NULL}: the window then orders and seeks on
+     *                the bare column (no {@code CASE WHEN … IS NULL} sort key), so a matching
+     *                {@code (col, …)} index can serve both the ORDER BY and the seek
+     */
+    public record Order(String column, boolean descending, boolean notNull) {
+        /** A nullable ordering column (NULLS LAST via a {@code CASE} sort key). */
+        public Order(String column, boolean descending) {
+            this(column, descending, false);
+        }
+
+        /** An ordering column the schema declares {@code NOT NULL}. */
+        public static Order notNull(String column, boolean descending) {
+            return new Order(column, descending, true);
+        }
+    }
 
     /** A collection response. Mapping preserves its raw SQL continuation boundary. */
     public record Page<T>(List<T> rows, String nextCursor, boolean hasMore) {
         public <R> Page<R> map(Function<T, R> mapper) {
             return new Page<>(rows.stream().map(mapper).toList(), nextCursor, hasMore);
+        }
+    }
+
+    /**
+     * Follow a paged read to its end, for trusted Java callers whose contract is the complete
+     * result (a whole tree, every related row, a full process history). Each SQL window stays
+     * bounded by {@link #MAX_LIMIT}; the total is not, so request paths should expose the paged
+     * variant instead. A repeated cursor fails rather than looping.
+     *
+     * @param window reads one window for a cursor ({@code null} for the first)
+     */
+    public static <T> List<T> drain(Function<String, Page<T>> window) {
+        List<T> all = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        String cursor = null;
+        while (true) {
+            Page<T> page = window.apply(cursor);
+            all.addAll(page.rows());
+            if (!page.hasMore() || page.nextCursor() == null) return all;
+            if (!seen.add(page.nextCursor())) throw new IllegalStateException("Paged read repeated a cursor");
+            cursor = page.nextCursor();
         }
     }
 
@@ -58,21 +95,22 @@ public final class KeysetWindow {
         for (int i = 0; i < order.size(); i++) {
             Order key = order.get(i);
             String col = key.column();
-            ordering.add("CASE WHEN " + col + " IS NULL THEN 1 ELSE 0 END ASC");
+            if (!key.notNull()) ordering.add("CASE WHEN " + col + " IS NULL THEN 1 ELSE 0 END ASC");
             ordering.add(col + (key.descending() ? " DESC" : " ASC"));
             if (cursor == null) continue;
             Object value = cursor.values().get(i);
             if (value != null) {
-                String after = "(" + col + " IS NULL OR " + col
-                        + (key.descending() ? " < " : " > ") + ":kw" + i + ")";
+                String compare = col + (key.descending() ? " < " : " > ") + ":kw" + i;
+                String after = key.notNull() ? compare : "(" + col + " IS NULL OR " + compare + ")";
                 alternatives.add("(" + String.join(" AND ", append(prefix, after)) + ")");
                 prefix.add(col + " = :kw" + i);
             } else {
                 prefix.add(col + " IS NULL");
             }
         }
-        String seek = cursor == null ? "" : " AND (" +
-                (alternatives.isEmpty() ? "1 = 0" : String.join(" OR ", alternatives)) + ")";
+        String seek = cursor == null ? "" : " AND (" + (rowValueSeek(order, cursor.values())
+                ? rowValue(order)
+                : alternatives.isEmpty() ? "1 = 0" : String.join(" OR ", alternatives)) + ")";
         Query query = handle.createQuery("SELECT " + projection + " FROM " + source
                 + " WHERE (" + where + ")" + seek + " ORDER BY " + String.join(", ", ordering)
                 + " LIMIT :kwLimit").bind("kwLimit", size + 1);
@@ -139,6 +177,31 @@ public final class KeysetWindow {
                 return true;
             }
         });
+    }
+
+    /**
+     * Whether the seek can be one row-value comparison {@code (a, b) < (:kw0, :kw1)}: every column
+     * NOT NULL and sorted the same way. That shape is what a composite index range-scans; the
+     * equivalent OR expansion usually is not.
+     */
+    private static boolean rowValueSeek(List<Order> order, List<Object> values) {
+        if (order.size() < 2) return false;
+        boolean descending = order.getFirst().descending();
+        for (int i = 0; i < order.size(); i++) {
+            if (!order.get(i).notNull() || order.get(i).descending() != descending || values.get(i) == null) return false;
+        }
+        return true;
+    }
+
+    private static String rowValue(List<Order> order) {
+        List<String> columns = new ArrayList<>();
+        List<String> binds = new ArrayList<>();
+        for (int i = 0; i < order.size(); i++) {
+            columns.add(order.get(i).column());
+            binds.add(":kw" + i);
+        }
+        return "(" + String.join(", ", columns) + ")" + (order.getFirst().descending() ? " < " : " > ")
+                + "(" + String.join(", ", binds) + ")";
     }
 
     private static List<String> append(List<String> prefix, String value) {
