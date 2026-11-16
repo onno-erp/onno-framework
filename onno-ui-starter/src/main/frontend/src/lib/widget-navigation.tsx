@@ -1,6 +1,7 @@
 import type { ComponentPropsWithRef, MouseEvent } from "react";
 import { withBasePath } from "./base-path";
 import { isAppRoute, openRoute } from "./navigation";
+import { toSnakeCase } from "./utils";
 
 type NavigateOptions = { newTab?: boolean };
 type RecordKind = "catalogs" | "documents";
@@ -24,7 +25,9 @@ function navigate(path: string, options?: NavigateOptions): void {
 
 function openRecord(kind: RecordKind, name: string, id: string): void {
   if (!name || !id) return;
-  navigate(`/${kind}/${encodeURIComponent(name)}/${encodeURIComponent(id)}`);
+  // Route names are snake_case logical names (SalesOrders / "Sales Orders" → sales_orders), the
+  // spelling that carries live updates and the localized tab title.
+  navigate(`/${kind}/${encodeURIComponent(toSnakeCase(name))}/${encodeURIComponent(id)}`);
 }
 
 function Link({ to, onClick, target, download, ...props }: LinkProps) {

@@ -94,7 +94,8 @@ function ReportActions({ orderId }: { orderId: string }) {
 ```
 
 Pass application paths starting with `/` and omit the configured UI prefix (for example, `/ui`).
-Use `"catalogs"` or `"documents"` with the logical entity name and record ID for `openRecord`.
+Use `"catalogs"` or `"documents"` with the logical entity name and record ID for `openRecord`;
+the name is snake-cased for the route (`"SalesOrders"` / `"Sales Orders"` → `sales_orders`).
 `Link` adds the UI prefix to its real `href`, so copy-link, Ctrl/⌘-click and middle-click still
 work. Use `navigate("/reports", { newTab: true })` to open a separate browser tab explicitly.
 For navigation within the current workspace, use these exports so its open tabs and drafts survive.

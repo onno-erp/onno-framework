@@ -27,7 +27,8 @@ afterAll(() => {
 it("sends app paths and encoded record paths through the workspace", () => {
   sdk.navigate("/reports?period=month");
   sdk.openRecord("catalogs", "sales orders", "a/b");
-  expect(actions).toEqual(["/reports?period=month", "/catalogs/sales%20orders/a%2Fb"]);
+  sdk.openRecord("documents", "SalesOrders", "c");
+  expect(actions).toEqual(["/reports?period=month", "/catalogs/sales_orders/a%2Fb", "/documents/sales_orders/c"]);
 });
 
 it("opens an explicit new browser tab under the configured UI prefix", () => {

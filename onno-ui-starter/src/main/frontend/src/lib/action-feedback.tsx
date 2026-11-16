@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
 import type { ActionFeedback, ActionResult } from "@/lib/types";
 import { useMessages } from "@/providers/messages-provider";
+import { isNavigationTarget, openRoute } from "@/lib/navigation";
 
 const EVENT = "onno:action-feedback";
 
@@ -60,6 +61,7 @@ export function applyActionResult(
   if (!result) return;
   if (result.feedback) presentActionFeedback(result.feedback);
   if (result.refresh) callbacks.refresh?.();
+  if (result.navigateTo && isNavigationTarget(result.navigateTo)) openRoute(result.navigateTo);
 }
 
 /** Present an expected action rejection; returns it for an open form to render inline. */
