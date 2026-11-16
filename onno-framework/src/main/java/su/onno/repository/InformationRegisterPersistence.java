@@ -311,6 +311,13 @@ public class InformationRegisterPersistence<T extends InformationRecord> {
         } else if (type == LocalDateTime.class) {
             java.sql.Timestamp val = rs.getTimestamp(col);
             return val != null ? val.toLocalDateTime() : null;
+        } else if (type == java.time.LocalTime.class) {
+            java.sql.Time val = rs.getTime(col);
+            return val != null ? val.toLocalTime() : null;
+        } else if (type == java.time.Instant.class) {
+            // TIMESTAMP WITH TIME ZONE: getTimestamp yields the absolute moment on every driver.
+            java.sql.Timestamp val = rs.getTimestamp(col);
+            return val != null ? val.toInstant() : null;
         } else if (type.isEnum()) {
             // Enum attributes are stored as their stable UUID — resolve back to the constant
             // rather than leaking the raw UUID through the getObject(...) fallback.

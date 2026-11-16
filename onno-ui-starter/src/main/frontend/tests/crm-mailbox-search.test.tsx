@@ -35,7 +35,7 @@ function mount({ mailboxAccounts = accounts as unknown, search }: { mailboxAccou
       : response(url.searchParams.get("pageToken") ? { messages: [{ ...firstPage.messages[0], id: "m3", subject: "Older thread" }], nextPageToken: null } : firstPage);
     if (path === `/api/crm${MAILBOX_ENDPOINTS.restore}` && init?.method === "POST") return response({ conversationId: "chat-carla", movedToInbox: true });
     const activity = path.match(/^\/api\/crm\/contacts\/(\w+)\/activity$/);
-    if (activity) return response({ hasMore: false, entries: [{ id: `message:${activity[1]}`, conversationId: `chat-${activity[1]}`, kind: "CUSTOMER_MESSAGE", direction: "INBOUND",
+    if (activity) return response({ hasMore: false, rows: [{ id: `message:${activity[1]}`, conversationId: `chat-${activity[1]}`, kind: "CUSTOMER_MESSAGE", direction: "INBOUND",
       channel: "EMAIL", authorName: activity[1], body: `Hello from ${activity[1]}`, at: "2025-03-01T08:00:00Z", attachments: [] }] });
     if (path.startsWith("/api/crm/contacts/")) return response({ fields: {}, identities: [] });
     if (path.endsWith("/delivery")) return response({ connected: true, label: "Email", replyCapability: "AVAILABLE", maxTextLength: 8000 });

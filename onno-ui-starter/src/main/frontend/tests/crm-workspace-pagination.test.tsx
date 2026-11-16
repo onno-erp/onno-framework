@@ -32,7 +32,7 @@ it.each([[false, false], [true, false], [false, true], [true, true]])("keeps sel
         rows: Array.from({ length: Number(url.searchParams.get("limit") ?? 2) }, (_, i) => start + i + 1).map(i => ({ id: `chat-${i}`, customer: `customer-${i}`, customerDisplay: `Person ${i}`, channel: "test" })) });
     }
     if (url.pathname === "/api/crm/workspace") return response({ config });
-    if (url.pathname.endsWith("/activity")) return response({ entries: [], hasMore: false });
+    if (url.pathname.endsWith("/activity")) return response({ rows: [], hasMore: false });
     if (url.pathname.includes("/contacts/")) return response({ fields: {}, identities: [] });
     if (url.pathname.endsWith("/delivery")) return response({ connected: false, replyCapability: "READ_ONLY" });
     return response([]);

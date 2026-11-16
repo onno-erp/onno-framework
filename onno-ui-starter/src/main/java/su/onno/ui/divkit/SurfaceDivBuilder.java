@@ -224,7 +224,45 @@ public final class SurfaceDivBuilder {
             custom.put("defaultView", cv.defaultView());
             descriptor.put("custom", custom);
         }
+        // Optional calendar / timeline views (ListSpec.calendar / ListSpec.timeline): alternate
+        // bodies over the same toolbar and list feed. Each field travels as its row key plus the
+        // data column the feed's range filters address; a blank pair means "unset".
+        if (view.calendarView() != null) {
+            ResolvedListView.CalendarView cv = view.calendarView();
+            Map<String, Object> calendar = new LinkedHashMap<>();
+            putViewField(calendar, "start", cv.start());
+            putViewField(calendar, "end", cv.end());
+            putViewField(calendar, "title", cv.title());
+            putViewField(calendar, "color", cv.color());
+            calendar.put("mode", cv.mode());
+            calendar.put("defaultView", cv.defaultView());
+            descriptor.put("calendar", calendar);
+        }
+        if (view.timelineView() != null) {
+            ResolvedListView.TimelineView tv = view.timelineView();
+            Map<String, Object> timeline = new LinkedHashMap<>();
+            putViewField(timeline, "start", tv.start());
+            putViewField(timeline, "end", tv.end());
+            putViewField(timeline, "lane", tv.lane());
+            timeline.put("laneKind", tv.laneKind());
+            timeline.put("laneTarget", tv.laneTarget());
+            timeline.put("laneLabel", tv.laneLabel());
+            putViewField(timeline, "title", tv.title());
+            putViewField(timeline, "color", tv.color());
+            timeline.put("slotMinutes", tv.slotMinutes());
+            timeline.put("startHour", tv.startHour());
+            timeline.put("endHour", tv.endHour());
+            timeline.put("defaultView", tv.defaultView());
+            descriptor.put("timeline", timeline);
+        }
         return descriptor;
+    }
+
+    /** {@code startField}/{@code startColumn}-style pair for one calendar/timeline field. */
+    private static void putViewField(Map<String, Object> target, String name, ResolvedListView.ViewField field) {
+        ResolvedListView.ViewField f = field == null ? ResolvedListView.ViewField.NONE : field;
+        target.put(name + "Field", f.key());
+        target.put(name + "Column", f.column());
     }
 
     // ----- record header actions -----
@@ -468,6 +506,27 @@ public final class SurfaceDivBuilder {
         }
         List<Map<String, Object>> next = new ArrayList<>((List<Map<String, Object>>) existing);
         Map<String, Object> panel = Div.custom("onno-comments",
+                Map.of("target", Map.of("kind", kind, "name", name, "id", id)));
+        Div.matchWidth(panel);
+        next.add(panel);
+        content.put("items", next);
+        return content;
+    }
+
+    /**
+     * Appends the change-history panel ({@code onno-history} custom component) below a record
+     * surface, for entities that opted in with {@code history = true}. It carries only the record's
+     * {@code {kind, name, id}}; the panel loads {@code /api/history/...} itself when expanded.
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> withHistory(Map<String, Object> content, String kind,
+                                                  String name, String id) {
+        Object items = content.get("items");
+        if (!(items instanceof List<?> existing)) {
+            return content;
+        }
+        List<Map<String, Object>> next = new ArrayList<>((List<Map<String, Object>>) existing);
+        Map<String, Object> panel = Div.custom("onno-history",
                 Map.of("target", Map.of("kind", kind, "name", name, "id", id)));
         Div.matchWidth(panel);
         next.add(panel);

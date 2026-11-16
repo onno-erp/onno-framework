@@ -22,6 +22,12 @@ import java.util.Map;
 @RestControllerAdvice
 public class OnnoValidationExceptionHandler {
 
+    @ExceptionHandler(su.onno.query.Cursor.ScopeMismatchException.class)
+    public ResponseEntity<Map<String, Object>> cursor() {
+        return ResponseEntity.badRequest().body(Map.of("error", "cursor_scope", "message",
+                "Cursor belongs to a different feed or access scope"));
+    }
+
     @ExceptionHandler(ValidationException.class)
     public ResponseEntity<Map<String, Object>> handle(ValidationException ex) {
         Map<String, Object> body = new LinkedHashMap<>();

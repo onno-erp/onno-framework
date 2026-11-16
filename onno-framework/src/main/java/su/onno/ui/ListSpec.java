@@ -36,6 +36,8 @@ public final class ListSpec<E> {
     private final List<FilterBuilder> filters = new ArrayList<>();
     private MapSpec<E> map;
     private CustomSpec custom;
+    private CalendarSpec<E> calendar;
+    private TimelineSpec<E> timeline;
     private int pageSize;
     private final List<String> groupable = new ArrayList<>();
     private final Map<String, String> cellMenus = new LinkedHashMap<>();
@@ -303,6 +305,92 @@ public final class ListSpec<E> {
     }
 
     /**
+     * Enable a calendar view for this list: a Table ⇄ Calendar toggle in the toolbar that draws each
+     * record on its {@code start} date/time in a month, week or day grid. The view reads through
+     * the list's own feed, so search, the declared filters and record-level access all apply, and it
+     * refreshes on live changes. Clicking an entry opens the record; a viewer with write access can
+     * drag an entry to another day/time, which saves the new start through the ordinary update
+     * command (validation, {@code beforeWrite} and record access included).
+     *
+     * <p>Calling {@code calendar(...)} again replaces the fields but keeps the same spec, mirroring
+     * {@link #map()}. A start field that does not resolve to a date/time column degrades to "no
+     * calendar view" rather than failing the list.</p>
+     *
+     * <pre>
+     * list.calendar(Task::getDueDate).title(Task::getSubject);
+     * </pre>
+     */
+    public <S> CalendarSpec<E> calendar(Field<E, S> start) {
+        return calendar(Fields.name(start), null);
+    }
+
+    /**
+     * A calendar view over a date range: entries span {@code start}…{@code end} and can also be
+     * resized when the viewer may write. A date-only ({@code LocalDate}) end is the range's last day
+     * (inclusive); a date-time end is the instant the entry stops. See {@link #calendar(Field)}.
+     *
+     * <pre>
+     * list.calendar(Booking::getCheckIn, Booking::getCheckOut).defaultMode(CalendarMode.WEEK);
+     * </pre>
+     */
+    public <S, T> CalendarSpec<E> calendar(Field<E, S> start, Field<E, T> end) {
+        return calendar(Fields.name(start), Fields.name(end));
+    }
+
+    /** String escape hatch for {@link #calendar(Field, Field)}; {@code endField} may be null. */
+    public CalendarSpec<E> calendar(String startField, String endField) {
+        if (calendar == null) {
+            calendar = new CalendarSpec<>();
+        }
+        calendar.startField = startField;
+        calendar.endField = endField;
+        return calendar;
+    }
+
+    /**
+     * Enable a timeline (resource scheduler) view for this list: a Table ⇄ Timeline toggle that
+     * lays one day out on a time axis, each record a block from {@code start} to {@code end}. Like
+     * {@link #calendar(Field)} it reads through the list's feed (search, filters and record access
+     * apply), refreshes live, opens the record on click and — for a viewer with write access —
+     * saves a drag (move) or a drag of the block's lower edge (resize) through the ordinary update
+     * command.
+     *
+     * <pre>
+     * list.timeline(WorkOrder::getStartsAt, WorkOrder::getEndsAt);
+     * </pre>
+     */
+    public <S, T> TimelineSpec<E> timeline(Field<E, S> start, Field<E, T> end) {
+        return timeline(Fields.name(start), Fields.name(end), null);
+    }
+
+    /**
+     * A timeline with one lane (column) per record of the {@code lane} reference — per doctor, room
+     * or machine. Lanes are the reference target's records the viewer may read, so an idle resource
+     * still shows; records with no lane value collect in an "Unassigned" lane. Dragging a block
+     * into another lane rewrites the reference. A lane field that is not a single-target
+     * {@code Ref} is ignored (the timeline then shows one lane).
+     *
+     * <pre>
+     * list.timeline(Appointment::getStartsAt, Appointment::getEndsAt, Appointment::getDoctor)
+     *     .title(Appointment::getPatient).slotMinutes(10).hours(8, 21).defaultView();
+     * </pre>
+     */
+    public <S, T, R> TimelineSpec<E> timeline(Field<E, S> start, Field<E, T> end, Field<E, R> lane) {
+        return timeline(Fields.name(start), Fields.name(end), Fields.name(lane));
+    }
+
+    /** String escape hatch for {@link #timeline(Field, Field, Field)}; {@code laneField} may be null. */
+    public TimelineSpec<E> timeline(String startField, String endField, String laneField) {
+        if (timeline == null) {
+            timeline = new TimelineSpec<>();
+        }
+        timeline.startField = startField;
+        timeline.endField = endField;
+        timeline.laneField = laneField;
+        return timeline;
+    }
+
+    /**
      * Delegate the list's <em>body</em> to a custom renderer registered in the UI's widget registry
      * (a consumer plugin's {@code registerListRenderer("type", Component)} via
      * {@code @onno/widget-sdk}) — tiles, cards, a gallery, whatever the component draws. The
@@ -530,6 +618,177 @@ public final class ListSpec<E> {
     /** The custom-renderer spec, or null when {@link #custom} was never called (default grid only). */
     public CustomSpec customSpec() {
         return custom;
+    }
+
+    /** The calendar view spec, or null when {@link #calendar} was never called. */
+    public CalendarSpec<E> calendarSpec() {
+        return calendar;
+    }
+
+    /** The timeline view spec, or null when {@link #timeline} was never called. */
+    public TimelineSpec<E> timelineSpec() {
+        return timeline;
+    }
+
+    /** The grid a {@link #calendar} view opens on. */
+    public enum CalendarMode { MONTH, WEEK, DAY }
+
+    /**
+     * A calendar list view: which fields carry an entry's start and (optionally) end, the
+     * {@link #title} shown on it, an optional {@link #colorBy} field, the grid it opens on and
+     * whether the list opens on the calendar rather than the table.
+     */
+    public static final class CalendarSpec<E> {
+        private String startField;
+        private String endField;
+        private String titleField;
+        private String colorField;
+        private CalendarMode defaultMode = CalendarMode.MONTH;
+        private boolean defaultView = false;
+
+        CalendarSpec() {}
+
+        /** The field shown as an entry's title (defaults to a system identifier when unset). */
+        public CalendarSpec<E> title(String titleField) {
+            this.titleField = titleField;
+            return this;
+        }
+
+        /** Compiler-checked title field. */
+        public <V> CalendarSpec<E> title(Field<E, V> field) {
+            return title(Fields.name(field));
+        }
+
+        /**
+         * Colour entries by this field: an {@code @Enumeration} value with an {@code @EnumLabel}
+         * colour uses it, any other value (a reference, a text) gets a stable colour per value.
+         */
+        public CalendarSpec<E> colorBy(String colorField) {
+            this.colorField = colorField;
+            return this;
+        }
+
+        /** Compiler-checked colour field. */
+        public <V> CalendarSpec<E> colorBy(Field<E, V> field) {
+            return colorBy(Fields.name(field));
+        }
+
+        /** The grid the calendar opens on (month by default). The viewer can switch freely. */
+        public CalendarSpec<E> defaultMode(CalendarMode mode) {
+            this.defaultMode = mode == null ? CalendarMode.MONTH : mode;
+            return this;
+        }
+
+        /** Open the list on the calendar rather than the table. */
+        public CalendarSpec<E> defaultView() {
+            this.defaultView = true;
+            return this;
+        }
+
+        public String startField() { return startField; }
+
+        public String endField() { return endField; }
+
+        public String titleField() { return titleField; }
+
+        public String colorField() { return colorField; }
+
+        public CalendarMode defaultMode() { return defaultMode; }
+
+        public boolean isDefaultView() { return defaultView; }
+    }
+
+    /**
+     * A timeline (resource scheduler) list view: the start/end fields, an optional lane reference,
+     * the {@link #title}/{@link #colorBy} fields, the slot step and visible hours of the day axis,
+     * and whether the list opens on the timeline rather than the table.
+     */
+    public static final class TimelineSpec<E> {
+        private String startField;
+        private String endField;
+        private String laneField;
+        private String titleField;
+        private String colorField;
+        private int slotMinutes = 30;
+        private int startHour = 0;
+        private int endHour = 24;
+        private boolean defaultView = false;
+
+        TimelineSpec() {}
+
+        /** The field shown as a block's title (defaults to a system identifier when unset). */
+        public TimelineSpec<E> title(String titleField) {
+            this.titleField = titleField;
+            return this;
+        }
+
+        /** Compiler-checked title field. */
+        public <V> TimelineSpec<E> title(Field<E, V> field) {
+            return title(Fields.name(field));
+        }
+
+        /** Colour blocks by this field; see {@link CalendarSpec#colorBy(String)}. */
+        public TimelineSpec<E> colorBy(String colorField) {
+            this.colorField = colorField;
+            return this;
+        }
+
+        /** Compiler-checked colour field. */
+        public <V> TimelineSpec<E> colorBy(Field<E, V> field) {
+            return colorBy(Fields.name(field));
+        }
+
+        /**
+         * The slot step in minutes: the grid lines, and what a drag or resize snaps to. Must divide
+         * an hour evenly (5, 10, 15, 20, 30 or 60); the default is 30.
+         */
+        public TimelineSpec<E> slotMinutes(int slotMinutes) {
+            if (slotMinutes < 5 || slotMinutes > 60 || 60 % slotMinutes != 0) {
+                throw new IllegalArgumentException(
+                        "slotMinutes must divide an hour evenly (5, 10, 15, 20, 30 or 60): " + slotMinutes);
+            }
+            this.slotMinutes = slotMinutes;
+            return this;
+        }
+
+        /**
+         * The hours of the day the axis shows, e.g. {@code hours(8, 21)} for an 08:00–21:00 working
+         * day ({@code endHour} is exclusive, up to 24). The default is the whole day. Blocks outside
+         * the range are clipped to it.
+         */
+        public TimelineSpec<E> hours(int startHour, int endHour) {
+            if (startHour < 0 || endHour > 24 || startHour >= endHour) {
+                throw new IllegalArgumentException(
+                        "hours must satisfy 0 <= startHour < endHour <= 24: " + startHour + ", " + endHour);
+            }
+            this.startHour = startHour;
+            this.endHour = endHour;
+            return this;
+        }
+
+        /** Open the list on the timeline rather than the table. */
+        public TimelineSpec<E> defaultView() {
+            this.defaultView = true;
+            return this;
+        }
+
+        public String startField() { return startField; }
+
+        public String endField() { return endField; }
+
+        public String laneField() { return laneField; }
+
+        public String titleField() { return titleField; }
+
+        public String colorField() { return colorField; }
+
+        public int slotMinutes() { return slotMinutes; }
+
+        public int startHour() { return startHour; }
+
+        public int endHour() { return endHour; }
+
+        public boolean isDefaultView() { return defaultView; }
     }
 
     /**

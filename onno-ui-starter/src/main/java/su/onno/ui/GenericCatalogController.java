@@ -43,15 +43,17 @@ public class GenericCatalogController {
      * folders, each with {@code hasChildFolders} (#411).
      */
     @GetMapping("/{name}/children")
-    public List<Map<String, Object>> children(@PathVariable String name,
-                                              @RequestParam(required = false) UUID parent,
-                                              @RequestParam(defaultValue = "false") boolean folders,
-                                              @RequestParam(defaultValue = "logical") String representation,
-                                              AccessSubject subject) {
+    public Map<String, Object> children(@PathVariable String name,
+            @RequestParam(required = false) UUID parent, @RequestParam(defaultValue = "false") boolean folders,
+            @RequestParam(defaultValue = "logical") String representation,
+            @RequestParam(required = false) String cursor, @RequestParam(defaultValue = "100") int limit,
+            AccessSubject subject) {
         CatalogDescriptor desc = query.require(name);
         access.requireRead(subject, desc);
-        return EntityJsonRepresentation.catalogs(desc, query.children(subject, desc, parent, folders),
-                EntityJsonRepresentation.parse(representation));
+        var page = query.childrenPage(subject, desc, parent, folders, cursor, limit);
+        return KeysetWindow.envelope(new su.onno.query.KeysetWindow.Page<>(
+                EntityJsonRepresentation.catalogs(desc, page.rows(), EntityJsonRepresentation.parse(representation)),
+                page.nextCursor(), page.hasMore()));
     }
 
     /**
@@ -59,16 +61,17 @@ public class GenericCatalogController {
      * {@code ids} are comma-separated or repeated; malformed ones are ignored.
      */
     @GetMapping("/{name}/tree")
-    public List<Map<String, Object>> tree(@PathVariable String name,
-                                          @RequestParam(required = false) List<String> ids,
-                                          @RequestParam(defaultValue = "logical") String representation,
-                                          AccessSubject subject) {
+    public Object tree(@PathVariable String name, @RequestParam(required = false) List<String> ids,
+            @RequestParam(defaultValue = "logical") String representation,
+            @RequestParam(required = false) String cursor, @RequestParam(defaultValue = "100") int limit,
+            AccessSubject subject) {
         CatalogDescriptor desc = query.require(name);
         access.requireRead(subject, desc);
-        List<Map<String, Object>> rows = ids == null
-                ? query.tree(subject, desc)
-                : query.paths(subject, desc, parseIds(ids));
-        return EntityJsonRepresentation.catalogs(desc, rows, EntityJsonRepresentation.parse(representation));
+        var mode = EntityJsonRepresentation.parse(representation);
+        if (ids != null) return EntityJsonRepresentation.catalogs(desc, query.paths(subject, desc, parseIds(ids)), mode);
+        var page = query.treePage(subject, desc, cursor, limit);
+        return KeysetWindow.envelope(new su.onno.query.KeysetWindow.Page<>(
+                EntityJsonRepresentation.catalogs(desc, page.rows(), mode), page.nextCursor(), page.hasMore()));
     }
 
     private static List<UUID> parseIds(List<String> values) {
@@ -106,14 +109,16 @@ public class GenericCatalogController {
      * resolves the junction and enforces read access on it.
      */
     @GetMapping("/{name}/{id}/related/{relatedName}")
-    public List<Map<String, Object>> related(@PathVariable String name, @PathVariable UUID id,
+    public Map<String, Object> related(@PathVariable String name, @PathVariable UUID id,
                                              @PathVariable String relatedName,
                                              @RequestParam(defaultValue = "logical") String representation,
+                                             @RequestParam(required = false) String cursor,
+                                             @RequestParam(defaultValue = "100") int limit,
                                              AccessSubject subject) {
         CatalogDescriptor parent = query.require(name);
         access.requireRead(subject, parent);
-        return relatedLists.rows(parent.javaClass(), parent.logicalName(), relatedName, id, subject,
-                EntityJsonRepresentation.parse(representation));
+        return KeysetWindow.envelope(relatedLists.page(parent.javaClass(), parent.logicalName(), relatedName, id, subject,
+                EntityJsonRepresentation.parse(representation), cursor, limit));
     }
 
     @PostMapping("/{name}")

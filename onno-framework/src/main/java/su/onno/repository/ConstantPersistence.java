@@ -65,6 +65,8 @@ public class ConstantPersistence {
         if (type == UUID.class) return UUID.fromString(raw);
         if (type == LocalDate.class) return LocalDate.parse(raw);
         if (type == LocalDateTime.class) return LocalDateTime.parse(raw);
+        if (type == java.time.LocalTime.class) return java.time.LocalTime.parse(raw);
+        if (type == java.time.Instant.class) return java.time.Instant.parse(raw);
         throw new IllegalArgumentException("Unsupported constant type: " + type.getName());
     }
 }

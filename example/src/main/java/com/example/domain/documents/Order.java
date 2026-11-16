@@ -45,7 +45,7 @@ import java.util.List;
  * <p>{@code items} is a {@code @TabularSection}: repeated {@link OrderLine} rows stored with the
  * order. {@code @AccessControl} lets any MANAGER read and write orders.</p>
  */
-@Document(name = "Orders", title = "Order", numberPrefix = "O-", context = "Sales")
+@Document(name = "Orders", title = "Order", numberPrefix = "O-", context = "Sales", history = true)
 @AccessControl(readRoles = {"MANAGER"}, writeRoles = {"MANAGER"})
 @Getter
 @Setter

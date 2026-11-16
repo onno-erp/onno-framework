@@ -29,7 +29,7 @@ function mount(groups: unknown = []) {
       }
       return response(current);
     }
-    if (path.endsWith("/activity")) return response({ entries: [], hasMore: false });
+    if (path.endsWith("/activity")) return response({ rows: [], hasMore: false });
     if (path.startsWith("/api/crm/contacts/")) return response({ fields: {}, identities: [] });
     if (path.endsWith("/delivery")) return response({ connected: true, label: "Email", replyCapability: "AVAILABLE", maxTextLength: 8000 });
     return response([]);

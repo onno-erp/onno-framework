@@ -11,7 +11,17 @@ public record ResolvedListView(String title, List<Column> columns,
                                boolean searchable, String sortColumn, boolean sortDescending,
                                List<Filter> filters, MapView mapView,
                                int pageSize, Grouping grouping,
-                               CustomView customView, boolean selectionCheckboxes, String selectionWidget) {
+                               CustomView customView, boolean selectionCheckboxes, String selectionWidget,
+                               CalendarView calendarView, TimelineView timelineView) {
+
+    /** Backward-compatible constructor: no calendar or timeline view. */
+    public ResolvedListView(String title, List<Column> columns, boolean searchable,
+                            String sortColumn, boolean sortDescending, List<Filter> filters,
+                            MapView mapView, int pageSize, Grouping grouping, CustomView customView,
+                            boolean selectionCheckboxes, String selectionWidget) {
+        this(title, columns, searchable, sortColumn, sortDescending, filters, mapView,
+                pageSize, grouping, customView, selectionCheckboxes, selectionWidget, null, null);
+    }
 
     public ResolvedListView(String title, List<Column> columns, boolean searchable,
                             String sortColumn, boolean sortDescending, List<Filter> filters,
@@ -93,6 +103,50 @@ public record ResolvedListView(String title, List<Column> columns,
             lngField = lngField == null ? "" : lngField;
             geoJsonField = geoJsonField == null ? "" : geoJsonField;
             labelField = labelField == null ? "" : labelField;
+        }
+    }
+
+    /**
+     * One field a calendar/timeline view reads: the logical row {@code key} (what the list feed's
+     * rows and the update command call it) and the data {@code column} the feed's range filters
+     * address. Both blank means "unset".
+     */
+    public record ViewField(String key, String column) {
+        public static final ViewField NONE = new ViewField("", "");
+
+        public ViewField {
+            key = key == null ? "" : key;
+            column = column == null ? "" : column;
+        }
+
+        public boolean isSet() {
+            return !key.isEmpty();
+        }
+    }
+
+    /**
+     * A resolved calendar view (see {@code ListSpec.calendar}): the {@code start} field (always a
+     * resolved date/time column — an unresolved one drops the view), the optional {@code end},
+     * {@code title} and {@code color} fields, the grid it opens on ({@code "month"}, {@code "week"}
+     * or {@code "day"}) and whether the list opens on the calendar.
+     */
+    public record CalendarView(ViewField start, ViewField end, ViewField title, ViewField color,
+                               String mode, boolean defaultView) {}
+
+    /**
+     * A resolved timeline view (see {@code ListSpec.timeline}): the {@code start}/{@code end}
+     * date-time fields (both resolved — otherwise the view is dropped), the optional {@code lane}
+     * reference with the {@code laneKind} ({@code "catalogs"}/{@code "documents"}) and route
+     * {@code laneTarget} its lanes are listed from, the optional {@code title}/{@code color}
+     * fields, the slot step and the visible hours, and whether the list opens on the timeline.
+     */
+    public record TimelineView(ViewField start, ViewField end, ViewField lane, String laneKind,
+                               String laneTarget, String laneLabel, ViewField title, ViewField color,
+                               int slotMinutes, int startHour, int endHour, boolean defaultView) {
+        public TimelineView {
+            laneKind = laneKind == null ? "" : laneKind;
+            laneTarget = laneTarget == null ? "" : laneTarget;
+            laneLabel = laneLabel == null ? "" : laneLabel;
         }
     }
 

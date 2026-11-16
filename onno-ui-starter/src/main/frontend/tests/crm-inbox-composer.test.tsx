@@ -28,7 +28,7 @@ function mount(delivery: Record<string, object> = {}) {
       list: { columns: [], filters: [], searchable: false, sort: { column: null, descending: false }, pageSize: 50, custom: { type: "crmInbox", defaultView: true } } });
     if (path === "/api/crm/workspace") return response({ config });
     const activity = path.match(/^\/api\/crm\/contacts\/(\w+)\/activity$/);
-    if (activity) return response({ hasMore: false, entries: [{ id: `message:${activity[1]}`, conversationId: `chat-${activity[1]}`, kind: "CUSTOMER_MESSAGE", direction: "INBOUND",
+    if (activity) return response({ hasMore: false, rows: [{ id: `message:${activity[1]}`, conversationId: `chat-${activity[1]}`, kind: "CUSTOMER_MESSAGE", direction: "INBOUND",
       channel: "EMAIL", authorName: activity[1], body: `Hello from ${activity[1]}`, at: "2026-11-09T08:00:00Z", attachments: [] }] });
     if (path.startsWith("/api/crm/contacts/")) return response({ fields: {}, identities: [] });
     const conversation = path.match(/^\/api\/crm\/conversations\/([\w-]+)\/delivery$/);

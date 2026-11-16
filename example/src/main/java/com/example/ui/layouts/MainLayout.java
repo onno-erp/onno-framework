@@ -6,6 +6,7 @@ import com.example.domain.catalogs.Customer;
 import com.example.domain.catalogs.Employee;
 import com.example.domain.catalogs.Supplier;
 import com.example.domain.documents.Order;
+import com.example.domain.documents.ScheduleEvent;
 import com.example.domain.documents.StockReceipt;
 import com.example.domain.registers.BookSales;
 import com.example.domain.registers.BookStock;
@@ -98,10 +99,11 @@ public class MainLayout implements Layout {
         var people = layout.section("People")
                 .order(4)
                 .icon("users")
-                // Scheduling is calendar-shaped work, so expose the authored Team page rather than
-                // a raw ScheduleEvent document list. The entity remains directly routable for
-                // calendar event forms and the "New team event" action.
-                .page("/team", "Team", "users");
+                // Scheduling is calendar-shaped work: the authored Team page leads, and the
+                // ScheduleEvent list beside it switches between table, calendar and a per-organizer
+                // timeline (ScheduleEventView).
+                .page("/team", "Team", "users")
+                .document(ScheduleEvent.class);
         if (includeEmployees) {
             people.catalog(Employee.class);
         }
@@ -121,7 +123,9 @@ public class MainLayout implements Layout {
             layout.section("System")
                     .order(6)
                     .icon("settings")
-                    .page("/settings", "Settings", "settings");
+                    .page("/settings", "Settings", "settings")
+                    // Built-in period-close administration page (onno-ui-starter).
+                    .page(su.onno.ui.period.PeriodClosePage.ROUTE, "Period close", "lock");
         }
 
     }

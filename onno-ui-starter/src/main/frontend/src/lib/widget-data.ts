@@ -78,8 +78,22 @@ export function useWidgetRows(
     const fail = () => alive && setItems([]);
     if (widget.entityType === "document") api.listDocuments(name, undefined, undefined, filter).then(set).catch(fail);
     else if (widget.entityType === "catalog") api.listCatalog(name, filter).then(set).catch(fail);
-    else if (widget.entityType === "register")
-      api.getTurnover(name, turnoverRange?.from ?? ALL_TIME_FROM, turnoverRange?.to ?? ALL_TIME_TO).then(set).catch(fail);
+    else if (widget.entityType === "register") {
+      // Accounting widgets must consume every window, never treat a preview as a full total.
+      void (async () => {
+        const rows: EntityRecord[] = [];
+        let cursor: string | null = null;
+        do {
+          const page = await api.getTurnover(name, turnoverRange?.from ?? ALL_TIME_FROM,
+            turnoverRange?.to ?? ALL_TIME_TO, undefined, { cursor, limit: 500 });
+          if (!alive) return;
+          rows.push(...page.rows);
+          cursor = page.nextCursor;
+          if (page.hasMore && !cursor) throw new Error("Register feed omitted its continuation");
+        } while (cursor);
+        set(rows);
+      })().catch(fail);
+    }
     else fail();
     return () => {
       alive = false;

@@ -17,7 +17,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,7 +33,7 @@ class CatalogQueryServiceKeysetTest {
     @Catalog(name = "KsClients")
     static class Client extends CatalogObject {
         @Attribute(length = 120)
-        private String tier;
+        @SuppressWarnings("unused") /* Read by metadata reflection. */ private String tier;
     }
 
     private static final List<String> NONE = List.of();
@@ -64,7 +63,7 @@ class CatalogQueryServiceKeysetTest {
         for (int i = 1; i <= 7; i++) {
             insert(String.format("C-%02d", i), "Client " + i, "std");
         }
-        List<String> codes = drainByCode(false, 2);
+        List<String> codes = drainByCode(false);
         assertThat(codes).containsExactly("C-01", "C-02", "C-03", "C-04", "C-05", "C-06", "C-07");
     }
 
@@ -74,7 +73,7 @@ class CatalogQueryServiceKeysetTest {
             insert(String.format("C-%02d", i), "Client " + i, "std");
         }
         // The default list direction (the controller's descending(dir) default).
-        assertThat(drainByCode(true, 2)).containsExactly("C-05", "C-04", "C-03", "C-02", "C-01");
+        assertThat(drainByCode(true)).containsExactly("C-05", "C-04", "C-03", "C-02", "C-01");
     }
 
     @Test
@@ -84,7 +83,7 @@ class CatalogQueryServiceKeysetTest {
         for (int i = 1; i <= 6; i++) {
             insert(String.format("C-%02d", i), "Same Name", "std");
         }
-        List<String> codes = drainBy("_description", false, 2);
+        List<String> codes = drainBy("_description", false);
         assertThat(codes).hasSize(6).doesNotHaveDuplicates()
                 .containsExactlyInAnyOrder("C-01", "C-02", "C-03", "C-04", "C-05", "C-06");
     }
@@ -97,7 +96,7 @@ class CatalogQueryServiceKeysetTest {
         insert("C-03", "C", "silver");
         insert("C-04", "D", null);
         insert("C-05", "E", "gold");
-        List<String> codes = drainBy(tierColumn(), false, 2);
+        List<String> codes = drainBy(tierColumn(), false);
         assertThat(codes).hasSize(5).doesNotHaveDuplicates()
                 .containsExactlyInAnyOrder("C-01", "C-02", "C-03", "C-04", "C-05");
     }
@@ -110,7 +109,7 @@ class CatalogQueryServiceKeysetTest {
         jdbi.useHandle(h -> h.createUpdate("UPDATE " + catalog.tableName()
                 + " SET _deletion_mark = true WHERE _id = :id").bind("id", goneId).execute());
 
-        assertThat(drainByCode(false, 2)).containsExactly("C-01", "C-03");
+        assertThat(drainByCode(false)).containsExactly("C-01", "C-03");
     }
 
     @Test
@@ -123,19 +122,44 @@ class CatalogQueryServiceKeysetTest {
     }
 
     @Test
-    void aStaleCursorFromADifferentSortRestartsFromTheFirstWindow() {
-        for (int i = 1; i <= 4; i++) {
-            insert(String.format("C-%02d", i), "Client " + i, "std");
-        }
-        // A cursor minted while sorting by _code, then replayed against a _description sort, must be
-        // ignored (treated as the first window) rather than seeking to a meaningless position.
-        String codeCursor = page(null, 2, "_code", false).nextCursor();
-        assertThat(codeCursor).isNotNull();
+    void aCursorFromAnotherSortIsRejected() {
+        for (int i = 1; i <= 4; i++) insert("C-" + i, "Client " + i, "std");
+        String cursor = page(null, 2, "_code", false).nextCursor();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> page(cursor, 2, "_description", false))
+                .isInstanceOfSatisfying(org.springframework.web.server.ResponseStatusException.class,
+                        e -> assertThat(e.getStatusCode().value()).isEqualTo(400));
+    }
 
-        KeysetPage restarted = page(codeCursor, 2, "_description", false);
-        // First window of the _description sort — i.e. as if no cursor were supplied.
-        KeysetPage fresh = page(null, 2, "_description", false);
-        assertThat(codes(restarted)).isEqualTo(codes(fresh));
+    @Test
+    void unrestrictedUsersCannotExchangeCursors() {
+        insert("C-01", "A", "std"); insert("C-02", "B", "std");
+        var alice = AccessSubject.user("alice", java.util.Set.of());
+        var bob = AccessSubject.user("bob", java.util.Set.of());
+        var first = service.keysetPage(alice, catalog, null, 1, "_code", false, null,
+                NONE, NONE, NONE, NONE, NONE, NONE, null);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.keysetPage(bob, catalog, first.nextCursor(),
+                1, "_code", false, null, NONE, NONE, NONE, NONE, NONE, NONE, null))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+    }
+
+    @Test
+    void insertingBeforeTheBoundaryDoesNotShiftTheNextWindow() {
+        insert("C-02", "B", "std");
+        insert("C-04", "D", "std");
+        insert("C-06", "F", "std");
+        KeysetPage first = page(null, 1, "_code", false);
+        insert("C-01", "A", "std");
+        insert("C-03", "C", "std");
+        assertThat(codes(page(first.nextCursor(), 10, "_code", false)))
+                .containsExactly("C-03", "C-04", "C-06");
+    }
+
+    @Test
+    void aMalformedCursorRestartsTheFeed() {
+        insert("C-01", "A", "std");
+        insert("C-02", "B", "std");
+        assertThat(codes(page("broken!", 1, "_code", false)))
+                .isEqualTo(codes(page(null, 1, "_code", false)));
     }
 
     // --- helpers ---------------------------------------------------------------
@@ -145,16 +169,16 @@ class CatalogQueryServiceKeysetTest {
                 NONE, NONE, NONE, NONE, NONE, NONE, null);
     }
 
-    private List<String> drainByCode(boolean descending, int limit) {
-        return drainBy("_code", descending, limit);
+    private List<String> drainByCode(boolean descending) {
+        return drainBy("_code", descending);
     }
 
     /** Walk the whole list one window at a time, collecting codes; asserts the hasMore/cursor contract. */
-    private List<String> drainBy(String sort, boolean descending, int limit) {
+    private List<String> drainBy(String sort, boolean descending) {
         List<String> codes = new ArrayList<>();
         String cursor = null;
         for (int guard = 0; guard < 1000; guard++) {
-            KeysetPage p = page(cursor, limit, sort, descending);
+            KeysetPage p = page(cursor, 2, sort, descending);
             codes.addAll(codes(p));
             if (!p.hasMore()) {
                 assertThat(p.nextCursor()).isNull();
@@ -173,7 +197,7 @@ class CatalogQueryServiceKeysetTest {
     private String tierColumn() {
         return catalog.attributes().stream()
                 .filter(a -> a.fieldName().equals("tier"))
-                .map(a -> a.columnName()).findFirst().orElseThrow();
+                .map(su.onno.metadata.AttributeDescriptor::columnName).findFirst().orElseThrow();
     }
 
     private UUID insert(String code, String description, String tier) {

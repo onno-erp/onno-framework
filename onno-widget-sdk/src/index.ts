@@ -20,6 +20,8 @@ import type {
 
 export type {
   ApiPath,
+  PageRequest,
+  CollectionPage,
   ChatMessage,
   ChatMessageRenderer,
   ChatMessageRendererProps,
