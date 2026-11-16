@@ -106,7 +106,7 @@ public class InformationRegisterQueryService {
      */
     public List<Map<String, Object>> relatedRows(AccessSubject subject, InformationRegisterDescriptor desc,
                                                   String viaColumn, UUID parentId) {
-        return relatedPage(subject, desc, viaColumn, parentId, null, 100).rows();
+        return su.onno.query.KeysetWindow.drain(c -> relatedPage(subject, desc, viaColumn, parentId, c, su.onno.query.KeysetWindow.MAX_LIMIT));
     }
 
     public su.onno.query.KeysetWindow.Page<Map<String, Object>> relatedPage(AccessSubject subject,

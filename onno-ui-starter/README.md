@@ -197,8 +197,8 @@ duplicates with `400`. See [the headless contract](../docs/HEADLESS_READ_API.md)
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/{name}/children?parent={uuid}` | Direct children (hierarchical catalogs only; else `400`). Omit `parent` for roots. `folders=true` returns just the folders, each with `hasChildFolders` (whether it holds a sub-folder the caller may read). |
-| GET | `/{name}/tree` | Full nested tree (hierarchical only). `ids=a,b` returns only the paths from the roots to those records; a path starts at the first ancestor the caller may read, and unreadable or deleted ids are left out. |
+| GET | `/{name}/children?parent={uuid}` | Direct children (hierarchical catalogs only; else `400`), one keyset window `{ rows, nextCursor, hasMore }` (`?cursor=&limit=`, default 100, max 500), folders first then by description. Omit `parent` for roots. `folders=true` returns just the folders, each with `hasChildFolders` (whether it holds a sub-folder the caller may read). |
+| GET | `/{name}/tree` | Every live node the caller may read as a flat keyset window `{ rows, nextCursor, hasMore }` (`?cursor=&limit=`, default 100, max 500); each node carries its `parent`, so a client assembles the hierarchy across windows (hierarchical only). `ids=a,b` instead returns a plain array of just the paths from the roots to those records; a path starts at the first ancestor the caller may read, and unreadable or deleted ids are left out. |
 | GET | `/{name}/{id}` | Single item. |
 | POST | `/{name}` | Create. Body is a JSON map of `code`/`description`/`folder`/`parent` + attribute fields. Code auto-generated when omitted and the catalog auto-numbers. |
 | PUT | `/{name}/{id}` | Partial update. Send `version` (or `_version`) for optimistic locking — a stale version returns `409`. |
@@ -241,9 +241,14 @@ Writes, post/unpost and `posting-preview` on a document inside a closed period r
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/{name}/movements?from=&to=` | Raw movements. |
-| GET | `/{name}/balance?{dim}={value}...` | Current balances (query params are dimension filters). |
-| GET | `/{name}/turnover?from=&to=&{dim}=...` | Period turnover; `from` and `to` are required. |
+| GET | `/{name}/movements?from=&to=` | Raw movements, newest first, one keyset window `{ rows, nextCursor, hasMore }` (`?cursor=&limit=`, default 100, max 500). |
+| GET | `/{name}/balance?{dim}={value}...&asOf=` | Current (or `asOf`) balances, one keyset window `{ rows, nextCursor, hasMore }` (`?cursor=&limit=`, default 100, max 500). Other query params are dimension equality filters, bound as the dimension's declared type (a malformed value is `400`). |
+| GET | `/{name}/turnover?from=&to=&{dim}=...` | Period turnover per dimension tuple, one keyset window `{ rows, nextCursor, hasMore }` (`?cursor=&limit=`, default 100, max 500); `from` and `to` are required. Only dimension names act as filters. |
+
+These are the same shared envelope as every other collection read: follow `nextCursor` until
+`hasMore` is false; a cursor minted for another feed, filter set or user is `400`. From Java,
+`RegisterQueryService.movements/balance/turnover(...)` return the complete result by following the
+cursor (`KeysetWindow.drain`); use the `*Page` variants on request paths.
 
 The catalog/document **list grid** is fed window-by-window from a dedicated feed so a 100k-row entity
 never ships whole to the client. The default is **keyset (seek) pagination**: indexed, constant-time
@@ -345,8 +350,8 @@ as a colored status pill:
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/list/registers/{name}/movements?cursor=&limit=&sort=&dir=&from=&to=&eq=&ge=&le=` | One window of movements + the live total, for the virtualized register surface. |
-| GET | `/api/list/registers/{name}/balance?cursor=&limit=&sort=&dir=&eq=&in=&ge=&le=` | One window of current balances + the live total (BALANCE registers). |
+| GET | `/api/list/registers/{name}/movements?cursor=&limit=&sort=&dir=&from=&to=&eq=&ge=&le=` | One window of movements for the virtualized register surface; `count=exact` adds `total`. |
+| GET | `/api/list/registers/{name}/balance?cursor=&limit=&sort=&dir=&eq=&in=&ge=&le=` | One window of current balances (BALANCE registers); `count=exact` adds `total`. |
 
 ### DivKit server-driven UI — `/api/divkit`
 
@@ -1003,16 +1008,16 @@ Headless clients use the same boundary:
 
 ```text
 GET  /api/process-definitions
-GET  /api/processes
+GET  /api/processes                       ?cursor=&limit= → {rows, nextCursor, hasMore}
 POST /api/processes/{definitionKey}
 GET  /api/processes/{instanceId}
-GET  /api/processes/{instanceId}/history
-GET  /api/processes/{instanceId}/executions
+GET  /api/processes/{instanceId}/history   ?cursor=&limit= → {rows, nextCursor, hasMore}
+GET  /api/processes/{instanceId}/executions ?cursor=&limit= → {rows, nextCursor, hasMore}
 POST /api/processes/{instanceId}/cancel    {"reason":"…"}
 POST /api/processes/{instanceId}/migrate
-GET  /api/tasks
+GET  /api/tasks                           ?cursor=&limit= → {rows, nextCursor, hasMore}
 POST /api/tasks/{workItemId}/claim
-GET  /api/tasks/{workItemId}/history
+GET  /api/tasks/{workItemId}/history       ?cursor=&limit= → {rows, nextCursor, hasMore}
 POST /api/tasks/{workItemId}/delegate   {"targetActorId":"identity-record-uuid","reason":"…"}
 POST /api/tasks/{workItemId}/complete   {"outcome":"ENUM_CONSTANT"}
 ```
@@ -1565,7 +1570,7 @@ first expand and refreshes when the record changes.
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| GET | `/api/history/{kind}/{name}/{id}` | The record's change entries, newest first. `?limit=` (default 50, max 200) and `?before=` (the previous page's `nextBefore`). `404` if the entity hasn't opted in. |
+| GET | `/api/history/{kind}/{name}/{id}` | The record's change entries, newest first, one keyset window `{ rows, nextCursor, hasMore }` (`?cursor=&limit=`, default 100, max 500). The cursor is bound to the record and the caller (a foreign one is `400`). `404` if the entity hasn't opted in. |
 
 Reading history needs what reading the record needs: the entity's read grant and, for a
 record-scoped viewer, the record inside its `RecordAccessPolicy` scope. References the viewer may
@@ -1602,7 +1607,7 @@ endpoints return **404** — the comment surface doesn't exist there.
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/comments/{kind}/{name}/{id}` | The thread for one record, oldest first. `{kind}` is `catalogs`/`documents`. `404` if the entity hasn't opted into comments. Each comment carries `parentId` (null for top-level), `mentions` (live mention/reference resolution), and grouped `reactions` (`{ emoji, count, mine }`). |
+| GET | `/api/comments/{kind}/{name}/{id}` | The thread for one record, oldest first, one keyset window `{ rows, nextCursor, hasMore }` (`?cursor=&limit=`, default 100, max 500). `{kind}` is `catalogs`/`documents`. `404` if the entity hasn't opted into comments. Each comment carries `parentId` (null for top-level), `mentions` (live mention/reference resolution), and grouped `reactions` (`{ emoji, count, mine }`). |
 | POST | `/api/comments/{kind}/{name}/{id}` | Add a comment or reply — body `{ "body": "…", "parentId": "…" }` (`parentId` optional/null). The author is stamped from the session ([CurrentUserResolver](src/main/java/su/onno/ui/CurrentUserResolver.java)); the client never asserts identity. |
 | POST | `/api/comments/{commentId}/reactions` | Toggle the caller's reaction — body `{ "emoji": "👍" }`; returns the updated grouped reactions for that comment and live-syncs the thread. Supported quick reactions: `👍`, `❤️`, `🎉`, `👀`, `✅`. |
 | DELETE | `/api/comments/{commentId}` | Soft-delete (kept for audit). Author or `ADMIN` only. |
@@ -1650,7 +1655,7 @@ feature is disabled.
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/notifications[?unread&cursor]` | The caller's timeline, newest first, keyset-paginated: `{ items, nextCursor, hasMore, unreadCount }`. `?unread=true` restricts to unread; `?cursor=` resumes. Scoped to the caller — never another user's feed. A record-scoped viewer gets no item about a record it can't read, and `unreadCount` leaves those out. |
+| GET | `/api/notifications[?unread&cursor]` | The caller's timeline, newest first, keyset-paginated: `{ rows, nextCursor, hasMore, unreadCount }`. `?unread=true` restricts to unread; `?cursor=` resumes. Scoped to the caller — never another user's feed. A record-scoped viewer gets no item about a record it can't read, and `unreadCount` leaves those out. |
 | POST | `/api/notifications/{id}/read` | Mark one read; returns the fresh `{ unreadCount }`. |
 | POST | `/api/notifications/read-all` | Mark every unread one read; returns `{ marked, unreadCount }`. |
 

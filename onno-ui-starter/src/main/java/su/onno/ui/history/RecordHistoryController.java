@@ -9,6 +9,8 @@ import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.TabularSectionDescriptor;
+import su.onno.query.Cursor;
+import su.onno.query.KeysetWindow;
 import su.onno.ui.CatalogQueryService;
 import su.onno.ui.DocumentQueryService;
 import su.onno.ui.FieldHint;
@@ -25,10 +27,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -38,7 +38,8 @@ import java.util.UUID;
 
 /**
  * The record change-history read endpoint: {@code GET /api/history/{kind}/{name}/{id}} returns the
- * recorded events of one catalog item or document, newest first, addressed by the same
+ * recorded events of one catalog item or document, newest first, as one keyset window
+ * ({@code {rows, nextCursor, hasMore}}; {@code ?cursor=}, {@code ?limit=} default 100, max 500), addressed by the same
  * {@code {kind}/{name}/{id}} triple the UI routes use.
  *
  * <p>Reading history needs exactly what reading the record needs: the entity's read grant
@@ -52,9 +53,6 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/history")
 public class RecordHistoryController {
-
-    static final int DEFAULT_LIMIT = 50;
-    static final int MAX_LIMIT = 200;
 
     private final RecordHistory history;
     private final UiAccessService access;
@@ -82,19 +80,13 @@ public class RecordHistoryController {
     @GetMapping("/{kind}/{name}/{id}")
     public Map<String, Object> list(@PathVariable String kind, @PathVariable String name,
                                     @PathVariable UUID id,
-                                    @RequestParam(required = false) Integer limit,
-                                    @RequestParam(required = false) String before,
+                                    @RequestParam(required = false) String cursor,
+                                    @RequestParam(defaultValue = "100") int limit,
                                     AccessSubject subject) {
         Target target = requireReadable(kind, name, id, subject);
-        int pageSize = limit == null ? DEFAULT_LIMIT : Math.max(1, Math.min(limit, MAX_LIMIT));
-        Instant cursor = parseCursor(before);
-
-        // One extra entry tells us whether an older page exists without a count query.
-        List<HistoryEntry> entries = history.list(id, cursor, pageSize + 1);
-        boolean more = entries.size() > pageSize;
-        if (more) {
-            entries = entries.subList(0, pageSize);
-        }
+        // The cursor is bound to this record and the caller's identity; a foreign one is a 400.
+        KeysetWindow.Page<HistoryEntry> page = history.page(id, cursor, limit, Cursor.subjectContext(subject));
+        List<HistoryEntry> entries = page.rows();
         Map<HistoryChange, Map<String, Object>> presented = present(target, entries, subject);
 
         List<Map<String, Object>> out = new ArrayList<>(entries.size());
@@ -112,10 +104,7 @@ public class RecordHistoryController {
             json.put("changes", changes);
             out.add(json);
         }
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("entries", out);
-        response.put("nextBefore", more ? entries.get(entries.size() - 1).at().toString() : null);
-        return response;
+        return su.onno.ui.KeysetWindow.envelope(new KeysetWindow.Page<>(out, page.nextCursor(), page.hasMore()));
     }
 
     /**
@@ -154,17 +143,6 @@ public class RecordHistoryController {
             }
         }
         return target;
-    }
-
-    private static Instant parseCursor(String before) {
-        if (before == null || before.isBlank()) {
-            return null;
-        }
-        try {
-            return Instant.parse(before);
-        } catch (DateTimeParseException invalid) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "before must be an ISO-8601 instant");
-        }
     }
 
     /**

@@ -476,7 +476,7 @@ class RecordPolicyConformanceTest {
         // under B's instance, a mirror ref to B's tenant) are masked — no B id or display leaks.
         ok(get("/api/history/catalogs/LkInstances/" + instanceA));
         Map<String, Object> orphanHistory = jsonMap(ok(get("/api/history/catalogs/LkInstances/" + instanceUnderB)));
-        assertThat((List<?>) orphanHistory.get("entries")).isNotEmpty();
+        assertThat((List<?>) orphanHistory.get("rows")).isNotEmpty();
         ok(get("/api/history/catalogs/LkInstances/" + instanceMirror));
         status(get("/api/history/catalogs/LkInstances/" + instanceB), 404);
 

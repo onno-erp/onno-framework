@@ -37,6 +37,41 @@ class KeysetWindowTest {
             assertThat(seen).containsExactlyElementsOf(descending ? List.of(1,3,4,5,6,7,8) : List.of(5,4,3,1,8,7,6));
         }
     }
+    @Test void notNullOrdersSeekByRowValueAcrossTies() {
+        jdbi.useHandle(h -> {
+            h.execute("CREATE TABLE events (t INT NOT NULL, id INT NOT NULL PRIMARY KEY)");
+            for (int i = 1; i <= 9; i++) h.execute("INSERT INTO events VALUES (?, ?)", i / 3, i);
+        });
+        for (boolean descending : List.of(false, true)) {
+            List<KeysetWindow.Order> order = List.of(KeysetWindow.Order.notNull("t", descending),
+                    KeysetWindow.Order.notNull("id", descending));
+            List<Integer> seen = KeysetWindow.drain(c -> KeysetWindow.fetch(jdbi, "events", "*", "1 = 1", q -> {},
+                    order, c, 2, "events")).stream().map(r -> (Integer) r.get("id")).toList();
+            List<Integer> expected = new ArrayList<>(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9));
+            if (descending) Collections.reverse(expected);
+            assertThat(seen).containsExactlyElementsOf(expected);
+        }
+    }
+    @Test void mixedDirectionNotNullOrdersFallBackToTheExpandedSeek() {
+        jdbi.useHandle(h -> {
+            h.execute("CREATE TABLE mixed (t INT NOT NULL, id INT NOT NULL PRIMARY KEY)");
+            for (int i = 1; i <= 6; i++) h.execute("INSERT INTO mixed VALUES (?, ?)", i % 2, i);
+        });
+        List<KeysetWindow.Order> order = List.of(KeysetWindow.Order.notNull("t", true),
+                KeysetWindow.Order.notNull("id", false));
+        List<Integer> seen = KeysetWindow.drain(c -> KeysetWindow.fetch(jdbi, "mixed", "*", "1 = 1", q -> {},
+                order, c, 2, "mixed")).stream().map(r -> (Integer) r.get("id")).toList();
+        assertThat(seen).containsExactly(1, 3, 5, 2, 4, 6);
+    }
+    @Test void drainFollowsEveryWindowToTheEnd() {
+        List<Integer> all = KeysetWindow.drain(c -> page(c, true)).stream()
+                .map(r -> (Integer) r.get("b")).toList();
+        assertThat(all).containsExactly(1, 3, 4, 5, 6, 7, 8);
+    }
+    @Test void drainRejectsARepeatedCursorInsteadOfLooping() {
+        assertThatThrownBy(() -> KeysetWindow.drain(c -> new KeysetWindow.Page<>(List.of(1), "same", true)))
+                .isInstanceOf(IllegalStateException.class);
+    }
     @Test void insertionBeforeTheBoundaryDoesNotRepeatOldRows() {
         var first = page(null, true);
         jdbi.useHandle(h -> h.execute("INSERT INTO feed VALUES ('earlier', 0, 'alice')"));

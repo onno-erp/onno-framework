@@ -77,7 +77,7 @@ public class CommentService {
 
     /** The live thread for one entity, oldest comment first. */
     public List<Comment> list(String entityType, String entityName, UUID entityId) {
-        return page(entityType, entityName, entityId, null, 100, "trusted").rows();
+        return su.onno.query.KeysetWindow.drain(c -> page(entityType, entityName, entityId, c, su.onno.query.KeysetWindow.MAX_LIMIT, "trusted"));
     }
 
     public su.onno.query.KeysetWindow.Page<Comment> page(String type, String name, UUID id,
@@ -86,8 +86,8 @@ public class CommentService {
             return jdbi.withHandle(h -> su.onno.query.KeysetWindow.fetch(h, TABLE, "*",
                     "_entity_type = :type AND _entity_name = :name AND _entity_id = :id AND _deleted = false",
                     q -> q.bind("type", type).bind("name", name).bind("id", id),
-                    List.of(new su.onno.query.KeysetWindow.Order("_created_at", false),
-                            new su.onno.query.KeysetWindow.Order("_id", false)), cursor, limit,
+                    List.of(su.onno.query.KeysetWindow.Order.notNull("_created_at", false),
+                            su.onno.query.KeysetWindow.Order.notNull("_id", false)), cursor, limit,
                     "comments:" + type + ":" + name + ":" + id + ":" + fingerprint,
                     (rs, ctx) -> map(rs.getObject("_id", UUID.class), type, name, id, rs)));
         } catch (su.onno.query.Cursor.ScopeMismatchException e) {

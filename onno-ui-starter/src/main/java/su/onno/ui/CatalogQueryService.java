@@ -457,7 +457,7 @@ public class CatalogQueryService {
      */
     public List<Map<String, Object>> children(AccessSubject subject, CatalogDescriptor desc, UUID parent,
                                               boolean foldersOnly) {
-        return childrenPage(subject, desc, parent, foldersOnly, null, 500).rows();
+        return su.onno.query.KeysetWindow.drain(c -> childrenPage(subject, desc, parent, foldersOnly, c, su.onno.query.KeysetWindow.MAX_LIMIT));
     }
 
     public su.onno.query.KeysetWindow.Page<Map<String, Object>> childrenPage(AccessSubject subject,
@@ -500,7 +500,7 @@ public class CatalogQueryService {
 
     /** The whole live tree the subject may read; in-scope nodes under an out-of-scope parent become roots. */
     public List<Map<String, Object>> tree(AccessSubject subject, CatalogDescriptor desc) {
-        return buildTree(treePage(subject, desc, null, 500).rows(), null);
+        return buildTree(su.onno.query.KeysetWindow.drain(c -> treePage(subject, desc, c, su.onno.query.KeysetWindow.MAX_LIMIT)), null);
     }
 
     /** Flat paged nodes: parent links allow a client to assemble the hierarchy across windows. */
@@ -582,7 +582,7 @@ public class CatalogQueryService {
      */
     public List<Map<String, Object>> relatedRows(AccessSubject subject, CatalogDescriptor desc, String viaColumn,
                                                  UUID parentId) {
-        return relatedPage(subject, desc, viaColumn, parentId, null, 100).rows();
+        return su.onno.query.KeysetWindow.drain(c -> relatedPage(subject, desc, viaColumn, parentId, c, su.onno.query.KeysetWindow.MAX_LIMIT));
     }
 
     public su.onno.query.KeysetWindow.Page<Map<String, Object>> relatedPage(AccessSubject subject,

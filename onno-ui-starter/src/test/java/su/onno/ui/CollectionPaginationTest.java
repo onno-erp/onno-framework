@@ -82,8 +82,9 @@ class CollectionPaginationTest {
                 first.nextCursor(), 500);
         assertThat(first.rows()).hasSize(500); assertThat(last.rows()).hasSize(10);
         assertThat(last.nextCursor()).isNull();
-        assertThatThrownBy(() -> registers.turnover(subject, stock, "2020-01-01", "2030-01-01", Map.of()))
-                .isInstanceOf(IllegalStateException.class);
+        // The complete-result Java API follows the cursor past one window instead of truncating.
+        assertThat(registers.turnover(subject, stock, "2020-01-01", "2030-01-01", Map.of()))
+                .hasSize(first.rows().size() + last.rows().size());
     }
 
     @Test void hierarchyAndRelatedListsAreBoundedAndCursorBoundToParent() {

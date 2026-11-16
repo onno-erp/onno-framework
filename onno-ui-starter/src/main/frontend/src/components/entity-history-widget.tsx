@@ -118,7 +118,7 @@ export function EntityHistoryWidget({ target }: { target: HistoryTarget }) {
   const t = useMessages();
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<HistoryEntryView[] | null>(null);
-  const [nextBefore, setNextBefore] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
@@ -129,8 +129,8 @@ export function EntityHistoryWidget({ target }: { target: HistoryTarget }) {
       .listHistory(kind, name, id)
       .then((page) => {
         if (cancelled) return;
-        setEntries(page.entries);
-        setNextBefore(page.nextBefore);
+        setEntries(page.rows);
+        setNextCursor(page.hasMore ? page.nextCursor : null);
         setFailed(false);
       })
       .catch(() => {
@@ -156,13 +156,14 @@ export function EntityHistoryWidget({ target }: { target: HistoryTarget }) {
   }, [load, id, open]);
 
   const loadMore = () => {
-    if (!nextBefore || loadingMore) return;
+    if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
     api
-      .listHistory(kind, name, id, nextBefore)
+      .listHistory(kind, name, id, nextCursor)
       .then((page) => {
-        setEntries((prev) => [...(prev ?? []), ...page.entries]);
-        setNextBefore(page.nextBefore);
+        setEntries((prev) => [...(prev ?? []), ...page.rows]);
+        // A cursor that comes back unchanged would refetch the same window forever.
+        setNextCursor(page.hasMore && page.nextCursor !== nextCursor ? page.nextCursor : null);
       })
       .catch(() => setFailed(true))
       .finally(() => setLoadingMore(false));
@@ -199,7 +200,7 @@ export function EntityHistoryWidget({ target }: { target: HistoryTarget }) {
                   <Entry key={entry.id} entry={entry} t={t} />
                 ))}
               </ol>
-              {nextBefore ? (
+              {nextCursor ? (
                 <button
                   type="button"
                   onClick={loadMore}

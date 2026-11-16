@@ -22,7 +22,6 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -31,6 +30,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The storage-level recorder behind {@code history = true} (#422): capture → write → record on one
@@ -137,7 +137,7 @@ class RecordHistoryTest {
         });
         jdbi.useHandle(h -> history.recordEvent(h, Card.class, id, RecordHistory.POSTED, null));
 
-        List<HistoryEntry> entries = history.list(id, null, 50);
+        List<HistoryEntry> entries = history.list(id);
         assertThat(entries).extracting(HistoryEntry::event).containsExactly(
                 RecordHistory.POSTED, RecordHistory.RESTORED, RecordHistory.DELETED,
                 RecordHistory.UPDATED, RecordHistory.CREATED);
@@ -167,10 +167,16 @@ class RecordHistoryTest {
                 new HistoryChange("notes", 2, HistoryChange.ROW_REMOVED, "text", "second", null, false));
         assertThat(entries.get(0).changes()).isEmpty();
 
-        // Keyset paging: strictly older than the cursor.
-        Instant cursor = entries.get(1).at();
-        assertThat(history.list(id, cursor, 2)).extracting(HistoryEntry::event)
+        // Keyset paging: windows continue from the cursor without overlap, bound to their context.
+        var first = history.page(id, null, 2, "ann");
+        assertThat(first.rows()).extracting(HistoryEntry::event)
+                .containsExactly(RecordHistory.POSTED, RecordHistory.RESTORED);
+        assertThat(first.hasMore()).isTrue();
+        var second = history.page(id, first.nextCursor(), 2, "ann");
+        assertThat(second.rows()).extracting(HistoryEntry::event)
                 .containsExactly(RecordHistory.DELETED, RecordHistory.UPDATED);
+        assertThatThrownBy(() -> history.page(id, first.nextCursor(), 2, "bob"))
+                .isInstanceOf(su.onno.query.Cursor.ScopeMismatchException.class);
 
         // No plaintext or ciphertext of the secret ever reaches the table.
         List<String> values = jdbi.withHandle(h -> h.createQuery("SELECT COALESCE(_old_value, '') || COALESCE(_new_value, '')"
@@ -193,7 +199,7 @@ class RecordHistoryTest {
         } catch (IllegalStateException expected) {
             // rolled back
         }
-        assertThat(history.list(id, null, 10)).isEmpty();
+        assertThat(history.list(id)).isEmpty();
     }
 
     @Test
@@ -209,11 +215,11 @@ class RecordHistoryTest {
             history.record(h, Plain.class, id, RecordImage.ABSENT, null);
         });
         jdbi.useHandle(h -> history.recordEvent(h, Plain.class, id, RecordHistory.POSTED, null));
-        assertThat(history.list(id, null, 10)).isEmpty();
+        assertThat(history.list(id)).isEmpty();
 
         RecordHistory off = RecordHistory.disabled();
         assertThat(off.tracks(Card.class)).isFalse();
-        assertThat(off.list(id, null, 10)).isEmpty();
+        assertThat(off.list(id)).isEmpty();
         off.recordEvent(null, Card.class, id, RecordHistory.POSTED, null);
     }
 

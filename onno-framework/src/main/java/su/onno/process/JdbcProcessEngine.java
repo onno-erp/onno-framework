@@ -99,7 +99,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
 
     @Override
     public List<ProcessSnapshot> instances(ProcessActor actor) {
-        return instances(actor, null, 500).rows();
+        return su.onno.query.KeysetWindow.drain(c -> instances(actor, c, su.onno.query.KeysetWindow.MAX_LIMIT));
     }
 
     @Override
@@ -107,8 +107,8 @@ public final class JdbcProcessEngine implements ProcessEngine {
         ensureCandidates();
         return jdbi.withHandle(h -> su.onno.query.KeysetWindow.fetch(h, "onno_process_instances i", "i.*",
                 instanceVisibility(actor), q -> bindActor(q, actor),
-                List.of(new su.onno.query.KeysetWindow.Order("i._started_at", true),
-                        new su.onno.query.KeysetWindow.Order("i._id", false)), cursor, limit,
+                List.of(su.onno.query.KeysetWindow.Order.notNull("i._started_at", true),
+                        su.onno.query.KeysetWindow.Order.notNull("i._id", true)), cursor, limit,
                 actorContext(actor) + ":instances", (rs, ctx) -> instanceRow(rs))
                 .map(row -> snapshot(h, row)));
     }
@@ -126,15 +126,15 @@ public final class JdbcProcessEngine implements ProcessEngine {
 
     @Override
     public List<ProcessTransitionSnapshot> history(UUID instanceId) {
-        return history(instanceId, null, 500).rows();
+        return su.onno.query.KeysetWindow.drain(c -> history(instanceId, c, su.onno.query.KeysetWindow.MAX_LIMIT));
     }
 
     @Override
     public su.onno.query.KeysetWindow.Page<ProcessTransitionSnapshot> history(UUID instanceId, String cursor, int limit) {
         return jdbi.withHandle(h -> su.onno.query.KeysetWindow.fetch(h, "onno_process_transitions", "*",
                 "_instance_id = :instance", q -> q.bind("instance", instanceId),
-                List.of(new su.onno.query.KeysetWindow.Order("_sequence", false),
-                        new su.onno.query.KeysetWindow.Order("_id", false)), cursor, limit,
+                List.of(su.onno.query.KeysetWindow.Order.notNull("_sequence", false),
+                        su.onno.query.KeysetWindow.Order.notNull("_id", false)), cursor, limit,
                 "process-history:" + instanceId, (rs, ctx) -> new ProcessTransitionSnapshot(
                         rs.getObject("_id", UUID.class),
                         rs.getObject("_instance_id", UUID.class),
@@ -152,21 +152,21 @@ public final class JdbcProcessEngine implements ProcessEngine {
 
     @Override
     public List<ProcessTokenSnapshot> tokens(UUID instanceId) {
-        return tokens(instanceId, null, 500).rows();
+        return su.onno.query.KeysetWindow.drain(c -> tokens(instanceId, c, su.onno.query.KeysetWindow.MAX_LIMIT));
     }
 
     @Override
     public su.onno.query.KeysetWindow.Page<ProcessTokenSnapshot> tokens(UUID instanceId, String cursor, int limit) {
         return jdbi.withHandle(h -> su.onno.query.KeysetWindow.fetch(h, "onno_process_tokens", "*",
                 "_instance_id = :instance", q -> q.bind("instance", instanceId),
-                List.of(new su.onno.query.KeysetWindow.Order("_entered_at", false),
-                        new su.onno.query.KeysetWindow.Order("_id", false)), cursor, limit,
+                List.of(su.onno.query.KeysetWindow.Order.notNull("_entered_at", false),
+                        su.onno.query.KeysetWindow.Order.notNull("_id", false)), cursor, limit,
                 "process-tokens:" + instanceId, (rs, ctx) -> toTokenSnapshot(tokenRow(rs))));
     }
 
     @Override
     public List<ProcessWorkItem> inbox(ProcessActor actor) {
-        return inbox(actor, null, 500).rows();
+        return su.onno.query.KeysetWindow.drain(c -> inbox(actor, c, su.onno.query.KeysetWindow.MAX_LIMIT));
     }
 
     @Override
@@ -178,8 +178,8 @@ public final class JdbcProcessEngine implements ProcessEngine {
                 "w._status IN ('OPEN', 'CLAIMED') AND " + (isAdmin(actor) ? "1 = 1" :
                         "(w._assignee = :pgActor OR (w._status = 'OPEN' AND " + candidates() + "))"),
                 q -> bindActor(q, actor),
-                List.of(new su.onno.query.KeysetWindow.Order("w._created_at", false),
-                        new su.onno.query.KeysetWindow.Order("w._id", false)), cursor, limit,
+                List.of(su.onno.query.KeysetWindow.Order.notNull("w._created_at", false),
+                        su.onno.query.KeysetWindow.Order.notNull("w._id", false)), cursor, limit,
                 actorContext(actor) + ":inbox", (rs, ctx) -> toWorkItem(workRow(rs))));
     }
 
@@ -206,8 +206,27 @@ public final class JdbcProcessEngine implements ProcessEngine {
         return actor.id().value() + ":" + actor.roles().stream().sorted().toList();
     }
 
-    /** Upgrade existing JSON assignments into queryable rows without loading the work-item table. */
-    private synchronized void ensureCandidates() {
+    /**
+     * Upgrade JSON assignments into queryable candidate rows before a read filters on them. New work
+     * items index their candidates in their creating transaction, so normally nothing is pending:
+     * the common path is one indexed, lock-free {@code EXISTS} probe — no {@code synchronized}
+     * section and no write transaction on the read path. Only when unindexed rows exist (a database
+     * upgraded from an earlier release, or a preceding-version node during a rolling upgrade) does
+     * a read take the lock and repair them in bounded {@code FOR UPDATE} batches.
+     */
+    private void ensureCandidates() {
+        if (!candidatesPending()) return;
+        synchronized (this) {
+            backfillCandidates();
+        }
+    }
+
+    private boolean candidatesPending() {
+        return jdbi.withHandle(h -> h.createQuery("SELECT EXISTS (SELECT 1 FROM onno_process_work_items"
+                + " WHERE _candidates_indexed = false)").mapTo(Boolean.class).one());
+    }
+
+    private void backfillCandidates() {
         while (true) {
             boolean repaired = jdbi.inTransaction(h -> {
                 var rows = h.createQuery("SELECT _id, _candidate_users, _candidate_roles FROM onno_process_work_items"
@@ -338,7 +357,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
             UUID workItemId,
             ProcessActor actor
     ) {
-        return workItemHistory(workItemId, actor, null, 500).rows();
+        return su.onno.query.KeysetWindow.drain(c -> workItemHistory(workItemId, actor, c, su.onno.query.KeysetWindow.MAX_LIMIT));
     }
 
     @Override
@@ -368,8 +387,8 @@ public final class JdbcProcessEngine implements ProcessEngine {
             }
             return su.onno.query.KeysetWindow.fetch(handle, "onno_process_work_item_events", "*",
                     "_work_item_id = :id", q -> q.bind("id", workItemId),
-                    List.of(new su.onno.query.KeysetWindow.Order("_sequence", false),
-                            new su.onno.query.KeysetWindow.Order("_id", false)), cursor, limit,
+                    List.of(su.onno.query.KeysetWindow.Order.notNull("_sequence", false),
+                            su.onno.query.KeysetWindow.Order.notNull("_id", false)), cursor, limit,
                     actorContext(actor) + ":work-history:" + workItemId,
                     (rs, ctx) -> new ProcessWorkItemEventSnapshot(
                             rs.getObject("_id", UUID.class),

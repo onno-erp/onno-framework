@@ -54,7 +54,7 @@ public class RelatedListReader {
     public List<Map<String, Object>> rows(Class<?> parentClass, String parentLogicalName,
                                            String relatedName, UUID parentId, AccessSubject subject,
                                            EntityJsonRepresentation.Mode representation) {
-        return page(parentClass, parentLogicalName, relatedName, parentId, subject, representation, null, 100).rows();
+        return su.onno.query.KeysetWindow.drain(c -> page(parentClass, parentLogicalName, relatedName, parentId, subject, representation, c, su.onno.query.KeysetWindow.MAX_LIMIT));
     }
 
     public su.onno.query.KeysetWindow.Page<Map<String, Object>> page(Class<?> parentClass, String parentLogicalName,
