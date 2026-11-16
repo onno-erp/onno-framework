@@ -1,3 +1,4 @@
+import { openRoute } from "@/lib/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronsUpDown, ExternalLink, List, Plus, Search, X } from "lucide-react";
 import { api } from "@/lib/api";
@@ -29,7 +30,7 @@ interface RefSelectProps {
    * typeahead's ?filter=, so only compatible records are offered. Undefined = unfiltered.
    */
   filter?: string;
-  value?: string;
+  value?: string | null;
   /**
    * Whether an existing value may be reset to null: an inline clear button in the field plus the
    * "Clear selection" row in the options. Required fields leave this false; entity forms pass the
@@ -55,6 +56,26 @@ interface RefSelectProps {
    * dialog. On by default; a polymorphic ref turns it off (one dialog cannot span its targets).
    */
   showAll?: boolean;
+  /**
+   * Offer "+ New" at the top of the options, opening the target's new-record form. On by default;
+   * a widget whose user cannot create the target (or that edits outside a form) turns it off.
+   */
+  allowCreate?: boolean;
+  /** Disables the field: the trigger does not open and the open/clear buttons are hidden. */
+  disabled?: boolean;
+  /** Empty-field text; defaults to "Select {targetName}". */
+  placeholder?: string;
+  /**
+   * The current value's label when the host already knows it: shown at once instead of waiting for
+   * the record fetch, and kept if the user may not read the target record itself.
+   */
+  valueLabel?: string | null;
+  /** The trigger's id, so a `<Label htmlFor>` names the field. */
+  id?: string;
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
+  /** Extra trigger classes, merged over the select-trigger look (e.g. a compact chip). */
+  className?: string;
   onChange: (id: string | null) => void;
 }
 
@@ -100,6 +121,14 @@ export function RefSelect({
   excludedIds = [],
   fieldLabel,
   showAll: showAllEnabled = true,
+  allowCreate = true,
+  disabled = false,
+  placeholder,
+  valueLabel,
+  id,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
+  className,
   onChange,
 }: RefSelectProps) {
   const t = useMessages();
@@ -202,7 +231,7 @@ export function RefSelect({
     // field is available. Register the hand-off first: when that form saves, the new record's
     // id lands straight in this field instead of the user re-finding it in the picker.
     requestTokenRef.current = requestQuickCreate(kind, name);
-    window.dispatchEvent(new CustomEvent("onno:action", { detail: `onno://${kind}/${name}/new` }));
+    openRoute(`onno://${kind}/${name}/new`);
   };
 
   const showAll = () => {
@@ -230,24 +259,31 @@ export function RefSelect({
   // layout, the record route elsewhere).
   const openSelected = () => {
     if (!value) return;
-    window.dispatchEvent(new CustomEvent("onno:action", { detail: `onno://${kind}/${name}/${value}` }));
+    openRoute(`onno://${kind}/${name}/${value}`);
   };
 
-  const showOpen = openButton && !!value;
-  const showClear = clearable && !!value;
+  const showOpen = openButton && !!value && !disabled;
+  const showClear = clearable && !!value && !disabled;
   const inlineButtons = (showOpen ? 1 : 0) + (showClear ? 1 : 0);
+  const setOpenUnlessDisabled = (next: boolean) => setOpen(next && !disabled);
 
   const trigger = (
     <button
       type="button"
-      onClick={() => setOpen(true)}
+      id={id}
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabelledBy}
+      disabled={disabled}
+      onClick={() => setOpenUnlessDisabled(true)}
       // text-left: a button centers text by default, and the selected row stretches full width.
-      className={cn(selectTriggerClassName, "min-w-0 gap-2 overflow-hidden text-left transition-colors hover:bg-accent")}
+      className={cn(selectTriggerClassName, "min-w-0 gap-2 overflow-hidden text-left transition-colors hover:bg-accent", className)}
     >
       {selected ? (
         <RefRow item={selected} />
+      ) : value && valueLabel ? (
+        <span className="min-w-0 flex-1 truncate">{valueLabel}</span>
       ) : (
-        <span className="min-w-0 truncate text-muted-foreground">{t("form.select", { name: targetName })}</span>
+        <span className="min-w-0 truncate text-muted-foreground">{placeholder ?? t("form.select", { name: targetName })}</span>
       )}
       {/* Keeps the label clear of the inline buttons overlaid just left of the chevron. */}
       {inlineButtons > 0 ? (
@@ -294,7 +330,7 @@ export function RefSelect({
       items={items}
       loading={loading}
       onPick={pick}
-      onAddNew={addNew}
+      onAddNew={allowCreate ? addNew : undefined}
       onClear={clearable && value ? clear : undefined}
       onShowAll={showAllEnabled ? showAll : undefined}
       excludedIds={excludedIds}
@@ -331,13 +367,14 @@ export function RefSelect({
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpenUnlessDisabled}>
       {withOverlay(<PopoverTrigger asChild>{trigger}</PopoverTrigger>)}
       <PopoverContent
         align="start"
         // z-[70] clears the action-form modal (z-[60]) so the picker floats above it, not behind;
-        // harmless in the entity form, which isn't a portal-stacked overlay.
-        className="z-[70] w-[var(--radix-popover-trigger-width)] overflow-hidden p-0"
+        // harmless in the entity form, which isn't a portal-stacked overlay. The minimum width keeps
+        // the search box and names readable under a compact trigger (a widget's chip).
+        className="z-[70] w-[var(--radix-popover-trigger-width)] min-w-64 max-w-[calc(100vw-2rem)] overflow-hidden p-0"
       >
         {content}
       </PopoverContent>
@@ -362,13 +399,14 @@ function RefSelectOptions({
 }: {
   targetName: string;
   secondaryField?: string;
-  value?: string;
+  value?: string | null;
   query: string;
   onQueryChange: (value: string) => void;
   items: EntityRecord[];
   loading: boolean;
   onPick: (item: EntityRecord) => void;
-  onAddNew: () => void;
+  /** Absent when the host turned creation off ({@code allowCreate={false}}). */
+  onAddNew?: () => void;
   onClear?: () => void;
   onShowAll?: () => void;
   excludedIds: string[];
@@ -377,14 +415,16 @@ function RefSelectOptions({
   return (
     <>
       {/* "+ New" pinned to the top so it's always reachable. */}
-      <button
-        type="button"
-        onClick={onAddNew}
-        className="flex w-full items-center gap-2 border-b px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-      >
-        <Plus className="size-4 text-muted-foreground" aria-hidden="true" />
-        {t("ref.new", { name: targetName })}
-      </button>
+      {onAddNew ? (
+        <button
+          type="button"
+          onClick={onAddNew}
+          className="flex w-full items-center gap-2 border-b px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+        >
+          <Plus className="size-4 text-muted-foreground" aria-hidden="true" />
+          {t("ref.new", { name: targetName })}
+        </button>
+      ) : null}
       {onClear ? (
         <button
           type="button"

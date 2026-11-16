@@ -119,8 +119,8 @@ of the row keeps the full context menu. Flat table view only.
 | `Popover`, `Tooltip`, `HintIcon` | `components/ui/*` | Anchored overlays; `HintIcon` is the authored "?" help glyph. |
 | `Button`, `Input`, `Textarea`, `Checkbox`, `Switch`, `Label`, `Badge` | `components/ui/*` | Form controls & pills. |
 | `ColorPicker` | `components/color-picker.tsx` | Hex color fields: canonical text input plus `react-colorful` popover. |
-| `Select` | `components/ui/select.tsx` | No-search dropdown; auto-drawer on touch. |
-| `RefSelect` | `components/ref-select.tsx` | Searchable ref picker: server typeahead, avatars, cascading `refFilter`, quick-create, and an accessible clear choice for nullable fields. A server-flagged `_recent` head of the options sits under a muted "Recent" label, ruled off from the rest. Entity forms add inline icon buttons (`size-6`, muted, `hover:bg-accent`) left of the chevron: open the selected record (`ExternalLink`, `onno://` hand-off) and clear (`X`); they sit beside the trigger, never inside it (#409). |
+| `Select` | `components/ui/select.tsx` | No-search dropdown: bottom sheet on phones, centred list over a backdrop on tablets, anchored popover on desktop. |
+| `RefSelect` | `components/ref-select.tsx` | Searchable ref picker: server typeahead, avatars, cascading `refFilter`, quick-create, and an accessible clear choice for nullable fields. A server-flagged `_recent` head of the options sits under a muted "Recent" label, ruled off from the rest. Entity forms add inline icon buttons (`size-6`, muted, `hover:bg-accent`) left of the chevron: open the selected record (`ExternalLink`, `onno://` hand-off) and clear (`X`); they sit beside the trigger, never inside it (#409). Exported to widgets as `ui.RefSelect` (contract v7) with `allowCreate`, `disabled`, `placeholder`, `valueLabel`, `id`/`aria-*` and a trigger `className`. |
 | `Card` | `components/ui/card.tsx` | Island surface (no shadow). |
 | `Avatar` / `PresenceAvatars` | `components/ui/avatar.tsx`, `components/presence-avatars.tsx` | Avatar primitive; face-pile + dicebear default. |
 | `Calendar`/`RangeCalendar`, `DateInput`, `DatePicker`, `DateTimePicker`, `DateRangeFacet`/`TimeRangeFacet` | `components/ui/calendar.tsx`, `ui/date-input.tsx`, `date-picker.tsx`, `date-time-picker.tsx`, `date-range-facet.tsx` | The single date/time-picking system, from form field to filter chip. |
@@ -130,7 +130,7 @@ of the row keeps the full context menu. Flat table view only.
 | `EntityListWidget` | `components/entity-list-widget.tsx` | The list island (see above). |
 | `ChartWidget` (+`TimeRangeWidget`), `StatWidget`, `SparklineWidget`, `GaugeWidget` | `components/*.tsx` | All chart kinds, KPI/trend/gauge tiles. |
 | `KanbanWidget`, `CalendarWidget`, `ListWidget`, `MapWidget` | `components/*.tsx` | Board / calendar / compact list / map surfaces. |
-| `DialogShell` | `components/ui/dialog-shell.tsx` | Canonical focus-managed shell for action forms, confirmations, and typed action feedback. |
+| `DialogShell` | `components/ui/dialog-shell.tsx` | Canonical focus-managed shell for action forms, confirmations, and typed action feedback. Selects and popovers inside it portal into the dialog; while one is open, a press outside it closes only that popup, the next one closes the dialog (`useOutsidePressGuard`, also used by the ref picker's "Show all…" dialog). |
 | `ActionFormDialog` | `components/action-form-dialog.tsx` | Server-declared action forms inside `DialogShell`; retains input and renders rejection errors. |
 | `IslandErrorBoundary` | `lib/island-error-boundary.tsx` | Per-island error containment. |
 | `registerWidget` / `resolveWidget` | `lib/widget-bridge.tsx` | Widget-type registry (extension point). |

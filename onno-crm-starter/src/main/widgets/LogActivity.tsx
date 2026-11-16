@@ -1,5 +1,5 @@
 import { text as t } from "@onno/widget-sdk";
-import { useId } from "react";
+import { useId, type ChangeEvent } from "react";
 import { Button, Input, Label, Popover, PopoverContent, PopoverTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea, useState } from "@onno/widget-sdk";
 import { Phone } from "lucide-react";
 import { request } from "./CrmWorkspace";
@@ -30,7 +30,7 @@ export function LogActivity({customerId, conversationId, onSaved}: {customerId: 
     } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   };
-  return <Popover open={open} onOpenChange={value => {if (!busy) {setOpen(value); setError("");}}}>
+  return <Popover open={open} onOpenChange={(value: boolean) => {if (!busy) {setOpen(value); setError("");}}}>
     <PopoverTrigger asChild><Button size="toolbar" variant="subtle" title={t("crm.activity.log")} aria-label={t("crm.activity.log")}><Phone className="size-4" /><span data-toolbar-label>{t("crm.activity.log")}</span></Button></PopoverTrigger>
     <PopoverContent align="end" className="w-96 max-w-[calc(100vw-32px)] space-y-3 p-4" aria-label={t("crm.activity.log")}>
       <div className="text-sm font-semibold">{t("crm.activity.addSummary")}</div>
@@ -38,8 +38,8 @@ export function LogActivity({customerId, conversationId, onSaved}: {customerId: 
         <SelectTrigger aria-label={t("crm.activity.type")}><SelectValue /></SelectTrigger>
         <SelectContent><SelectItem value="CALL_COMPLETED">{t("crm.activity.callCompleted")}</SelectItem><SelectItem value="OTHER">{t("crm.activity.other")}</SelectItem></SelectContent>
       </Select>
-      <div className="space-y-1"><Label htmlFor={`${id}-summary`}>{t("crm.activity.summary")}</Label><Textarea id={`${id}-summary`} value={details} onChange={e => setDetails(e.target.value)} maxLength={7000} disabled={busy} placeholder={t("crm.activity.summaryPlaceholder")} /></div>
-      <div className="space-y-1"><Label htmlFor={`${id}-recording`}>{t("crm.activity.recordingLink")}</Label><Input id={`${id}-recording`} value={recording} onChange={e => setRecording(e.target.value)} maxLength={2000} disabled={busy} placeholder="https://…" /></div>
+      <div className="space-y-1"><Label htmlFor={`${id}-summary`}>{t("crm.activity.summary")}</Label><Textarea id={`${id}-summary`} value={details} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setDetails(e.target.value)} maxLength={7000} disabled={busy} placeholder={t("crm.activity.summaryPlaceholder")} /></div>
+      <div className="space-y-1"><Label htmlFor={`${id}-recording`}>{t("crm.activity.recordingLink")}</Label><Input id={`${id}-recording`} value={recording} onChange={(e: ChangeEvent<HTMLInputElement>) => setRecording(e.target.value)} maxLength={2000} disabled={busy} placeholder="https://…" /></div>
       <p className="text-xs text-muted-foreground">{t("crm.activity.visibility")}</p>
       {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
       <div className="flex justify-end gap-2"><Button variant="ghost" disabled={busy} onClick={() => setOpen(false)}>{t("crm.group.cancel")}</Button><Button disabled={busy || !details.trim()} onClick={() => void save()}>{busy ? t("crm.activity.saving") : t("crm.activity.save")}</Button></div>

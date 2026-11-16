@@ -40,7 +40,8 @@ public final class UiMessageBundles {
 
     /**
      * The message overrides for {@code locale}, merged from the bundled then the consumer file (consumer
-     * wins). Empty for {@code "en"}, blank, or an unknown locale.
+     * wins). Empty for {@code "en"}, a regional English such as {@code "en-GB"} without its own bundle, blank,
+     * or an unknown locale.
      */
     public static Map<String, String> load(String locale) {
         Map<String, String> out = new LinkedHashMap<>();
@@ -50,7 +51,10 @@ public final class UiMessageBundles {
         String key = locale.trim().toLowerCase(Locale.ROOT);
         boolean found = merge(out, String.format(BUNDLED, key));
         found |= merge(out, String.format(CONSUMER, key));
-        if (!found) {
+        // A regional English ("en-GB", "en_AU") only changes date and number formats; its wording is the
+        // English defaults unless a bundle for that region exists.
+        boolean english = key.startsWith("en-") || key.startsWith("en_");
+        if (!found && !english) {
             log.warn("onno.ui.locale='{}' but no message bundle found (looked for {} and {}); "
                     + "falling back to English defaults.", locale, String.format(BUNDLED, key),
                     String.format(CONSUMER, key));

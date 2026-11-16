@@ -5,6 +5,7 @@ import su.onno.metadata.MetadataRegistry;
 import su.onno.numbering.NumberGenerator;
 import su.onno.posting.PostingService;
 import su.onno.spring.OnnoAutoConfiguration;
+import su.onno.spring.OnnoProperties;
 import su.onno.ui.comments.CommentAuthorAvatars;
 
 import org.jdbi.v3.core.Jdbi;
@@ -363,9 +364,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     @Bean
     public RecordScopeIndexes recordScopeIndexes(su.onno.access.RecordPolicies recordPolicies, Jdbi jdbi,
                                                  RecordAccessProperties properties,
-                                                 org.springframework.core.env.Environment environment) {
+                                                 OnnoProperties onnoProperties) {
+        // The typed property, not the Environment: its "apply" default lives on the field (#460).
         return new RecordScopeIndexes(recordPolicies, jdbi, properties.isCreateIndexes(),
-                environment.getProperty("onno.schema.mode", "update"));
+                onnoProperties.getSchema().getMode());
     }
 
     @Bean
@@ -551,12 +553,16 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                              UiMessages uiMessages,
                                              org.springframework.beans.factory.ObjectProvider<su.onno.ui.comments.CommentProperties> commentProperties,
                                              org.springframework.beans.factory.ObjectProvider<su.onno.ui.notifications.NotificationProperties> notificationProperties,
-                                             AccessSubjectResolver accessSubjectResolver) {
+                                             AccessSubjectResolver accessSubjectResolver,
+                                             org.springframework.beans.factory.ObjectProvider<RecordActionContributor> recordActionContributors,
+                                             org.springframework.beans.factory.ObjectProvider<SelectionDownloadContributor> selectionDownloadContributors) {
         DivKitController controller = new DivKitController(layoutSet, layoutResolver, profileResolver, access,
                 currentUserResolver, resolvedMetadata, uiViewResolver, pageResolver, catalogQueryService,
                 documentQueryService, registerQueryService, uiActionResolver, relatedListReader, uiProperties,
                 uiMessages, commentProperties, notificationProperties);
         controller.setAccessSubjectResolver(accessSubjectResolver);
+        controller.setRecordActionContributors(recordActionContributors.orderedStream().toList());
+        controller.setSelectionDownloadContributors(selectionDownloadContributors.orderedStream().toList());
         return controller;
     }
 

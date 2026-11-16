@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 /**
@@ -154,10 +155,10 @@ public final class WidgetBuckets {
      */
     static Map<String, Object> run(Jdbi jdbi, RefResolver refResolver, List<AttributeDescriptor> attributes,
                                    String table, Set<String> columns, Set<String> uuidColumns, Request r,
-                                   ScopeClause scope, su.onno.access.AccessSubject subject) {
+                                   ScopeClause scope, su.onno.access.AccessSubject subject, Function<String, String> columnResolver) {
         // The viewer's record scope is ANDed in before GROUP BY / aggregation, so buckets, totals and
         // the span only ever reflect rows the viewer may read.
-        WidgetFilter.Result wf = scope.andInto(WidgetFilter.parse(r.filter(), columns, uuidColumns));
+        WidgetFilter.Result wf = scope.andInto(WidgetFilter.parse(r.filter(), columns, uuidColumns, columnResolver));
         Query q = build(r, table, columns, wf);
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var query = h.createQuery(q.sql());

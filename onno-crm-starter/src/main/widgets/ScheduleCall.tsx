@@ -1,5 +1,5 @@
-import { text as t } from "@onno/widget-sdk";
-import { useId } from "react";
+import { locale, text as t } from "@onno/widget-sdk";
+import { useId, type ChangeEvent } from "react";
 import { Button, DatePicker, Input, Label, Popover, PopoverContent, PopoverTrigger, useState } from "@onno/widget-sdk";
 import { Video } from "lucide-react";
 import { request } from "./CrmWorkspace";
@@ -13,7 +13,7 @@ export function callInvitation(when: string, link: string, duration: string, now
     throw new Error(t("crm.zoom.hostError"));
   if (!Number.isInteger(Number(duration)) || Number(duration) < 5 || Number(duration) > 240) throw new Error(t("crm.zoom.durationError"));
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const display = new Intl.DateTimeFormat(undefined, {dateStyle:"medium",timeStyle:"short"}).format(date);
+  const display = new Intl.DateTimeFormat(locale(), {dateStyle:"medium",timeStyle:"short"}).format(date);
   return `Let's meet on Zoom on ${display} (${zone}).\nDuration: ${duration} minutes\n${url.href}`;
 }
 
@@ -44,13 +44,13 @@ export function ScheduleCall({customerId, conversationId, onSaved, onInvitation}
       await onSaved();
     } catch(e) {setError((e as Error).message);} finally {setBusy(false);}
   };
-  return <Popover open={open} onOpenChange={value=>{if(!busy){setOpen(value);setError("");}}}>
+  return <Popover open={open} onOpenChange={(value:boolean)=>{if(!busy){setOpen(value);setError("");}}}>
     <PopoverTrigger asChild><Button size="toolbar" variant="subtle" title={t("crm.zoom.schedule")} aria-label={t("crm.zoom.schedule")}><Video className="size-4" /><span data-toolbar-label>{t("crm.zoom.schedule")}</span></Button></PopoverTrigger>
     <PopoverContent align="end" className="w-96 max-w-[calc(100vw-32px)] space-y-3 p-4" aria-label={t("crm.zoom.scheduleCall")}>
       <div className="text-sm font-semibold">{t("crm.zoom.scheduleCall")}</div>
       <div className="space-y-1"><div className="text-sm font-medium">{t("crm.zoom.dateTime")}</div><DatePicker value={when} onChange={setWhen} includeTime aria-label={t("crm.zoom.dateTime")} isDisabled={busy} /><p className="text-xs text-muted-foreground">Time zone: {Intl.DateTimeFormat().resolvedOptions().timeZone}</p></div>
-      <div className="space-y-1"><Label htmlFor={`${id}-duration`}>{t("crm.zoom.duration")}</Label><Input id={`${id}-duration`} type="number" min={5} max={240} value={duration} onChange={e=>setDuration(e.target.value)} disabled={busy} /></div>
-      <div className="space-y-1"><Label htmlFor={`${id}-link`}>{t("crm.zoom.link")}</Label><Input id={`${id}-link`} type="url" placeholder="https://zoom.us/j/…" maxLength={2000} value={link} onChange={e=>setLink(e.target.value)} disabled={busy} /></div>
+      <div className="space-y-1"><Label htmlFor={`${id}-duration`}>{t("crm.zoom.duration")}</Label><Input id={`${id}-duration`} type="number" min={5} max={240} value={duration} onChange={(e:ChangeEvent<HTMLInputElement>)=>setDuration(e.target.value)} disabled={busy} /></div>
+      <div className="space-y-1"><Label htmlFor={`${id}-link`}>{t("crm.zoom.link")}</Label><Input id={`${id}-link`} type="url" placeholder="https://zoom.us/j/…" maxLength={2000} value={link} onChange={(e:ChangeEvent<HTMLInputElement>)=>setLink(e.target.value)} disabled={busy} /></div>
       <p className="text-xs text-muted-foreground">Paste a link from Zoom. Saving adds the call to this client's history and prepares an invitation in the reply box. Send it when ready.</p>
       {error&&<p role="alert" className="text-xs text-destructive">{error}</p>}
       <div className="flex justify-end gap-2"><Button variant="ghost" disabled={busy} onClick={()=>setOpen(false)}>{t("crm.group.cancel")}</Button><Button disabled={busy||!when||!link.trim()} onClick={()=>void save()}>{busy?t("crm.activity.saving"):t("crm.zoom.save")}</Button></div>

@@ -2,8 +2,10 @@ package su.onno.ui;
 
 import su.onno.fields.Field;
 import su.onno.fields.Fields;
+import su.onno.metadata.AttributeDescriptor;
 import su.onno.repository.EnumerationPersistence;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -23,6 +25,9 @@ import java.util.UUID;
  * (typed back to your enum), or {@link #get(String)} (the raw stored value). All lookups are
  * case-insensitive.</p>
  *
+ * <p>{@code E} is the owning entity. Typed reads accept only its getters (including inherited
+ * getters); string reads remain an escape hatch for storage-column names.</p>
+ *
  * <pre>
  * a.action("toggle").scope(ActionScope.ROW)
  *  .icon(row -&gt; row.enumValue("status", Status.class) == Status.STOPPED ? "play" : "pause")
@@ -30,12 +35,33 @@ import java.util.UUID;
  *  .handler(ctx -&gt; ...);
  * </pre>
  */
-public final class ActionRow {
+public final class ActionRow<E> {
 
     private final Map<String, Object> data;
+    private final List<AttributeDescriptor> attributes;
 
     public ActionRow(Map<String, Object> data) {
+        this(data, List.of());
+    }
+
+    /**
+     * Wrap a storage-keyed row with its entity's attributes. Typed getters resolve Java property
+     * names to the declared storage columns, including custom {@code @Attribute(name = "...")}
+     * names. String getters and {@link #values()} retain their existing column-based contract.
+     */
+    public ActionRow(Map<String, Object> data, List<AttributeDescriptor> attributes) {
         this.data = data == null ? Map.of() : data;
+        this.attributes = List.copyOf(attributes);
+    }
+
+    private String column(Field<?, ?> field) {
+        String name = Fields.name(field);
+        for (AttributeDescriptor attribute : attributes) {
+            if (attribute.fieldName().equals(name)) {
+                return attribute.columnName();
+            }
+        }
+        return name;
     }
 
     /** This row's id ({@code _id}), or {@code null} if absent/unparseable. */
@@ -71,8 +97,8 @@ public final class ActionRow {
     }
 
     /** Read a raw value using a compiler-checked field reference. */
-    public <E, V> Object get(Field<E, V> field) {
-        return get(Fields.name(field));
+    public <V> Object get(Field<? super E, V> field) {
+        return get(column(field));
     }
 
     /**
@@ -96,8 +122,8 @@ public final class ActionRow {
     }
 
     /** Read a boolean using a compiler-checked field reference. */
-    public <E> boolean bool(Field<E, Boolean> field) {
-        return bool(Fields.name(field));
+    public boolean bool(Field<? super E, Boolean> field) {
+        return bool(column(field));
     }
 
     /**
@@ -111,8 +137,8 @@ public final class ActionRow {
     }
 
     /** Read display text using a compiler-checked field reference. */
-    public <E, V> String text(Field<E, V> field) {
-        return text(Fields.name(field));
+    public <V> String text(Field<? super E, V> field) {
+        return text(column(field));
     }
 
     /**
@@ -120,7 +146,7 @@ public final class ActionRow {
      * empty/unmatched. Enum fields are stored as deterministic UUIDs; display labels and legacy
      * constant-name strings are deliberately not accepted as storage identities.
      */
-    public <E extends Enum<E>> E enumValue(String column, Class<E> enumType) {
+    public <V extends Enum<V>> V enumValue(String column, Class<V> enumType) {
         // 1) Raw UUID — how an enum value is actually stored (see EnumerationPersistence).
         Object raw = get(column);
         UUID id = null;
@@ -134,7 +160,7 @@ public final class ActionRow {
             }
         }
         if (id != null) {
-            for (E constant : enumType.getEnumConstants()) {
+            for (V constant : enumType.getEnumConstants()) {
                 if (EnumerationPersistence.resolveId(enumType, constant).equals(id)) {
                     return constant;
                 }
@@ -144,8 +170,8 @@ public final class ActionRow {
     }
 
     /** Resolve an enum using a compiler-checked field reference. */
-    public <T, E extends Enum<E>> E enumValue(Field<T, E> field, Class<E> enumType) {
-        return enumValue(Fields.name(field), enumType);
+    public <V extends Enum<V>> V enumValue(Field<? super E, V> field, Class<V> enumType) {
+        return enumValue(column(field), enumType);
     }
     /** The underlying row map (resolved values keyed by column) — an escape hatch for ad-hoc reads. */
     public Map<String, Object> values() {

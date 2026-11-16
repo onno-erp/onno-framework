@@ -126,6 +126,18 @@ class ListSpecTest {
     }
 
     @Test
+    void numberRangeFilterHasNoOptions() {
+        ListSpec<Object> spec = new ListSpec<>();
+        spec.filter("total").label("Total").numberRange();
+
+        ListSpec.Filter f = spec.filters().get(0);
+        assertThat(f.field()).isEqualTo("total");
+        assertThat(f.label()).isEqualTo("Total");
+        assertThat(f.type()).isEqualTo(ListSpec.FilterType.NUMBER_RANGE);
+        assertThat(f.options()).isEmpty();
+    }
+
+    @Test
     void filtersKeepDeclarationOrder() {
         ListSpec<Object> spec = new ListSpec<>();
         spec.filter("a").options("1");

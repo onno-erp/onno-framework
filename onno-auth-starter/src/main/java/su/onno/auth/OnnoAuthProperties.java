@@ -24,7 +24,12 @@ public class OnnoAuthProperties {
      *
      * <ul>
      *   <li>{@link Mode#IN_MEMORY} (default) — username/password against {@code onno.auth.users},
-     *       session cookie, JSON {@code /api/auth/login}. Zero external dependencies.</li>
+     *       session cookie, JSON {@code /api/auth/login}. Zero external dependencies; accounts live
+     *       in configuration, so use it for development and demos only.</li>
+     *   <li>{@link Mode#DATABASE} — username/password against accounts stored in the application
+     *       database (table {@code onno_auth_user}), managed at runtime: create, disable, change
+     *       roles, reset passwords, force a password change, sign out everywhere. The
+     *       {@code onno.auth.users} list only seeds the first accounts into an empty store.</li>
      *   <li>{@link Mode#OIDC} — server-side OpenID Connect authorization-code login against any
      *       standard provider (Keycloak, Zitadel, …). Keeps the session-cookie model; "login"
      *       becomes a redirect to {@code /oauth2/authorization/{registrationId}}. Configure the
@@ -85,7 +90,7 @@ public class OnnoAuthProperties {
 
     /**
      * Request paths exempted from CSRF protection in the cookie-based modes
-     * ({@link Mode#IN_MEMORY} and {@link Mode#OIDC}). Defaults to just the login endpoint. Add a
+     * ({@link Mode#IN_MEMORY}, {@link Mode#DATABASE} and {@link Mode#OIDC}). Defaults to just the login endpoint. Add a
      * path here to expose an anonymous, CSRF-free {@code POST} (e.g. a public lead/intake form)
      * without having to override the whole {@code SecurityFilterChain} (issue #30). Ant patterns
      * are supported (e.g. {@code /api/public/**}). Ignored in {@link Mode#RESOURCE_SERVER}, where
@@ -94,15 +99,23 @@ public class OnnoAuthProperties {
     private List<String> csrfIgnoredPaths = new ArrayList<>(List.of("/api/auth/login"));
 
     /**
-     * In-memory user accounts. Empty by default — the consuming app supplies them via
-     * {@code onno.auth.users[*]}. Production deployments should disable in-memory users
-     * and configure their own UserDetailsService. Only used in {@link Mode#IN_MEMORY}.
+     * Configured user accounts. Empty by default — the starter ships no built-in users. In
+     * {@code in-memory} mode these are the only accounts and live as long as the configuration
+     * does. In {@code database} mode they are copied into the empty account store once, on first
+     * boot, and ignored afterwards. Ignored in {@code oidc} and {@code resource-server} modes.
      */
     private List<User> users = new ArrayList<>();
 
     /**
-     * Session longevity and persistence for the cookie-based modes ({@link Mode#IN_MEMORY} and
-     * {@link Mode#OIDC}). Controls the idle timeout and (in-memory only) remember-me. Ignored in
+     * Account-store settings for {@code database} mode: the password policy and how the first
+     * accounts are seeded from {@code onno.auth.users}. Ignored in the other modes.
+     */
+    @NestedConfigurationProperty
+    private Database database = new Database();
+
+    /**
+     * Session longevity and persistence for the cookie-based modes ({@link Mode#IN_MEMORY}, {@link Mode#DATABASE} and
+     * {@link Mode#OIDC}). Controls the idle timeout and (password modes only) remember-me. Ignored in
      * {@link Mode#RESOURCE_SERVER}, which is stateless.
      */
     @NestedConfigurationProperty
@@ -194,6 +207,14 @@ public class OnnoAuthProperties {
         this.session = session;
     }
 
+    public Database getDatabase() {
+        return database;
+    }
+
+    public void setDatabase(Database database) {
+        this.database = database;
+    }
+
     public Demo getDemo() {
         return demo;
     }
@@ -213,6 +234,8 @@ public class OnnoAuthProperties {
     public enum Mode {
         /** Username/password against {@code onno.auth.users}. */
         IN_MEMORY,
+        /** Username/password against accounts stored and managed in the application database. */
+        DATABASE,
         /** Server-side OpenID Connect authorization-code login (session cookie). */
         OIDC,
         /** Stateless JWT bearer-token validation. */
@@ -249,12 +272,46 @@ public class OnnoAuthProperties {
         }
     }
 
-    /** Demo-only authentication shortcuts for the in-memory auth mode. */
+    /** Account-store settings for {@link Mode#DATABASE}. */
+    public static class Database {
+
+        /**
+         * Minimum password length, in characters, for a password an account holder or an
+         * administrator chooses. Generated one-time passwords are never shorter than 16.
+         */
+        private int passwordMinLength = 8;
+
+        /**
+         * Whether accounts seeded from {@code onno.auth.users} on first boot must set a new password
+         * at first sign-in. Keep it on: the configured password sits in a file. Turning it off
+         * requires every seed password to satisfy the password policy.
+         */
+        private boolean seedPasswordChangeRequired = true;
+
+        public int getPasswordMinLength() {
+            return passwordMinLength;
+        }
+
+        public void setPasswordMinLength(int passwordMinLength) {
+            this.passwordMinLength = passwordMinLength;
+        }
+
+        public boolean isSeedPasswordChangeRequired() {
+            return seedPasswordChangeRequired;
+        }
+
+        public void setSeedPasswordChangeRequired(boolean seedPasswordChangeRequired) {
+            this.seedPasswordChangeRequired = seedPasswordChangeRequired;
+        }
+    }
+
+    /** Demo-only authentication shortcuts for the password-login modes. */
     public static class Demo {
 
         /**
          * In-memory username to authenticate automatically on every anonymous API request. Blank
-         * (the default) disables auto-login. The named user must exist in {@code onno.auth.users}.
+         * (the default) disables auto-login. The named user must exist in {@code onno.auth.users}
+         * ({@code in-memory} mode) or in the account store ({@code database} mode).
          * This bypasses password login and is intended only for public, non-sensitive demos.
          */
         private String autoLoginUsername;
@@ -308,7 +365,7 @@ public class OnnoAuthProperties {
      * Session longevity for the cookie-based modes. The idle {@link #timeout} is applied to the
      * servlet container (overriding Spring Boot's 30-minute default) and slides on every request,
      * so an actively-used tab never expires mid-session. {@link #rememberMe} adds a persistent
-     * login cookie in {@link Mode#IN_MEMORY} so a session that lapses (closed browser, idle past
+     * login cookie in {@link Mode#IN_MEMORY} and {@link Mode#DATABASE} so a session that lapses (closed browser, idle past
      * the timeout) is silently re-established on the next request instead of bouncing to login.
      */
     public static class Session {
@@ -342,7 +399,7 @@ public class OnnoAuthProperties {
     }
 
     /**
-     * Persistent "remember me" login for {@link Mode#IN_MEMORY}. When enabled, a successful
+     * Persistent "remember me" login for {@link Mode#IN_MEMORY} and {@link Mode#DATABASE}. When enabled, a successful
      * password login also issues a signed remember-me cookie; a request that arrives after the
      * session has expired is re-authenticated from that cookie (via Spring's
      * {@code RememberMeAuthenticationFilter}) for up to {@link #validity}, so the user stays signed

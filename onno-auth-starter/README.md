@@ -2,7 +2,8 @@
 
 Spring Boot (Spring Security) starter that secures a onno application's HTTP API. It contributes a
 `SecurityFilterChain`, a small JSON auth API (`/api/auth/*`), and — depending on the selected mode —
-an in-memory user store, server-side Keycloak (OIDC) login, or stateless JWT validation.
+a database-backed account store, an in-memory (config-file) user list, server-side OIDC login, or
+stateless JWT validation.
 
 The model is deliberately SPA-friendly: **everything outside `/api/**` is public** (so the SPA shell
 and login screen can load), **`/api/**` requires an authenticated session**, and a handful of
@@ -16,6 +17,7 @@ others stay dormant.
 
 | Mode | Value | How you log in | Session | Extra deps active |
 |------|-------|----------------|---------|-------------------|
+| Database (recommended) | `database` | `POST /api/auth/login` against accounts in the table `onno_auth_user`, managed at runtime | Cookie (`JSESSIONID`) | a `DataSource` |
 | In-memory (default) | `in-memory` | `POST /api/auth/login` against `onno.auth.users` | Cookie (`JSESSIONID`) | none |
 | Keycloak OIDC login | `oidc` | Full-page redirect to Keycloak (authorization-code) | Cookie (`JSESSIONID`) | `spring-boot-starter-oauth2-client` |
 | Resource server | `resource-server` | Client gets a token from Keycloak, sends `Authorization: Bearer …` | Stateless | `spring-boot-starter-oauth2-resource-server` |
@@ -51,9 +53,11 @@ to contribute nothing and wire your own security.
 | Key | Default | Purpose |
 |-----|---------|---------|
 | `onno.auth.enabled` | `true` | Master switch. When `false`, no `SecurityFilterChain` is contributed and the app wires its own. |
-| `onno.auth.mode` | `in-memory` | Backend: `in-memory`, `oidc`, or `resource-server`. See [modes](#authentication-modes). |
+| `onno.auth.mode` | `in-memory` | Backend: `database`, `in-memory`, `oidc`, or `resource-server`. See [modes](#authentication-modes). |
+| `onno.auth.database.password-min-length` | `8` | `database` mode: minimum length of a password a holder or administrator chooses. |
+| `onno.auth.database.seed-password-change-required` | `true` | `database` mode: accounts seeded from `onno.auth.users` must set a new password at first sign-in. When `false`, every seed password must satisfy the policy or startup fails. |
 | `onno.auth.public-paths` | see below | Ant patterns permitted without authentication, on top of the implicit "everything outside `/api/**`". **Setting this REPLACES the defaults — it does not append.** Repeat every default below (plus your additions) or the login screen 401s (dropped `/api/config`, `/api/auth/login`, …). |
-| `onno.auth.users[*].username` | — | In-memory account username. |
+| `onno.auth.users[*].username` | — | `in-memory`: an account. `database`: a first-boot seed, copied into the empty store once and ignored afterwards. |
 | `onno.auth.users[*].password` | — | Plaintext password; BCrypt-encoded at startup. Missing username **or** password fails startup. |
 | `onno.auth.users[*].roles` | `[]` | Role names (stored as `ROLE_*` authorities by Spring's `User.roles(...)`). |
 | `onno.auth.demo.auto-login-username` | — | **Public demos only:** authenticate every anonymous API request as this configured in-memory user, without sending its password to the browser. Blank disables it. |
@@ -182,7 +186,9 @@ appears as `ROLE_USER`).
 Every `AuthUser` response also carries three routing hints the SPA uses to render the right
 affordance without knowing the server's config:
 
-- `mode` — `"in-memory"`, `"oidc"`, or `"resource-server"`.
+- `mode` — `"in-memory"`, `"database"`, `"oidc"`, or `"resource-server"`.
+- `passwordChangeRequired` — `true` while a `database`-mode account signed in with a one-time
+  password; the SPA shows only the change-password screen until it is replaced.
 - `loginUrl` — where to send the browser to sign in. Non-null **only in OIDC mode**
   (`/oauth2/authorization/{registrationId}`); the server-driven login screen renders an SSO button
   per provider instead of the password form.
@@ -191,6 +197,59 @@ affordance without knowing the server's config:
 
 In OIDC and resource-server modes there is no password manager, so `POST /api/auth/login` returns
 `409 Conflict` (with the `AuthUser` so the SPA can read `loginUrl`) instead of authenticating.
+
+## Database accounts (`mode: database`)
+
+Config-file users never go away: whatever sits in `application.yaml` stays a valid login for as long
+as the file says so, and agent-built apps tend to inherit `admin`/`admin` from a template. Database
+mode makes the application database the source of truth instead:
+
+```yaml
+onno:
+  auth:
+    mode: database
+    users:                       # first-boot seed only — remove after the first sign-in
+      - username: admin@acme.test
+        password: change-me-on-first-login
+        roles: [ADMIN]
+```
+
+- **Store.** Accounts live in the framework-managed table `onno_auth_user` (created on startup), not
+  in a catalog, so password hashes are never reachable through the generic REST, MCP, import or
+  export surfaces. Replace the storage by declaring your own `UserStore` bean.
+- **Seeding.** When the store is empty, each `onno.auth.users` entry is copied in once, flagged so the
+  holder must replace the configured password at first sign-in. Once any account exists the list is
+  ignored (a startup warning tells you to delete it). With no accounts and no seeds, startup warns
+  that nobody can sign in.
+- **Management.** `UserAccounts` (inject it) creates accounts with a generated one-time password,
+  disables/enables them, replaces roles, resets passwords and signs an account out everywhere. The
+  last enabled `ADMIN` can be neither disabled nor demoted.
+- **Immediate effect.** Each change bumps the account's security stamp. A guard filter re-reads the
+  account on every request and signs out sessions issued under an older stamp (`401
+  session_revoked`); remember-me cookies are bound to the stamp too.
+- **Forced change.** While a one-time password is pending, every API call other than `/api/auth/**`
+  and the public paths answers `403 password_change_required`, and the SPA shows a change-password
+  screen.
+- **Policy.** Minimum length (`onno.auth.database.password-min-length`), at most 72 bytes (bcrypt),
+  not equal to the username, different from the current password.
+- **Identity.** Accounts are logins, not business records. Link one to an employee with
+  `Layout.identity(Employee.class, "email")` as before.
+- **UI.** Put `b.widget("Users").type("users")` on an admin page (account list, create, roles,
+  disable, reset, sign out) and `b.widget("Password").type("changePassword")` wherever holders should
+  change their own password.
+
+| Method | Path | Auth | Body | Response |
+|--------|------|------|------|----------|
+| `GET` | `/api/auth/password-policy` | authenticated | — | `{"minLength":8}` |
+| `POST` | `/api/auth/password` | authenticated | `{"currentPassword":"…","newPassword":"…"}` | `204`; the session and remember-me cookie are re-issued under the new stamp. `400` with `message` on a wrong current password or a policy breach |
+| `GET` | `/api/auth/users` | `ADMIN` | — | Accounts (`id`, `username`, `roles`, `enabled`, `passwordChangeRequired`, `createdAt`, `passwordChangedAt`, `lastLoginAt`) |
+| `POST` | `/api/auth/users` | `ADMIN` | `{"username":"…","roles":["…"],"password":null}` | `201` `{account, temporaryPassword}` — the generated one-time password is returned only here. `409` on a duplicate username |
+| `PATCH` | `/api/auth/users/{id}` | `ADMIN` | `{"roles":[…]?,"enabled":bool?}` | The account. `409` when it would remove the last enabled administrator |
+| `POST` | `/api/auth/users/{id}/reset-password` | `ADMIN` | — | `{"temporaryPassword":"…"}`; the account is signed out everywhere |
+| `POST` | `/api/auth/users/{id}/sign-out` | `ADMIN` | — | The account; every session and remember-me cookie ends |
+
+Not yet included (tracked in #545): password reset by e-mailed link, one-time-code login, password
+expiry/history, lockout, and a login journal with an active-session list.
 
 ## End-to-end recipe (curl)
 
@@ -438,10 +497,9 @@ form behind a back link — so it stays uncluttered; single-method screens rende
 ## Gotchas
 
 - **No default credentials.** `onno.auth.users` is empty by default — if you configure none, no one
-  can log in. There is no built-in `admin`/`admin`.
-- **In-memory only.** Users come from properties and live in an `InMemoryUserDetailsManager`.
-  For production, define your own `UserDetailsService` bean (it wins via `@ConditionalOnMissingBean`)
-  and leave `onno.auth.users` empty.
+  can log in. There is no built-in `admin`/`admin`; it only ever appears because a config file says so.
+- **In-memory users are permanent.** In `in-memory` mode the config list is the account set and
+  cannot be changed at runtime. Use `mode: database` for anything real.
 - **Passwords are plaintext in config, hashed at startup.** Put real secrets behind environment
   variables / a secrets manager, not in committed YAML.
 - **Mutations need `X-XSRF-TOKEN`.** A `403` on a `POST`/`PUT`/`PATCH`/`DELETE` almost always means a

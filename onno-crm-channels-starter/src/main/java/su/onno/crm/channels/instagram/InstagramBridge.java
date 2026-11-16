@@ -5,8 +5,11 @@ import jakarta.annotation.PreDestroy;
 import java.nio.charset.StandardCharsets;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.concurrent.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -14,55 +17,101 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import su.onno.crm.channels.CrmChannelsProperties;
 import su.onno.crm.domain.*;
 import su.onno.crm.repository.*;
 import su.onno.crm.service.*;
 import su.onno.types.Ref;
 
-/** Single-account local adapter. Polls provider-visible messages; webhook hosting is separate. */
+/**
+ * Single-account local adapter. Polls provider-visible messages; webhook hosting is separate.
+ *
+ * <p>Only messages sent at or after the account's persisted activation cutoff
+ * ({@code onno_crm_ig_sync.activation_cutoff}, an ISO-8601 UTC instant) are imported; the cutoff is
+ * written once and never reset. Each poll reads the conversation list head-first (most recently
+ * updated first) and stops at the account's checkpoint minus an overlap window, downloads the recent
+ * messages only of conversations that changed since their last download (per-thread watermark in
+ * {@code onno_crm_ig_thread}), and bounds both pages and downloads per poll. A longer backlog is
+ * resumed from a saved cursor on later polls, after the newest conversations are rechecked first.
+ * Watermarks, cursors and the checkpoint advance only after the messages they cover have committed;
+ * provider message ids deduplicate every overlap.
+ */
 @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(InstagramBridge.class)
 @Component
 @ConditionalOnProperty(name="onno.crm.channels.instagram.enabled",havingValue="true")
 public class InstagramBridge implements CrmChannelConnection,CrmMessageTransport {
+    private static final Logger log=LoggerFactory.getLogger(InstagramBridge.class);
+    /** How far behind the checkpoint a poll still looks, absorbing late or out-of-order provider timestamps. */
+    static final Duration OVERLAP=Duration.ofMinutes(2);
+    /**
+     * A conversation is downloaded again until one download happened at least this long after its
+     * latest {@code updated_time}: Instagram timestamps have one-second precision, so a later message
+     * in the same second leaves {@code updated_time} unchanged.
+     */
+    static final Duration SETTLE=Duration.ofMinutes(1);
     private final InstagramClient client;private final JdbcTemplate jdbc;private final TransactionTemplate tx;
     private final InboxRepository inboxes;private final ConversationRepository conversations;
     private final ConversationMessageRepository messages;private final ContactIdentityRepository identities;
     private final CrmContactService contacts;private final CrmWorkspaceService workspace;
+    private final CrmChannelsProperties.Instagram settings;
     private final ScheduledExecutorService worker=Executors.newSingleThreadScheduledExecutor(r->{var t=new Thread(r,"crm-instagram");t.setDaemon(true);return t;});
-    private volatile boolean ready;private volatile String failure="";private Instant retryAt=Instant.EPOCH;
+    private volatile boolean ready;private volatile String failure="";private volatile Instant retryAt=Instant.EPOCH;private int failures;
+    private Clock clock=Clock.systemUTC();
     private final su.onno.crm.service.CrmConversationStatuses statuses;
     private final su.onno.ui.UiMessages uiMessages;
     public su.onno.crm.service.CrmChannelDefinition definition() { return new su.onno.crm.service.CrmChannelDefinition("INSTAGRAM","Instagram","/crm/channels/instagram.png"); }
     public InstagramBridge(InstagramClient client,JdbcTemplate jdbc,PlatformTransactionManager transactions,InboxRepository inboxes,
         ConversationRepository conversations,ConversationMessageRepository messages,
         ContactIdentityRepository identities,CrmContactService contacts,CrmWorkspaceService workspace, su.onno.crm.service.CrmConversationStatuses statuses,
-        su.onno.ui.UiMessages uiMessages) {
-        this.statuses=statuses;this.uiMessages=uiMessages;
+        su.onno.ui.UiMessages uiMessages,CrmChannelsProperties properties) {
+        this.statuses=statuses;this.uiMessages=uiMessages;this.settings=properties.getInstagram();
         this.client=client;this.jdbc=jdbc;this.tx=new TransactionTemplate(transactions);this.inboxes=inboxes;
         this.conversations=conversations;this.messages=messages;this.identities=identities;this.contacts=contacts;this.workspace=workspace;
     }
+    /** Test hook: the clock behind cutoffs, watermarks and backoff. */
+    void clock(Clock value){this.clock=value;}
     private record Account(String id,String scoped,String username,UUID inbox,boolean active,String cursor){}
+    /** Persisted synchronization state; a non-null {@code passHead} means a poll pass is still in progress at {@code passCursor} (null = list head). */
+    record SyncState(Instant cutoff,Instant checkpoint,Instant passHead,String passCursor){}
+    private record ThreadMark(Instant updated,Instant fetchedAt){}
     private Account account(){var a=jdbc.query("SELECT account_id,scoped_id,username,inbox_id,active,cursor FROM onno_crm_ig_account",(r,n)->new Account(r.getString(1),r.getString(2),r.getString(3),r.getObject(4,UUID.class),r.getBoolean(5),r.getString(6)));return a.isEmpty()?null:a.getFirst();}
     @EventListener(ApplicationReadyEvent.class) public void start(){
+        initialize();
+        ready=true;worker.scheduleWithFixedDelay(this::tick,2,15,TimeUnit.SECONDS);
+    }
+    /** Creates the additive adapter tables, recovers uncertain sends and seeds a configured cutoff. */
+    void initialize(){
         jdbc.execute("CREATE TABLE IF NOT EXISTS onno_crm_ig_account (account_id VARCHAR(100) PRIMARY KEY,scoped_id VARCHAR(100),username VARCHAR(200),inbox_id UUID NOT NULL,active BOOLEAN NOT NULL,cursor VARCHAR(4000))");
         jdbc.execute("CREATE TABLE IF NOT EXISTS onno_crm_ig_peer (account_id VARCHAR(100),peer_id VARCHAR(100),conversation_id UUID NOT NULL,last_inbound TIMESTAMP,PRIMARY KEY(account_id,peer_id))");
         jdbc.execute("CREATE TABLE IF NOT EXISTS onno_crm_ig_seen (account_id VARCHAR(100),external_id VARCHAR(2048),PRIMARY KEY(account_id,external_id))");
         jdbc.execute("CREATE TABLE IF NOT EXISTS onno_crm_ig_outbox (message_id UUID PRIMARY KEY,account_id VARCHAR(100),peer_id VARCHAR(100),state VARCHAR(20))");
+        // Times are ISO-8601 UTC text (Instant#toString), so neither the JVM nor the database time zone can shift them.
+        jdbc.execute("CREATE TABLE IF NOT EXISTS onno_crm_ig_sync (account_id VARCHAR(100) PRIMARY KEY,activation_cutoff VARCHAR(40) NOT NULL,checkpoint VARCHAR(40),pass_head VARCHAR(40),pass_cursor VARCHAR(4000))");
+        jdbc.execute("CREATE TABLE IF NOT EXISTS onno_crm_ig_thread (account_id VARCHAR(100),thread_id VARCHAR(512),updated_time VARCHAR(40) NOT NULL,fetched_at VARCHAR(40) NOT NULL,PRIMARY KEY(account_id,thread_id))");
         tx.executeWithoutResult(s->{for(UUID id:jdbc.query("SELECT message_id FROM onno_crm_ig_outbox WHERE state='SENDING'",(r,n)->r.getObject(1,UUID.class)))finish(id,false,null);});
-        ready=true;worker.scheduleWithFixedDelay(this::tick,2,15,TimeUnit.SECONDS);
+        var a=account();
+        if(a!=null){
+            var state=syncOrNull(a.id);
+            if(state==null&&settings.getActivationCutoff()!=null)ensureCutoff(a.id,"configured");
+            else if(state!=null&&settings.getActivationCutoff()!=null&&!state.cutoff().equals(settings.getActivationCutoff()))
+                log.warn("Instagram account {} keeps its persisted activation cutoff {}; onno.crm.channels.instagram.activation-cutoff={} only seeds an account without one",a.id,state.cutoff(),settings.getActivationCutoff());
+        }
     }
     public String key(){return "instagram";}
-    public View view(){var a=ready?account():null;return new View(key(),"Instagram","INSTAGRAM",!client.configured()?"UNAVAILABLE":!failure.isBlank()?"ERROR":a==null?"DISCONNECTED":a.active?"CONNECTED":"PAUSED",a==null?"":"@"+a.username,
-        "Checks provider-visible conversations every 15 seconds. Meta test-mode restrictions apply; live webhooks are not configured.",a==null?List.of("check"):List.of("check",a.active?"pause":"resume"));}
+    public View view(){var a=ready?account():null;Instant cutoff=null;try{var s=a==null?null:syncOrNull(a.id);cutoff=s==null?null:s.cutoff();}catch(RuntimeException ignored){}
+        return new View(key(),"Instagram","INSTAGRAM",!client.configured()?"UNAVAILABLE":!failure.isBlank()?"ERROR":a==null?"DISCONNECTED":a.active?"CONNECTED":"PAUSED",a==null?"":"@"+a.username,
+        "Checks provider-visible conversations every 15 seconds and imports only messages sent "+(cutoff==null?"after synchronization is enabled":"from "+cutoff)
+            +". Meta test-mode restrictions apply; live webhooks are not configured.",a==null?List.of("check"):List.of("check",a.active?"pause":"resume"));}
     private void connect(){var p=client.profile();var old=account();if(old!=null&&!old.id.equals(p.userId()))throw new IllegalArgumentException("Reconnect the original Instagram account");
         tx.executeWithoutResult(s->{workspace.lock();if(old==null){var i=new Inbox();i.setChannel(Channel.INSTAGRAM);i.setDescription("Instagram · @"+p.username());i.setAddress(p.username());inboxes.save(i);
-            jdbc.update("INSERT INTO onno_crm_ig_account VALUES (?,?,?,?,TRUE,NULL)",p.userId(),p.id(),p.username(),i.getId());}});
+            jdbc.update("INSERT INTO onno_crm_ig_account VALUES (?,?,?,?,TRUE,NULL)",p.userId(),p.id(),p.username(),i.getId());
+            ensureCutoff(p.userId(),"first connection");}});
     }
     public synchronized void command(String action,String credential){if(!ready)throw new IllegalArgumentException("Instagram is starting");
-        if(action.equals("check")){connect();retryAt=Instant.EPOCH;failure="";return;}
+        if(action.equals("check")){connect();retryAt=Instant.EPOCH;failures=0;failure="";return;}
         if(!Set.of("pause","resume").contains(action))throw new IllegalArgumentException("Unsupported Instagram action");
         var a=account();if(a==null)throw new IllegalArgumentException("Connect Instagram first");if(action.equals("resume"))connect();boolean active=action.equals("resume");
-        tx.executeWithoutResult(s->{workspace.lock();jdbc.update("UPDATE onno_crm_ig_account SET active=? WHERE account_id=?",active,a.id);inboxes.findActiveById(a.inbox).ifPresent(i->{i.setActive(active);inboxes.save(i);});});failure="";retryAt=Instant.EPOCH;
+        tx.executeWithoutResult(s->{workspace.lock();if(active)ensureCutoff(a.id,"resumed");jdbc.update("UPDATE onno_crm_ig_account SET active=? WHERE account_id=?",active,a.id);inboxes.findActiveById(a.inbox).ifPresent(i->{i.setActive(active);inboxes.save(i);});});failure="";failures=0;retryAt=Instant.EPOCH;
     }
     public boolean supports(Conversation conversation) { return Channel.INSTAGRAM.equals(conversation.getChannel()); }
 
@@ -80,17 +129,134 @@ public class InstagramBridge implements CrmChannelConnection,CrmMessageTransport
         if(jdbc.queryForObject("SELECT COUNT(*) FROM onno_crm_ig_outbox WHERE message_id=?",Integer.class,m.getId())==0)jdbc.update("INSERT INTO onno_crm_ig_outbox VALUES (?,?,?,'QUEUED')",m.getId(),a.id,peer);
         else if(jdbc.update("UPDATE onno_crm_ig_outbox SET state='QUEUED' WHERE message_id=? AND state='FAILED'",m.getId())!=1)throw new IllegalArgumentException("Message is already queued or sent");
     }
-    synchronized void tick(){if(!ready||!client.configured()||Instant.now().isBefore(retryAt))return;
-        try{if(account()==null)connect();var a=account();if(!a.active)return;failure="";deliver(a);
-            // Save a continuation only after all messages in this page commit. Empty pages can still have a cursor.
-            var page=client.conversations(a.id,a.cursor);for(var thread:page.data()){String after="";Set<String> seen=new HashSet<>();int pages=0;
-                do{var mail=client.messages(InstagramClient.required(thread,"id"),after);var ordered=new ArrayList<JsonNode>();mail.data().forEach(ordered::add);Collections.reverse(ordered);for(var m:ordered)ingest(a,m);
-                    after=mail.after();if(!after.isBlank()&&!seen.add(after))throw new IllegalStateException("Repeated Instagram cursor");if(++pages>100)throw new IllegalStateException("Instagram conversation exceeds sync limit");
-                }while(!after.isBlank());}
-            jdbc.update("UPDATE onno_crm_ig_account SET cursor=? WHERE account_id=?",page.after().isBlank()?null:page.after(),a.id);
-        }catch(InstagramClient.ApiFailure e){failure=e.status==401||e.status==400?"Instagram access failed; check permissions or generate a new token":"Instagram synchronization deferred";retryAt=Instant.now().plusSeconds(Math.max(60,e.retrySeconds));}
-        catch(Exception e){failure="Instagram synchronization failed; check connection";retryAt=Instant.now().plusSeconds(60);}
+
+    // ---- synchronization state ----
+
+    private static final class InvalidCutoff extends RuntimeException{InvalidCutoff(){super("invalid Instagram activation cutoff");}}
+    SyncState syncOrNull(String account){
+        var rows=jdbc.query("SELECT activation_cutoff,checkpoint,pass_head,pass_cursor FROM onno_crm_ig_sync WHERE account_id=?",
+                (r,n)->new String[]{r.getString(1),r.getString(2),r.getString(3),r.getString(4)},account);
+        if(rows.isEmpty())return null;var row=rows.getFirst();
+        try{return new SyncState(Instant.parse(row[0].trim()),row[1]==null?null:Instant.parse(row[1]),row[2]==null?null:Instant.parse(row[2]),row[3]);}
+        catch(DateTimeParseException|NullPointerException e){throw new InvalidCutoff();}
     }
+    /**
+     * Persists the account's activation cutoff unless one already exists; an existing cutoff is never
+     * changed. The configured {@code activation-cutoff} wins over "now" for the first value.
+     */
+    Instant ensureCutoff(String account,String reason){
+        var existing=syncOrNull(account);if(existing!=null)return existing.cutoff();
+        Instant configured=settings.getActivationCutoff();Instant cutoff=configured!=null?configured:clock.instant();
+        jdbc.update("INSERT INTO onno_crm_ig_sync (account_id,activation_cutoff) VALUES (?,?)",account,cutoff.toString());
+        log.info("Instagram account {} activation cutoff persisted as {} ({}); earlier messages are never imported",account,cutoff,configured!=null?"configured":reason);
+        return cutoff;
+    }
+    private ThreadMark mark(String account,String thread){
+        var rows=jdbc.query("SELECT updated_time,fetched_at FROM onno_crm_ig_thread WHERE account_id=? AND thread_id=?",(r,n)->new ThreadMark(Instant.parse(r.getString(1)),Instant.parse(r.getString(2))),account,thread);
+        return rows.isEmpty()?null:rows.getFirst();
+    }
+    private void saveMark(String account,String thread,Instant updated,Instant fetchedAt){
+        if(jdbc.update("UPDATE onno_crm_ig_thread SET updated_time=?,fetched_at=? WHERE account_id=? AND thread_id=?",updated.toString(),fetchedAt.toString(),account,thread)==0)
+            jdbc.update("INSERT INTO onno_crm_ig_thread (account_id,thread_id,updated_time,fetched_at) VALUES (?,?,?,?)",account,thread,updated.toString(),fetchedAt.toString());
+    }
+    private void savePass(String account,Instant head,String cursor){
+        jdbc.update("UPDATE onno_crm_ig_sync SET pass_head=?,pass_cursor=? WHERE account_id=?",head.toString(),cursor,account);
+    }
+    private void finishPass(String account,SyncState state,Instant head){
+        Instant checkpoint=state.checkpoint()==null||head.isAfter(state.checkpoint())?head:state.checkpoint();
+        jdbc.update("UPDATE onno_crm_ig_sync SET checkpoint=?,pass_head=NULL,pass_cursor=NULL WHERE account_id=?",checkpoint.toString(),account);
+    }
+
+    // ---- polling ----
+
+    synchronized void tick(){if(!ready||!client.configured()||clock.instant().isBefore(retryAt))return;
+        try{if(account()==null)connect();var a=account();if(!a.active)return;failure="";
+            ensureCutoff(a.id,"first poll");deliver(a);poll(a);failures=0;
+        }catch(InstagramClient.ApiFailure e){
+            failures++;boolean limited=e.rateLimited();
+            long delay=Math.max(e.retrySeconds,backoff(limited?300:60,limited?3600:900));
+            failure=limited?"Instagram rate limit reached; synchronization resumes automatically"
+                    :e.accessDenied()?"Instagram access failed; check permissions or generate a new token":"Instagram synchronization deferred";
+            retryAt=clock.instant().plusSeconds(delay);
+            log.warn("Instagram synchronization deferred {}s: HTTP {}, Graph error code {} subcode {}{}",delay,e.status,e.code,e.subcode,limited?" (rate limited)":"");
+        }catch(InvalidCutoff e){
+            failures++;failure="Instagram activation cutoff is invalid; store an ISO-8601 UTC instant in onno_crm_ig_sync";retryAt=clock.instant().plusSeconds(backoff(60,900));
+            log.warn("Instagram synchronization stopped: the persisted activation cutoff is not an ISO-8601 instant");
+        }catch(Exception e){
+            failures++;long delay=backoff(60,900);failure="Instagram synchronization failed; check connection";retryAt=clock.instant().plusSeconds(delay);
+            // Only the exception type: messages can carry SQL parameters or provider text.
+            log.warn("Instagram synchronization failed ({}); retrying in {}s",e.getClass().getSimpleName(),delay);
+        }
+    }
+    private long backoff(long base,long cap){return Math.min(cap,base<<Math.min(Math.max(failures-1,0),6));}
+    private static final class Budget{int pages;int threads;Budget(int pages,int threads){this.pages=pages;this.threads=threads;}}
+    /** Outcome of one conversation page: every eligible thread done, a thread older than the floor seen, newest updated_time. */
+    private record Scan(boolean complete,boolean reachedFloor,Instant newest){}
+
+    private void poll(Account a){
+        var state=syncOrNull(a.id);
+        Instant floor=state.checkpoint()==null?state.cutoff():max(state.cutoff(),state.checkpoint().minus(OVERLAP));
+        var budget=new Budget(settings.getConversationPagesPerPoll(),settings.getThreadsPerPoll());
+        // The newest conversations come first on every poll, so a backlog can never delay a fresh DM.
+        var head=client.conversations(a.id,null);budget.pages--;
+        var scan=scan(a,state.cutoff(),floor,head,budget);
+        Instant passHead=state.passHead()!=null?state.passHead():scan.newest()!=null?scan.newest():state.checkpoint()!=null?state.checkpoint():state.cutoff();
+        String cursor;
+        if(state.passHead()==null){
+            if(!scan.complete()){savePass(a.id,passHead,null);return;}
+            if(scan.reachedFloor()||head.after().isBlank()){finishPass(a.id,state,passHead);return;}
+            cursor=head.after();
+        }else{
+            // Newest-first: when the head alone reaches the floor, nothing at or above it is left beyond the head.
+            if(scan.complete()&&(scan.reachedFloor()||head.after().isBlank())){finishPass(a.id,state,max(passHead,scan.newest()));return;}
+            // A pass still at the head (passCursor null) moves past it only once every head thread is done.
+            if(state.passCursor()==null&&!scan.complete()){savePass(a.id,passHead,null);return;}
+            cursor=state.passCursor()==null?head.after():state.passCursor();
+        }
+        var cursors=new HashSet<String>();
+        while(budget.pages>0&&budget.threads>0){
+            if(!cursors.add(cursor))throw new IllegalStateException("Repeated Instagram cursor");
+            var page=client.conversations(a.id,cursor);budget.pages--;
+            var part=scan(a,state.cutoff(),floor,page,budget);
+            if(!part.complete()){savePass(a.id,passHead,cursor);return;}
+            if(part.reachedFloor()||page.after().isBlank()){finishPass(a.id,state,passHead);return;}
+            cursor=page.after();
+        }
+        savePass(a.id,passHead,cursor);
+    }
+    private Scan scan(Account a,Instant cutoff,Instant floor,InstagramClient.Page page,Budget budget){
+        boolean complete=true,reached=false;Instant newest=null;
+        for(var thread:page.data()){
+            String id=InstagramClient.required(thread,"id");Instant updated=parseInstant(InstagramClient.required(thread,"updated_time"));
+            newest=max(newest,updated);
+            if(updated.isBefore(floor)){reached=true;continue;}
+            var mark=mark(a.id,id);
+            if(mark!=null&&!mark.updated().isBefore(updated)&&!mark.fetchedAt().isBefore(updated.plus(SETTLE)))continue;
+            if(budget.threads<=0){complete=false;continue;}
+            budget.threads--;Instant fetchedAt=clock.instant();
+            importRecent(a,cutoff,id,mark,client.messages(id));
+            // Each message above committed in its own transaction; only now may the thread's watermark move.
+            saveMark(a.id,id,mark==null?updated:max(mark.updated(),updated),fetchedAt);
+        }
+        return new Scan(complete,reached,newest);
+    }
+    private void importRecent(Account a,Instant cutoff,String thread,ThreadMark mark,InstagramClient.Page mail){
+        record Item(Instant sent,int order,JsonNode raw){}
+        var items=new ArrayList<Item>();int order=0;Instant oldest=null;
+        for(var m:mail.data()){Instant sent=parseInstant(InstagramClient.required(m,"created_time"));oldest=oldest==null||sent.isBefore(oldest)?sent:oldest;
+            // Message-level cutoff: a new DM in an old conversation never brings that conversation's history with it.
+            if(sent.isBefore(cutoff))continue;
+            String external=InstagramClient.required(m,"id");
+            if(jdbc.queryForObject("SELECT COUNT(*) FROM onno_crm_ig_seen WHERE account_id=? AND external_id=?",Integer.class,a.id,external)>0)continue;
+            items.add(new Item(sent,order++,m));}
+        if(!mail.after().isBlank()&&oldest!=null&&!oldest.isBefore(cutoff)&&(mark==null||oldest.isAfter(mark.updated())))
+            log.warn("Instagram conversation had more than {} new messages since the last poll; Instagram details only the most recent {}",InstagramClient.MESSAGE_PAGE_SIZE,InstagramClient.MESSAGE_PAGE_SIZE);
+        // The provider lists newest first; import oldest first so conversation previews end on the latest message.
+        items.sort(Comparator.comparing(Item::sent).thenComparing(Item::order,Comparator.reverseOrder()));
+        for(var item:items)ingest(a,item.raw());
+    }
+    private static Instant max(Instant a,Instant b){return a==null?b:b==null?a:a.isAfter(b)?a:b;}
+
     private boolean own(Account a,String id){return a.id.equals(id)||a.scoped.equals(id);}
     private void ingest(Account a,JsonNode raw){
         String external=InstagramClient.required(raw,"id"),sender=InstagramClient.required(raw.path("from"),"id");boolean outbound=own(a,sender);
@@ -124,11 +290,10 @@ public class InstagramBridge implements CrmChannelConnection,CrmMessageTransport
         }catch(Exception e){tx.executeWithoutResult(s->finish(id,false,null));}
     }}
     private void finish(UUID id,boolean sent,String external){messages.findActiveById(id).ifPresent(m->{m.setDeliveryStatus(sent?DeliveryStatus.SENT:DeliveryStatus.FAILED);if(external!=null)m.setExternalMessageId(externalKey(external));messages.save(m);});jdbc.update("UPDATE onno_crm_ig_outbox SET state=? WHERE message_id=?",sent?"SENT":"FAILED",id);}
-    static LocalDateTime parseTime(String value){
-        OffsetDateTime time;
-        try{time=OffsetDateTime.parse(value);}catch(java.time.format.DateTimeParseException e){time=OffsetDateTime.parse(value,DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ"));}
-        return time.atZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
+    static Instant parseInstant(String value){
+        try{return OffsetDateTime.parse(value).toInstant();}catch(DateTimeParseException e){return OffsetDateTime.parse(value,DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ")).toInstant();}
     }
+    static LocalDateTime parseTime(String value){return LocalDateTime.ofInstant(parseInstant(value),ZoneId.systemDefault());}
     private static String externalKey(String id){return "instagram:"+UUID.nameUUIDFromBytes(id.getBytes(StandardCharsets.UTF_8));}
     private static String cut(String text,int max){return text.substring(0,Math.min(text.length(),max));}
     @PreDestroy public void stop(){ready=false;worker.shutdownNow();}

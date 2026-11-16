@@ -73,6 +73,7 @@ val publishedModules = mapOf(
     "onno-cluster-starter" to "Cross-node delivery of onno entity-change events for horizontal scale-out via a pluggable bus (default Postgres LISTEN/NOTIFY).",
     "onno-kafka-starter" to "Kafka integration starter publishing onno entity-change events to topics.",
     "onno-import-starter" to "Data import starter for onno: xlsx / csv ingestion into catalogs and documents.",
+    "onno-print-starter" to "Print forms for onno: fill Word (.docx) and Excel (.xlsx) templates from catalog and document records.",
     "onno-observability-starter" to "Privacy-safe operational, UX, and business-outcome instrumentation exported through OpenTelemetry.",
     "onno-crm-channels-starter" to "Opt-in Telegram, Gmail, Instagram and WhatsApp adapters for the onno CRM inbox.",
     "onno-crm-starter" to "Reusable CRM module for onno with customers, opportunities, unified inboxes, comments, activity timelines, and a packaged workspace UI.",
@@ -329,7 +330,7 @@ val configNotesDir = file("docs/_config")
 // Render order + human section titles. One entry per published starter that owns `onno.*` props.
 val configModuleProjects = listOf(
     "onno-framework-starter", "onno-ui-starter", "onno-auth-starter", "onno-mcp-starter",
-    "onno-import-starter", "onno-cluster-starter", "onno-kafka-starter",
+    "onno-import-starter", "onno-print-starter", "onno-cluster-starter", "onno-kafka-starter",
     "onno-observability-starter", "onno-desktop-starter", "onno-crm-channels-starter",
 )
 
@@ -356,6 +357,7 @@ val configModuleTitles = mapOf(
     "onno-auth-starter" to "Auth — `onno-auth-starter` (`OnnoAuthProperties`, prefix `onno.auth`)",
     "onno-mcp-starter" to "MCP — `onno-mcp-starter` (`OnnoMcpProperties`, prefix `onno.mcp`)",
     "onno-import-starter" to "Import — `onno-import-starter` (`OnnoImportProperties`, prefix `onno.import`)",
+    "onno-print-starter" to "Print — `onno-print-starter` (`OnnoPrintProperties`, prefix `onno.print`)",
     "onno-cluster-starter" to "Cluster — `onno-cluster-starter` (`OnnoClusterProperties`, prefix `onno.cluster`)",
     "onno-kafka-starter" to "Kafka — `onno-kafka-starter` (`OnnoKafkaProperties`, prefix `onno.kafka`)",
     "onno-desktop-starter" to "Desktop — `onno-desktop-starter` (`DesktopProperties`, prefix `onno.desktop`)",

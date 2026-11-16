@@ -9,6 +9,7 @@ import type {
   LayoutSection,
   RegisterMeta,
   AuthUser,
+  UserAccountView,
   UiEvent,
   SettingMeta,
   ActionResult,
@@ -27,6 +28,7 @@ import type {
 import { toSnakeCase } from "./utils";
 // Type-only (erased at build time), so this doesn't create a runtime cycle with widget-data.
 import type { AggregateBuckets } from "./widget-data";
+import type { ActionItem } from "./actions-menu-bridge";
 
 const BASE = "/api";
 const CSRF_COOKIE = "XSRF-TOKEN";
@@ -270,6 +272,48 @@ export async function uploadMedia(file: File): Promise<StoredMedia> {
 }
 
 /**
+ * POST the selected record ids to a server download endpoint (a list's selection download, e.g. batch
+ * print) and save the returned attachment. The file name comes from Content-Disposition (RFC 5987
+ * {@code filename*} preferred), falling back to {@code fallbackName}.
+ */
+export async function downloadSelection(url: string, ids: string[], fallbackName: string): Promise<void> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const csrf = readCsrfToken();
+  if (csrf) headers[CSRF_HEADER] = csrf;
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "same-origin",
+    headers,
+    body: JSON.stringify({ ids }),
+  });
+  if (!res.ok) {
+    let message = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (body.message) message = body.message;
+      else if (body.error) message = body.error;
+    } catch { /* ignore parse errors */ }
+    if (res.status === 401) onUnauthorized?.();
+    throw new ApiError(message, res.status);
+  }
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+  const plain = /filename="?([^";]+)"?/i.exec(disposition)?.[1];
+  const name = encoded ? decodeURIComponent(encoded) : plain ?? fallbackName;
+  const href = URL.createObjectURL(await res.blob());
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.download = name;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(href), 60_000);
+  }
+}
+
+/**
  * A resolved {@code @} mention or {@code #} reference in a comment body (see MentionResolver). The body
  * carries it as a `@[Display](kind/name/id)` or `#[Display](kind/name/id)` token; this is the live resolution for the current viewer — display
  * and avatar reflect the record now, and `readable` is false when the viewer can't open it (the chip
@@ -492,6 +536,34 @@ export const api = {
     }),
   logout: () =>
     fetchJson<void>(`${BASE}/auth/logout`, { method: "POST" }),
+  // Database-mode accounts. The caller renders its own error text, so these stay silent.
+  getPasswordPolicy: () =>
+    fetchJson<{ minLength: number }>(`${BASE}/auth/password-policy`, undefined, { silent: true }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    fetchJson<void>(`${BASE}/auth/password`, {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }, { silent: true }),
+  listUserAccounts: () =>
+    fetchJson<UserAccountView[]>(`${BASE}/auth/users`, undefined, { silent: true }),
+  createUserAccount: (username: string, roles: string[], password?: string) =>
+    fetchJson<{ account: UserAccountView; temporaryPassword: string | null }>(`${BASE}/auth/users`, {
+      method: "POST",
+      body: JSON.stringify({ username, roles, password: password || null }),
+    }, { silent: true }),
+  updateUserAccount: (id: string, patch: { roles?: string[]; enabled?: boolean }) =>
+    fetchJson<UserAccountView>(`${BASE}/auth/users/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }, { silent: true }),
+  resetUserPassword: (id: string) =>
+    fetchJson<{ temporaryPassword: string }>(`${BASE}/auth/users/${encodeURIComponent(id)}/reset-password`, {
+      method: "POST",
+    }, { silent: true }),
+  signOutUserAccount: (id: string) =>
+    fetchJson<UserAccountView>(`${BASE}/auth/users/${encodeURIComponent(id)}/sign-out`, {
+      method: "POST",
+    }, { silent: true }),
 
   getConfig: () => fetchJson<AppConfig>(`${BASE}/config`),
   getTheme: () => fetchJson<Record<string, string>>(`${BASE}/theme`),
@@ -625,6 +697,13 @@ export const api = {
   },
   getDocument: (name: string, id: string) =>
     fetchJson<EntityRecord>(`${BASE}/documents/${name}/${id}`),
+  getRecordRefresh: (kind: "catalogs" | "documents", name: string, id: string,
+    { profile, viewport }: { profile: string; viewport?: string | null }) => {
+    const params = new URLSearchParams({ profile });
+    if (viewport) params.set("viewport", viewport);
+    return fetchJson<{ record: EntityRecord; actions: ActionItem[]; readOnly: boolean }>(
+      `${BASE}/divkit/record-refresh/${kind}/${encodeURIComponent(name)}/${id}?${params}`, undefined, { silent: true });
+  },
   createDocument: (name: string, data: EntityRecord, opts?: FetchOptions) =>
     fetchJson<EntityRecord>(`${BASE}/documents/${name}`, {
       method: "POST",

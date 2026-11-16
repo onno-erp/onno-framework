@@ -69,13 +69,13 @@ public interface EntityView<E> {
      * Default: none.
      *
      * <pre>
-     * public void actions(ActionSpec a) {
+     * public void actions(ActionSpec&lt;E&gt; a) {
      *     a.action("recalc").label("Recalculate").icon("calculator").scope(ActionScope.DETAIL)
      *      .handler(ctx -&gt; { service.recalc(ctx.id()); return ActionResult.refresh(ActionToast.success("Recalculated")); });
      * }
      * </pre>
      */
-    default void actions(ActionSpec actions) {}
+    default void actions(ActionSpec<E> actions) {}
 
     /**
      * Custom input fields for this entity's list toolbar — a date picker, dropdown, text or number
@@ -87,7 +87,7 @@ public interface EntityView<E> {
      * public void inputs(InputSpec in) {
      *     in.input("asOf").label("As of").type(InputType.DATE);
      * }
-     * public void actions(ActionSpec a) {
+     * public void actions(ActionSpec&lt;E&gt; a) {
      *     a.action("report").label("Report").scope(ActionScope.TOOLBAR)
      *      .handler(ctx -&gt; ActionResult.toast(ActionToast.success("Report as of " + ctx.input("asOf"))));
      * }

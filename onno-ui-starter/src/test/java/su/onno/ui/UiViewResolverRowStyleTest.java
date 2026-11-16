@@ -20,12 +20,12 @@ class UiViewResolverRowStyleTest {
     private static final class Plain {}
     private static final class ProfileOnly {}
 
-    private static EntityView view(Class<?> entity, String profile,
-                                   Function<ActionRow, ListSpec.RowStyle> style) {
-        return new EntityView() {
-            @Override public Class<?> entity() { return entity; }
+    private static <E> EntityView<E> view(Class<E> entity, String profile,
+                                   Function<ActionRow<E>, ListSpec.RowStyle> style) {
+        return new EntityView<E>() {
+            @Override public Class<E> entity() { return entity; }
             @Override public String profile() { return profile; }
-            @Override public void list(ListSpec spec) {
+            @Override public void list(ListSpec<E> spec) {
                 if (style != null) {
                     spec.rowStyle(style);
                 }
@@ -39,10 +39,10 @@ class UiViewResolverRowStyleTest {
                 view(Styled.class, null, row -> row.bool("urgent") ? ListSpec.RowStyle.DANGER : null),
                 view(Plain.class, null, null)));
 
-        Function<ActionRow, ListSpec.RowStyle> fn = resolver.rowStyle(Styled.class);
+        Function<ActionRow<Styled>, ListSpec.RowStyle> fn = resolver.rowStyle(Styled.class);
         assertThat(fn).isNotNull();
-        assertThat(fn.apply(new ActionRow(Map.of("urgent", true)))).isEqualTo(ListSpec.RowStyle.DANGER);
-        assertThat(fn.apply(new ActionRow(Map.of("urgent", false)))).isNull();
+        assertThat(fn.apply(new ActionRow<>(Map.of("urgent", true)))).isEqualTo(ListSpec.RowStyle.DANGER);
+        assertThat(fn.apply(new ActionRow<>(Map.of("urgent", false)))).isNull();
 
         assertThat(resolver.rowStyle(Plain.class)).as("no rowStyle authored").isNull();
         assertThat(resolver.rowStyle(Object.class)).as("no view at all").isNull();
@@ -55,9 +55,9 @@ class UiViewResolverRowStyleTest {
                 view(ProfileOnly.class, null, null),
                 view(ProfileOnly.class, "warehouse", row -> ListSpec.RowStyle.MUTED)));
 
-        Function<ActionRow, ListSpec.RowStyle> fn = resolver.rowStyle(ProfileOnly.class);
+        Function<ActionRow<ProfileOnly>, ListSpec.RowStyle> fn = resolver.rowStyle(ProfileOnly.class);
         assertThat(fn).isNotNull();
-        assertThat(fn.apply(new ActionRow(Map.of()))).isEqualTo(ListSpec.RowStyle.MUTED);
+        assertThat(fn.apply(new ActionRow<>(Map.of()))).isEqualTo(ListSpec.RowStyle.MUTED);
     }
 
     @Test
@@ -66,7 +66,7 @@ class UiViewResolverRowStyleTest {
                 view(Styled.class, "warehouse", row -> ListSpec.RowStyle.MUTED),
                 view(Styled.class, null, row -> ListSpec.RowStyle.ACCENT)));
 
-        assertThat(resolver.rowStyle(Styled.class).apply(new ActionRow(Map.of())))
+        assertThat(resolver.rowStyle(Styled.class).apply(new ActionRow<>(Map.of())))
                 .isEqualTo(ListSpec.RowStyle.ACCENT);
     }
 }

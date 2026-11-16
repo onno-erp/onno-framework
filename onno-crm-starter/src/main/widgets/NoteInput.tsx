@@ -1,6 +1,7 @@
 import { text as t, useTranslate } from "@onno/widget-sdk";
 import { Button, Popover, PopoverAnchor, PopoverContent, Textarea, useEffect, useRef, useState } from "@onno/widget-sdk";
-import type { ClipboardEvent, KeyboardEvent } from "react";
+import type { ClipboardEvent, KeyboardEvent, MouseEvent } from "react";
+import { useAutoGrow } from "./useAutoGrow";
 
 type Reference = {kind: "catalogs" | "documents"; name: string; id: string; display: string; entity: string; avatarUrl?: string};
 type Pick = Reference & {marker: "@" | "#"};
@@ -9,12 +10,34 @@ function serialize(text: string, picks: Pick[]) {
     () => `${pick.marker}[${pick.display.replace(/]/g, "")}](${pick.kind}/${pick.name}/${pick.id})`), text);
 }
 
+/**
+ * The references picked into a draft's note, shared by every field editing that draft: the inline
+ * composer and the large window show the same note, and a note restored after switching chats keeps
+ * its links when it is edited further.
+ */
+const draftPicks = new Map<string, {current: Pick[]}>();
+function usePicks(draftKey?: string) {
+  const local = useRef<Pick[]>([]);
+  if (!draftKey) return local;
+  let shared = draftPicks.get(draftKey);
+  if (!shared) { shared = {current: []}; draftPicks.set(draftKey, shared); }
+  return shared;
+}
+
 /** Inbox input: the existing note field with a small reference picker, no separate comment panel. */
-export function NoteInput({value, disabled, onChange, onSubmit}: {
+export function NoteInput({value, disabled, onChange, onSubmit, draftKey, autoGrow = false, fill = false, autoFocus = false}: {
   value: string; disabled: boolean; onChange: (text: string, body: string) => void; onSubmit: () => void;
+  /** Shares picked references with other fields editing the same draft. */
+  draftKey?: string;
+  /** Grow with the text up to the field's CSS max-height (the inline composer). */
+  autoGrow?: boolean;
+  /** Fill the remaining height of a flex column (the large composer window). */
+  fill?: boolean;
+  autoFocus?: boolean;
 }) {
   const input = useRef<HTMLTextAreaElement>(null);
-  const picks = useRef<Pick[]>([]);
+  const picks = usePicks(draftKey);
+  useAutoGrow(input, value, autoGrow);
   const current = useRef(value); current.current = value;
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => {mounted.current = false;}; }, []);
@@ -85,7 +108,8 @@ export function NoteInput({value, disabled, onChange, onSubmit}: {
   };
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (query) {
-      if (event.key === "Escape") { event.preventDefault(); setQuery(null); return; }
+      // The open suggestions are the topmost layer: Escape closes them, not a dialog around the field.
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setQuery(null); return; }
       if (options.length && ["ArrowDown", "ArrowUp", "Enter", "Tab"].includes(event.key)) {
         event.preventDefault();
         if (event.key === "Enter" || event.key === "Tab") choose(options[active]);
@@ -101,7 +125,7 @@ export function NoteInput({value, disabled, onChange, onSubmit}: {
       {loading || error || !options.length ? <p role="status" className="px-2 py-2 text-xs text-muted-foreground">{loading ? "Searching…" : error ? t("crm.note.referencesError") : t("crm.note.noMatches")}</p> :
         <div role="listbox" aria-label={t("crm.note.references")} className="max-h-48 overflow-y-auto">
           {options.map((option, index) => <Button variant="ghost" type="button" role="option" aria-selected={index === active}
-            key={`${option.kind}/${option.name}/${option.id}`} onMouseDown={event => {event.preventDefault(); choose(option);}}
+            key={`${option.kind}/${option.name}/${option.id}`} onMouseDown={(event: MouseEvent<HTMLButtonElement>) => {event.preventDefault(); choose(option);}}
             onMouseEnter={() => setActive(index)}
             className={`h-auto whitespace-normal font-normal flex w-full items-center gap-2 rounded-field px-2 py-2 text-left text-xs ${index === active ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"}`}>
             {option.avatarUrl && <img src={option.avatarUrl} alt="" className="size-6 rounded-full object-cover" />}
@@ -109,10 +133,10 @@ export function NoteInput({value, disabled, onChange, onSubmit}: {
           </Button>)}
         </div>}
     </PopoverContent>
-    <PopoverAnchor asChild><div><Textarea ref={input} value={value} disabled={disabled} maxLength={8000}
+    <PopoverAnchor asChild><div data-composer-note className={fill ? "flex min-h-0 flex-1 flex-col" : undefined}><Textarea ref={input} value={value} disabled={disabled} maxLength={8000} autoFocus={autoFocus}
       aria-label={t("crm.note.write")} placeholder={t("crm.note.placeholder")}
       onChange={(event: {target: HTMLTextAreaElement}) => {change(event.target.value); locate(event.target.value, event.target.selectionStart);}}
       onKeyDown={keyDown} onPaste={paste} onBlur={() => setQuery(null)}
-      className="min-h-20 resize-none border-0 bg-transparent dark:bg-transparent px-2 shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none" />
+      className={`${fill ? "min-h-48 flex-1" : "min-h-20"} resize-none border-0 bg-transparent dark:bg-transparent px-2 shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none`} />
   </div></PopoverAnchor></Popover>;
 }

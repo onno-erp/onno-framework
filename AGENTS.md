@@ -37,9 +37,10 @@ to future agents that may not have the full conversation context.
 | `onno-ui-starter` | Generic REST + DivKit UI controllers plus the packaged React/Vite frontend, media uploads, and the SSE event stream. |
 | `onno-observability-starter` | Opt-in privacy-safe business/UX telemetry API, browser intake, and bounded asynchronous HTTP export. |
 | `onno-crm-starter` | Composable inbox and messaging around explicitly bound host customer/employee catalogs. Host owns sales, business fields and navigation. |
-| `onno-auth-starter` | Security and auth API auto-configuration: in-memory, OIDC/SSO, and resource-server (JWT) modes. |
+| `onno-auth-starter` | Security and auth API auto-configuration: database (runtime-managed accounts), in-memory, OIDC/SSO, and resource-server (JWT) modes. |
 | `onno-mcp-starter` | MCP server exposing the model + CRUD + register reads + posting as AI-agent tools. |
 | `onno-import-starter` | CSV import (preview, mapping, upsert, dry-run) through the UI command path. |
+| `onno-print-starter` | Print forms: typed `PrintForm<T>` beans fill Word/Excel templates; record ⋯ menu, list batch zip, admin template uploads, optional PDF. |
 | `onno-cluster-starter` | Cross-node delivery of entity-change events for horizontal scale-out via a pluggable `ClusterEventBus` (default Postgres LISTEN/NOTIFY; no-op on H2). |
 | `onno-kafka-starter` | Kafka/event transport helpers (outbox relay, CloudEvents, remote refs). |
 | `onno-desktop-starter` | Desktop runtime support and bundled Tauri shell resources. |
@@ -49,7 +50,7 @@ to future agents that may not have the full conversation context.
 | `example` | Local example app and smoke-test consumer inside the multi-module build. Do not publish it. |
 | `community/` | Community integrations registry: `registry.json` (source of truth) + `registry.schema.json`. `INTEGRATIONS.md` is generated from it by the `generateIntegrationsDoc` Gradle task. |
 
-Commercial vertical connectors (`onno-guesty-starter`, `onno-hospedajes-starter`) are licensed separately and live in the [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo — not in this build. Authentication (including OIDC/SSO via `onno-auth-starter`) stays in the open-source core.
+Commercial connectors (e.g. `onno-tochka-starter`, `onno-yookassa-starter`, `onno-ozon-starter`) are licensed separately and live in the [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo — not in this build. Authentication (including OIDC/SSO via `onno-auth-starter`) stays in the open-source core.
 
 Community extensions (connectors, SPI implementations, UI add-ons, skills) are built by anyone as separate artifacts on the published core — see [docs/EXTENDING.md](docs/EXTENDING.md) for the contract and conventions, and [CONTRIBUTING.md](CONTRIBUTING.md) for how they get listed. When you build a connector for a user, you can suggest they publish and list it.
 
@@ -110,6 +111,8 @@ For targeted iteration:
 ./gradlew :onno-framework:test
 ./gradlew :onno-framework-starter:compileJava
 ./gradlew :onno-ui-starter:buildFrontend
+# tsc over src/, tests/, vite.config.ts and the widget sources the tests import
+./gradlew :onno-ui-starter:typecheckFrontend
 ./gradlew :onno-ui-starter:compileJava
 ```
 
@@ -157,7 +160,9 @@ When adding a starter, include:
 - Javadoc currently emits many missing-comment warnings. Broken links are not acceptable because they can fail
   publication.
 - The frontend npm audit may report moderate vulnerabilities. Do not run forced upgrades without checking the
-  impact on the UI build and generated assets.
+  impact on the UI build and generated assets. `CI` runs the same audits as the release workflow on main and every PR
+  (`.github/scripts/npm-audit.mjs`, with its reviewed allowlist), so a new advisory blocks a merge rather
+  than a release tag.
 
 ### AI-Friendly Change Style
 
@@ -342,6 +347,26 @@ posted document must be explicitly unposted before repository deletion. Ordinary
 Data aggregates retain physical deletes. Generic REST/import/MCP creates and updates run
 `onFilling` (create), `beforeWrite`, rules, persistence, then `afterWrite`; validation previews never
 run `afterWrite`.
+
+**Who may post is a separate right from who may edit.** `@AccessControl(postRoles = …,
+unpostRoles = …)` on a document narrows posting (and re-posting) or unposting to those roles *on
+top of* write access; left empty, every writer keeps the right. Deleting a posted document unposts
+it, so it needs the unpost right too. `ADMIN` always passes. The gates are enforced on the shared
+command path (generic REST, MCP tools, built-in UI actions — the Post/Unpost buttons are hidden
+from callers who lack them); trusted code calling `PostingService` directly is not gated, like typed
+repositories. For a state-based veto ("a reconciled payment cannot be unposted") implement
+`BeforeUnpostHandler.beforeUnpost()` — the counterpart of `BeforePostHandler` — and throw.
+
+```java
+@Document(name = "Invoices")
+@AccessControl(readRoles = {"RECEPTION", "MANAGER"}, unpostRoles = "MANAGER")
+public class Invoice extends DocumentObject implements Postable, BeforeUnpostHandler {
+    @Override
+    public void beforeUnpost() {
+        if (paid) throw new ValidationException("A paid invoice cannot be unposted");
+    }
+}
+```
 
 Use `TURNOVER` when period totals matter but current balance does not.
 
@@ -749,8 +774,9 @@ Ask:
 
 Likely outputs:
 - `BeforeWriteHandler`
-- `BeforePostHandler`
+- `BeforePostHandler` / `BeforeUnpostHandler`
 - validation in Java services
+- `@AccessControl(postRoles = …, unpostRoles = …)` when posting is a different right from editing
 
 ### Round 6: Integrations, Scale, And Boundaries
 
@@ -939,6 +965,39 @@ The domain `AfterPostHandler.afterPost()` hook still exists, but it has no Sprin
 event for anything that touches beans. Neither requires the Kafka outbox (that's only for cross-service
 event streaming).
 
+`PostingEngine` also publishes document `EntityChangedEvent` notifications
+(`POSTED` / `UNPOSTED`), plus a wildcard register `CHANGED` notification so open register views
+refresh, after its JDBI transaction commits, including calls made directly through
+`PostingService`. Each successful operation publishes one of each; rolled-back operations publish
+none. UI commands do not duplicate these notifications.
+
+Post-commit callbacks (`AfterPostHandler.afterPost()`, `DocumentPostedEvent`/`DocumentUnpostedEvent`
+listeners, these notifications) cannot fail a committed post: an exception is logged at ERROR and
+the framework's remaining callbacks still run (Spring still skips later listeners of the same
+event). Anything that must not be lost belongs in a `@DomainEvent` outbox
+row, which commits with the posting.
+
+### Print Forms
+
+A print form (1C "печатная форма") is a `.docx`/`.xlsx` template plus a typed `PrintForm<T>` bean
+from `onno-print-starter`. Templates use `{{key}}` placeholders and `{{table.column}}` rows that
+repeat per item. The record ⋯ menu offers each form the viewer may use (`print-{key}` action key).
+Keep values typed (`number`/`date`) so Excel cells stay numeric. List selections batch-print to a
+zip; admins replace templates at runtime with the `printTemplates` widget (stored in
+`onno_print_templates`); `spec.pdf()` / `?format=pdf` need a configured `PdfConverter` (Gotenberg or
+LibreOffice). Do not build bespoke download controllers for printing.
+
+```java
+@Component
+class OrderInvoice extends PrintForm<Order> {
+    OrderInvoice() { super("invoice", Order.class); }   // classpath:/print/invoice.docx
+    @Override protected void fill(Order o, TemplateModel m) {
+        m.text("customer", o.getCustomer())
+         .table("items", o.getItems(), (row, l) -> row.text("book", l.getBook()).number("qty", l.getQuantity()));
+    }
+}
+```
+
 ### Business Rules
 
 Validation is typed Java, not string expressions. Implement `Validated` and return named `BusinessRule`s whose condition is a `BooleanSupplier` over the entity's fields. Rules run before write and before posting; the first failure throws with the rule's message (or `Business rule failed: {name}` if none).
@@ -966,7 +1025,7 @@ UI is authored as Java classes registered as Spring beans — never as annotatio
 
 - **`Layout`** — navigation structure + shell (nav presentation) + persona. The default layout (`profile() == null`) is the back-office shell and is the only place to configure application-wide shell, branding, or `identity(...)`; startup rejects those settings on named profiles. One layout per persona declares its roles and curated sections. `configure(LayoutSpec)`: `spec.shell().nav(NavStyle.SIDEBAR)`, `spec.section("Sales").icon("euro").catalog(Customer.class).document(Invoice.class)`. **Nav is curated:** a catalog/document/register shows in the sidebar only if a section lists it. An entity with an `EntityView` but no section is reachable by its direct route (`/catalogs/{name}`) yet absent from the nav. A section can also link an authored page at a custom route with `.page(route, label, icon)` (e.g. `spec.section("Reports").page("/ops", "Sales Ops", "activity")`). (Earlier versions auto-listed unclaimed catalogs under default groups; that was removed — cf. #69.)
 - **`Page`** — a route whose content you compose: `compose(PageBuilder)` with `b.title(...)`, `b.widget(...)`, `b.text(...)`, `b.list(entity)` (the full interactive list, embedded), `b.actions(...)`, `b.custom(...)`, `b.bare()`/`b.header(false)` to drop the header row, `b.row(r -> r.col(width, c -> …)…)` for arbitrary column layout (nestable; widths are fractions / `"<n>px"` / null=equal; columns stack on mobile), and `b.aside(a -> …)` as the right-rail shortcut — any widget works on any page, in any region. **Everything is a page:** the home dashboard (`/`), settings (`/settings`), a default surface route (`/catalogs/{name}` / `/documents/{name}` / `/registers/{name}` — an authored page there *overrides* the default list/report surface), and arbitrary custom routes (`/ops`, `/reports`) are all just pages. The framework serves a good default; a registered `Page` bean at a route replaces it. `profile()`/`viewport()` scope a page to a persona/device (most-specific match wins, like `EntityView`). A widget's `.type("…")` may name a **custom widget** the framework has no built-in for: author a React component in `src/main/widgets/*.tsx` (using `@onno/widget-sdk`), apply the `su.onno.widgets` Gradle plugin, and it compiles + serves + auto-loads with no frontend project. See `onno-ui-starter/README.md` → "Pages — everything is a page" and "Authoring a custom widget".
-- **`EntityView`** — per-entity list columns (`list(ListSpec)`) and field hints (`fields(EntityConfigBuilder)`). A view with `profile()` set replaces the default view for that profile on both the list and the record surface (fields, `detail(...)` widgets, action placement, validations). An `EntityView` is what makes a surface *served* — no view → `404` (the view layer is the allowlist). It is **necessary but not sufficient for nav presence**: the entity is reachable by direct route but stays out of the sidebar until a `Layout` section also lists it (see Layout above). Override `comments()` to return `true` to opt that catalog/document into the per-entity discussion thread (`/api/comments`); it is off by default and gated by the global `onno.comments.enabled` switch. Override `opensInMain()` to return `true` when the entity's records are full working surfaces: on the desktop islands layout, opening one (list row, ref link, `onno://{kind}/{name}/{id}` from a widget) replaces the focused pane instead of opening a detail island beside the list; the shell advertises those list routes as `mainRecordRoutes` for every readable opted-in entity, whether or not a `Layout` places it in the nav. `list.rowStyle(row -> …)` adds **conditional row formatting**: the function runs server-side per row (same `ActionRow` as state-aware actions) and returns a semantic `ListSpec.RowStyle` tone (`DANGER`/`WARNING`/`SUCCESS`/`ACCENT`/`MUTED`) or `null` — e.g. urgent rows tinted red, cancelled ones faded; the grid renders it as a theme-aware translucent wash.
+- **`EntityView<E>`** — per-entity list columns (`list(ListSpec)`) and field hints (`fields(EntityConfigBuilder)`). A view with `profile()` set replaces the default view for that profile on both the list and the record surface (fields, `detail(...)` widgets, action placement, validations). Its `actions(ActionSpec<E>)` and `ListSpec<E>.rowStyle` callbacks retain `E`: typed `ActionRow<E>` reads reject getters from unrelated entities at compile time, including in dynamic action providers. Use parameterized types; page actions use `ActionSpec<Void>`. An `EntityView` is what makes a surface *served* — no view → `404` (the view layer is the allowlist). It is **necessary but not sufficient for nav presence**: the entity is reachable by direct route but stays out of the sidebar until a `Layout` section also lists it (see Layout above). Override `comments()` to return `true` to opt that catalog/document into the per-entity discussion thread (`/api/comments`); it is off by default and gated by the global `onno.comments.enabled` switch. Override `opensInMain()` to return `true` when the entity's records are full working surfaces: on the desktop islands layout, opening one (list row, ref link, `onno://{kind}/{name}/{id}` from a widget) replaces the focused pane instead of opening a detail island beside the list; the shell advertises those list routes as `mainRecordRoutes` for every readable opted-in entity, whether or not a `Layout` places it in the nav. `list.rowStyle(row -> …)` adds **conditional row formatting**: the function runs server-side per row (same `ActionRow` as state-aware actions) and returns a semantic `ListSpec.RowStyle` tone (`DANGER`/`WARNING`/`SUCCESS`/`ACCENT`/`MUTED`) or `null` — e.g. urgent rows tinted red, cancelled ones faded; the grid renders it as a theme-aware translucent wash.
 
 Field-hint methods on `FieldHintBuilder` (used inside `EntityView.fields`): `order(int)`, `group(String)`, `width(String)`, `widget(String)`, `placeholder(String)`, `format(String)`, `hint(String)`, `label(String)`, `refSecondary(String)`, `openButton(bool)`, `clearButton(bool)`, `hideInList()`, `hideInForm()`, `hideInDetail()`, plus explicit `visibleInList(bool)`/`visibleInForm(bool)`/`visibleInDetail(bool)`. Only set what differs from the default. `width(String)` is a form-layout hint (`half`/`1/2`/`50%` pairs fields); a list column falls back to it only when it is a pixel value. Size list columns with the list-only `ListSpec.width(field, px)` / `width(field, "<n>px")` (getter-reference overloads too), which wins and rejects non-pixel values at configuration time.
 
@@ -976,7 +1035,7 @@ Field-hint methods on `FieldHintBuilder` (used inside `EntityView.fields`): `ord
 
 `hint(String)` attaches optional help text to a field — surfaced in the UI as a hoverable/focusable `?` icon next to the field's label (on the record form and the list column header). Custom dashboard components carry the same affordance: `b.widget("Revenue").type("metric").hint("…")` shows a `?` next to the widget title. Keep hints to a sentence.
 
-`EntityView.actions(ActionSpec)` declares custom buttons — `a.action(key).scope(ActionScope.TOOLBAR|ROW|DETAIL)` running a server `handler(ctx -> ActionResult)` or `navigate(url)`. `.roles("MANAGER")` restricts an action to callers holding one of the roles (`ADMIN` always passes; #227) — on an entity action a finer gate on top of the entity's write roles, on a page action (no entity to gate on) the authorization itself, and the page button is hidden from callers who lack it; server/page actions also honour `onno.ui.read-only`. A **row** action can be *state-aware*: pass `icon(row -> …)`, `label(row -> …)`, `visibleWhen(row -> …)` or `enabledWhen(row -> …)` (each taking an `ActionRow` — `id()`, `text(col)`, `enumValue(col, Type)`, `bool(col)`) so one control adapts per row (a `pause` "Suspend" flipping to a `play` "Resume", a button shown only where it applies). Evaluated server-side as the list renders; static actions cost nothing. The same per-record functions apply to a **`DETAIL`** action, evaluated against the loaded record — one header button can hide/relabel/grey itself by the record's state, e.g. a "Next status" button gone once the order is terminal, or swapping for a form-opening sibling in one state via complementary `visibleWhen` predicates (#255). A `DETAIL` action defaults to the record surface's header overflow (⋯) menu (the record surface is the editable form itself — there are no separate detail/edit pages) but honors the same placement override as the built-in `unpost`/`duplicate`/`delete`/`openInList` actions (`f.action("post").hidden()` hides the form's built-in Post button) — `f.action(key).primary()` (prominent button), `.inMenu()` (default), or `.hidden()` (dropped from the UI, still reachable via REST). The built-in **`openInList`** ("Open in list", icon `list`) needs only read access, so read-only viewers get it too: it opens the entity's list at `?focus=<id>`, whose feed returns the keyset window containing the record (#410); it is omitted when an authored `Page` overrides that list route. Three more behaviours: `.menu("Change status")` moves a ROW action into the row's **right-click context menu** under a submenu with that label (one action per enum value is the idiom); `.form(f -> f.input("reason").type(InputType.TEXTAREA).required())` makes the click collect inputs in a **modal dialog** first (the handler reads them via `ctx.input(key)`) — a form field can be a **reference picker** of another entity's records via `.reference(Target.class)` (value is the picked id) and can declare a **repeatable row group** `.group(key, g -> g.column(col, c -> …))` (an add/remove tabular grid whose columns reuse the field DSL incl. `.reference(...)`), read back with `ctx.inputRows(key)` → `List<Map<String,String>>`; and the list itself supports **batch selection** (⌘/Ctrl/Shift-click, ⌘A, ⇧⌘↑/↓) — server row actions then run over every selected record — plus a **⌘C/⌘V row clipboard** (TSV out; paste creates server-side duplicates). See `onno-ui-starter/README.md`.
+`EntityView.actions(ActionSpec)` declares custom buttons — `a.action(key).scope(ActionScope.TOOLBAR|ROW|DETAIL)` running a server `handler(ctx -> ActionResult)` or `navigate(url)`. `.roles("MANAGER")` restricts an action to callers holding one of the roles (`ADMIN` always passes; #227) — on an entity action a finer gate on top of the entity's write roles, on a page action (no entity to gate on) the authorization itself, and the page button is hidden from callers who lack it; server/page actions also honour `onno.ui.read-only`. A **row** action can be *state-aware*: pass `icon(row -> …)`, `label(row -> …)`, `visibleWhen(row -> …)` or `enabledWhen(row -> …)` (each taking an `ActionRow<E>` — `id()`, `text(col)`, `enumValue(col, Type)`, `bool(col)`) so one control adapts per row (a `pause` "Suspend" flipping to a `play` "Resume", a button shown only where it applies). Evaluated server-side as the list renders; static actions cost nothing. The same per-record functions apply to a **`DETAIL`** action, evaluated against the loaded record — one header button can hide/relabel/grey itself by the record's state, e.g. a "Next status" button gone once the order is terminal, or swapping for a form-opening sibling in one state via complementary `visibleWhen` predicates (#255). A `DETAIL` action defaults to the record surface's header overflow (⋯) menu (the record surface is the editable form itself — there are no separate detail/edit pages) but honors the same placement override as the built-in `unpost`/`duplicate`/`delete`/`openInList` actions (`f.action("post").hidden()` hides the form's built-in Post button) — `f.action(key).primary()` (prominent button), `.inMenu()` (default), or `.hidden()` (dropped from the UI, still reachable via REST). The built-in **`openInList`** ("Open in list", icon `list`) needs only read access, so read-only viewers get it too: it opens the entity's list at `?focus=<id>`, whose feed returns the keyset window containing the record (#410); it is omitted when an authored `Page` overrides that list route. Three more behaviours: `.menu("Change status")` moves a ROW action into the row's **right-click context menu** under a submenu with that label (one action per enum value is the idiom); `.form(f -> f.input("reason").type(InputType.TEXTAREA).required())` makes the click collect inputs in a **modal dialog** first (the handler reads them via `ctx.input(key)`) — a form field can be a **reference picker** of another entity's records via `.reference(Target.class)` (value is the picked id) and can declare a **repeatable row group** `.group(key, g -> g.column(col, c -> …))` (an add/remove tabular grid whose columns reuse the field DSL incl. `.reference(...)`), read back with `ctx.inputRows(key)` → `List<Map<String,String>>`; and the list itself supports **batch selection** (⌘/Ctrl/Shift-click, ⌘A, ⇧⌘↑/↓) — server row actions then run over every selected record — plus a **⌘C/⌘V row clipboard** (TSV out; paste creates server-side duplicates). See `onno-ui-starter/README.md`.
 
 ## Questions To Ask For Common Domains
 
@@ -1082,6 +1141,7 @@ For changes that affect public artifacts, starter wiring, frontend packaging, or
 For UI frontend-only changes, at minimum run:
 
 ```bash
+./gradlew :onno-ui-starter:testFrontend   # typecheckFrontend first, then Vitest
 ./gradlew :onno-ui-starter:buildFrontend
 ./gradlew :onno-ui-starter:processResources
 ```
@@ -1100,8 +1160,11 @@ up every agent:
 **Authenticate first (session cookie + CSRF), then call the API.** Login is a JSON POST that sets a
 `JSESSIONID` session cookie — *not* HTTP Basic. Mutations (`POST`/`PUT`/`DELETE`) require the CSRF
 token: it's delivered in a readable `XSRF-TOKEN` cookie and echoed back in the `X-XSRF-TOKEN` header.
-Users come from `onno.auth.users[*]` (the starter ships **no** default credentials; the bundled
-example app seeds `admin@onnobooks.local`/`admin` and `manager@onnobooks.local`/`manager`).
+Users come from `onno.auth.users[*]` in `in-memory` mode, or from the `onno_auth_user` table in
+`database` mode (where that list only seeds an empty store once). The starter ships **no** default
+credentials; the bundled example app configures `admin@onnobooks.local`/`admin` and
+`manager@onnobooks.local`/`manager` for its demo. For a real app use `onno.auth.mode=database` so no
+config-file password stays valid forever.
 
 ```bash
 # 1. Log in — saves the session cookie and the XSRF-TOKEN cookie into the jar. Login itself is CSRF-exempt.
@@ -1202,7 +1265,10 @@ recorded in `onno_crm_gmail_grouping`. Replies retain the thread selected when q
 The Instagram adapter in `onno-crm-channels-starter` owns the opt-in `onno.crm.channels.instagram.enabled`
 connection, private token-file reads, and additive `onno_crm_ig_*` tables. `Channel.INSTAGRAM` is
 append-only; preserve existing enum constants. Provider-visible polling messages deduplicate by
-account/message ID and route by account/peer, preserving contact canonicalization. Outbound sends
+account/message ID and route by account/peer, preserving contact canonicalization. Polling imports
+only messages at or after the account's persisted UTC activation cutoff (`onno_crm_ig_sync`), never
+history; never reset or overwrite that cutoff in code. Polling is head-first and bounded per poll, and
+per-thread watermarks/cursors/checkpoint advance only after message inserts commit. Outbound sends
 are queued transactionally and enforce a 24-hour reply window; uncertain sends require explicit
 retry. This adapter does not configure public webhooks or publish the Meta app.
 

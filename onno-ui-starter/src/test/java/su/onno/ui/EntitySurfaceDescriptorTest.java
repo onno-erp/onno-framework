@@ -55,6 +55,60 @@ class EntitySurfaceDescriptorTest {
         assertThat(surface.safeSort("api_key")).isEqualTo("_code");
     }
 
+
+    @Test
+    void widgetFilterResolvesLogicalPostedName() {
+        EntitySurfaceDescriptor surface = EntitySurfaceDescriptor.document(
+                scanner.scanDocument(EntityJsonRepresentationTest.Order.class)
+        );
+
+        WidgetFilter.Result result = WidgetFilter.parse(
+                "posted = true",
+                surface.columnNames(),
+                surface.uuidColumns(),
+                surface::storageColumn
+        );
+
+        assertThat(result.sql()).isEqualTo("_posted = :wf0");
+        assertThat(result.bindings()).containsEntry("wf0", true);
+    }
+
+
+    @Test
+    void widgetFilterAcceptsLogicalAndStorageDateNames() {
+        EntitySurfaceDescriptor surface = EntitySurfaceDescriptor.document(
+                scanner.scanDocument(EntityJsonRepresentationTest.Order.class)
+        );
+
+        for (String field : java.util.List.of("date", "_date")) {
+            WidgetFilter.Result result = WidgetFilter.parse(
+                    field + " = null",
+                    surface.columnNames(),
+                    surface.uuidColumns(),
+                    surface::storageColumn
+            );
+
+            assertThat(result.sql()).isEqualTo("_date IS NULL");
+            assertThat(result.bindings()).isEmpty();
+        }
+    }
+
+    @Test
+    void widgetFilterAcceptsUppercaseStorageName() {
+        EntitySurfaceDescriptor surface = EntitySurfaceDescriptor.document(
+                scanner.scanDocument(EntityJsonRepresentationTest.Order.class));
+
+        WidgetFilter.Result result = WidgetFilter.parse(
+                "_POSTED = true",
+                surface.columnNames(),
+                surface.uuidColumns(),
+                surface::storageColumn
+        );
+
+        assertThat(result.sql()).isEqualTo("_posted = :wf0");
+        assertThat(result.bindings()).containsEntry("wf0", true);
+    }
+
     private static AttributeDescriptor attribute(String name, boolean secret) {
         return new AttributeDescriptor(
                 name, name, name, String.class,

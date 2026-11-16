@@ -8,6 +8,7 @@ import { MessagesProvider, useMessages } from "@/providers/messages-provider";
 import { AuthProvider, useAuth } from "@/providers/auth-provider";
 import { TimeRangeProvider } from "@/providers/time-range-provider";
 import { LoginView } from "@/views/login";
+import { ChangePasswordView } from "@/views/change-password";
 import { DivKitView } from "@/views/divkit-view";
 import { WidgetPortals } from "@/lib/widget-bridge";
 import { FormPortals } from "@/lib/form-bridge";
@@ -33,7 +34,9 @@ function ProtectedApp() {
   const location = useLocation();
   const t = useMessages();
 
-  const authenticated = !!user;
+  // A one-time-password session may only change its password: the server refuses every other API
+  // call, so don't boot plugins or the shell for it.
+  const authenticated = !!user && !user.passwordChangeRequired;
 
   // Load consumer widget plugins only once a user is signed in: plugin code runs with the app's
   // session, so it never evaluates on the login screen. The server's modulepreload links have already
@@ -77,6 +80,10 @@ function ProtectedApp() {
 
   if (!user) {
     return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  if (user.passwordChangeRequired) {
+    return <ChangePasswordView />;
   }
 
   // The entire authenticated app is server-driven DivKit (chrome + content).

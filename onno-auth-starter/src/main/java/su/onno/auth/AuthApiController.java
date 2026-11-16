@@ -6,7 +6,7 @@ import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -22,6 +22,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import su.onno.auth.users.AccountUserDetails;
+import su.onno.auth.users.UserAccounts;
 
 import java.util.List;
 
@@ -29,19 +31,29 @@ import java.util.List;
 @RequestMapping("/api/auth")
 class AuthApiController {
 
-    /** Non-null only in in-memory mode; OIDC / resource-server modes have no password manager. */
+    /** Non-null only in the password modes; OIDC / resource-server modes have no password manager. */
     private final AuthenticationManager authenticationManager;
     /** Non-null only when remember-me is enabled (in-memory mode); issues/clears the persistent cookie. */
     private final RememberMeServices rememberMeServices;
     private final OnnoAuthProperties properties;
+    /** Non-null only in database mode; records the last sign-in time. */
+    private final UserAccounts userAccounts;
     private final SecurityContextRepository contextRepository = new HttpSessionSecurityContextRepository();
 
     AuthApiController(AuthenticationManager authenticationManager,
                       RememberMeServices rememberMeServices,
                       OnnoAuthProperties properties) {
+        this(authenticationManager, rememberMeServices, properties, null);
+    }
+
+    AuthApiController(AuthenticationManager authenticationManager,
+                      RememberMeServices rememberMeServices,
+                      OnnoAuthProperties properties,
+                      UserAccounts userAccounts) {
         this.authenticationManager = authenticationManager;
         this.rememberMeServices = rememberMeServices;
         this.properties = properties;
+        this.userAccounts = userAccounts;
     }
 
     @GetMapping("/me")
@@ -90,8 +102,13 @@ class AuthApiController {
                 rememberMeServices.loginSuccess(request, response, authentication);
             }
 
+            if (userAccounts != null) {
+                userAccounts.recordLogin(authentication.getName());
+            }
             return ResponseEntity.ok(AuthUser.from(authentication, authMode()));
-        } catch (BadCredentialsException ex) {
+        } catch (AuthenticationException ex) {
+            // Bad credentials, an unknown user and a disabled account all answer the same 401, so
+            // the endpoint does not reveal which accounts exist or are disabled.
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
     }
@@ -147,6 +164,7 @@ class AuthApiController {
     private static String modeName(OnnoAuthProperties.Mode mode) {
         return switch (mode) {
             case IN_MEMORY -> "in-memory";
+            case DATABASE -> "database";
             case OIDC -> "oidc";
             case RESOURCE_SERVER -> "resource-server";
         };
@@ -176,22 +194,27 @@ class AuthApiController {
      * @param authenticated whether a session/principal is established
      * @param username      the authenticated principal name (empty when anonymous)
      * @param roles         granted authorities
-     * @param mode          active auth backend: {@code in-memory}, {@code oidc}, or {@code resource-server}
+     * @param mode          active auth backend: {@code in-memory}, {@code database}, {@code oidc},
+     *                      or {@code resource-server}
      * @param loginUrl      where the SPA should send the user to log in; non-null only in OIDC mode
      * @param logoutUrl     full-page RP-initiated-logout endpoint; non-null only in OIDC mode
+     * @param passwordChangeRequired the account signed in with a one-time password and must set a
+     *                      new one (database mode); every other API call answers {@code 403} until it does
      */
     record AuthUser(boolean authenticated, String username, List<String> roles,
-                    String mode, String loginUrl, String logoutUrl) {
+                    String mode, String loginUrl, String logoutUrl, boolean passwordChangeRequired) {
         static AuthUser anonymous(AuthMode mode) {
-            return new AuthUser(false, "", List.of(), mode.mode(), mode.loginUrl(), mode.logoutUrl());
+            return new AuthUser(false, "", List.of(), mode.mode(), mode.loginUrl(), mode.logoutUrl(), false);
         }
 
         static AuthUser from(Authentication authentication, AuthMode mode) {
             List<String> roles = authentication.getAuthorities().stream()
                     .map(GrantedAuthority::getAuthority)
                     .toList();
+            boolean changeRequired = authentication.getPrincipal() instanceof AccountUserDetails account
+                    && account.passwordChangeRequired();
             return new AuthUser(true, authentication.getName(), roles,
-                    mode.mode(), mode.loginUrl(), mode.logoutUrl());
+                    mode.mode(), mode.loginUrl(), mode.logoutUrl(), changeRequired);
         }
     }
 }

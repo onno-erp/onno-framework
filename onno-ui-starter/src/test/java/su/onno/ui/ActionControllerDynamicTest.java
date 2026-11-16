@@ -38,7 +38,7 @@ class ActionControllerDynamicTest {
         EntityView<String> view = new EntityView<>() {
             @Override public Class<String> entity() { return String.class; }
 
-            @Override public void actions(ActionSpec actions) {
+            @Override public void actions(ActionSpec<String> actions) {
                 actions.dynamic(live -> {
                     for (String choice : choices) {
                         live.action(choice).label("Set " + choice).scope(ActionScope.ROW)

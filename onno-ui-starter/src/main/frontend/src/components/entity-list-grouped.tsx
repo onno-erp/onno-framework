@@ -1,3 +1,5 @@
+import { useSurfaceRefresh } from "@/lib/surface-refresh";
+import { openRoute } from "@/lib/navigation";
 import { ListSelectionCheckbox, loadedSelectionState, selectLoaded } from "./list-selection-checkbox";
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type Ref, type SetStateAction } from "react";
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
@@ -29,10 +31,6 @@ type GroupHeader = {
 };
 /** Per-group lazy row state: the loaded rows, the cursor for the next window, and load flags. */
 type GroupRows = { rows: EntityRecord[]; cursor: string | null; hasMore: boolean; loading: boolean };
-
-function dispatchAction(url: string) {
-  window.dispatchEvent(new CustomEvent("onno:action", { detail: url }));
-}
 
 /**
  * The grouped rendering of a list: one collapsible header per {@code GROUP BY} value (or date
@@ -154,6 +152,7 @@ export function GroupedList({
   const expandedRef = useRef(expanded);
   expandedRef.current = expanded;
   const [liveTick, setLiveTick] = useState(0);
+  useSurfaceRefresh(() => setLiveTick((tick) => tick + 1));
   useEffect(() => {
     let timer: number | undefined;
     const onData = (e: Event) => {
@@ -496,7 +495,7 @@ export function GroupedList({
                             clearSelection();
                             return;
                           }
-                          if (url) dispatchAction(url);
+                          if (url) openRoute(url);
                         }}
                         onContextMenu={(e) => {
                           if (!url || !rowId) return; // keep the browser menu for non-openable rows

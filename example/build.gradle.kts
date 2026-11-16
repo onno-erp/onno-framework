@@ -14,6 +14,8 @@ dependencies {
     implementation(project(":onno-auth-starter"))
     // The crm profile explicitly binds the existing Customer and Employee catalogs.
     implementation(project(":onno-crm-starter"))
+    // Print forms: the Orders record menu offers a Word invoice and an Excel pick list (com.example.print).
+    implementation(project(":onno-print-starter"))
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc")
     implementation("com.h2database:h2")

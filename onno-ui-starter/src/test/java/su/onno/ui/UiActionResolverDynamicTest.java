@@ -21,7 +21,7 @@ class UiActionResolverDynamicTest {
         EntityView<String> view = new EntityView<>() {
             @Override public Class<String> entity() { return String.class; }
 
-            @Override public void actions(ActionSpec actions) {
+            @Override public void actions(ActionSpec<String> actions) {
                 actions.action("fixed").label("Fixed").scope(ActionScope.ROW)
                         .handler(ctx -> ActionResult.ok());
                 actions.dynamic(live -> {
@@ -61,7 +61,7 @@ class UiActionResolverDynamicTest {
         EntityView<Integer> first = new EntityView<>() {
             @Override public Class<Integer> entity() { return Integer.class; }
 
-            @Override public void actions(ActionSpec actions) {
+            @Override public void actions(ActionSpec<Integer> actions) {
                 actions.dynamic(live -> live.action("same").label("Dynamic first"));
                 actions.action("same").label("Static second");
             }
@@ -69,7 +69,7 @@ class UiActionResolverDynamicTest {
         EntityView<Integer> second = new EntityView<>() {
             @Override public Class<Integer> entity() { return Integer.class; }
 
-            @Override public void actions(ActionSpec actions) {
+            @Override public void actions(ActionSpec<Integer> actions) {
                 actions.action("same").label("Other view");
             }
         };
@@ -87,7 +87,7 @@ class UiActionResolverDynamicTest {
         EntityView<Long> view = new EntityView<>() {
             @Override public Class<Long> entity() { return Long.class; }
 
-            @Override public void actions(ActionSpec actions) {
+            @Override public void actions(ActionSpec<Long> actions) {
                 actions.dynamic(live -> {
                     for (int i = 0; i < 12; i++) {
                         live.action("choice-" + i).scope(ActionScope.ROW).menu("Choose");
