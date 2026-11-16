@@ -16,6 +16,7 @@ import { LIST_CUSTOM_COMPONENTS } from "@/lib/list-bridge";
 import { REGISTER_CUSTOM_COMPONENTS } from "@/lib/register-bridge";
 import { ACTIONS_BAR_CUSTOM_COMPONENTS } from "@/lib/actions-bar-bridge";
 import { COMMENTS_CUSTOM_COMPONENTS } from "@/lib/comments-bridge";
+import { HISTORY_CUSTOM_COMPONENTS } from "@/lib/history-bridge";
 import { NAV_PRESENCE_CUSTOM_COMPONENTS } from "@/lib/nav-presence-bridge";
 import { NOTIFICATION_INDICATOR_CUSTOM_COMPONENTS } from "@/lib/notification-indicator-bridge";
 import { GEO_CUSTOM_COMPONENTS } from "@/lib/geo-bridge";
@@ -36,6 +37,7 @@ const CUSTOM_COMPONENTS = new Map([
   ...REGISTER_CUSTOM_COMPONENTS,
   ...ACTIONS_BAR_CUSTOM_COMPONENTS,
   ...COMMENTS_CUSTOM_COMPONENTS,
+  ...HISTORY_CUSTOM_COMPONENTS,
   ...NAV_PRESENCE_CUSTOM_COMPONENTS,
   ...NOTIFICATION_INDICATOR_CUSTOM_COMPONENTS,
   ...GEO_CUSTOM_COMPONENTS,

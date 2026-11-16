@@ -68,7 +68,8 @@ public record CrmInboxWorkspace(String key, String label, Set<String> readRoles,
     public interface FacetResolver {
         /**
          * {@code conversations} are already authorized for {@code principal}; the host must still
-         * enforce the principal's access to any related records it reads.
+         * enforce the principal's access to any related records it reads. Calls receive bounded
+         * batches (at most 500), so resolve each conversation independently of batch membership.
          */
         Map<UUID, List<String>> resolve(List<Conversation> conversations, Principal principal);
     }
@@ -96,8 +97,8 @@ public record CrmInboxWorkspace(String key, String label, Set<String> readRoles,
      * source currently yields no options is omitted from the filter metadata and its row chips.
      *
      * <p>{@code showOnRows} shows each row's values as coloured chips. It is not free: the resolver
-     * then runs on every feed page over <em>all</em> conversations the principal may see in the
-     * workspace, not only the page, so keep it to one or two batched queries.
+     * then runs in bounded batches over eligible conversations when used for selection, and for
+     * visible page rows when decorating. Keep it to one or two batched queries per invocation.
      */
     public record Facet(String key, String label, FacetOptions optionSource, FacetResolver resolver, boolean showOnRows) {
         /** Row keys a facet must not shadow: conversation fields and every key the feed computes. */
@@ -137,7 +138,7 @@ public record CrmInboxWorkspace(String key, String label, Set<String> readRoles,
          * companions, and the keys the inbox feed adds to each row.
          */
         private static Set<String> reservedRowKeys() {
-            var names = new LinkedHashSet<String>(List.of("id", "description", "customerAvatar", "rowBadges"));
+            var names = new LinkedHashSet<>(List.of("id", "description", "customerAvatar", "rowBadges"));
             for (Class<?> type = Conversation.class; type != null && type != Object.class; type = type.getSuperclass()) {
                 for (Field field : type.getDeclaredFields()) {
                     if (Modifier.isStatic(field.getModifiers()) || field.isSynthetic()) continue;
@@ -210,6 +211,7 @@ public record CrmInboxWorkspace(String key, String label, Set<String> readRoles,
         public Builder writeRoles(String... roles) { return writeRoles(Set.of(roles)); }
         public Builder writeRoles(Set<String> roles) { this.writeRoles = roles; return this; }
         public Builder selection(Predicate<Conversation> selection) { this.selection = selection; return this; }
+        @SuppressWarnings("unused") // Public workspace builder API for consuming applications.
         public Builder configure(UnaryOperator<CrmWorkspaceService.Config> configure) { this.configure = configure; return this; }
         /** Author the same list used by both table and inbox renderers. */
         public Builder list(Consumer<ListSpec<Conversation>> list) { this.list = list; return this; }
@@ -218,6 +220,7 @@ public record CrmInboxWorkspace(String key, String label, Set<String> readRoles,
             return list(view::list);
         }
         public Builder facet(Facet facet) { this.facets.add(Objects.requireNonNull(facet)); return this; }
+        @SuppressWarnings("unused") // Public workspace builder API for consuming applications.
         public Builder facets(List<Facet> facets) { facets.forEach(this::facet); return this; }
 
         public CrmInboxWorkspace build() {

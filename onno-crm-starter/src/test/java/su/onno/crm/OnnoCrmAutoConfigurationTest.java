@@ -22,6 +22,7 @@ class OnnoCrmAutoConfigurationTest {
             .withBean(org.springframework.jdbc.core.JdbcTemplate.class, () -> mock(org.springframework.jdbc.core.JdbcTemplate.class))
             .withBean(com.fasterxml.jackson.databind.ObjectMapper.class, com.fasterxml.jackson.databind.ObjectMapper::new)
             .withBean(su.onno.crm.repository.InboxRepository.class, () -> mock(su.onno.crm.repository.InboxRepository.class))
+            .withBean(su.onno.crm.web.CrmFeedQuery.class, () -> mock(su.onno.crm.web.CrmFeedQuery.class))
             .withBean(ConversationRepository.class, () -> mock(ConversationRepository.class))
             .withBean(ConversationMessageRepository.class, () -> mock(ConversationMessageRepository.class))
             .withBean(su.onno.ui.CatalogQueryService.class, () -> mock(su.onno.ui.CatalogQueryService.class))

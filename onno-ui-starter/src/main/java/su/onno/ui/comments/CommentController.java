@@ -81,12 +81,17 @@ public class CommentController {
     public record ReactionRequest(String emoji) {}
 
     @GetMapping("/{kind}/{name}/{id}")
-    public List<Map<String, Object>> list(@PathVariable String kind, @PathVariable String name,
-                                          @PathVariable UUID id, Principal principal, AccessSubject subject) {
+    public Map<String, Object> list(@PathVariable String kind, @PathVariable String name,
+                                          @PathVariable UUID id, Principal principal, AccessSubject subject,
+                                          @org.springframework.web.bind.annotation.RequestParam(required = false) String cursor,
+                                          @org.springframework.web.bind.annotation.RequestParam(defaultValue = "100") int limit) {
         requireRead(kind, name, id, subject);
         CurrentUser me = currentUser.resolve(principal);
         boolean admin = isAdmin(principal);
-        List<Comment> thread = comments.list(kind, name, id);
+        var page = comments.page(kind, name, id, cursor, limit,
+                su.onno.query.Cursor.context(su.onno.query.Cursor.subjectContext(subject),
+                        catalogQuery.scopes().policies().fingerprint(subject)));
+        List<Comment> thread = page.rows();
         Map<String, String> avatars = authorAvatars.avatarsFor(
                 thread.stream().map(Comment::authorId).filter(Objects::nonNull).toList());
         // Resolve every mention across the whole thread in one batch (per the viewer's read access),
@@ -95,13 +100,15 @@ public class CommentController {
         Map<MentionRef, ResolvedMention> resolved = resolveThreadMentions(thread, subject);
         Map<UUID, List<CommentService.CommentReaction>> reactions = comments.reactionsFor(
                 thread.stream().map(Comment::id).toList(), reactionUserKey(me));
-        return thread.stream()
+        var rows = thread.stream()
                 // authorId is null for authors not linked to an identity record (e.g. the built-in
                 // admin user). avatars is an immutable map whose get(null) throws NPE, so guard the
                 // key — a null-author comment simply has no avatar.
                 .map(c -> toJson(c, me, admin, c.authorId() == null ? null : avatars.get(c.authorId()),
                         mentionsFor(c.body(), resolved), reactions.getOrDefault(c.id(), List.of())))
                 .toList();
+        return su.onno.ui.KeysetWindow.envelope(new su.onno.query.KeysetWindow.Page<>(rows,
+                page.nextCursor(), page.hasMore()));
     }
 
     @PostMapping("/{kind}/{name}/{id}")

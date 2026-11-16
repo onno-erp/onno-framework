@@ -38,7 +38,6 @@ import { request, ContactPanel, useWorkspace, action, rowValue, type Config, typ
 import {
   ResponsiveActionPanel,
   DialogShell,
-  Badge,
   Input,
   EntityListWidget,
   registerWidget,
@@ -190,6 +189,11 @@ function csrfToken(): string | undefined {
   return token ? decodeURIComponent(token.slice("XSRF-TOKEN=".length)) : undefined;
 }
 
+async function checkedJson<T>(response: Response, message: string): Promise<T> {
+  if (!response.ok) throw new Error(message);
+  return response.json() as Promise<T>;
+}
+
 async function crmCommand<T>(path: string, body: unknown = {}): Promise<T> {
   const csrf = csrfToken();
   const response = await fetch(path, {
@@ -212,22 +216,6 @@ async function crmCommand<T>(path: string, body: unknown = {}): Promise<T> {
     throw new Error(message);
   }
   return response.json() as Promise<T>;
-}
-
-async function loadMessages(id: string, workspaceKey?: string): Promise<Message[]> {
-  const response = await fetch(`/api/crm/conversations/${id}/messages${workspaceKey ? `?workspace=${encodeURIComponent(workspaceKey)}` : ""}`, {
-    credentials: "same-origin",
-  });
-  if (!response.ok) throw new Error(t("crm.error.conversation"));
-  return response.json() as Promise<Message[]>;
-}
-
-async function loadComments(id: string, workspaceKey?: string): Promise<Comment[]> {
-  const response = await fetch(workspaceKey ? `/api/crm/inbox-workspaces/${workspaceKey}/conversations/${id}/comments` : `/api/comments/catalogs/crm_conversations/${id}`, {
-    credentials: "same-origin",
-  });
-  if (!response.ok) throw new Error(t("crm.error.notes"));
-  return response.json() as Promise<Comment[]>;
 }
 
 function Avatar({
@@ -532,7 +520,6 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
     openedRoutedFolder.current = initialFolder;
     setFolderKey(initialFolder);
   }, [initialFolder, folders]);
-  const { statuses: conversationStatuses } = useConversationStatuses();
   const [selectedId, setSelectedId] = useState<string | null>(rows.length ? String(rows[0].id) : null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loadedActivityId, setLoadedActivityId] = useState<string | null>(null);
@@ -703,12 +690,19 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
     await Promise.all([
       (async () => {
         try {
-          type ActivityEntry = {id:string;conversationId:string;kind:string;direction:string;channel:string;authorName:string;authorAvatarUrl:string|null;mine:boolean;body:string;at:string;deliveryStatus:string;attachments?:Attachment[];bodyHtml?:string|null};
-          const entries:ActivityEntry[]=[];let hasMore=false;
+          type ActivityEntry = {id:string;conversationId:string;kind:string;direction:string;channel:string;authorName:string;authorAvatarUrl:string|null;mine:boolean;body:string;at:string;deliveryStatus:string;attachments?:Attachment[];bodyHtml?:string|null;senderAccount?:string|null};
+          const entries:ActivityEntry[]=[];let hasMore=false;let cursor:string|null=null;
           for(let page=0;page<historyPages;page++) {
-            const response=await fetch(`/api/crm/contacts/${customerId}/activity?limit=100&offset=${page*100}`,{credentials:"same-origin"});
-            if(!response.ok)throw new Error(t("crm.error.history"));
-            const result=await response.json() as {entries:ActivityEntry[];hasMore:boolean};entries.push(...result.entries);hasMore=result.hasMore;if(!hasMore)break;
+            const query=new URLSearchParams({limit:"100"});
+            if(cursor)query.set("cursor",cursor);
+            const response=await fetch(`/api/crm/contacts/${customerId}/activity?${query}`,{credentials:"same-origin"});
+            const result=await checkedJson<{rows?:ActivityEntry[];hasMore:boolean;nextCursor:string|null}>(response,t("crm.error.history"));
+            entries.push(...(result.rows??[]));hasMore=result.hasMore;cursor=result.nextCursor;
+            if(!hasMore)break;
+            if(!cursor) {
+              if(current()) setError(t("crm.error.history"));
+              return;
+            }
           }
           if (!current()) return;
           setHasMoreHistory(hasMore);
@@ -734,8 +728,7 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
       (async () => {
         try {
           const response = await fetch(`/api/crm/conversations/${id}/delivery${workspaceKey ? `?workspace=${encodeURIComponent(workspaceKey)}` : ""}`, { credentials: "same-origin" });
-          if (!response.ok) throw new Error(t("crm.error.connection"));
-          const nextDelivery = await response.json() as DeliveryConnection;
+          const nextDelivery = await checkedJson<DeliveryConnection>(response, t("crm.error.connection"));
           if (!current()) return;
           setDelivery(nextDelivery);
           setLoadedConversationId(id);
@@ -880,9 +873,11 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
     let maxFileSize: number;
     try {
       const limits = await fetch("/api/media/limits", {credentials:"same-origin"});
-      if (!limits.ok) throw new Error(t("crm.chat.uploadLimitsUnavailable"));
-      const policy = await limits.json();
-      if (typeof policy.maxFileSize !== "number" || policy.maxFileSize <= 0) throw new Error(t("crm.chat.uploadLimitsUnavailable"));
+      const policy = await checkedJson<{maxFileSize: number}>(limits, t("crm.chat.uploadLimitsUnavailable"));
+      if (typeof policy.maxFileSize !== "number" || policy.maxFileSize <= 0) {
+        setError(t("crm.chat.uploadLimitsUnavailable"));
+        return;
+      }
       maxFileSize = policy.maxFileSize;
     } catch {
       if (here()) setError(t("crm.chat.uploadLimitsUnavailable"));
@@ -905,7 +900,10 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
           headers: token ? { "X-XSRF-TOKEN": decodeURIComponent(token) } : undefined, body: form });
         if (!response.ok) {
           const failure = await response.json().catch(() => ({}));
-          throw new Error(failure.message || failure.detail || t("crm.chat.uploadFailedFile", { name: file.name }));
+          if (selectionRef.current === conversationId) {
+            setError(failure.message || failure.detail || t("crm.chat.uploadFailedFile", { name: file.name }));
+          }
+          continue;
         }
         const stored = await response.json();
         setPending(current => current.some(item => item.url === stored.url) ? current : [...current, {
@@ -1360,7 +1358,7 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
             {hasMoreHistory && <Button size="sm" variant="ghost" onClick={() => setHistoryPages(value => value+1)}>{t("crm.chat.loadEarlier")}</Button>}
             {timeline.map((entry) => entry.message ? (
               entry.message.kind === "SYSTEM_EVENT" ? (
-                config?.showSystemEvents !== false ? <ChatMessageBody key={entry.id} message={entry.message} fallback={<TimelineSystemEvent message={entry.message} config={config} />} /> : null
+                (config?.showSystemEvents ?? true) ? <ChatMessageBody key={entry.id} message={entry.message} fallback={<TimelineSystemEvent message={entry.message} config={config} />} /> : null
               ) : (
                 <TimelineMessage
                   key={entry.id}
@@ -1471,7 +1469,7 @@ function ShellIcon({ name, size = 14 }: { name: string; size?: number }) {
 }
 
 type WorkspaceSummary = { key: string; label: string; canWrite: boolean };
-type WorkspaceFeed = { list: Record<string,any>; filters: {field:string;label:string;type:string;options:{value:string;label:string;avatarUrl?:string}[]}[]; key: string; label: string; config: Config; canWrite: boolean; rows: EntityRecord[]; total: number; hasMore: boolean; nextCursor: string | null };
+type WorkspaceFeed = { list: Record<string,any>; filters: {field:string;label:string;type:string;options:{value:string;label:string;avatarUrl?:string}[]}[]; key: string; label: string; config: Config; canWrite: boolean; rows: EntityRecord[]; total?: number; hasMore: boolean; nextCursor: string | null };
 function workspaceRead<T>(path: string): Promise<T> {
   return api.getJson<T>(`/api/crm/inbox-workspaces${path}`);
 }

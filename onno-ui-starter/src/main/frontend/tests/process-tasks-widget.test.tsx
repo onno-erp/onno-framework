@@ -40,7 +40,7 @@ vi.mock("@/hooks/use-ui-events", () => ({
 
 vi.mock("@/components/ui/avatar", () => ({
   Avatar: ({ children }: { children: ReactNode }) => <span>{children}</span>,
-  AvatarImage: (props: ImgHTMLAttributes<HTMLImageElement>) => <img {...props} />,
+  AvatarImage: (props: ImgHTMLAttributes<HTMLImageElement>) => <img alt="" {...props} />,
   AvatarFallback: ({ children }: { children: ReactNode }) => <span>{children}</span>,
 }));
 
@@ -81,7 +81,7 @@ afterEach(() => {
 
 describe("ProcessTasksWidget live inbox", () => {
   it("refetches on the shared tasks-changed SSE event without a refresh button", async () => {
-    listProcessTasks.mockResolvedValueOnce([]).mockResolvedValueOnce([task]);
+    listProcessTasks.mockResolvedValueOnce({ rows: [], nextCursor: null, hasMore: false }).mockResolvedValueOnce({ rows: [task], nextCursor: null, hasMore: false });
     render(<ProcessTasksWidget widget={widget} />);
 
     await screen.findByText("You have no open tasks.");
@@ -96,7 +96,7 @@ describe("ProcessTasksWidget live inbox", () => {
   });
 
   it("shows Retry only when loading the inbox failed", async () => {
-    listProcessTasks.mockRejectedValueOnce(new Error("Network unavailable")).mockResolvedValueOnce([]);
+    listProcessTasks.mockRejectedValueOnce(new Error("Network unavailable")).mockResolvedValueOnce({ rows: [], nextCursor: null, hasMore: false });
     render(<ProcessTasksWidget widget={widget} />);
 
     expect(await screen.findByText("Network unavailable")).toBeInTheDocument();
@@ -114,7 +114,7 @@ describe("ProcessTasksWidget live inbox", () => {
         kind: "documents", entityName: "Orders", id: "order-42", label: "Order O-42",
       },
     } as ProcessWorkItem;
-    listProcessTasks.mockResolvedValueOnce([claimed]).mockResolvedValueOnce([]);
+    listProcessTasks.mockResolvedValueOnce({ rows: [claimed], nextCursor: null, hasMore: false }).mockResolvedValueOnce({ rows: [], nextCursor: null, hasMore: false });
     searchTaskAssignees.mockResolvedValue([
       {
         actorId: "employee-1",
@@ -173,7 +173,7 @@ describe("ProcessTasksWidget live inbox", () => {
       assigneeId: "employee-1",
       assignee: "Mara",
     } as ProcessWorkItem;
-    listProcessTasks.mockResolvedValue([available, mine]);
+    listProcessTasks.mockResolvedValue({ rows: [available, mine], nextCursor: null, hasMore: false });
     render(<ProcessTasksWidget widget={widget} />);
 
     await screen.findByText("Review order O-10");
@@ -196,7 +196,7 @@ describe("ProcessTasksWidget live inbox", () => {
       assigneeId: "employee-1",
       assignee: "Mara",
     } as ProcessWorkItem;
-    listProcessTasks.mockResolvedValueOnce([claimed]).mockResolvedValueOnce([]);
+    listProcessTasks.mockResolvedValueOnce({ rows: [claimed], nextCursor: null, hasMore: false }).mockResolvedValueOnce({ rows: [], nextCursor: null, hasMore: false });
     completeProcessTask.mockResolvedValue({});
     render(<ProcessTasksWidget widget={widget} />);
 
@@ -217,7 +217,7 @@ describe("ProcessTasksWidget live inbox", () => {
       assigneeId: "employee-1",
       assignee: "Mara",
     } as ProcessWorkItem;
-    listProcessTasks.mockResolvedValue([claimed]);
+    listProcessTasks.mockResolvedValue({ rows: [claimed], nextCursor: null, hasMore: false });
     searchTaskAssignees.mockResolvedValue([
       {
         actorId: "employee-1",
@@ -226,7 +226,7 @@ describe("ProcessTasksWidget live inbox", () => {
         avatarUrl: "https://images.example.test/mara.jpg",
       },
     ]);
-    getProcessTaskHistory.mockResolvedValue([
+    getProcessTaskHistory.mockResolvedValue({ rows: [
       {
         id: "event-1",
         workItemId: "task-1",
@@ -239,7 +239,7 @@ describe("ProcessTasksWidget live inbox", () => {
         occurredAt: new Date().toISOString(),
         sequence: 2,
       },
-    ]);
+    ], nextCursor: null, hasMore: false });
     render(<ProcessTasksWidget widget={widget} />);
 
     await screen.findByText("Review order O-42");

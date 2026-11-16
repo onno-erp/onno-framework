@@ -23,7 +23,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView; });
 const config = {folders:[], fields:[], actions:[{key:"reply",label:"Reply",visible:true},{key:"sendReply",label:"Send reply",visible:true}], showAvatar:false, listTitle:"customerDisplay",listSubtitle:"subject",listPreview:"lastMessagePreview"};
-const activity = {entries:[{id:"message:one",conversationId:"chat",kind:"CUSTOMER_MESSAGE",direction:"INBOUND",channel:"EMAIL",authorName:"Person",body:"Hello from the customer",at:"2026-10-05T10:00:00",attachments:[]}],hasMore:false};
+const activity = {rows:[{id:"message:one",conversationId:"chat",kind:"CUSTOMER_MESSAGE",direction:"INBOUND",channel:"EMAIL",authorName:"Person",body:"Hello from the customer",at:"2026-10-05T10:00:00",attachments:[]}],hasMore:false};
 const connected = {connected:true,label:"Email",replyCapability:"AVAILABLE",maxAttachments:2,maxTextLength:8000};
 function mount(options: {sidebar?: boolean; activity?: Promise<Response>; contact?: Promise<Response>; delivery?: Promise<Response>; read?: Promise<Response>} = {}) {
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -175,7 +175,7 @@ it("opens Manage connections through the host navigation action", async () => {
 
 it("plays received audio inline without preloading and retains a download fallback", async () => {
   const file={url:"/api/media/voice.ogg",filename:"voice.ogg",contentType:"audio/ogg",size:100,image:false};
-  const {container}=mount({activity:Promise.resolve(response({ ...activity, entries:[{...activity.entries[0],body:"",attachments:[file]}]}))});
+  const {container}=mount({activity:Promise.resolve(response({ ...activity, rows:[{...activity.rows[0],body:"",attachments:[file]}]}))});
   const player=await screen.findByLabelText("voice.ogg", {selector:"audio"});
   expect(player.tagName).toBe("AUDIO");
   expect(player).not.toHaveAttribute("controls");

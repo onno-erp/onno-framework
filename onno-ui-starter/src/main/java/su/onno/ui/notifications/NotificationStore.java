@@ -6,7 +6,6 @@ import su.onno.ui.SqlBind;
 
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 
@@ -53,6 +52,12 @@ public class NotificationStore {
                     "    _created_at TIMESTAMP NOT NULL,\n" +
                     "    _read_at TIMESTAMP\n" +
                     ")");
+            h.execute("ALTER TABLE " + TABLE + " ADD COLUMN IF NOT EXISTS _target_kind VARCHAR(32)");
+            h.execute("ALTER TABLE " + TABLE + " ADD COLUMN IF NOT EXISTS _target_name VARCHAR(256)");
+            h.execute("ALTER TABLE " + TABLE + " ADD COLUMN IF NOT EXISTS _target_id UUID");
+            h.execute("ALTER TABLE " + TABLE + " ADD COLUMN IF NOT EXISTS _target_indexed BOOLEAN DEFAULT false NOT NULL");
+            normalizeTargets(h, null);
+            h.execute("CREATE INDEX IF NOT EXISTS onno_notifications_target_backfill_idx ON " + TABLE + " (_recipient, _target_indexed)");
             // Feed reads scan one recipient newest-first; the composite index serves both the ORDER BY
             // and the unread filter without a sort.
             h.execute("CREATE INDEX IF NOT EXISTS onno_notifications_feed_idx ON " + TABLE +
@@ -60,22 +65,46 @@ public class NotificationStore {
         });
     }
 
+    /** Also repairs rows written by an older node during a rolling deployment. */
+    private void normalizeTargets(org.jdbi.v3.core.Handle h, String recipient) {
+        while (true) {
+            var query = h.createQuery("SELECT _id, _link FROM " + TABLE + " WHERE _target_indexed = false"
+                    + (recipient == null ? "" : " AND _recipient = :recipient") + " LIMIT 500");
+            if (recipient != null) query.bind("recipient", recipient);
+            var old = query.mapToMap().list();
+            if (old.isEmpty()) break;
+            for (var row : old) {
+                var target = su.onno.ui.RecordAccess.routeTarget((String) row.get("_link"));
+                var q = h.createUpdate("UPDATE " + TABLE + " SET _target_kind = :kind, _target_name = :name,"
+                        + " _target_id = :target, _target_indexed = true WHERE _id = :id").bind("id", row.get("_id"));
+                SqlBind.nullable(q, "kind", target == null ? null : target.kind());
+                SqlBind.nullable(q, "name", target == null ? null : target.name());
+                SqlBind.nullable(q, "target", target == null ? null : target.id());
+                q.execute();
+            }
+        }
+    }
+
     /** Persist a new notification and return it as stored. */
     public Notification insert(String recipientId, String type, String title, String body, String link,
                                String actorId, String actorName, String actorAvatar) {
         UUID id = UUID.randomUUID();
         Instant now = Instant.now();
+        var target = su.onno.ui.RecordAccess.routeTarget(link);
         jdbi.useHandle(h -> {
             var update = h.createUpdate("INSERT INTO " + TABLE +
                             " (_id, _recipient, _type, _title, _body, _link, _actor_id, _actor_name," +
-                            " _actor_avatar, _created_at, _read_at)" +
+                            " _actor_avatar, _created_at, _read_at, _target_kind, _target_name, _target_id, _target_indexed)" +
                             " VALUES (:id, :recipient, :type, :title, :body, :link, :actorId, :actorName," +
-                            " :actorAvatar, :createdAt, NULL)")
+                            " :actorAvatar, :createdAt, NULL, :targetKind, :targetName, :targetId, true)")
                     .bind("id", id)
                     .bind("recipient", recipientId)
                     .bind("type", type)
                     .bind("title", title)
                     .bind("createdAt", Timestamp.from(now));
+            SqlBind.nullable(update, "targetKind", target == null ? null : target.kind());
+            SqlBind.nullable(update, "targetName", target == null ? null : target.name());
+            SqlBind.nullable(update, "targetId", target == null ? null : target.id());
             SqlBind.nullable(update, "body", body);
             SqlBind.nullable(update, "link", link);
             SqlBind.nullable(update, "actorId", actorId);
@@ -92,39 +121,34 @@ public class NotificationStore {
      * {@code limit} caps the window. Never returns another user's rows.
      */
     public Page list(String recipientId, boolean unreadOnly, String cursor, int limit) {
-        int capped = Math.max(1, Math.min(limit, 200));
-        Cursor after = Cursor.decode(cursor);
-        StringBuilder sql = new StringBuilder("SELECT * FROM " + TABLE + " WHERE _recipient = :recipient");
-        if (unreadOnly) {
-            sql.append(" AND _read_at IS NULL");
+        return list(recipientId, unreadOnly, cursor, limit, su.onno.ui.ScopeClause.ALL);
+    }
+
+    public Page list(String recipientId, boolean unreadOnly, String cursor, int limit,
+                     su.onno.ui.ScopeClause visibility) {
+        try {
+            jdbi.useHandle(h -> normalizeTargets(h, recipientId));
+            var page = jdbi.withHandle(h -> su.onno.query.KeysetWindow.fetch(h, TABLE, "*",
+                    "_recipient = :recipient" + (unreadOnly ? " AND _read_at IS NULL" : "") + visibility.and(),
+                    q -> { q.bind("recipient", recipientId); visibility.bind(q); },
+                    List.of(su.onno.query.KeysetWindow.Order.notNull("_created_at", true),
+                            su.onno.query.KeysetWindow.Order.notNull("_id", true)), cursor, limit,
+                    "notifications:" + recipientId + ":" + unreadOnly + ":" + visibility,
+                    (rs, ctx) -> map(rs)));
+            return new Page(page.rows(), page.nextCursor(), page.hasMore());
+        } catch (su.onno.query.Cursor.ScopeMismatchException e) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "Cursor belongs to another notification feed", e);
         }
-        if (after != null) {
-            // Keyset: strictly older than the cursor row in (_created_at DESC, _id DESC) order.
-            sql.append(" AND (_created_at < :cursorTs OR (_created_at = :cursorTs AND _id < :cursorId))");
-        }
-        sql.append(" ORDER BY _created_at DESC, _id DESC LIMIT :limit");
-        List<Notification> rows = jdbi.withHandle(h -> {
-            var q = h.createQuery(sql.toString())
-                    .bind("recipient", recipientId)
-                    .bind("limit", capped + 1); // fetch one extra to detect a further window
-            if (after != null) {
-                q.bind("cursorTs", Timestamp.from(after.createdAt())).bind("cursorId", after.id());
-            }
-            return q.map((rs, ctx) -> map(rs)).list();
-        });
-        boolean hasMore = rows.size() > capped;
-        if (hasMore) {
-            rows = rows.subList(0, capped);
-        }
-        String next = hasMore && !rows.isEmpty()
-                ? Cursor.encode(rows.get(rows.size() - 1)) : null;
-        return new Page(rows, next, hasMore);
     }
 
     /** How many of a recipient's notifications are still unread — the badge count. */
-    public int unreadCount(String recipientId) {
-        return jdbi.withHandle(h -> h.createQuery("SELECT COUNT(*) FROM " + TABLE +
-                        " WHERE _recipient = :recipient AND _read_at IS NULL")
+    public int unreadCount(String recipientId) { return unreadCount(recipientId, su.onno.ui.ScopeClause.ALL); }
+
+    public int unreadCount(String recipientId, su.onno.ui.ScopeClause visibility) {
+        if (!visibility.isAll()) jdbi.useHandle(h -> normalizeTargets(h, recipientId));
+        return jdbi.withHandle(h -> visibility.bind(h.createQuery("SELECT COUNT(*) FROM " + TABLE +
+                        " WHERE _recipient = :recipient AND _read_at IS NULL" + visibility.and()))
                 .bind("recipient", recipientId)
                 .mapTo(Integer.class)
                 .one());
@@ -148,9 +172,12 @@ public class NotificationStore {
      * fully modular — a custom producer's type gets a tab with no config, and a disabled built-in source
      * (its type no longer produced) drops out as its old notifications age out.
      */
-    public List<String> distinctTypes(String recipientId) {
-        return jdbi.withHandle(h -> h.createQuery("SELECT _type FROM " + TABLE +
-                        " WHERE _recipient = :recipient GROUP BY _type ORDER BY MAX(_created_at) DESC")
+    public List<String> distinctTypes(String recipientId) { return distinctTypes(recipientId, su.onno.ui.ScopeClause.ALL); }
+
+    public List<String> distinctTypes(String recipientId, su.onno.ui.ScopeClause visibility) {
+        if (!visibility.isAll()) jdbi.useHandle(h -> normalizeTargets(h, recipientId));
+        return jdbi.withHandle(h -> visibility.bind(h.createQuery("SELECT _type FROM " + TABLE +
+                        " WHERE _recipient = :recipient" + visibility.and() + " GROUP BY _type ORDER BY MAX(_created_at) DESC LIMIT 100"))
                 .bind("recipient", recipientId)
                 .mapTo(String.class)
                 .list());
@@ -206,33 +233,4 @@ public class NotificationStore {
     /** One newest-first window of a timeline, with the cursor to resume after it. */
     public record Page(List<Notification> items, String nextCursor, boolean hasMore) {}
 
-    /**
-     * The keyset position after a row: its {@code (_created_at, _id)} pair, opaquely base64-encoded. The
-     * timestamp is carried at <em>full</em> precision (epoch-second + nanos), not truncated to millis —
-     * the {@code TIMESTAMP} column keeps sub-millisecond digits, so a millisecond-only cursor would make
-     * same-millisecond siblings fall through both arms of the keyset comparison and silently vanish
-     * between windows.
-     */
-    private record Cursor(Instant createdAt, UUID id) {
-
-        static String encode(Notification n) {
-            Instant t = n.createdAt();
-            String raw = t.getEpochSecond() + ":" + t.getNano() + ":" + n.id();
-            return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes());
-        }
-
-        static Cursor decode(String cursor) {
-            if (cursor == null || cursor.isBlank()) {
-                return null;
-            }
-            try {
-                String raw = new String(Base64.getUrlDecoder().decode(cursor));
-                String[] parts = raw.split(":", 3);
-                Instant createdAt = Instant.ofEpochSecond(Long.parseLong(parts[0]), Long.parseLong(parts[1]));
-                return new Cursor(createdAt, UUID.fromString(parts[2]));
-            } catch (RuntimeException e) {
-                return null; // a garbled cursor just restarts the feed from the top
-            }
-        }
-    }
 }

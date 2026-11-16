@@ -116,6 +116,34 @@ class RegisterQueryServiceSignedTotalsTest {
     }
 
     @Test
+    void historicalPagesFilterAggregatedResourcesAndBindCursorToCutoff() {
+        for (int i = 1; i <= 5; i++) {
+            UUID key = new UUID(0, i);
+            insertBalance(key, "2024-03-31T12:00:00", "RECEIPT", "10", true);
+            insertBalance(key, "2024-03-31T13:00:00", "RECEIPT", "10", true);
+            insertBalance(key, "2024-04-01T00:00:00", "RECEIPT", "100", true);
+        }
+        var filters = ListFilter.parse(List.of(), List.of(), List.of(), List.of(),
+                List.of("amount,15"), List.of(), service.balanceFilterColumns(balanceDescriptor),
+                service.numericFilterColumns(balanceDescriptor));
+        var first = service.balancePage(AccessSubject.system(), balanceDescriptor, filters,
+                null, false, null, 2, "2024-03-31");
+        assertThat(first.rows()).hasSize(2);
+        assertThat(first.rows()).allSatisfy(r -> assertThat((BigDecimal) r.get("amount")).isEqualByComparingTo("20"));
+        var second = service.balancePage(AccessSubject.system(), balanceDescriptor, filters,
+                null, false, first.nextCursor(), 2, "2024-03-31");
+        var last = service.balancePage(AccessSubject.system(), balanceDescriptor, filters,
+                null, false, second.nextCursor(), 2, "2024-03-31");
+        assertThat(last.rows()).hasSize(1);
+        assertThat(last.nextCursor()).isNull();
+        assertThat(last.hasMore()).isFalse();
+        assertThat(service.balanceCount(AccessSubject.system(), balanceDescriptor, filters, "2024-03-31")).isEqualTo(5);
+        assertThatThrownBy(() -> service.balancePage(AccessSubject.system(), balanceDescriptor, filters,
+                null, false, first.nextCursor(), 2, "2024-04-01"))
+                .isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
     void historicalBalanceIncludesBoundaryAndSubtractsExpensesWithFiltersAndScope() {
         for (String period : List.of("2024-03-30T12:00:00", "2024-03-31T23:59:59", "2024-04-01T00:00:00")) {
             insertBalance(property, period, "RECEIPT", "100", true);

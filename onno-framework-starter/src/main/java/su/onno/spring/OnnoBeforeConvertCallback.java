@@ -9,6 +9,8 @@ import su.onno.model.DocumentObject;
 import su.onno.model.TabularSectionRow;
 import su.onno.numbering.NumberGenerator;
 import su.onno.performance.OnnoPerformance;
+import su.onno.period.PeriodCloseService;
+import su.onno.period.PeriodOperation;
 import su.onno.rules.BusinessRuleValidator;
 import su.onno.security.SecretCipher;
 import su.onno.security.SecretFields;
@@ -27,6 +29,7 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
     private final NumberGenerator numberGenerator;
     private final SecretCipher secretCipher;
     private final OnnoMetrics metrics;
+    private PeriodCloseService periodClose;
     private final BusinessRuleValidator businessRuleValidator = new BusinessRuleValidator();
     private final AttributeValidator attributeValidator = new AttributeValidator();
 
@@ -41,6 +44,11 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
         this.numberGenerator = numberGenerator;
         this.secretCipher = secretCipher;
         this.metrics = metrics;
+    }
+
+    /** Enables period-close enforcement on document saves (including the soft delete). */
+    public void setPeriodCloseService(PeriodCloseService periodClose) {
+        this.periodClose = periodClose;
     }
 
     @Override
@@ -83,6 +91,13 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
             // Tabular-section rows are aggregate children with a non-generated UUID @Id; Spring
             // Data JDBC won't assign one, so populate any missing ids before the insert.
             assignTabularRowIds(document, desc.tabularSections());
+            if (periodClose != null) {
+                // The stored date and the date being written must both be outside closed periods.
+                periodClose.requireDocumentOpen(desc, document.getId(), document.getDate(),
+                        periodClose.organizationOf(document),
+                        document.isNew() ? PeriodOperation.CREATE
+                                : document.isDeletionMark() ? PeriodOperation.DELETE : PeriodOperation.UPDATE);
+            }
         } else if (aggregate instanceof AccumulationRecord record) {
             if (record.getId() == null) {
                 record.setId(UUID.randomUUID());

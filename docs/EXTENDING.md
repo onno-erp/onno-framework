@@ -384,3 +384,9 @@ credentials and inbox routing: advertising `PERSONAL` also closes the generic CR
 administrators. Existing `CrmChannelConnection` beans remain shared legacy accounts.
 For explicit privacy boundaries, `UiEntityAccessPolicy.includesAdministrators()` opts out of the
 ordinary ADMIN bypass. See the CRM starter README for full contracts and widget configuration.
+
+CRM workspace pagination preserves Java selectors and facet resolvers through request-local SQL
+projections. Facet resolvers now receive bounded batches (maximum 500) and must produce values
+per conversation independently of batch membership. Avoid global ranking inside the callback.
+See [the pagination contract](HEADLESS_READ_API.md#collection-pagination) and
+[CRM pagination](../onno-crm-starter/README.md#conversation-pagination) for performance limits.

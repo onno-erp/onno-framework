@@ -22,6 +22,9 @@ public class OnnoProperties {
 
     private final Repository repository = new Repository();
 
+    private final PeriodClose periodClose = new PeriodClose();
+    private final History history = new History();
+
     public List<String> getScanPackages() {
         return scanPackages;
     }
@@ -40,6 +43,83 @@ public class OnnoProperties {
 
     public Repository getRepository() {
         return repository;
+    }
+
+    public History getHistory() {
+        return history;
+    }
+
+    /** Record change history ({@code onno.history.*}). */
+    public static class History {
+
+        /**
+         * Whether field-level change history is recorded for catalogs and documents that opt in with
+         * {@code @Catalog(history = true)} / {@code @Document(history = true)}. Entities that have
+         * not opted in are never recorded. Set to {@code false} to stop recording everywhere (the
+         * {@code onno_record_history} table is then not created and the history panel and
+         * {@code /api/history} endpoint disappear) without touching the model.
+         */
+        private boolean enabled = true;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+    }
+
+    public PeriodClose getPeriodClose() {
+        return periodClose;
+    }
+
+    /** Accounting period close ({@code onno.period-close.*}). */
+    public static class PeriodClose {
+
+        /**
+         * Enables period close: documents dated on or before a closed date cannot be created,
+         * changed, deleted, posted, reposted or unposted. With no period closed nothing is
+         * rejected. Set to {@code false} to remove the service and every check.
+         */
+        private boolean enabled = true;
+
+        /**
+         * Roles allowed to close and reopen periods through the UI page and {@code /api/period-close}.
+         * {@code ADMIN} is always allowed.
+         */
+        private List<String> manageRoles = new ArrayList<>();
+
+        /**
+         * Roles whose signed-in holders may change documents inside a closed period without
+         * reopening it. Each bypassed operation is written to the audit trail. Empty by default:
+         * nobody is exempt, not even {@code ADMIN} — list {@code ADMIN} here to exempt administrators.
+         */
+        private List<String> overrideRoles = new ArrayList<>();
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public List<String> getManageRoles() {
+            return manageRoles;
+        }
+
+        public void setManageRoles(List<String> manageRoles) {
+            this.manageRoles = manageRoles;
+        }
+
+        public List<String> getOverrideRoles() {
+            return overrideRoles;
+        }
+
+        public void setOverrideRoles(List<String> overrideRoles) {
+            this.overrideRoles = overrideRoles;
+        }
     }
 
     /** Repository guardrails ({@code onno.repository.*}). */

@@ -89,6 +89,8 @@ public class CalendarController {
             boolean movable = source.canReschedule(principal);
             for (var item : source.items(query)) {
                 if (!item.overlaps(query.windowStart(), query.windowEnd()) || !query.matches(item)) continue;
+                if (result.size() == 500) throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "Calendar exceeds 500 items; narrow the date range or filters");
                 result.add(view(source, item, movable));
             }
         }

@@ -40,11 +40,23 @@ public class TagService {
     private Optional<TagCatalog> catalog(String scope) { return catalogs.stream().filter(c -> c.scope().equals(scope)).findFirst(); }
     private List<Tag> catalogLibrary(TagCatalog catalog) {
         // Preserve legacy IDs. Imports are idempotent and never overwrite catalog edits/deletions.
-        var legacy=jdbi.withHandle(h -> h.createQuery("SELECT id,name,color FROM onno_tags WHERE scope=:s").bind("s",catalog.scope())
-            .map((r,c)->new Tag(r.getObject(1,UUID.class),r.getString(2),r.getString(3))).list());
-        legacy.forEach(tag -> catalog.importTag(tag.id(),tag.name(),tag.color()));
-        return catalog.list();
+        String cursor = null;
+        do {
+            var page = su.onno.query.KeysetWindow.fetch(jdbi, "onno_tags", "*", "scope = :scope",
+                    q -> q.bind("scope", catalog.scope()),
+                    List.of(new su.onno.query.KeysetWindow.Order("id", false)), cursor, 500, "tag-import:" + catalog.scope());
+            for (var row : page.rows()) catalog.importTag((UUID) row.get("id"), (String) row.get("name"), (String) row.get("color"));
+            cursor = page.nextCursor();
+        } while (cursor != null);
+        return bounded(catalog.list());
     }
+
+    private static <T> List<T> bounded(List<T> rows) {
+        if (rows.size() > 500) throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "Tag selector exceeds 500 entries; use the bound catalog's paged list");
+        return rows;
+    }
+
     public static String scope(String kind, String name) { return kind + ":" + name.replace("_", "").replace(" ", "").toLowerCase(Locale.ROOT); }
     static String nameFromScope(String scope) { return scope.substring(scope.indexOf(':') + 1); }
 
@@ -93,17 +105,16 @@ public class TagService {
         }
     }
     public List<Tag> library(String scope) {
-        var bound=catalog(scope); if(bound.isPresent()) return catalogLibrary(bound.get());
-        return jdbi.withHandle(h -> h.createQuery("SELECT id,name,color FROM onno_tags WHERE scope=:s ORDER BY normalized")
-            .bind("s", scope).map((r,c) -> new Tag(r.getObject(1,UUID.class),r.getString(2),r.getString(3))).list());
+        return catalog(scope).map(this::catalogLibrary).orElseGet(() -> bounded(jdbi.withHandle(h -> h.createQuery("SELECT id,name,color FROM onno_tags WHERE scope=:s ORDER BY normalized LIMIT 501")
+            .bind("s", scope).map((r,c) -> new Tag(r.getObject(1,UUID.class),r.getString(2),r.getString(3))).list())));
     }
     public List<Tag> assigned(String scope, UUID record) {
         if(catalog(scope).isPresent()) {
-            var ids=jdbi.withHandle(h -> h.createQuery("SELECT tag_id FROM onno_tag_links WHERE scope=:s AND record_id=:r").bind("s",scope).bind("r",record).mapTo(UUID.class).list());
+            var ids=bounded(jdbi.withHandle(h -> h.createQuery("SELECT tag_id FROM onno_tag_links WHERE scope=:s AND record_id=:r LIMIT 501").bind("s",scope).bind("r",record).mapTo(UUID.class).list()));
             return library(scope).stream().filter(tag -> ids.contains(tag.id())).toList();
         }
-        return jdbi.withHandle(h -> h.createQuery("SELECT t.id,t.name,t.color FROM onno_tags t JOIN onno_tag_links l ON t.id=l.tag_id WHERE l.scope=:s AND l.record_id=:r ORDER BY t.normalized")
-            .bind("s",scope).bind("r",record).map((r,c) -> new Tag(r.getObject(1,UUID.class),r.getString(2),r.getString(3))).list());
+        return bounded(jdbi.withHandle(h -> h.createQuery("SELECT t.id,t.name,t.color FROM onno_tags t JOIN onno_tag_links l ON t.id=l.tag_id WHERE l.scope=:s AND l.record_id=:r ORDER BY t.normalized LIMIT 501")
+            .bind("s",scope).bind("r",record).map((r,c) -> new Tag(r.getObject(1,UUID.class),r.getString(2),r.getString(3))).list()));
     }
     public Tag create(String scope, String name, String color) {
         String label = name == null ? "" : name.strip();

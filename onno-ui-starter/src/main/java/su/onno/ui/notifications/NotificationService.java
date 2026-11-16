@@ -118,8 +118,22 @@ public class NotificationService {
 
     // ---- read/mutate surface used by NotificationController -------------------------------------
 
+    public int pageSize() { return su.onno.query.KeysetWindow.clampLimit(properties.getPageSize()); }
+
     public NotificationStore.Page list(String recipientId, boolean unreadOnly, String cursor) {
         return store.list(recipientId, unreadOnly, cursor, properties.getPageSize());
+    }
+
+    public NotificationStore.Page list(String recipientId, boolean unreadOnly, String cursor, int limit,
+            su.onno.ui.ScopeClause visibility) {
+        return store.list(recipientId, unreadOnly, cursor, limit, visibility);
+    }
+
+    public int unreadCount(String recipientId, su.onno.ui.ScopeClause visibility) {
+        return store.unreadCount(recipientId, visibility);
+    }
+    public java.util.List<String> types(String recipientId, su.onno.ui.ScopeClause visibility) {
+        return store.distinctTypes(recipientId, visibility);
     }
 
     public int unreadCount(String recipientId) {
@@ -136,6 +150,7 @@ public class NotificationService {
         return store.distinctTypes(recipientId);
     }
 
+    @SuppressWarnings("UnusedReturnValue") // Callers may inspect whether a row changed.
     public boolean markRead(UUID id, String recipientId) {
         return store.markRead(id, recipientId);
     }

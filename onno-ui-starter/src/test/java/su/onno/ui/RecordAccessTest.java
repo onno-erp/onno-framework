@@ -83,6 +83,22 @@ class RecordAccessTest {
     }
 
     @Test
+    void notificationSqlMatchesRouteVisibilityIncludingAliasesAndUnknownEntities() {
+        jdbi.useHandle(h -> {
+            h.execute("CREATE TABLE notification_scope_test (_id INT, _target_kind VARCHAR, _target_name VARCHAR, _target_id UUID)");
+            h.execute("INSERT INTO notification_scope_test VALUES (1,NULL,NULL,NULL),"
+                    + "(2,'catalogs','ratenants',?),(3,'catalogs','ratenants',?),"
+                    + "(4,'catalogs','ralessees',?),(5,'catalogs','unknown',?)", tenantEu, tenantUs, tenantEu, tenantEu);
+        });
+        ScopeClause visible = access.notificationScope(CUSTOMER);
+        var ids = jdbi.withHandle(h -> visible.bind(h.createQuery(
+                "SELECT _id FROM notification_scope_test WHERE " + visible.sql() + " ORDER BY _id")).mapTo(Integer.class).list());
+        assertThat(ids).containsExactly(1, 2, 4);
+        assertThat(access.notificationScope(STAFF).isAll()).isTrue();
+        assertThatThrownBy(() -> access.notificationScope(null)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void aNullSubjectAlwaysThrows() {
         RecordAccess unrestricted = recordAccess(RecordPolicies.none(registry));
         for (RecordAccess ra : List.of(access, unrestricted)) {

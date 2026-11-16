@@ -46,6 +46,11 @@ public class ThemeController {
         out.put("readOnly", properties.isReadOnly());
         out.put("basePath", properties.getPath());
         out.put("locale", properties.getLocale());
+        // The display zone for Instant fields (onno.ui.time-zone). Omitted when unset: the client
+        // then renders instants in the viewer's browser zone.
+        if (!properties.getTimeZone().isEmpty()) {
+            out.put("timeZone", properties.getTimeZone());
+        }
         // The resolved chrome strings (English defaults + onno.ui.messages overrides). The web
         // client overlays this on its bundled defaults so the whole shell — buttons, dialogs,
         // login, empty/loading states, validation — speaks the app's configured language.

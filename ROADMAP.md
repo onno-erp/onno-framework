@@ -19,6 +19,7 @@ Implemented:
 - Document post/unpost rights separate from write access: `@AccessControl(postRoles, unpostRoles)` narrows who may post, re-post or unpost (and delete a posted document) on REST, MCP and the built-in UI actions; `BeforeUnpostHandler` lets the domain veto an unpost
 - Record-level access policies (`RecordAccessPolicy` + `RecordScope`): declarative, query-pushed-down "which records" rules for external users, enforced on every generic read/write path (lists, aggregates, search, refs, writes, actions, import, comments, tags, presence, notifications, SSE, MCP, CRM inbox) with a shipped leak-test conformance suite
 - Structured reference resolution for API rows via `{column}_display` and `{column}_ref`
+- Record change history: opt-in `@Catalog/@Document(history = true)` field-level audit log (who, when, old and new value; tabular-section rows; post/unpost/delete events) recorded on the generic command path and typed repository saves, with a History panel on the record surface and `GET /api/history/{kind}/{name}/{id}` under the record's own read access
 - Server-sent UI event stream (`GET /api/events`) for live refresh of catalogs, documents, registers, and comment threads
 - Agent-readable business model surface via the MCP server (`onno-mcp-starter`, `describe_metadata` tool) — there is no anonymous HTTP manifest endpoint
 - Application-defined MCP tools via authenticated, role-scoped `@McpTool` Spring bean methods, with an SDK-level `McpToolProvider` extension point
@@ -41,6 +42,7 @@ Implemented:
 - Diff-based schema migration: `onno_schema_history` with metadata snapshots, renames via `previousNames`, modes (`apply`/`plan`/`validate`/`off`), destructive-change gating, and versioned `AppMigration` data migrations
 - Hierarchical catalog children/tree APIs
 - Dry-run posting previews
+- Period close (`PeriodCloseService`): global / per-context / per-register / per-organization, soft or hard change-prohibition dates, `@PeriodAdjustment` documents, enforced in core posting (including chronological restoration), repository saves and the generic command path; audited close, reopen, adjustment and role override; `/api/period-close`, the `period_close_status` MCP tool and a built-in `/period-close` admin page. See `docs/PERIOD_CLOSE.md`.
 - Domain event metadata and outbox publication hooks
 - `onno-auth-starter` with session-based defaults, JSON login/logout, CSRF cookie, in-memory users via `onno.auth.users`, plus OIDC and resource-server modes
 - Integration starters: MCP server (`onno-mcp-starter`), CSV import (`onno-import-starter`), Word/Excel print forms with batch printing, admin-uploaded templates and PDF (`onno-print-starter`), Kafka outbox relay (`onno-kafka-starter`), native desktop packaging (`onno-desktop-starter` + Gradle plugin)
