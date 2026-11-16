@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { I18nProvider } from "react-aria-components";
 import { api } from "@/lib/api";
 import { DEFAULT_MESSAGES, makeTranslate, type Translate } from "@/lib/messages";
+import { publishDisplayTimeZone } from "@/lib/time-zone";
 import { publishWidgetLocale, publishWidgetMessages } from "@/lib/widget-messages";
 
 /**
@@ -28,6 +29,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
         if (cancelled || !cfg) return;
         setLocale(cfg.locale || undefined);
         publishWidgetLocale(cfg.locale || undefined);
+        publishDisplayTimeZone(cfg.timeZone || undefined);
         if (!cfg.messages) return;
         // Server map wins per key; any key the server omits keeps its bundled English default.
         const resolved = { ...DEFAULT_MESSAGES, ...cfg.messages };

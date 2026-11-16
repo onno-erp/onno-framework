@@ -6,10 +6,12 @@ import { ExtensionSlot } from "@/lib/ui-extensions";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ListSelectionCheckbox, loadedSelectionState, selectLoaded } from "./list-selection-checkbox";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
-import { ArrowDown, ArrowLeftRight, ArrowUp, CalendarDays, Check, ChevronsUpDown, Copy, ExternalLink, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowLeftRight, ArrowUp, CalendarDays, Check, ChevronsUpDown, Copy, ExternalLink, GanttChart, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
 import { CalendarDate, getLocalTimeZone, parseDate, startOfMonth, startOfYear, today } from "@internationalized/date";
 import { toast } from "@/components/ui/toast";
 import { ListMapView, type ListMapConfig } from "@/components/list-map-view";
+import { ListCalendarView, ListTimelineView } from "@/components/list-schedule-view";
+import type { ListCalendarConfig, ListTimelineConfig } from "@/lib/schedule";
 import {
   ActionFormDialog,
   type ActionFormDialogConfig,
@@ -203,6 +205,8 @@ export type ListFilterControl = {
  * type degrades to the default grid — the toggle simply doesn't appear.
  */
 export type ListCustomConfig = { type: string; label?: string; defaultView?: boolean };
+/** The list's body: the grid, or one of the alternates the list declares (see ListSpec). */
+export type ListViewMode = "table" | "map" | "custom" | "calendar" | "timeline";
 /**
  * The props a custom list-body renderer receives (registered via {@code registerListRenderer} from
  * {@code @onno/widget-sdk} or the host registry). The framework keeps the toolbar
@@ -324,6 +328,10 @@ export type ListDescriptor = {
   filters?: ListFilterControl[];
   /** When set, the toolbar offers a Table ⇄ Map toggle that plots the rows as markers. */
   map?: ListMapConfig;
+  /** When set, the toolbar offers a Calendar view over the same feed (ListSpec.calendar). */
+  calendar?: ListCalendarConfig;
+  /** When set, the toolbar offers a Timeline (resource scheduler) view (ListSpec.timeline). */
+  timeline?: ListTimelineConfig;
   /** When set (and the type is registered), the toolbar offers a Table ⇄ custom-view toggle. */
   custom?: ListCustomConfig;
   /** Columns offered in the "Group by ▾" picker; a `date` column buckets by day/month/year. */
@@ -509,6 +517,15 @@ export function ListCell({ row, col }: { row: EntityRecord; col: ListColumn }) {
   // stopPropagation, so opening a link doesn't also trigger the row's navigate-to-detail click.
   const display = displayCellValue(raw, col);
   return <span className="truncate text-foreground">{linkify(display)}</span>;
+}
+
+/** The body a list opens on: the first alternate view declared as its default, else the grid. */
+function defaultViewOf(list: { custom?: ListCustomConfig; map?: ListMapConfig; calendar?: ListCalendarConfig; timeline?: ListTimelineConfig }): ListViewMode {
+  if (list.custom?.defaultView) return "custom";
+  if (list.map?.defaultView) return "map";
+  if (list.timeline?.defaultView) return "timeline";
+  if (list.calendar?.defaultView) return "calendar";
+  return "table";
 }
 
 // Mirror of the server's snake-casing so an SSE event's entity name matches the route name.
@@ -1741,17 +1758,18 @@ export function EntityListWidget({
   // Table vs map vs custom view (each alternative only offered when the list declares it). The map
   // fetches its own rows, so the grid's search/filters/sort are hidden while it's shown; a custom
   // renderer shares the grid's feed, so the toolbar stays live.
-  const [view, setView] = useState<"table" | "map" | "custom">(() => {
+  const [view, setView] = useState<ListViewMode>(() => {
     // "Open in list" lands on a highlighted table row, whatever the default view.
     if (list.focus) return "table";
-    if (urlSynced && (list.map || list.custom)) {
+    if (urlSynced && (list.map || list.custom || list.calendar || list.timeline)) {
       const v = initialParams.get("view");
+      if (v === "calendar" && list.calendar) return "calendar";
+      if (v === "timeline" && list.timeline) return "timeline";
       if (v === "map" && list.map) return "map";
       if (v === "custom" && list.custom) return "custom";
       if (v === "table") return "table";
     }
-    if (list.custom?.defaultView) return "custom";
-    return list.map?.defaultView ? "map" : "table";
+    return defaultViewOf(list);
   });
 
   // Re-resolve list components when a plugin registers after mount.
@@ -1765,14 +1783,27 @@ export function EntityListWidget({
   const ownsLoadingMore = renderer
     ? Boolean((renderer as ListRendererComponent).ownsLoadingMore)
     : registeredRenderer?.ownsLoadingMore ?? false;
-  const availableViews = (["table", ...(list.map ? ["map"] : []), ...(CustomRenderer ? ["custom"] : [])] as Array<"table" | "map" | "custom">);
+  // Calendar/timeline read the catalog/document list feed, so a register never offers them.
+  const schedulable = kind === "catalogs" || kind === "documents";
+  const availableViews = ([
+    "table",
+    ...(list.map ? ["map"] : []),
+    ...(schedulable && list.calendar ? ["calendar"] : []),
+    ...(schedulable && list.timeline ? ["timeline"] : []),
+    ...(CustomRenderer ? ["custom"] : []),
+  ] as ListViewMode[]);
   const configuredViews = toolbarOptions?.views?.filter(value => availableViews.includes(value));
   const allowedViews = configuredViews?.length ? configuredViews : availableViews;
   const activeView = allowedViews.includes(view) ? view : allowedViews[0];
   const mapMode = !!list.map && activeView === "map";
   const customMode = activeView === "custom" && !!CustomRenderer;
+  const calendarMode = activeView === "calendar" && !!list.calendar;
+  const timelineMode = activeView === "timeline" && !!list.timeline;
+  // Calendar and timeline keep the toolbar's search and filters live (they query the list feed
+  // with them) but, like the map, replace the grid — so grouping and row selection step aside.
+  const scheduleMode = calendarMode || timelineMode;
   // Grouped view replaces the flat table (never shown together with the map or a custom body).
-  const grouped = !!groupBy && !mapMode && !customMode;
+  const grouped = !!groupBy && !mapMode && !customMode && !scheduleMode;
   // Catalog/document rows open their record; register rows (movements/balance) have no detail route,
   // so they aren't clickable. Also gates the single-row live patch (registers have no row identity).
   const openable = kind === "catalogs" || kind === "documents";
@@ -1878,8 +1909,9 @@ export function EntityListWidget({
       params.set("sort", sort.column);
       params.set("dir", sort.descending ? "desc" : "asc");
     }
-    const defaultViewName = list.custom?.defaultView ? "custom" : list.map?.defaultView ? "map" : "table";
-    const currentViewName = mapMode ? "map" : customMode ? "custom" : "table";
+    const defaultViewName = defaultViewOf(list);
+    const currentViewName: ListViewMode =
+      mapMode ? "map" : customMode ? "custom" : calendarMode ? "calendar" : timelineMode ? "timeline" : "table";
     if (currentViewName !== defaultViewName) params.set("view", currentViewName);
     for (const f of filters) {
       const st = filterStateRef.current[f.key];
@@ -1903,7 +1935,7 @@ export function EntityListWidget({
       qs ? `${window.location.pathname}?${qs}` : window.location.pathname
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlSynced, filterSig, debounced, sort.column, sort.descending, mapMode, customMode]);
+  }, [urlSynced, filterSig, debounced, sort.column, sort.descending, mapMode, customMode, calendarMode, timelineMode]);
 
   // How many filters currently constrain the query — drives the "Clear all" affordance on the
   // filter bar. A filter counts as active only when it actually narrows rows (a picked option, some
@@ -1928,6 +1960,8 @@ export function EntityListWidget({
   // controls need more room. `compact` additionally drops button labels to icons.
   const controlsWidthEstimate =
     (list.map ? 150 : 0) +
+    (list.calendar ? 150 : 0) +
+    (list.timeline ? 150 : 0) +
     (list.custom && CustomRenderer ? 150 : 0) +
     (list.searchable ? 36 : 0) + // the collapsed search icon; the expanded input may wrap, which is fine
     toolbarActions.length * 100 +
@@ -2025,6 +2059,14 @@ export function EntityListWidget({
   // The shared query (sort + search + filters) the grouped view fetches groups/rows with, as a
   // string so its effects can depend on it.
   const groupParamsBase = useMemo(() => buildParams().toString(), [buildParams]);
+  // The same query for the calendar/timeline views, minus the grid's sort: entries are placed by
+  // their dates, and a sort change must not refetch the period.
+  const scheduleQuery = useMemo(() => {
+    const params = new URLSearchParams(groupParamsBase);
+    params.delete("sort");
+    params.delete("dir");
+    return params.toString();
+  }, [groupParamsBase]);
 
   // Load the first keyset window. Bumps the generation so a slow fetch that lands after a newer
   // query is discarded. A hard load blanks to the skeleton; a soft live refresh keeps the current
@@ -2318,7 +2360,7 @@ export function EntityListWidget({
     // grouped/mapMode/customMode: the observed body remounts when those views swap back to the
     // table — re-run so the observer isn't left holding the unmounted element (see the viewport
     // effect).
-  }, [surfaceMode, grouped, mapMode, customMode]);
+  }, [surfaceMode, grouped, mapMode, customMode, scheduleMode]);
 
   // Keep the virtual-window viewport height in sync with the body's client height. Keyed on the
   // view toggles too: the grouped/map views unmount the table body, and unmount delivers a final
@@ -2336,7 +2378,7 @@ export function EntityListWidget({
     const ro = new ResizeObserver(apply);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [surfaceMode, grouped, mapMode, customMode]);
+  }, [surfaceMode, grouped, mapMode, customMode, scheduleMode]);
 
   // Body scroll: drive the virtual window and fetch the next keyset window as the end nears.
   const onScroll = useCallback(() => {
@@ -3125,7 +3167,7 @@ export function EntityListWidget({
             onScroll={measureRail}
             className="-mx-1 -my-1 flex w-full items-center gap-2 overflow-x-auto overscroll-x-contain px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
-          {selected.size > 0 && !mapMode && !customMode ? (
+          {selected.size > 0 && !mapMode && !customMode && !scheduleMode ? (
             <div role="group" aria-label={t("list.selectionActions")} className="flex shrink-0 items-center gap-2 border-r border-border pr-2">
               {canWrite && SelectionWidget ? <SelectionWidget ids={[...selected]} complete={() => { clearSelection(); reload(); }} /> : null}
               <Button size="toolbar" variant="subtle" onClick={() => {
@@ -3158,7 +3200,7 @@ export function EntityListWidget({
           {/* group-by (+ granularity for a date column) — a facet chip like the filters beside it.
               Hidden on the map (it fetches its own rows) and on a custom body (grouping renders the
               grouped table, which the custom renderer replaces). */}
-          {!mapMode && !customMode && showControl("grouping") && groupable.length ? (
+          {!mapMode && !customMode && !scheduleMode && showControl("grouping") && groupable.length ? (
             <GroupByFacet
               groupable={groupable}
               groupBy={groupBy}
@@ -3311,6 +3353,12 @@ export function EntityListWidget({
                 ...(list.map
                   ? [{ value: "map" as const, icon: MapIcon, label: compact ? undefined : t("list.mapView"), ariaLabel: t("list.mapView") }]
                   : []),
+                ...(list.calendar
+                  ? [{ value: "calendar" as const, icon: CalendarDays, label: compact ? undefined : t("list.calendarView"), ariaLabel: t("list.calendarView") }]
+                  : []),
+                ...(list.timeline
+                  ? [{ value: "timeline" as const, icon: GanttChart, label: compact ? undefined : t("list.timelineView"), ariaLabel: t("list.timelineView") }]
+                  : []),
                 ...(list.custom && CustomRenderer
                   ? [{
                       value: "custom" as const,
@@ -3319,7 +3367,7 @@ export function EntityListWidget({
                       ariaLabel: list.custom.label || t("list.customView"),
                     }]
                   : []),
-              ].filter(option => allowedViews.includes(option.value as "table" | "map" | "custom"))}
+              ].filter(option => allowedViews.includes(option.value as ListViewMode))}
             />
           ) : null}
           {showControl("extensions") && <ExtensionSlot name="entity.list.actions" className="flex items-center gap-2" context={{execute:async(key,input)=>{const a=toolbarActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown list command");await runAction(a,undefined,input as ActionFormValues,true);},surface:"entity-list",kind,name,selectedIds:[...selected],permissions:{canWrite},refresh:reload,openRecord:(kind,name,id)=>openRoute(`onno://${kind}/${name}/${id}`)}} />}
@@ -3420,6 +3468,19 @@ export function EntityListWidget({
         // register — narrow the kind for the map view, which pages from /api/list/{kind}/{name}.
         <div className={cn(surfaceMode && "min-h-0 flex-1")}>
           <ListMapView kind={kind as "catalogs" | "documents"} name={name} config={list.map!} fill={surfaceMode} />
+        </div>
+      ) : scheduleMode ? (
+        // Calendar / timeline (ListSpec.calendar / .timeline): the same feed and query as the grid
+        // — search and filters apply — narrowed to the visible period. Only catalog/document
+        // lists offer them (see `schedulable`).
+        <div className={cn(surfaceMode && "min-h-0 flex-1")}>
+          {calendarMode ? (
+            <ListCalendarView kind={kind as "catalogs" | "documents"} name={name} feedBase={feedBase} query={scheduleQuery}
+              config={list.calendar!} canWrite={canWrite} fill={surfaceMode} />
+          ) : (
+            <ListTimelineView kind={kind as "catalogs" | "documents"} name={name} feedBase={feedBase} query={scheduleQuery}
+              config={list.timeline!} canWrite={canWrite} fill={surfaceMode} />
+          )}
         </div>
       ) : customMode && CustomRenderer ? (
         // Custom body (ListSpec.custom): the registered renderer draws the rows; the island keeps

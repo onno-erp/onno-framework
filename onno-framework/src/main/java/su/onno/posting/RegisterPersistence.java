@@ -190,7 +190,7 @@ public class RegisterPersistence<T extends AccumulationRecord> {
         }
         return SqlRenderer.render(new SqlRenderer.RenderModel(
                 List.of("*"), descriptor.totalsTableName(), null, null,
-                filterClauses(filters), null, null, null, null));
+                filterClauses(filters), null, null, null));
     }
 
     /** Signed turnover over [from, to] grouped by every dimension. */
@@ -202,7 +202,7 @@ public class RegisterPersistence<T extends AccumulationRecord> {
         where.addAll(filterClauses(filters));
         return SqlRenderer.render(new SqlRenderer.RenderModel(
                 select, descriptor.tableName(), null, null,
-                where, dimensionColumns(), null, null, null));
+                where, dimensionColumns(), null, null));
     }
 
     @SuppressWarnings("unchecked")
@@ -392,7 +392,7 @@ public class RegisterPersistence<T extends AccumulationRecord> {
                 ? dimColList : List.of();
 
         String sql = SqlRenderer.render(new SqlRenderer.RenderModel(
-                selectItems, fromTable, null, null, whereClauses, groupByList, null, null, null));
+                selectItems, fromTable, null, null, whereClauses, groupByList, null, null));
 
         return jdbi.withHandle(handle -> {
             var query = handle.createQuery(sql);
@@ -551,7 +551,7 @@ public class RegisterPersistence<T extends AccumulationRecord> {
         select.addAll(resourceSumExpressions());
         return SqlRenderer.render(new SqlRenderer.RenderModel(
                 select, descriptor.tableName(), null, null,
-                List.of("_active = TRUE"), dimensionColumns(), null, null, null));
+                List.of("_active = TRUE"), dimensionColumns(), null, null));
     }
 
     /**

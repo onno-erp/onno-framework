@@ -23,6 +23,10 @@ final class EntityQuerySupport {
     private EntityQuerySupport() {
     }
 
+    static String cursorSubject(AccessSubject subject) {
+        return su.onno.query.Cursor.subjectContext(subject);
+    }
+
     static String filterClause(ListFilter.Result filter) {
         return filter.isEmpty() ? "" : " AND (" + filter.sql() + ")";
     }
@@ -71,6 +75,11 @@ final class EntityQuerySupport {
                     row.put(attr.columnName(), TemporalValues.toLocalDate(value).toString());
                 } else if (attr.javaType() == LocalDateTime.class) {
                     row.put(attr.columnName(), TemporalValues.toLocalDateTime(value).toString());
+                } else if (attr.javaType() == java.time.LocalTime.class) {
+                    row.put(attr.columnName(), TemporalValues.toLocalTime(value).toString());
+                } else if (attr.javaType() == java.time.Instant.class) {
+                    // An absolute moment: always ISO-8601 UTC ("…Z"), never a wall-clock string.
+                    row.put(attr.columnName(), TemporalValues.toInstant(value).toString());
                 }
             }
             // Also normalize framework system timestamps such as _date and _period.
@@ -81,6 +90,12 @@ final class EntityQuerySupport {
     private static Object canonicalTemporal(Object value) {
         if (value instanceof LocalDate || value instanceof java.sql.Date) {
             return TemporalValues.toLocalDate(value).toString();
+        }
+        if (value instanceof java.time.LocalTime || value instanceof java.sql.Time) {
+            return TemporalValues.toLocalTime(value).toString();
+        }
+        if (value instanceof java.time.Instant instant) {
+            return instant.toString();
         }
         if (value instanceof LocalDateTime || value instanceof java.sql.Timestamp
                 || value instanceof OffsetDateTime || value instanceof ZonedDateTime) {
@@ -224,37 +239,6 @@ final class EntityQuerySupport {
         Map<String, String> merged = new java.util.LinkedHashMap<>(prefill == null ? Map.of() : prefill);
         merged.putAll(defaults);
         return merged;
-    }
-
-    // ------------------------------------------------------------- subject-bound keyset cursors
-
-    private static final char CURSOR_SEAL = '~'; // not in the URL-safe Base64 alphabet
-
-    /**
-     * Bind a keyset cursor to the subject that minted it: a restricted subject's cursor carries
-     * its {@link su.onno.access.RecordPolicies#fingerprint fingerprint}; an unrestricted one is
-     * unchanged.
-     */
-    static String sealCursor(String token, String fingerprint) {
-        if (token == null || fingerprint == null || fingerprint.isEmpty()) return token;
-        return token + CURSOR_SEAL + fingerprint;
-    }
-
-    /**
-     * The raw cursor token if it was minted for {@code fingerprint}; a cursor minted for another
-     * subject is rejected with 400 rather than silently re-seeked.
-     */
-    static String openCursor(String token, String fingerprint) {
-        if (token == null || token.isBlank()) return token;
-        int seal = token.lastIndexOf(CURSOR_SEAL);
-        String raw = seal < 0 ? token : token.substring(0, seal);
-        String minted = seal < 0 ? "" : token.substring(seal + 1);
-        String expected = fingerprint == null ? "" : fingerprint;
-        if (!minted.equals(expected)) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                    org.springframework.http.HttpStatus.BAD_REQUEST, "Cursor was issued for a different user");
-        }
-        return raw;
     }
 
     // ------------------------------------------------------------- hierarchical catalogs

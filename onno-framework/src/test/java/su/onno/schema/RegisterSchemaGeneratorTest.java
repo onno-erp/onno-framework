@@ -23,9 +23,9 @@ class RegisterSchemaGeneratorTest {
         SchemaGenerator generator = new SchemaGenerator(registry);
         List<String> ddl = generator.generateDDL();
 
-        assertThat(ddl).hasSize(9);
+        assertThat(ddl).hasSize(10);
 
-        String movementDDL = ddl.get(7);
+        String movementDDL = ddl.get(8);
         assertThat(movementDDL).contains("CREATE TABLE IF NOT EXISTS register_test_stock");
         assertThat(movementDDL).contains("_id UUID PRIMARY KEY");
         assertThat(movementDDL).contains("_period TIMESTAMP");
@@ -36,7 +36,7 @@ class RegisterSchemaGeneratorTest {
         assertThat(movementDDL).contains("warehouse UUID");
         assertThat(movementDDL).contains("quantity DECIMAL(15,2)");
 
-        String totalsDDL = ddl.get(8);
+        String totalsDDL = ddl.get(9);
         assertThat(totalsDDL).contains("CREATE TABLE IF NOT EXISTS register_test_stock_totals");
         assertThat(totalsDDL).contains("PRIMARY KEY (product, warehouse)");
         assertThat(totalsDDL).contains("quantity DECIMAL(15,2) DEFAULT 0");
@@ -51,9 +51,9 @@ class RegisterSchemaGeneratorTest {
         SchemaGenerator generator = new SchemaGenerator(registry);
         List<String> ddl = generator.generateDDL();
 
-        assertThat(ddl).hasSize(8);
-        assertThat(ddl.get(7)).contains("register_test_sales");
-        assertThat(ddl.get(7)).doesNotContain("_totals");
+        assertThat(ddl).hasSize(9);
+        assertThat(ddl.get(8)).contains("register_test_sales");
+        assertThat(ddl.get(8)).doesNotContain("_totals");
     }
 
     @Test

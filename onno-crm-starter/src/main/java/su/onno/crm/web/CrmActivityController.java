@@ -17,14 +17,13 @@ import su.onno.ui.UiAccessService;
 import su.onno.ui.UiProperties;
 import su.onno.ui.comments.CommentService;
 import su.onno.ui.comments.CommentAuthorAvatars;
-import su.onno.ui.comments.Comment;
 
 /** Contact history includes only conversations readable by the requesting user. */
 @RestController
 @RequestMapping("/api/crm/contacts/{customer}/activity")
 public class CrmActivityController {
+    @org.springframework.beans.factory.annotation.Autowired private CrmFeedQuery feeds;
     private final CrmContactService contacts;
-    private final ConversationRepository conversations;
     private final ConversationMessageRepository messages;
     private final InboxRepository inboxes;
     private final CrmInboxWorkspaceService workspaces;
@@ -34,11 +33,13 @@ public class CrmActivityController {
     private final CommentAuthorAvatars authorAvatars;
     private final su.onno.crm.service.CrmAttachments attachments;
     private final UiProperties uiProperties;
-    public CrmActivityController(CrmContactService contacts,ConversationRepository conversations,
+    // The repository beans are registered by OnnoJdbcRepositoriesRegistrar at runtime.
+    @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
+    public CrmActivityController(CrmContactService contacts,ConversationRepository ignoredConversations,
             ConversationMessageRepository messages,InboxRepository inboxes,CrmInboxWorkspaceService workspaces,
             UiAccessService access,CurrentUserResolver users,CommentService comments,CommentAuthorAvatars authorAvatars,
             su.onno.crm.service.CrmAttachments attachments,UiProperties uiProperties) {
-        this.contacts=contacts;this.conversations=conversations;this.messages=messages;this.inboxes=inboxes;
+        this.contacts=contacts;this.messages=messages;this.inboxes=inboxes;
         this.workspaces=workspaces;this.access=access;this.users=users;this.comments=comments;this.authorAvatars=authorAvatars;
         this.attachments=attachments;this.uiProperties=uiProperties;
     }
@@ -50,13 +51,14 @@ public class CrmActivityController {
     public record Entry(String id,UUID conversationId,String subject,String channel,String kind,
                         String direction,String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine,String accountLabel,
                         List<su.onno.crm.service.CrmAttachments.View> attachments,
-                        /** Sanitized email HTML; null for plain-text messages and notes. Render isolated. */
+                        /* Sanitized email HTML; null for plain-text messages and notes. Render isolated. */
                         String bodyHtml,
-                        /** The sender account id a reply was queued with (a Gmail mailbox address); null otherwise. */
+                        /* Sender account used for the reply, if present. */
                         String senderAccount) {
         public Entry {
             attachments=attachments==null?List.of():List.copyOf(attachments);
         }
+        @SuppressWarnings("unused") // Compatibility constructor for Java clients.
         public Entry(String id,UUID conversationId,String subject,String channel,String kind,String direction,
                 String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine,String accountLabel,
                 List<su.onno.crm.service.CrmAttachments.View> attachments,String bodyHtml) {
@@ -65,7 +67,7 @@ public class CrmActivityController {
         public Entry(String id,UUID conversationId,String subject,String channel,String kind,String direction,
                 String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine,String accountLabel,
                 List<su.onno.crm.service.CrmAttachments.View> attachments) {
-            this(id,conversationId,subject,channel,kind,direction,authorName,body,at,deliveryStatus,authorAvatarUrl,mine,accountLabel,attachments,null);
+            this(id,conversationId,subject,channel,kind,direction,authorName,body,at,deliveryStatus,authorAvatarUrl,mine,accountLabel,attachments,null,null);
         }
         public Entry(String id,UUID conversationId,String subject,String channel,String kind,String direction,
                 String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine,String accountLabel) {
@@ -76,48 +78,50 @@ public class CrmActivityController {
             this(id,conversationId,subject,channel,kind,direction,authorName,body,at,deliveryStatus,authorAvatarUrl,mine,null,List.of());
         }
     }
-    public record Feed(List<Entry> entries,int total,boolean hasMore) {}
+    public record Feed(List<Entry> rows, String nextCursor, boolean hasMore) {}
     private void require(Principal principal){
         workspaces.requireAccess(principal,false);
     }
-    @GetMapping public Feed read(@PathVariable UUID customer,@RequestParam(defaultValue="0") int offset,
-                                @RequestParam(defaultValue="100") int limit,Principal principal) {
+    @GetMapping public Feed read(@PathVariable UUID customer,@RequestParam(defaultValue="100") int limit,@RequestParam(required=false) String cursor,Principal principal) {
         require(principal);
-        if(offset<0||limit<1||limit>500)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid activity page");
-        UUID canonical=contacts.canonical(customer);workspaces.requireCustomer(canonical,principal,false);
-        List<Entry> entries=new ArrayList<>();
+        UUID canonical=contacts.canonical(customer);
+        contacts.requireRead(canonical,principal);
+        var redirects=contacts.redirects();
         var me=users.resolve(principal);
-        // Agent replies get their author's photo here too, so one contact's history reads the same
-        // whether it is opened as a timeline or as a chat.
         Map<String,String> messageAvatars=new HashMap<>();
-        var related=conversations.findAllActive().stream()
-            .filter(c->c.getCustomer()!=null&&canonical.equals(contacts.canonical(c.getCustomer()))).toList();
-        for(var conversation:workspaces.accessible(related,principal,false)) {
+        Map<UUID,Conversation> selectedConversations=new HashMap<>();
+        Map<UUID,String> accountLabels=new HashMap<>();
+        String context="crm-activity:"+canonical+":"+principal.getName()+":"+new TreeSet<>(access.roles(principal));
+        var page=feeds.activity(cursor,limit,context,(handle,sink)->feeds.scan(handle,batch->{
+            var related=batch.stream().filter(c->c.getCustomer()!=null
+                    && canonical.equals(CrmContactService.canonical(c.getCustomer(),redirects))).toList();
+            for(var conversation:workspaces.accessible(related,principal,false))sink.add(conversation.getId(),null);
+        }),row->{
+            UUID conversationId=(UUID)row.get("_conversation");
+            var conversation=selectedConversations.computeIfAbsent(conversationId,
+                    id->workspaces.requireConversation(id,principal,false));
             String channel=conversation.getChannel();
-            String accountLabel=conversation.getInbox()==null ? channel : inboxes.findActiveById(conversation.getInbox().id())
-                .map(account -> account.getDescription()+" · "+account.getAddress()).orElse(channel);
-            var thread=messages.findByConversationAndDeletionMarkFalseOrderBySentAtAsc(Ref.of(Conversation.class,conversation.getId()));
-            var unresolved=thread.stream().map(ConversationMessage::getAuthorId).filter(Objects::nonNull)
-                .filter(id->!messageAvatars.containsKey(id)).distinct().toList();
-            if(!unresolved.isEmpty())messageAvatars.putAll(authorAvatars.avatarsFor(unresolved));
-            for(var message:thread)
-                entries.add(new Entry("message:"+message.getId(),conversation.getId(),conversation.getSubject(),channel,
-                    message.getKind().name(),message.getDirection().name(),message.getAuthorName(),message.getBody(),
-                    message.getSentAt(),message.getDeliveryStatus().name(),
-                    message.getAuthorId()==null?null:messageAvatars.get(message.getAuthorId()),
-                    message.getAuthorId()!=null&&message.getAuthorId().equals(me.recordId()),accountLabel,
-                    attachments.viewsOf(message),message.getBodyHtml(),message.getSenderAccount()));
-            var notes=comments.list("catalogs","crm_conversations",conversation.getId());
-            var avatars=authorAvatars.avatarsFor(notes.stream().map(Comment::authorId).filter(Objects::nonNull).toList());
-            for(var note:notes)
-                entries.add(new Entry("note:"+note.id(),conversation.getId(),conversation.getSubject(),channel,"NOTE","INTERNAL",
+            String accountLabel=accountLabels.computeIfAbsent(conversationId,id->conversation.getInbox()==null ? channel
+                    : inboxes.findActiveById(conversation.getInbox().id())
+                        .map(account->account.getDescription()+" · "+account.getAddress()).orElse(channel));
+            UUID id=(UUID)row.get("_id");
+            if("message".equals(row.get("_source"))) {
+                var message=messages.findActiveById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));
+                String author=message.getAuthorId();
+                if(author!=null && !messageAvatars.containsKey(author))messageAvatars.putAll(authorAvatars.avatarsFor(List.of(author)));
+                return new Entry("message:"+id,conversationId,conversation.getSubject(),channel,
+                        message.getKind().name(),message.getDirection().name(),message.getAuthorName(),message.getBody(),
+                        message.getSentAt(),message.getDeliveryStatus().name(),author==null?null:messageAvatars.get(author),
+                        author!=null&&author.equals(me.recordId()),accountLabel,attachments.viewsOf(message),message.getBodyHtml(),message.getSenderAccount());
+            }
+            var note=comments.find(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));
+            String author=note.authorId();
+            if(author!=null && !messageAvatars.containsKey(author))messageAvatars.putAll(authorAvatars.avatarsFor(List.of(author)));
+            return new Entry("note:"+id,conversationId,conversation.getSubject(),channel,"NOTE","INTERNAL",
                     note.authorName(),note.body(),LocalDateTime.ofInstant(note.createdAt(),ZoneId.systemDefault()),"NOT_APPLICABLE",
-                    note.authorId()==null?null:avatars.get(note.authorId()),
-                    note.authorId()!=null&&note.authorId().equals(me.recordId()),accountLabel));
-        }
-        entries.sort(Comparator.comparing(Entry::at).thenComparing(Entry::id).reversed());
-        int end=(int)Math.min(entries.size(),(long)offset+limit);
-        return new Feed(entries.subList(Math.min(offset,entries.size()),end),entries.size(),end<entries.size());
+                    author==null?null:messageAvatars.get(author),author!=null&&author.equals(me.recordId()),accountLabel);
+        });
+        return new Feed(page.rows(),page.nextCursor(),page.hasMore());
     }
     public enum EventType {
         QUOTED("Quoted"), CALL_PLANNED("Call planned"), CALL_COMPLETED("Call completed"),
@@ -140,7 +144,8 @@ public class CrmActivityController {
         var event=new ConversationMessage();event.setConversation(Ref.of(Conversation.class,conversation.getId()));
         event.setKind(MessageKind.SYSTEM_EVENT);event.setDirection(MessageDirection.INTERNAL);event.setChannel(conversation.getChannel());
         event.setAuthorName(users.resolve(principal).displayName());event.setBody(body);event.setDescription(request.type().label);
-        event.setDeliveryStatus(DeliveryStatus.NOT_APPLICABLE);messages.save(event);
-        return Map.of("id",event.getId());
+        event.setDeliveryStatus(DeliveryStatus.NOT_APPLICABLE);
+        var saved = messages.save(event);
+        return Map.of("id", Objects.requireNonNull(saved.getId(), "Saved event must have an id"));
     }
 }

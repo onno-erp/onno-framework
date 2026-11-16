@@ -60,6 +60,8 @@ public class CommentService {
             h.execute("ALTER TABLE " + TABLE + " ADD COLUMN IF NOT EXISTS _parent_id UUID");
             h.execute("CREATE INDEX IF NOT EXISTS onno_comments_target_idx ON " + TABLE +
                     " (_entity_type, _entity_name, _entity_id)");
+            h.execute("CREATE INDEX IF NOT EXISTS onno_comments_feed_idx ON " + TABLE +
+                    " (_entity_type, _entity_name, _entity_id, _created_at, _id)");
             h.execute("CREATE INDEX IF NOT EXISTS onno_comments_parent_idx ON " + TABLE + " (_parent_id)");
             h.execute("CREATE TABLE IF NOT EXISTS " + REACTIONS_TABLE + " (\n" +
                     "    _comment_id UUID NOT NULL,\n" +
@@ -75,14 +77,23 @@ public class CommentService {
 
     /** The live thread for one entity, oldest comment first. */
     public List<Comment> list(String entityType, String entityName, UUID entityId) {
-        return jdbi.withHandle(h -> h.createQuery("SELECT * FROM " + TABLE +
-                        " WHERE _entity_type = :type AND _entity_name = :name AND _entity_id = :id" +
-                        " AND _deleted = FALSE ORDER BY _created_at ASC, _id ASC")
-                .bind("type", entityType)
-                .bind("name", entityName)
-                .bind("id", entityId)
-                .map((rs, ctx) -> map(rs.getObject("_id", UUID.class), entityType, entityName, entityId, rs))
-                .list());
+        return su.onno.query.KeysetWindow.drain(c -> page(entityType, entityName, entityId, c, su.onno.query.KeysetWindow.MAX_LIMIT, "trusted"));
+    }
+
+    public su.onno.query.KeysetWindow.Page<Comment> page(String type, String name, UUID id,
+            String cursor, int limit, String fingerprint) {
+        try {
+            return jdbi.withHandle(h -> su.onno.query.KeysetWindow.fetch(h, TABLE, "*",
+                    "_entity_type = :type AND _entity_name = :name AND _entity_id = :id AND _deleted = false",
+                    q -> q.bind("type", type).bind("name", name).bind("id", id),
+                    List.of(su.onno.query.KeysetWindow.Order.notNull("_created_at", false),
+                            su.onno.query.KeysetWindow.Order.notNull("_id", false)), cursor, limit,
+                    "comments:" + type + ":" + name + ":" + id + ":" + fingerprint,
+                    (rs, ctx) -> map(rs.getObject("_id", UUID.class), type, name, id, rs)));
+        } catch (su.onno.query.Cursor.ScopeMismatchException e) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "Cursor belongs to another thread or access scope", e);
+        }
     }
 
     /** Append a comment and return it as stored. */

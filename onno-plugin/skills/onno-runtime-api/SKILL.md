@@ -27,5 +27,7 @@ Generated APIs are authenticated. Browser page routes are not a substitute for A
 - `LocalDate` is `yyyy-MM-dd`. `LocalDateTime` is offset-free ISO wall time
   (`yyyy-MM-ddTHH:mm[:ss[.fraction]]`). Offset- or zone-bearing writes are rejected with a
   field-specific `400`; callers must send the canonical offset-free form.
+- `LocalTime` is `HH:mm[:ss[.fraction]]`. `Instant` is the reverse of `LocalDateTime`: writes must
+  carry `Z` or `±HH:mm` (offset-free is a `400`), reads are ISO UTC (`…Z`).
 
 Read [references/examples.md](references/examples.md) for curl flows and response-shape examples.

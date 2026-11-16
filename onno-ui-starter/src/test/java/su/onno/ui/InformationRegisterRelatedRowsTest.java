@@ -51,11 +51,11 @@ class InformationRegisterRelatedRowsTest {
     @InformationRegister(name = "IrBookingClient")
     static class BookingClientReg extends InformationRecord {
         @Dimension
-        private Ref<Booking> booking;
+        @SuppressWarnings("unused") /* Read by metadata reflection. */ private Ref<Booking> booking;
         @Dimension
-        private Ref<Client> client;
+        @SuppressWarnings("unused") /* Read by metadata reflection. */ private Ref<Client> client;
         @Attribute(length = 40)
-        private String relation;
+        @SuppressWarnings("unused") /* Read by metadata reflection. */ private String relation;
     }
 
     private Jdbi jdbi;
@@ -95,6 +95,16 @@ class InformationRegisterRelatedRowsTest {
     }
 
     @Test
+    void relatedRowsHaveAParentBoundCursorAndNoOverlap() {
+        var first=service.relatedPage(AccessSubject.system(),regDesc,dim("booking"),booking1,null,1);
+        var last=service.relatedPage(AccessSubject.system(),regDesc,dim("booking"),booking1,first.nextCursor(),1);
+        assertThat(first.hasMore()).isTrue();assertThat(last.hasMore()).isFalse();
+        assertThat(first.rows().getFirst().get("_id")).isNotEqualTo(last.rows().getFirst().get("_id"));
+        assertThatThrownBy(() -> service.relatedPage(AccessSubject.system(),regDesc,dim("booking"),booking2,first.nextCursor(),1))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+    }
+
+    @Test
     void scopesRowsToParentAndResolvesDisplayRef() {
         List<Map<String, Object>> rows = service.relatedRows(AccessSubject.system(), regDesc, dim("booking"), booking1);
 
@@ -103,7 +113,7 @@ class InformationRegisterRelatedRowsTest {
         assertThat(rows).extracting(r -> r.get(dim("client") + "_display"))
                 .containsExactlyInAnyOrder("Ada Lovelace", "Grace Hopper");
         // The non-ref attribute rides along on the row.
-        assertThat(rows).extracting(r -> ci(r, "relation"))
+        assertThat(rows).extracting(InformationRegisterRelatedRowsTest::relation)
                 .containsExactlyInAnyOrder("Primary guest", "Co-guest");
     }
 
@@ -112,7 +122,7 @@ class InformationRegisterRelatedRowsTest {
         List<Map<String, Object>> rows = service.relatedRows(AccessSubject.system(), regDesc, dim("booking"), booking2);
 
         assertThat(rows).hasSize(1);
-        assertThat(rows.get(0).get(dim("client") + "_display")).isEqualTo("Ada Lovelace");
+        assertThat(rows.getFirst().get(dim("client") + "_display")).isEqualTo("Ada Lovelace");
     }
 
     @Test
@@ -143,7 +153,8 @@ class InformationRegisterRelatedRowsTest {
     }
 
     /** Case-insensitive row lookup — engines differ on returned column-name case. */
-    private static Object ci(Map<String, Object> row, String key) {
+    private static Object relation(Map<String, Object> row) {
+        String key = "relation";
         Object v = row.get(key);
         if (v != null) return v;
         v = row.get(key.toUpperCase(Locale.ROOT));

@@ -103,6 +103,13 @@ public final class ListFilter {
     /** A calendar-date value as the island's date-range picker sends it ({@code yyyy-MM-dd}). */
     private static final Pattern DATE_ONLY = Pattern.compile("^\\d{4}-\\d{2}-\\d{2}$");
 
+    /** An absolute moment with an explicit offset, as an {@code Instant} bound is sent. */
+    private static final Pattern OFFSET_DATE_TIME = Pattern.compile(
+            "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})$");
+
+    /** A bare time of day, as a {@code LocalTime} bound is sent. */
+    private static final Pattern TIME_ONLY = Pattern.compile("^\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?$");
+
     /**
      * A range bound ({@code ge}/{@code le}). A bare calendar date gets special treatment on both
      * counts a plain {@code column >= :value} binding would miss:
@@ -119,7 +126,9 @@ public final class ListFilter {
      * (H2 coerces silently). A value that is not a number is skipped — like a stale column, a
      * malformed bound degrades to "no constraint" instead of failing the list.
      *
-     * <p>Any other value (a full timestamp, a bound on a text column) keeps the plain native
+     * <p>An offset-bearing ISO date-time (an {@code Instant} bound) and a bare time of day (a
+     * {@code LocalTime} bound) are likewise CAST to their column type, for the same PostgreSQL
+     * reason. Any other value (a full timestamp, a bound on a text column) keeps the plain native
      * comparison.</p>
      */
     private static void appendBound(StringBuilder sql, Map<String, Object> bindings, int[] i,
@@ -150,6 +159,14 @@ public final class ListFilter {
                 and(sql).append(cv[0]).append(' ').append(op)
                         .append(" CAST(:").append(param).append(" AS TIMESTAMP)");
                 bindings.put(param, upper ? cv[1] + " 23:59:59.999999" : cv[1] + " 00:00:00");
+            } else if (OFFSET_DATE_TIME.matcher(cv[1]).matches()) {
+                and(sql).append(cv[0]).append(' ').append(op)
+                        .append(" CAST(:").append(param).append(" AS TIMESTAMP WITH TIME ZONE)");
+                bindings.put(param, cv[1]);
+            } else if (TIME_ONLY.matcher(cv[1]).matches()) {
+                and(sql).append(cv[0]).append(' ').append(op)
+                        .append(" CAST(:").append(param).append(" AS TIME)");
+                bindings.put(param, cv[1]);
             } else {
                 and(sql).append(cv[0]).append(' ').append(op).append(" :").append(param);
                 bindings.put(param, cv[1]);

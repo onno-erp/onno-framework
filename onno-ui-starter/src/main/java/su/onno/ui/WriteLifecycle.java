@@ -94,8 +94,9 @@ class WriteLifecycle {
             try {
                 setField(entity, attr, raw, false);
             } catch (RuntimeException badValue) {
-                String message = attr.javaType() == LocalDateTime.class
-                        ? attr.displayName() + " " + TemporalValues.LOCAL_DATE_TIME_WRITE_MESSAGE
+                String temporal = TemporalValues.writeMessage(attr.javaType());
+                String message = temporal != null
+                        ? attr.displayName() + " " + temporal
                         : attr.displayName() + " is not a valid value";
                 errors.field(attr.fieldName(), message);
             }
@@ -198,6 +199,12 @@ class WriteLifecycle {
                 field.set(target, fromCiphertext
                         ? DocumentCommandService.toLocalDateTime(value)
                         : TemporalValues.toWriteLocalDateTime(value));
+            } else if (type == java.time.LocalTime.class) {
+                field.set(target, TemporalValues.toLocalTime(value));
+            } else if (type == java.time.Instant.class) {
+                field.set(target, fromCiphertext
+                        ? TemporalValues.toInstant(value)
+                        : TemporalValues.toWriteInstant(value));
             } else if (type == UUID.class) {
                 field.set(target, toUuid(value));
             } else if (type.isEnum()) {
@@ -243,6 +250,9 @@ class WriteLifecycle {
         }
         if (value instanceof LocalDateTime dateTime) {
             return dateTime.toString();
+        }
+        if (value instanceof java.time.LocalTime || value instanceof java.time.Instant) {
+            return value.toString();
         }
         return value;
     }

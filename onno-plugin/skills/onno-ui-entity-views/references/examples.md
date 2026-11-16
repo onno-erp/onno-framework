@@ -165,6 +165,25 @@ public void list(ListSpec<Location> list) {
 
 Use map view only when the entity has stable latitude and longitude attributes.
 
+## Calendar And Timeline Views
+
+```java
+@Override
+public void list(ListSpec<Appointment> list) {
+    list.columns(Appointment::getNumber, Appointment::getPatient, Appointment::getStartsAt);
+    list.calendar(Appointment::getStartsAt, Appointment::getEndsAt)
+            .title(Appointment::getPatient).colorBy(Appointment::getStatus);
+    list.timeline(Appointment::getStartsAt, Appointment::getEndsAt, Appointment::getDoctor)
+            .title(Appointment::getPatient).slotMinutes(10).hours(8, 21).defaultView();
+}
+```
+
+Use them for records with a start (and usually an end) date/time. The timeline lane must be a
+single-target `Ref<T>`; its lanes are that target's records. Both views read the list feed with the
+list's filters and save a drag through the ordinary update, so put scheduling invariants (no
+overlap, working hours) in `Validated` rules or `beforeWrite` — a refused drag snaps back with the
+rule's message. A `LocalDate` end is the inclusive last day.
+
 Enum status pills come from `@EnumLabel(color = "#RRGGBB")`, not from `EntityView`. For a Ref
 filter, supply UUID-backed `ListSpec.Option` values; `contains()` searches the stored UUID column,
 not the target's display label. UI visibility predicates are presentation only—handlers must recheck

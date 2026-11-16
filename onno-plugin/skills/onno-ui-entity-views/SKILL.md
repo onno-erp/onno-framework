@@ -7,7 +7,7 @@ description: >-
   ref picker open/clear buttons, recent picks and the "Show all..." picker dialog
   (dependent ref fields filtered by another field's value), related lists, comments, toolbar row
   and detail actions, action forms, dynamic action labels/icons/visibility, built-in post/unpost
-  placement, or map list views.
+  placement, or map, calendar and timeline (resource scheduler) list views.
 ---
 
 # onno UI Entity Views And Actions
@@ -17,7 +17,7 @@ routes and API UI surfaces, but nav still requires a `Layout` section.
 
 ## Author The Complete View
 
-- `list(ListSpec)` for table/report shape, filters, grouping, sorting, row styles, map toggle.
+- `list(ListSpec)` for table/report shape, filters, grouping, sorting, row styles, map / calendar / timeline view modes.
 - `fields(EntityConfigBuilder)` for form/detail hints, system column labels, tabular section hints,
   related lists, action placement.
 - `detail(DetailSpec)` for custom widgets below a saved record's fields; `widget.record` supplies

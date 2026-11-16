@@ -1,7 +1,9 @@
 package su.onno.ui;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -24,7 +26,24 @@ final class TemporalValues {
     static final String LOCAL_DATE_TIME_WRITE_MESSAGE =
             "must be an offset-free ISO local date-time (yyyy-MM-ddTHH:mm[:ss[.fraction]])";
 
+    static final String LOCAL_TIME_WRITE_MESSAGE =
+            "must be an ISO local time (HH:mm[:ss[.fraction]])";
+
+    static final String INSTANT_WRITE_MESSAGE =
+            "must be an ISO instant with an explicit offset (yyyy-MM-ddTHH:mm[:ss[.fraction]]Z or ±HH:mm)";
+
     private TemporalValues() {
+    }
+
+    /**
+     * The field-level message for a temporal {@code targetType} whose write value failed to
+     * parse, or {@code null} when the type has no specific message.
+     */
+    static String writeMessage(Class<?> targetType) {
+        if (targetType == LocalDateTime.class) return LOCAL_DATE_TIME_WRITE_MESSAGE;
+        if (targetType == LocalTime.class) return LOCAL_TIME_WRITE_MESSAGE;
+        if (targetType == Instant.class) return INSTANT_WRITE_MESSAGE;
+        return null;
     }
 
     /**
@@ -40,7 +59,64 @@ final class TemporalValues {
         if (targetType == LocalDateTime.class) {
             return toWriteLocalDateTime(value);
         }
+        if (targetType == LocalTime.class) {
+            return toLocalTime(value);
+        }
+        if (targetType == Instant.class) {
+            return toWriteInstant(value);
+        }
         return null;
+    }
+
+    /**
+     * Coerce a value into a {@link LocalTime} — a zone-less time of day. Accepts a typed value, a
+     * JDBC {@code java.sql.Time}, or an ISO {@code HH:mm[:ss[.fraction]]} string. Used on both the
+     * write and the read side: a time of day carries no offset to mishandle.
+     */
+    static LocalTime toLocalTime(Object value) {
+        if (value instanceof LocalTime lt) return lt;
+        if (value instanceof java.sql.Time t) return t.toLocalTime();
+        if (value instanceof LocalDateTime ldt) return ldt.toLocalTime();
+        try {
+            return LocalTime.parse(value.toString().trim(), DateTimeFormatter.ISO_LOCAL_TIME);
+        } catch (DateTimeParseException invalid) {
+            throw new IllegalArgumentException(LOCAL_TIME_WRITE_MESSAGE, invalid);
+        }
+    }
+
+    /**
+     * Parse an external write value for an {@link Instant}. An instant is an absolute moment, so a
+     * JSON string must say which one: an ISO date-time with {@code Z} or a numeric offset. An
+     * offset-free value is rejected rather than guessed against the server's zone — the mirror
+     * image of {@link #toWriteLocalDateTime}, which rejects offset-bearing values.
+     */
+    static Instant toWriteInstant(Object value) {
+        if (value instanceof Instant i) return i;
+        if (value instanceof OffsetDateTime odt) return odt.toInstant();
+        if (value instanceof ZonedDateTime zdt) return zdt.toInstant();
+        if (value instanceof java.sql.Timestamp ts) return ts.toInstant();
+        try {
+            return OffsetDateTime.parse(value.toString().trim(),
+                    DateTimeFormatter.ISO_OFFSET_DATE_TIME).toInstant();
+        } catch (DateTimeParseException invalid) {
+            throw new IllegalArgumentException(INSTANT_WRITE_MESSAGE, invalid);
+        }
+    }
+
+    /**
+     * Normalize a JDBC/read-side {@code TIMESTAMP WITH TIME ZONE} value into an {@link Instant}.
+     * PostgreSQL surfaces the column as {@code java.sql.Timestamp}, H2 as {@code OffsetDateTime};
+     * both denote the same absolute moment. A string keeps its offset (space-separated accepted).
+     */
+    static Instant toInstant(Object value) {
+        if (value instanceof Instant i) return i;
+        if (value instanceof OffsetDateTime odt) return odt.toInstant();
+        if (value instanceof ZonedDateTime zdt) return zdt.toInstant();
+        if (value instanceof java.sql.Timestamp ts) return ts.toInstant();
+        String s = value.toString().trim().replace(' ', 'T');
+        // Drivers render a bare hour offset ("+00") that ISO_OFFSET_DATE_TIME refuses.
+        if (s.matches(".*[+-]\\d{2}$")) s = s + ":00";
+        return OffsetDateTime.parse(s, DateTimeFormatter.ISO_OFFSET_DATE_TIME).toInstant();
     }
 
     /**
