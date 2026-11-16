@@ -244,7 +244,7 @@ authorization precedes it. `canAccess` remains for single-conversation checks.
 | `GET /inbox-workspaces` | Permitted `{key,label,canWrite}` workspaces |
 | `GET /inbox-workspaces/{key}` | Authorized rows with filters, cursor/limit, totals, config and permissions |
 | `GET /inbox-workspaces/{key}/conversation/{id}` | Authorized conversations for the same customer |
-| `GET/POST /inbox-workspaces/{key}/conversations/{id}/comments` | Internal notes |
+| `GET/POST /inbox-workspaces/{key}/conversations/{id}/comments` | Internal notes. POST validates `body` against the shared `onno.comments.max-length` (4000 characters by default) and the CRM request cap of 8000 characters. Invalid text returns `422`. |
 | `GET/POST /conversations/{id}/messages` | History / enqueue `{body,attachments,subject?,recipient?,from?}`; each message returns `attachments:[{url,filename,contentType,size,image}]` and the stored `subject`/`recipient`/`senderAccount` (null when not set), so history shows overrides. A `from` the delivery connection does not offer is `400` |
 | `GET /conversations/{id}/delivery` | `{connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients,senders,sender}`; `recipient` is the default address and `recipients` the choices (null/empty when the transport offers no selection); `senders` (`[{id,label}]`) are the accounts the reply may come from and `sender` the default id (empty/null when there is no choice), as offered to the caller. Addresses known only through another user's personal account are left out |
 | `POST /conversations/{id}/status` | `{status}` (a configured status id) → the updated conversation state; a missing body or `status` is `400` |

@@ -1543,6 +1543,8 @@ Button face — set **one**:
 | Factory | Effect |
 |---------|--------|
 | `ok()` | acknowledge, nothing observable |
+| `open(Ref.of(Invoice.class, id))` | open the returned catalog/document record through the workspace |
+| `navigate("/reports/sales")` | navigate to an application route after the handler succeeds |
 | `reload()` | reload the current surface without feedback |
 | `toast(ActionToast.success(title).message(text).detail(detail))` | structured typed toast with an explicit severity and hierarchy |
 | `dialog(ActionDialog.info(title).message(text).detail(detail))` | successful typed acknowledgement dialog |
@@ -1556,9 +1558,28 @@ than navigating with React Router directly. Lists, calendars and kanban cards fo
 tab reuse and record-pane placement rules as other links. Paths are relative to the router;
 do not prepend the configured UI mount prefix.
 
-Navigation is declaration metadata, not a handler response: use
-`a.action("docs").navigate("/documentation")` for a static navigation action. Server handlers return
-only refresh intent and structured feedback.
+For fixed navigation without a server handler, use
+`a.action("docs").navigate("/documentation")`. A handler may instead choose its destination after
+doing the work, for example creating an invoice:
+
+```java
+.handler(ctx -> {
+    UUID id = invoices.createFor(ctx.id());
+    return ActionResult.open(Ref.of(Invoice.class, id));
+})
+```
+
+Only navigation targets are accepted — an application path or `onno://` / `onno://{catalogs|documents|registers|information-registers}/{name}[/{id}]`; command URLs (`logout`, `delete/`, `action/`, `redirect/`, `open/`, `download/`) and external URLs are rejected by `ActionResult` and ignored by the SPA, so a route built from stored or user data cannot trigger a side effect or leave the app.
+
+The successful wire response is `{refresh, feedback, navigateTo}`; `navigateTo` is optional/null
+for existing results. `open(ref)` uses the target's `@Catalog`/`@Document` logical name, not its
+Java class name, display title or storage table override. `navigate(route)` accepts `onno://...`
+and router-relative `/...` paths, including query strings; it rejects unsupported routes.
+The client presents feedback, calls the source surface's refresh callback, then passes
+`navigateTo` to the shared `openRoute` helper. Existing constructor calls
+`new ActionResult(refresh, feedback)` remain valid; the three-argument constructor can combine
+feedback, refresh and navigation. Batch endpoints keep their count/feedback summary and do not
+propagate individual records' navigation destinations.
 
 ### Record history — `/api/history`
 

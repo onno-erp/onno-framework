@@ -5,12 +5,10 @@ import java.util.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
-import org.springframework.context.ApplicationEventPublisher;
 import su.onno.crm.domain.Conversation;
 import su.onno.crm.service.*;
 import su.onno.ui.*;
 import su.onno.ui.comments.*;
-import su.onno.events.EntityChangedEvent;
 
 /** Scoped inbox reads; generic conversation exports remain unavailable to non-admin workspace users. */
 @RestController
@@ -21,7 +19,7 @@ public class CrmInboxWorkspaceController {
     private final CurrentUserResolver users;
     private final CommentService comments;
     private final CommentAuthorAvatars avatars;
-    private final ApplicationEventPublisher events;
+    private final AccessSubjectResolver subjects;
     private final CrmContactService contacts;
     private final org.springframework.beans.factory.ObjectProvider<CrmAgentBinding<?>> agents;
     private final UiAccessService access;
@@ -30,9 +28,11 @@ public class CrmInboxWorkspaceController {
     @org.springframework.beans.factory.annotation.Autowired private CrmStateConfiguration states;
     @org.springframework.beans.factory.annotation.Autowired private CrmPriorityBinding priorities;
     public CrmInboxWorkspaceController(CrmInboxWorkspaceService workspaces,CatalogQueryService catalogs,
-            CurrentUserResolver users,CommentService comments,CommentAuthorAvatars avatars,ApplicationEventPublisher events,CrmContactService contacts,
+            CurrentUserResolver users,CommentService comments,CommentAuthorAvatars avatars,
+            AccessSubjectResolver subjects,CrmContactService contacts,
             org.springframework.beans.factory.ObjectProvider<CrmAgentBinding<?>> agents,UiAccessService access) {
-        this.workspaces=workspaces;this.catalogs=catalogs;this.users=users;this.comments=comments;this.avatars=avatars;this.events=events;this.contacts=contacts;this.agents=agents;this.access=access;
+        this.workspaces=workspaces;this.catalogs=catalogs;this.users=users;this.comments=comments;this.avatars=avatars;this.contacts=contacts;this.agents=agents;this.access=access;
+        this.subjects = subjects;
     }
     @GetMapping public Object list(Principal principal) {
         return workspaces.available(principal).stream().limit(100).map(w->Map.of("key",w.key(),"label",w.label(),"canWrite",workspaces.permitted(w,principal,true))).toList();
@@ -241,9 +241,13 @@ public class CrmInboxWorkspaceController {
         if(request==null||request.body()==null||request.body().isBlank()||request.body().length()>8000)
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,"Note must contain 1–8000 characters");
         var me=users.resolve(principal);
-        var saved=comments.add("catalogs","crm_conversations",id,me.recordId(),me.displayName(),request.body().strip());
-        events.publishEvent(new EntityChangedEvent(EntityChangedEvent.CREATED,"comment","crm_conversations",id,null));
-        return note(saved,me);
+        try {
+            var saved = comments.add("catalogs", "crm_conversations", id, me, request.body(), null,
+                    subjects.resolve(principal));
+            return note(saved, me);
+        } catch (CommentService.InvalidCommentException e) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage(), e);
+        }
     }
     private Map<String,Object> note(Comment comment,CurrentUserResolver.CurrentUser me) {
         Map<String,Object> result=new LinkedHashMap<>();

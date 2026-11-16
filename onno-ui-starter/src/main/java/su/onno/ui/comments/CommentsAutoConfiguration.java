@@ -10,6 +10,7 @@ import su.onno.ui.UiAutoConfiguration;
 import su.onno.ui.UiViewResolver;
 
 import org.jdbi.v3.core.Jdbi;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -17,6 +18,11 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Wires the {@code /api/comments} discussion-thread endpoint, its {@link CommentService} store, and
@@ -37,8 +43,26 @@ import org.springframework.context.annotation.Bean;
 public class CommentsAutoConfiguration {
 
     @Bean
-    public CommentService commentService(Jdbi jdbi) {
-        return new CommentService(jdbi);
+    public CommentService commentService(Jdbi jdbi, ApplicationEventPublisher events,
+                                         CommentProperties properties, MentionResolver mentionResolver,
+                                         ObjectProvider<PlatformTransactionManager> transactions) {
+        return new CommentService(jdbi, event -> {
+            if (!TransactionSynchronizationManager.isActualTransactionActive()
+                    || !TransactionSynchronizationManager.isSynchronizationActive()) {
+                events.publishEvent(event);
+                return;
+            }
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    // Synchronous notification listeners may write to the database.
+                    // Suspend the completed transaction so those writes use a fresh connection.
+                    TransactionTemplate outsideTransaction = new TransactionTemplate(transactions.getObject());
+                    outsideTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_NOT_SUPPORTED);
+                    outsideTransaction.executeWithoutResult(status -> events.publishEvent(event));
+                }
+            });
+        }, properties, mentionResolver);
     }
 
     @Bean
@@ -63,9 +87,8 @@ public class CommentsAutoConfiguration {
                                                CommentProperties properties, UiViewResolver viewResolver,
                                                CatalogQueryService catalogQuery,
                                                DocumentQueryService documentQuery,
-                                               MentionResolver mentionResolver,
-                                               ApplicationEventPublisher events) {
+                                               MentionResolver mentionResolver) {
         return new CommentController(commentService, access, currentUserResolver, authorAvatars,
-                properties, viewResolver, catalogQuery, documentQuery, mentionResolver, events);
+                properties, viewResolver, catalogQuery, documentQuery, mentionResolver);
     }
 }

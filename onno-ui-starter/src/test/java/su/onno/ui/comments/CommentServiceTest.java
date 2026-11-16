@@ -5,11 +5,19 @@ import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import su.onno.access.AccessSubject;
+import su.onno.events.EntityChangedEvent;
+import su.onno.ui.CurrentUserResolver.CurrentUser;
+
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * The {@link CommentService} persistence contract: a thread is scoped to its
@@ -20,6 +28,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CommentServiceTest {
 
     private CommentService service;
+    private Jdbi jdbi;
+    private final CommentProperties properties = new CommentProperties();
+    private final List<Object> publishedEvents = new ArrayList<>();
     private final UUID property = UUID.randomUUID();
     private final UUID other = UUID.randomUUID();
     private final String alice = UUID.randomUUID().toString();
@@ -28,7 +39,8 @@ class CommentServiceTest {
     void setUp() {
         JdbcDataSource ds = new JdbcDataSource();
         ds.setURL("jdbc:h2:mem:comments" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
-        service = new CommentService(Jdbi.create(ds));
+        jdbi = Jdbi.create(ds);
+        service = new CommentService(jdbi, publishedEvents::add, properties, null);
     }
 
     @Test
@@ -61,6 +73,89 @@ class CommentServiceTest {
         assertThat(thread).extracting(Comment::id).containsExactly(parent.id(), reply.id());
         assertThat(thread.get(1).parentId()).isEqualTo(parent.id());
         assertThat(service.find(reply.id())).get().extracting(Comment::parentId).isEqualTo(parent.id());
+    }
+
+    @Test
+    void publishesReplyEventWhenAddingReplyDirectly() {
+        Comment parent = service.add(
+                "catalogs", "Properties", property, alice, "Alice", "First");
+        String bob = UUID.randomUUID().toString();
+        Comment reply = service.add(
+                "catalogs", "Properties", property, bob, "Bob", "Second", parent.id());
+
+        List<CommentRepliedEvent> replyEvents = publishedEvents.stream()
+                .filter(CommentRepliedEvent.class::isInstance)
+                .map(CommentRepliedEvent.class::cast)
+                .toList();
+
+        assertThat(replyEvents).singleElement().satisfies(event -> {
+            assertThat(event.reply()).isEqualTo(reply);
+            assertThat(event.parent()).isEqualTo(parent);
+            assertThat(event.actor().recordId()).isEqualTo(bob);
+        });
+    }
+
+    @Test
+    void publishesOneEventPerReadableMentionAndDegradesForbiddenLinks() {
+        var actor = new CurrentUser("alice", "Alice", alice, null, null);
+        var subject = AccessSubject.user("alice", java.util.Set.of("STAFF"));
+        var allowed = new MentionRef("catalogs", "People", UUID.randomUUID());
+        var forbidden = new MentionRef("documents", "Orders", UUID.randomUUID());
+        var resolver = mock(MentionResolver.class);
+        when(resolver.canRead(subject, allowed)).thenReturn(true);
+        when(resolver.resolve(List.of(allowed), subject)).thenReturn(List.of(
+                new MentionResolver.ResolvedMention(
+                        allowed.kind(), allowed.name(), allowed.id(), "Bob", null, "People", true)));
+        service = new CommentService(jdbi, publishedEvents::add, properties, resolver);
+        String mention = Mentions.token("Bob", allowed);
+        String body = mention + " " + Mentions.token("Hidden", forbidden) + " " + mention;
+
+        Comment saved = service.add("catalogs", "Properties", property, actor, body, null, subject);
+
+        assertThat(saved.body()).isEqualTo(mention + " Hidden " + mention);
+        assertThat(publishedEvents).containsExactly(
+                new EntityChangedEvent(EntityChangedEvent.CREATED, "comment", "Properties", property, null),
+                new EntityMentionedEvent(saved, allowed, actor));
+    }
+
+    @Test
+    void enforcesConfiguredLengthBeforeWritingOrPublishing() {
+        properties.setMaxLength(5);
+        assertThatThrownBy(() -> service.add("catalogs", "Properties", property, alice, "Alice", "abcdef"))
+                .isInstanceOf(CommentService.InvalidCommentException.class)
+                .hasMessage("Comment must be at most 5 characters");
+        assertThat(service.list("catalogs", "Properties", property)).isEmpty();
+        assertThat(publishedEvents).isEmpty();
+
+        Comment saved = service.add("catalogs", "Properties", property, alice, "Alice", " abcde ");
+        assertThat(saved.body()).isEqualTo("abcde");
+        assertThat(publishedEvents).containsExactly(
+                new EntityChangedEvent(EntityChangedEvent.CREATED, "comment", "Properties", property, null));
+    }
+
+    @Test
+    void eventsFollowTheOutcomeOfAnOuterJdbiTransaction() {
+        Comment parent = service.add("catalogs", "Properties", property, alice, "Alice", "parent");
+        publishedEvents.clear();
+
+        jdbi.useTransaction(handle -> {
+            service.add("catalogs", "Properties", property, null, "Guest", "rolled back", parent.id());
+            service.toggleReaction(parent.id(), "guest", "👍");
+            service.softDelete(parent.id());
+            handle.rollback();
+        });
+        assertThat(publishedEvents).isEmpty();
+        assertThat(service.list("catalogs", "Properties", property)).containsExactly(parent);
+        assertThat(service.reactionsFor(List.of(parent.id()), "guest")).isEmpty();
+
+        jdbi.useTransaction(handle -> {
+            service.add("catalogs", "Properties", property, null, "Guest", "committed", parent.id());
+            service.toggleReaction(parent.id(), "guest", "👍");
+            service.softDelete(parent.id());
+            assertThat(publishedEvents).isEmpty();
+        });
+        assertThat(publishedEvents).hasSize(4);
+        assertThat(publishedEvents.stream().filter(CommentRepliedEvent.class::isInstance)).hasSize(1);
     }
 
     @Test

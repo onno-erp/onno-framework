@@ -139,11 +139,15 @@ For a mounted record form, `GET /api/divkit/record-refresh/{kind}/{name}/{id}` r
 The response applies the same access rules as the record surface. `record` uses the logical
 representation and `actions` uses the form descriptor's header action shape.
 
-Action handlers use the successful response `{refresh, feedback}`. Feedback has `severity`
+Action handlers use the successful response `{refresh, feedback, navigateTo}`.
+`navigateTo` is optional and carries an application route for a single successful action. Feedback has `severity`
 (`info|success|warning|error`) and `presentation` (`toast|dialog|inline`). Text is structured through
-`ActionToast`, `ActionDialog`, or `ActionFeedback`; navigation is static action declaration
-metadata, not a handler response. An expected `ActionRejectedException` is HTTP 422 whose body is
-the feedback object itself:
+`ActionToast`, `ActionDialog`, or `ActionFeedback`. `ActionResult.open(ref)` returns the referenced
+catalog/document's route; `ActionResult.navigate(route)` chooses a page or record destination. Only navigation targets are accepted — an application path or `onno://` / `onno://{catalogs|documents|registers|information-registers}/{name}[/{id}]`; command URLs (`logout`, `delete/`, `action/`, `redirect/`, `open/`, `download/`) and external URLs are rejected by `ActionResult` and ignored by the SPA, so a route built from stored or user data cannot trigger a side effect or leave the app.
+Clients apply feedback and source refresh before navigating; the destination's normal access
+checks still apply. Fixed navigation remains available as action declaration metadata. Batch
+responses retain their count/feedback summary without per-record navigation. An expected
+`ActionRejectedException` is HTTP 422 whose body is the feedback object itself:
 
 ```json
 {
@@ -647,7 +651,8 @@ checked; missing scope, an inaccessible workspace, a foreign chat or read-only m
 The CRM workspace feed accepts `ids` (comma-separated or repeated UUIDs, at most 500) for live row refreshes. It intersects these IDs with workspace membership and read authorization before returning rows or counts. Reading a conversation therefore refreshes that conversation without replacing it with the first inbox row.
 
 `GET|POST /api/crm/inbox-workspaces/{key}/conversations/{id}/comments` accesses the existing internal
-notes. GET accepts `cursor`/`limit` and returns the common page envelope; POST accepts `{body}` of 1–8000 characters. These routes use normal session CSRF protection.
+notes. GET accepts `cursor`/`limit` and returns the common page envelope; POST accepts `{body}` of 1–8000 characters, also subject to the shared
+`onno.comments.max-length` limit (4000 by default). These routes use normal session CSRF protection.
 
 Business merging and any undo are host commands; see the [CRM composition guide](../onno-crm-starter/README.md).
 

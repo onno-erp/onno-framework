@@ -4,13 +4,16 @@ import type {
   ChatMessageRenderer,
   ChatMessageRendererProps,
   DashboardWidgetMeta,
+  LinkProps,
   ListRendererOptions,
   ListRendererProps,
   ListSelectionProps,
+  NavigateOptions,
   OnnoEvents,
   OnnoHost,
   OnnoReadApi,
   OnnoUi,
+  RecordKind,
   UiEvent,
   UiEventFilter,
 } from "./types";
@@ -26,16 +29,19 @@ export type {
   DialogShellProps,
   DialogShellSize,
   EntityRecord,
+  LinkProps,
   ListRendererColumn,
   ListRendererComponent,
   ListRendererDescriptor,
   ListRendererOptions,
   ListRendererProps,
   ListSelectionProps,
+  NavigateOptions,
   OnnoReadApi,
   OnnoEvents,
   OnnoHost,
   OnnoUi,
+  RecordKind,
   RefSelectOptionContext,
   RefSelectProps,
   UiEvent,
@@ -153,6 +159,29 @@ export const html = host.html;
 
 /** The read-only REST client (same-origin, session + CSRF handled by the host). */
 export const api: OnnoReadApi = host.api;
+
+function requireNavigation(): NonNullable<OnnoHost["navigation"]> {
+  if (host.navigation) return host.navigation;
+  throw new Error(
+    "@onno/widget-sdk: navigation requires host contract v8. Upgrade onno-ui-starter to the " +
+      "same version as the su.onno.widgets Gradle plugin."
+  );
+}
+
+/** Navigate to an application path through the host workspace. */
+export function navigate(path: string, options?: NavigateOptions): void {
+  requireNavigation().navigate(path, options);
+}
+
+/** Open a catalog or document record using the host's tab and pane placement rules. */
+export function openRecord(kind: RecordKind, name: string, id: string): void {
+  requireNavigation().openRecord(kind, name, id);
+}
+
+/** A real anchor that uses workspace navigation for ordinary clicks. */
+export function Link(props: LinkProps) {
+  return host.React.createElement(requireNavigation().Link, props);
+}
 
 function requireEvents(): OnnoEvents {
   if (host.events) return host.events;
