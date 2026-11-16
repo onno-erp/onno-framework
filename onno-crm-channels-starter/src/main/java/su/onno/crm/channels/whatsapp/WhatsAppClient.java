@@ -9,18 +9,12 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.time.*;
 import java.util.*;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
 
 /** WhatsApp Cloud API and raw-body webhook authentication. */
-@org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(WhatsAppClient.class)
-@Component
-@ConditionalOnProperty(name="onno.crm.channels.whatsapp.enabled",havingValue="true")
 public class WhatsAppClient {
  private final Path file;private final ObjectMapper json;
  private final HttpClient http=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
- public WhatsAppClient(@Value("${onno.crm.channels.whatsapp.tokens-file:${user.home}/.config/onno/whatsapp-tokens.json}") String file,ObjectMapper json){this.file=Path.of(file);this.json=json;}
+ public WhatsAppClient(String file,ObjectMapper json){this.file=Path.of(file);this.json=json;}
  private JsonNode credentials(){try{return json.readTree(file.toFile());}catch(Exception e){throw new IllegalArgumentException("Check the private WhatsApp credential file");}}
  public boolean configured(){return Files.isRegularFile(file);}
  public String businessAccount(){return required(credentials(),"business_account_id");}

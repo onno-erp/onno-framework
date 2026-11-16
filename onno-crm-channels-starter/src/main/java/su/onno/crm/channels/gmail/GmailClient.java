@@ -9,9 +9,6 @@ import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.time.*;
 import java.util.*;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
 
 /**
  * Local single-account Gmail client. Credentials are never returned to the browser or logs.
@@ -21,9 +18,6 @@ import org.springframework.stereotype.Component;
  * therefore read with a private copy of the application's mapper whose limit fits Gmail's largest
  * email; the application's own mapper is left as it is.
  */
-@org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(GmailClient.class)
-@Component
-@ConditionalOnProperty(name="onno.crm.channels.gmail.enabled", havingValue="true")
 public class GmailClient {
     private final ObjectMapper json;
     /** {@link #json} with a string limit that fits a whole email; used only to read Gmail's answers. */
@@ -45,9 +39,9 @@ public class GmailClient {
      */
     static final int MAX_STRING_LENGTH = 100_000_000;
     public GmailClient(ObjectMapper json,
-            @Value("${onno.crm.channels.gmail.client-file:${user.home}/.config/onno/gmail-client.json}") String clientFile,
-            @Value("${onno.crm.channels.gmail.tokens-file:${user.home}/.config/onno/gmail-tokens.json}") String tokensFile,
-            @Value("${onno.crm.channels.gmail.redirect-uri:http://127.0.0.1:8090/api/crm/gmail/callback}") String redirectUri) {
+            String clientFile,
+            String tokensFile,
+            String redirectUri) {
         this.json=json;this.reader=wholeEmails(json);this.clientFile=Path.of(clientFile);this.tokensFile=Path.of(tokensFile);this.redirectUri=redirectUri;
     }
     /** A copy of {@code json} that reads a whole email as one string; {@code json} is left as it was. */

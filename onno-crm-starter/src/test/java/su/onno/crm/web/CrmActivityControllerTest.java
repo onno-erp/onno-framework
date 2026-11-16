@@ -29,13 +29,14 @@ class CrmActivityControllerTest {
      return Optional.of(new su.onno.ui.media.LoadedMedia(new org.springframework.core.io.ByteArrayResource("file".getBytes()),
        key.endsWith(".png")?"image/png":"application/pdf",4,key.substring(key.lastIndexOf('/')+1)));}
    },new su.onno.ui.media.MediaProperties());
+ final UiProperties ui=new UiProperties();
  final Principal principal=()->"agent";
  final UUID customer=UUID.randomUUID();
  @SuppressWarnings("unchecked")
  CrmActivityController controller(){when(access.hasAnyRole(eq(principal),any())).thenReturn(true);
   // The controller filters in one batch; the per-row stubs below stay the source of truth.
   when(workspaces.accessible(any(),eq(principal),anyBoolean())).thenAnswer(i->((List<Conversation>)i.getArgument(0)).stream()
-    .filter(c->workspaces.canAccess(c,principal,i.getArgument(2))).toList());when(contacts.canonical(any())).thenAnswer(i->i.getArgument(0));return new CrmActivityController(contacts,conversations,messages,inboxes,workspaces,access,users,comments,avatars,attachments);}
+    .filter(c->workspaces.canAccess(c,principal,i.getArgument(2))).toList());when(contacts.canonical(any())).thenAnswer(i->i.getArgument(0));return new CrmActivityController(contacts,conversations,messages,inboxes,workspaces,access,users,comments,avatars,attachments,ui);}
  Conversation conversation(String channel){var c=new Conversation();c.setId(UUID.randomUUID());c.setCustomer(customer);c.setChannel(channel);return c;}
  ConversationMessage message(Conversation c,String body){var m=new ConversationMessage();m.setId(UUID.randomUUID());m.setConversation(Ref.of(Conversation.class,c.getId()));m.setKind(MessageKind.CUSTOMER_MESSAGE);m.setDirection(MessageDirection.INBOUND);m.setChannel(c.getChannel());m.setBody(body);m.setSentAt(LocalDateTime.now());return m;}
  @Test void combinesChannelsWithoutReadingHiddenConversations(){
@@ -90,7 +91,7 @@ class CrmActivityControllerTest {
   verify(inboxes,never()).findActiveById(hidden.getInbox().id());
  }
  @Test void readOnlyModeRejectsManualActivities() {
-  var controller=controller();org.springframework.test.util.ReflectionTestUtils.setField(controller,"readOnly",true);
+  var controller=controller();ui.setReadOnly(true);
   assertThatThrownBy(()->controller.log(customer,new CrmActivityController.LogEvent(UUID.randomUUID(),CrmActivityController.EventType.CALL_COMPLETED,"Notes",null),principal))
     .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
   verifyNoInteractions(messages);

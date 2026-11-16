@@ -192,7 +192,7 @@ The `onno-desktop-gradle-plugin` is configured through the `onnoDesktop { … }`
 
 | Property | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `onno.crm.channels.gmail.client-file` | `String` | — | Google OAuth client JSON file outside the application artifact. |
+| `onno.crm.channels.gmail.client-file` | `String` | — | Google OAuth client JSON file outside the application artifact. Defaults to `.config/onno/gmail-client.json` under the JVM's `user.home` directory. |
 | `onno.crm.channels.gmail.enabled` | `Boolean` | `false` | Enable the Gmail OAuth adapter. Each connected account (shared or personal) authorizes its own mailbox and gets its own inbox. |
 | `onno.crm.channels.gmail.history-import.enabled` | `Boolean` | `false` | Import each mailbox's older mail once, as read history with its files left in Gmail. |
 | `onno.crm.channels.gmail.history-import.labels` | `List<String>` | — | Gmail labels whose threads are imported, in this order; `INBOX` by default, add `SENT` for archived threads the studio answered. |
@@ -201,17 +201,17 @@ The `onno-desktop-gradle-plugin` is configured through the `onnoDesktop { … }`
 | `onno.crm.channels.gmail.initial-import-days` | `Integer` | `90` | Age limit, in days, of the Inbox messages a mailbox's first import brings in. 0 removes the age limit. A re-scan after Gmail's history expired starts from the mailbox's latest imported email instead. |
 | `onno.crm.channels.gmail.initial-import-limit` | `Integer` | `500` | Most Inbox messages a mailbox's first import brings in, newest first. A re-scan after Gmail's history expired applies it to Inbox and to sent mail. 0 removes the count limit. |
 | `onno.crm.channels.gmail.redirect-uri` | `String` | `http://127.0.0.1:8090/api/crm/gmail/callback` | Exact registered Google OAuth callback URI; use HTTPS in deployments. |
-| `onno.crm.channels.gmail.tokens-file` | `String` | — | Private writable Google token JSON file. |
+| `onno.crm.channels.gmail.tokens-file` | `String` | — | Private writable Google token JSON file. Defaults to `.config/onno/gmail-tokens.json` under the JVM's `user.home` directory. |
 | `onno.crm.channels.instagram.activation-cutoff` | `Instant` | — | UTC instant (for example `2026-11-12T09:00:00Z`) from which Instagram messages are imported; messages sent earlier are never imported, even in a conversation that receives a new message later. Used only to seed the account's persisted cutoff in `onno_crm_ig_sync` when it has none; a persisted cutoff is never changed by this property, a restart, a reconnect or pause/resume. When unset, the cutoff is the moment synchronization is first enabled for the account. |
 | `onno.crm.channels.instagram.conversation-pages-per-poll` | `Integer` | `4` | Conversation-list pages (25 conversations each) one poll may read. Polling starts at the most recently updated conversation and stops at the account's checkpoint; a longer backlog continues on the next poll, which first rechecks the newest conversations. |
 | `onno.crm.channels.instagram.enabled` | `Boolean` | `false` | Enable the single-account Instagram polling adapter. |
 | `onno.crm.channels.instagram.threads-per-poll` | `Integer` | `20` | Conversations whose recent messages one poll may download. Conversations unchanged since their last download are skipped and do not count. |
-| `onno.crm.channels.instagram.tokens-file` | `String` | — | Private Instagram token JSON file. |
+| `onno.crm.channels.instagram.tokens-file` | `String` | — | Private Instagram token JSON file. Defaults to `.config/onno/instagram-tokens.json` under the JVM's `user.home` directory. |
 | `onno.crm.channels.telegram.enabled` | `Boolean` | `false` | Enable the Telegram bot adapter: one server-configured bot that serves ordinary bot chats and, when the bot has business mode, per-user Telegram business connections. |
 | `onno.crm.channels.telegram.regular-chats-enabled` | `Boolean` | `true` | Accept ordinary (non-business) private chats with the bot into a shared Telegram inbox. When false the bot serves Telegram business connections only: ordinary chats are ignored, no ordinary inbox is created, and replies to existing ordinary chats are not sent. |
 | `onno.crm.channels.telegram.token` | `String` | — | Bot token; supply through external secret configuration. |
 | `onno.crm.channels.whatsapp.enabled` | `Boolean` | `false` | Enable the single-number WhatsApp Cloud API adapter. |
-| `onno.crm.channels.whatsapp.tokens-file` | `String` | — | Private WhatsApp token and webhook signing JSON file. |
+| `onno.crm.channels.whatsapp.tokens-file` | `String` | — | Private WhatsApp token and webhook signing JSON file. Defaults to `.config/onno/whatsapp-tokens.json` under the JVM's `user.home` directory. |
 
 ## Enterprise connectors (`su.onno.enterprise`, separate repo)
 
