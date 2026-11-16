@@ -13,7 +13,7 @@ class CrmActionControllerTest {
   var calls=new AtomicInteger();
   EntityView<Conversation> view=new EntityView<>() {
    public Class<Conversation> entity(){return Conversation.class;}
-   public void actions(ActionSpec actions){actions.action("host.review").label("Review").scope(ActionScope.ROW)
+   public void actions(ActionSpec<Conversation> actions){actions.action("host.review").label("Review").scope(ActionScope.ROW)
     .enabledWhen(row->"allowed".equals(row.text("subject")))
     .handler(ctx->{assertThat(ctx.input("reason")).isEqualTo("Review requested");calls.incrementAndGet();return ActionResult.ok();});}
   };

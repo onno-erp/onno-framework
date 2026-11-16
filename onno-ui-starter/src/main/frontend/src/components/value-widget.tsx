@@ -1,3 +1,4 @@
+import { openRoute } from "@/lib/navigation";
 import type { MouseEvent } from "react";
 import type { DashboardWidgetMeta } from "@/lib/types";
 import { withBasePath } from "@/lib/base-path";
@@ -34,9 +35,7 @@ export function ValueWidget({ widget }: { widget: DashboardWidgetMeta }) {
       return;
     }
     event.preventDefault();
-    window.dispatchEvent(new CustomEvent("onno:action", {
-      detail: `onno://${widget.href!.replace(/^\/+/, "")}`,
-    }));
+    openRoute(widget.href!);
   };
   return (
     <a className="block h-full" href={withBasePath(widget.href)} onClick={open}>

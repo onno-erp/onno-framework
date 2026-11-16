@@ -88,20 +88,20 @@ class CrmInboxReadPerformanceTest {
         when(workspaces.canAccess(members.get(98),principal,false)).thenReturn(false);
         var params=new LinkedMultiValueMap<String,String>();params.set("count","exact");params.set("limit","2");params.set("count","exact");
         params.set("eq","channel,WILDBERRIES");params.set("sort","unreadCount");params.set("dir","desc");
-        var result=(Map<?,?>)controller.read("support","",1,params,principal);
+        var result=(Map<?,?>)controller.read("support","",params,principal);
         assertThat(result.get("total")).isEqualTo(49L);
         assertThat(result.get("nextCursor")).isNotNull().isNotEqualTo("3");
         var rows=(List<?>)result.get("rows");
-        assertThat(rows).extracting(r->(UUID)((Map<?,?>)r).get("id")).containsExactly(members.get(94).getId(),members.get(92).getId());
+        assertThat(rows).extracting(r->(UUID)((Map<?,?>)r).get("id")).containsExactly(members.get(96).getId(),members.get(94).getId());
         verify(catalogs,times(2)).get(any(),any(),any());
         assertThat(resolvedCustomers())
-            .containsExactlyInAnyOrder(members.get(94).getCustomer(),members.get(92).getCustomer())
+            .containsExactlyInAnyOrder(members.get(96).getCustomer(),members.get(94).getCustomer())
             .doesNotContain(members.get(98).getCustomer());
     }
     @Test void liveReadPatchReturnsOnlyRequestedAuthorizedConversation() {
         var params=new LinkedMultiValueMap<String,String>();params.set("count","exact");
         params.set("ids",Objects.requireNonNull(members.get(75).getId()).toString());
-        var result=(Map<?,?>)controller.read("support","",0,params,principal);
+        var result=(Map<?,?>)controller.read("support","",params,principal);
         var rows=(List<?>)result.get("rows");
         assertThat(rows).extracting(r->(UUID)((Map<?,?>)r).get("id")).containsExactly(members.get(75).getId());
         assertThat(result.get("total")).isEqualTo(1L);
@@ -111,28 +111,29 @@ class CrmInboxReadPerformanceTest {
         when(workspaces.canAccess(members.get(75),principal,false)).thenReturn(false);
         var params=new LinkedMultiValueMap<String,String>();params.set("count","exact");
         params.set("ids",members.get(75).getId()+","+UUID.randomUUID());
-        var result=(Map<?,?>)controller.read("support","",0,params,principal);
+        var result=(Map<?,?>)controller.read("support","",params,principal);
         assertThat((List<?>)result.get("rows")).isEmpty();
         assertThat(result.get("total")).isEqualTo(0L);
         verifyNoInteractions(contacts);
     }
     @Test void rejectsMalformedPatchIds() {
         var params=new LinkedMultiValueMap<String,String>();params.set("count","exact");params.set("ids","invalid");
-        assertThatThrownBy(()->controller.read("support","",0,params,principal))
+        assertThatThrownBy(()->controller.read("support","",params,principal))
             .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
     }
     @Test void customerNameSearchStillResolvesNamesBeforePaging() {
         var params=new LinkedMultiValueMap<String,String>();params.set("count","exact");params.set("limit","1");
-        var result=(Map<?,?>)controller.read("support","customer-99",0,params,principal);
+        var result=(Map<?,?>)controller.read("support","customer-99",params,principal);
         assertThat(result.get("total")).isEqualTo(1L);
         var rows=(List<?>)result.get("rows");
         assertThat(((Map<?,?>)rows.getFirst()).get("id")).isEqualTo(members.get(99).getId());
     }
     @Test void emptyPageDoesNotResolveCustomerDetails() {
         var params=new LinkedMultiValueMap<String,String>();params.set("count","exact");params.set("count","exact");
-        var result=(Map<?,?>)controller.read("support","",100,params,principal);
+        params.set("ids", UUID.randomUUID().toString());
+        var result=(Map<?,?>)controller.read("support","",params,principal);
         assertThat((List<?>)result.get("rows")).isEmpty();
-        assertThat(result.get("total")).isEqualTo(100L);
+        assertThat(result.get("total")).isEqualTo(0L);
         verify(contacts,never()).get(any(),any());verify(catalogs,never()).get(any(),any(),any());
     }
 }

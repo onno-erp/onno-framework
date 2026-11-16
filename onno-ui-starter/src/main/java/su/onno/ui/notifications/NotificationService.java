@@ -140,6 +140,11 @@ public class NotificationService {
         return store.unreadCount(recipientId);
     }
 
+    /** The links of the recipient's unread notifications ({@code null} for a link-less one). */
+    public java.util.List<String> unreadLinks(String recipientId) {
+        return store.unreadLinks(recipientId);
+    }
+
     /** The distinct notification types this recipient has — drives the panel's modular filter tabs. */
     public java.util.List<String> types(String recipientId) {
         return store.distinctTypes(recipientId);

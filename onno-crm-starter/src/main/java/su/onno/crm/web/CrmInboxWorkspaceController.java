@@ -42,13 +42,11 @@ public class CrmInboxWorkspaceController {
         workspaces.requireConversation(key,id,principal,false);
         var scoped=new org.springframework.util.LinkedMultiValueMap<>(params);
         scoped.set("conversation",id.toString());
-        return read(key,Objects.toString(params.getFirst("q"),""),0,scoped,principal);
+        return read(key,Objects.toString(params.getFirst("q"),""),scoped,principal);
     }
     @GetMapping("/{key}") public Object read(@PathVariable String key,@RequestParam(defaultValue="") String q,
-            @RequestParam(defaultValue="0") int offset,
             @RequestParam org.springframework.util.MultiValueMap<String,String> params, Principal principal) {
         var workspace=workspaces.requireWorkspace(key,principal,false);
-        if(offset<0)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"offset must be non-negative");
         int limit=100;
         try {
             String requestedLimit = params.getFirst("limit");
@@ -142,10 +140,10 @@ public class CrmInboxWorkspaceController {
         };
         // Context excludes transport position/size/count but includes every effective filter and identity.
         var contextParams=new TreeMap<String,List<String>>();
-        params.forEach((name,values)->{if(!Set.of("cursor","offset","limit","count","q","sort","dir").contains(name))contextParams.put(name,List.copyOf(values));});
+        params.forEach((name,values)->{if(!Set.of("cursor","limit","count","q","sort","dir").contains(name))contextParams.put(name,List.copyOf(values));});
         String context="crm-inbox:"+key+":"+principal.getName()+":"+new TreeSet<>(access.roles(principal))
                 +":"+search+":"+sortField+":"+contextParams;
-        var result=feeds.inbox(sortField,descending,cursor,pageLimit,offset,context,
+        var result=feeds.inbox(sortField,descending,cursor,pageLimit,context,
                 "exact".equals(params.getFirst("count")),(handle,sink)->feeds.scan(handle,batch->{
             var candidates=batch.stream().filter(workspace.selection())
                 .filter(c->target==null || (target.getCustomer()==null ? Objects.equals(c.getId(),target.getId()) : target.getCustomer().equals(c.getCustomer())))

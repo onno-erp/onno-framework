@@ -60,12 +60,9 @@ public class RegisterListController {
         AccumulationRegisterDescriptor desc = query.require(name);
         access.requireRead(subject, desc);
         int lim = clamp(limit);
-        ListFilter.Result filters = filters(request, query.movementFilterColumns(desc));
+        ListFilter.Result filters = filters(request, query.movementFilterColumns(desc), desc);
         var page = query.movementsPage(subject, desc, from, to, filters, sort, descending(dir),
                 request.getParameter("cursor"), lim);
-        if (request.getParameter("cursor") == null && request.getParameter("offset") != null) {
-            page = legacyMovements(subject, desc, from, to, filters, sort, descending(dir), request, lim);
-        }
         decorateMovementType(page.rows());
         Map<String, Object> out = KeysetWindow.envelope(page);
         if ("exact".equals(request.getParameter("count"))) out.put("total", query.movementsCount(subject, desc, from, to, filters));
@@ -82,48 +79,29 @@ public class RegisterListController {
         AccumulationRegisterDescriptor desc = query.require(name);
         access.requireRead(subject, desc);
         int lim = clamp(limit);
-        ListFilter.Result filters = filters(request, query.balanceFilterColumns(desc));
-        var page = query.balancePage(subject, desc, filters, sort, descending(dir), request.getParameter("cursor"), lim);
-        if (request.getParameter("cursor") == null && request.getParameter("offset") != null) {
-            int offset = legacyOffset(request);
-            page = su.onno.query.KeysetWindow.legacyOffset(offset, lim,
-                    (c, n) -> query.balancePage(subject, desc, filters, sort, descending(dir), c, n));
-        }
+        ListFilter.Result filters = filters(request, query.balanceFilterColumns(desc), desc);
+        var page = query.balancePage(subject, desc, filters, sort, descending(dir), request.getParameter("cursor"), lim, request.getParameter("asOf"));
         Map<String, Object> out = KeysetWindow.envelope(page);
-        if ("exact".equals(request.getParameter("count"))) out.put("total", query.balanceCount(subject, desc, filters));
+        if ("exact".equals(request.getParameter("count"))) out.put("total", query.balanceCount(subject, desc, filters, request.getParameter("asOf")));
         return out;
     }
 
     /**
      * The grid's declarative filter params, read raw (Spring's {@code List<String>} binding splits
      * a single value on commas, mangling the {@code "column,value"} encoding) and compiled against
-     * the register's own columns.
+     * the register's own columns. Numeric dimensions/resources are passed along so a number-range
+     * bound ({@code ge}/{@code le} on a resource) binds as a number.
      */
-    private static ListFilter.Result filters(HttpServletRequest request, java.util.Set<String> columns) {
+    private ListFilter.Result filters(HttpServletRequest request, java.util.Set<String> columns,
+                                      AccumulationRegisterDescriptor desc) {
         return ListFilter.parse(multi(request, "eq"), multi(request, "in"), multi(request, "like"),
-                multi(request, "prefix"), multi(request, "ge"), multi(request, "le"), columns);
+                multi(request, "prefix"), multi(request, "ge"), multi(request, "le"), columns,
+                query.numericFilterColumns(desc));
     }
 
     private static List<String> multi(HttpServletRequest request, String param) {
         String[] values = request.getParameterValues(param);
         return values == null ? List.of() : Arrays.asList(values);
-    }
-
-    private static int legacyOffset(HttpServletRequest request) {
-        try {
-            int offset = Integer.parseInt(request.getParameter("offset"));
-            if (offset >= 0) return offset;
-        } catch (NumberFormatException ignored) { }
-        throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.BAD_REQUEST, "offset must be a non-negative integer");
-    }
-
-    private su.onno.query.KeysetWindow.Page<Map<String, Object>> legacyMovements(AccessSubject subject,
-            AccumulationRegisterDescriptor desc, String from, String to, ListFilter.Result filters,
-            String sort, boolean descending, HttpServletRequest request, int limit) {
-        int offset = legacyOffset(request);
-        return su.onno.query.KeysetWindow.legacyOffset(offset, limit,
-                (c, n) -> query.movementsPage(subject, desc, from, to, filters, sort, descending, c, n));
     }
 
     /**

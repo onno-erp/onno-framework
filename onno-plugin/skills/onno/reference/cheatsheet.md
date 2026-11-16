@@ -139,6 +139,9 @@ stored instances under a changed same-version graph.
 
 ### `@AccessControl` (RBAC; deny-by-default, `ADMIN` always allowed)
 `readRoles=String[]{}`, `writeRoles=String[]{}` (falls back to `readRoles` if empty).
+Documents only: `postRoles=String[]{}`, `unpostRoles=String[]{}` — narrow who may post/re-post or
+unpost **on top of write access** (empty = every writer). Deleting a posted document needs the
+unpost right. Enforced on REST/MCP/UI actions; direct `PostingService` calls are trusted code.
 
 ### `RecordAccessPolicy` (record-level; package `su.onno.access`, a Spring bean)
 `RecordAccessPolicy.forCatalog|forDocument|forRegister|of(Type.class)` `.appliesTo(roles…)`
@@ -178,6 +181,7 @@ Enums: `AccumulationType{BALANCE,TURNOVER}`, `Periodicity{NONE,SECOND,MINUTE,HOU
 | `OnFillingHandler` | `onFilling()` | Seed/normalize defaults on **create/save**. It does not populate the initially rendered blank New form; use Java field initializers for values that must appear there. It runs on every save of a new entity (`isNew==true`), so guard on null and keep it idempotent. |
 | `BeforePostHandler` | `beforePost()` | Before posting (validation) — **no Spring DI** (see below). |
 | `Postable` | `handlePosting(PostingContext)` | Write register movements. |
+| `BeforeUnpostHandler` | `beforeUnpost()` | Before unposting (incl. the unpost a delete of a posted document performs) — throw to veto; **no Spring DI**. Not run on re-post. |
 | `AfterPostHandler` | `afterPost()` | After post — **no Spring DI**; prefer `@EventListener` on `DocumentPostedEvent`. |
 | `BeforeDeleteHandler` | `beforeDelete()` | Before delete — runs on BOTH the repository path and the UI/REST DELETE; throw (e.g. `ValidationException`) to veto, which is how a catalog protects seeded system rows. |
 | `Validated` | `List<BusinessRule> rules()` | Rules checked before write and before post — **no Spring DI** (see below). |
@@ -309,7 +313,8 @@ because they are not Java field references.
   `{onno.ui.path}/plugins/**`, and auto-loads at boot; no frontend project. Config `onno.ui.plugins.*`.
   - **Host UI primitives** (≥ host contract v2 / framework 1.5.0): `import { Segmented, Select, Button,
     Badge, DatePicker, … } from "@onno/widget-sdk"` (or `ui.Segmented`) — the app's real controls, not
-    lookalikes. Reach for these before hand-rolling.
+    lookalikes. Reach for these before hand-rolling. Record pickers use `RefSelect` (contract v7): the
+    form's reference field with typeahead, "+ New" and "Show all…" — never a `Select` of fetched rows.
   - **Styling** (since 1.5.0): the plugin now runs **Tailwind over `src/main/widgets`** and ships
     a coordinate-specific `*-widgets.css` (utilities-only, preflight off, host tokens), injected at boot *before* the
     host stylesheet (its unscoped utilities tie with the host's on specificity, so loaded last a bare
@@ -338,7 +343,7 @@ because they are not Java field references.
 - `EntityView<E>` — `Class<E> entity()` (names the target catalog/document/register), `profile()`
   (a profile's own view replaces the default one for its list *and* record surface),
   `list(ListSpec<E>)`, `fields(EntityConfigBuilder<E>)`, `detail(DetailSpec<E>)`,
-  `actions(ActionSpec)`, `inputs(InputSpec)`,
+  `actions(ActionSpec<E>)`, `inputs(InputSpec)`,
   `comments()` (return `true` to opt this catalog/document into the `/api/comments` discussion
   thread; off by default, gated by the global `onno.comments.enabled` switch), `opensInMain()`
   (return `true` so records open in the focused pane instead of a detail island beside the list).
@@ -364,7 +369,8 @@ because they are not Java field references.
     order), or `options/multiOptions(Collection<ListSpec.Option>)` when choices need richer display
     such as `ListSpec.Option.withAvatar(employeeId, name, avatarUrl)`; `.options(...).multiple()` is
     the configurable form of the same multi-select behavior
-    as `.multiOptions(...)`; `contains` / `startsWith` / `dateRange`; an **`@Enumeration` field** persists as
+    as `.multiOptions(...)`; `contains` / `startsWith` / `dateRange` / `numberRange` (from–to over a
+    numeric field, either bound optional, inclusive; `ge`/`le` feed params); an **`@Enumeration` field** persists as
     deterministic UUIDs, so the resolver translates its select options — author the constant name
     (`"SHIPPED"`) or its `@EnumLabel` text, or author **no options** (`.multiOptions()`) to offer
     every declared value labelled like the pills; `map()` → `MapSpec<E>` adds a Table⇄Map toggle —
@@ -379,11 +385,13 @@ because they are not Java field references.
     scroll only its bounded inner panes; do not cap it with viewport clamps or grow the whole page.
     Use entity/ref/comment avatar payloads and merge durable system activity into communication
     timelines. `rowStyle(row →
-    RowStyle)` = **conditional row formatting** — evaluated server-side per row (same `ActionRow` as
+    RowStyle)` = **conditional row formatting** — evaluated server-side per row (same `ActionRow<E>` as
     state-aware actions), returns `ListSpec.RowStyle.DANGER/WARNING/SUCCESS/ACCENT/MUTED` or `null`
     (default look); the grid renders a theme-aware translucent wash (e.g. urgent rows red, cancelled
     faded), also inside expanded groups; a throwing function = `null` for that row.
-  - `ActionSpec`: `action(key)` → `ActionBuilder.label/icon(String)`, `logo(urlOrStaticPath)` (image
+  - `ActionSpec<E>` retains the view entity in all row callbacks, including `dynamic` providers;
+    getters from unrelated entities do not compile. Page actions use `ActionSpec<Void>`.
+    Action DSL: `action(key)` → `ActionBuilder.label/icon(String)`, `logo(urlOrStaticPath)` (image
     instead of the lucide icon — e.g. a brand mark), `scope(ActionScope.ROW|TOOLBAR|DETAIL)`,
     `handler(ctx→ActionResult)` or `navigate(url)`. `roles("MANAGER", …)` restricts who may run the
     action (`ADMIN` always passes; #227): on an entity action it's a finer gate on top of the
@@ -414,7 +422,7 @@ because they are not Java field references.
     add/remove tabular grid whose columns reuse the field DSL (incl. `.reference(...)`), read back
     with `ctx.inputRows(key)` → `List<Map<String,String>>` (`.required()` = at least one row).
     Groups are action-form only; a toolbar renders scalars and ignores them (#248). A **row** action may vary per row — `icon(row→String)`,
-    `label(row→String)`, `visibleWhen(row→bool)`, `enabledWhen(row→bool)` — taking an `ActionRow`
+    `label(row→String)`, `visibleWhen(row→bool)`, `enabledWhen(row→bool)` — taking an `ActionRow<E>`
     (`id()`, `text(col)`, `enumValue(col,Type)`, `bool(col)`), evaluated as the list renders (#116).
     A dynamic **server ROW** action should also declare a human-facing `label(String)`: batch
     selection has no single row context, so its menu and progress messages use the fixed label and
@@ -486,6 +494,28 @@ makes it reachable by direct route but unlisted. No auto-listing of unclaimed ca
 #69). Media widgets stream the file to `MediaStorage` and persist the returned URL (see
 `docs/MEDIA_UPLOADS.md`).
 
+## Print forms (onno-print-starter, package `su.onno.print`; `onno.print.enabled`)
+
+- `@Component class X extends PrintForm<Order>`: `super("invoice", Order.class)` (key `[a-z0-9-]`,
+  unique per type); `configure(PrintFormSpec)` → `label`, `template("classpath:/print/x.docx")`
+  (default `classpath:/print/{key}.docx|.xlsx`), `icon`, `roles(...)`, `locale`;
+  `fill(T, TemplateModel)`; optional `fileName(T)`.
+- `TemplateModel`: `text(key, Object)` (Ref → record name, enum → `@EnumLabel`), `number(key, n[, pattern])`,
+  `date(key, t[, pattern])`, `table(key, items, (row, item) -> row.text(...)…)`. Patterns apply in
+  Word only; Excel cells keep their own format.
+- Template syntax `{{key}}`, table rows `{{items.col}}` (row repeats per item). Unknown keys stay
+  visible. Excel `SUM` ranges ending on the template row stretch over inserted rows.
+- UI: record ⋯ menu entry per permitted form, action key `print-{key}` (`f.action("print-invoice").primary()`).
+- REST: `GET /api/print/{kind}/{name}/{id}` (list), `GET /api/print/{kind}/{name}/{id}/{form}[?format=pdf]`
+  (file), `POST /api/print/batch/{kind}/{name}/{form}` `{"ids":[…]}` (zip), `/api/print/templates/**` (admin).
+- Batch: list selection toolbar → zip (`onno.print.batch.max-records`, default 200).
+- Uploaded templates: `b.widget("Print templates").type("printTemplates")`; `onno.print.templates.*`
+  (`enabled`, `manage-roles` = ADMIN, `max-size` = 10MB); same format as the built-in file.
+- PDF: `onno.print.pdf.gotenberg.url` or `onno.print.pdf.libreoffice.command` (or a `PdfConverter`
+  bean); `spec.pdf()` makes PDF the default (fails startup without a converter); menu gains `· PDF`.
+- Generic SPIs behind it: `su.onno.ui.RecordActionContributor` (record ⋯ menu) and
+  `su.onno.ui.SelectionDownloadContributor` (list selection-toolbar downloads).
+
 ## Notifications (package `su.onno.ui.notifications`; `onno.notifications.*`)
 
 - Per-user timeline behind the shell's bell + `/api/notifications` (sidebar trigger on desktop, a
@@ -518,8 +548,11 @@ makes it reachable by direct route but unlisted. No auto-listing of unclaimed ca
 
 - `SchemaMode{APPLY,PLAN,VALIDATE,OFF}` ← `onno.schema.mode`. `SchemaUpgrader.run(jdbi)` diffs
   desired `SchemaModel` vs previous `SchemaSnapshot` (JSON in `onno_schema_history`) vs live DB.
-- `SchemaChange.Type{CREATE_TABLE,RENAME_TABLE,RENAME_COLUMN,ADD_COLUMN,ALTER_COLUMN_TYPE,DROP_COLUMN,DROP_TABLE}`;
+- `SchemaChange.Type{CREATE_TABLE,RENAME_TABLE,RENAME_COLUMN,ADD_COLUMN,ALTER_COLUMN_TYPE,ALTER_COLUMN_NULLABILITY,ALTER_UNIQUE_KEY,DROP_COLUMN,DROP_TABLE}`;
   `MigrationPlan.safe()/destructive()`.
+- `ALTER_UNIQUE_KEY` reconciles an information register's `(_period, dimensions…)` key with the live
+  `UNIQUE` constraints, so a changed `periodicity`/`@Dimension` moves the key on an existing database.
+  Widening it applies by default; narrowing it is destructive-gated.
 - `AppMigration` — `version()` (segment-wise compare), `description()`, `migrate(MigrationContext)`;
   `MigrationContext.execute(sql)`. Runs once per DB, in version order, recorded in history.
 
@@ -584,4 +617,4 @@ Collection reads: use limit/cursor and `{rows,nextCursor,hasMore}` (100 default,
 Only su.onno.query.Cursor issues context-bound typed positions; use KeysetWindow for SQL seek.
 SQL DATE values must remain typed. Count only by explicit request; never compute a report from
 a silently capped preview. Register SDK reads return pages. See docs/HEADLESS_READ_API.md,
-Collection pagination, for aliases, offset compatibility, bounded selectors and CRM callback limits.
+Collection pagination, for the cursor-only contract, bounded selectors and CRM callback limits.

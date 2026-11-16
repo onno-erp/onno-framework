@@ -10,6 +10,7 @@ import {
 import { Lock, LogIn, SearchX, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMessages } from "@/providers/messages-provider";
+import { isFormDirty } from "@/lib/dirty-forms";
 import {
   DivKitContent,
   type ContentAction,
@@ -170,7 +171,9 @@ export function ContentPane({
     fetch(ep, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((json) => {
-        if (endpointRef.current === ep) setContent({ key: ep, json });
+        if (endpointRef.current === ep && !isFormDirty(pathRef.current.split("?")[0])) {
+          setContent({ key: ep, json });
+        }
       })
       .catch(() => {});
   }, []);
@@ -183,7 +186,7 @@ export function ContentPane({
       fetch(`${ep}&delta=1`, { credentials: "include" })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
         .then((d: Delta) => {
-          if (endpointRef.current !== ep) return;
+          if (endpointRef.current !== ep || isFormDirty(pathRef.current.split("?")[0])) return;
           // If the targeted row patch didn't take (missing/broken target), fall back to
           // a full remount so the list is refreshed instead of wiped.
           if (!handle.applyDelta(d)) fullReload(ep);
@@ -193,7 +196,7 @@ export function ContentPane({
       fetch(ep, { credentials: "include" })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
         .then((resp: { card?: { states?: { div?: { items?: unknown[] } }[] } }) => {
-          if (endpointRef.current !== ep) return;
+          if (endpointRef.current !== ep || isFormDirty(pathRef.current.split("?")[0])) return;
           const items = resp?.card?.states?.[0]?.div?.items;
           if (!items) return;
           if (!handle.applyDelta({ changes: [{ id: "onno-content", items }] })) fullReload(ep);
@@ -201,6 +204,10 @@ export function ContentPane({
         .catch(() => {});
     }
   }, [fullReload]);
+
+  const onSurfaceAction = useCallback((action: ContentAction) => {
+    onAction({ ...action, surfacePath: path });
+  }, [onAction, path]);
 
   // Register this pane's surface + refetch so the parent SSE handler can reach it.
   useEffect(() => {
@@ -274,9 +281,10 @@ export function ContentPane({
       <DivKitContent
         ref={contentRef}
         surfaceKey={endpoint}
+        surfacePath={path}
         card={contentJson as ContentCard}
         theme={theme}
-        onAction={onAction}
+        onAction={onSurfaceAction}
       />
     </>
   );

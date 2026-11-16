@@ -28,7 +28,6 @@ public final class SqlRenderer {
      * @param groupBy  GROUP BY expressions, or {@code null}/empty
      * @param orderBy  ORDER BY terms (e.g. {@code "t0._date DESC"}), or {@code null}/empty
      * @param limit    optional LIMIT
-     * @param offset   deprecated compatibility slot; only null/zero is supported, use KeysetWindow for paging
      */
     public record RenderModel(List<String> select,
                               String fromTable,
@@ -37,8 +36,7 @@ public final class SqlRenderer {
                               List<String> where,
                               List<String> groupBy,
                               List<String> orderBy,
-                              Integer limit,
-                              Integer offset) {
+                              Integer limit) {
     }
 
     public static String render(RenderModel model) {
@@ -67,9 +65,6 @@ public final class SqlRenderer {
         }
         if (model.limit() != null) {
             sql.append(" LIMIT ").append(model.limit());
-        }
-        if (model.offset() != null && model.offset() != 0) {
-            throw new IllegalArgumentException("Use KeysetWindow for pagination; positional SQL offsets are unsupported");
         }
         return sql.toString();
     }

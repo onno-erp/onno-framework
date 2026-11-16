@@ -103,13 +103,12 @@ public final class KeysetWindow {
         }
     }
 
-    /** The common wire envelope; aliases can be retained during the one-release migration. */
-    public static <T> Map<String, Object> envelope(su.onno.query.KeysetWindow.Page<T> page, String... aliases) {
+    /** The common collection wire envelope. */
+    public static <T> Map<String, Object> envelope(su.onno.query.KeysetWindow.Page<T> page) {
         Map<String, Object> out = new java.util.LinkedHashMap<>();
         out.put("rows", page.rows());
         out.put("nextCursor", page.nextCursor());
         out.put("hasMore", page.hasMore());
-        for (String alias : aliases) out.put(alias, page.rows());
         return out;
     }
 

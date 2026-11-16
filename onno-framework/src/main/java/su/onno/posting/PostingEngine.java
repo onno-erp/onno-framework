@@ -1,7 +1,9 @@
 package su.onno.posting;
 
+import su.onno.events.EntityChangedEvent;
 import su.onno.lifecycle.AfterPostHandler;
 import su.onno.lifecycle.BeforePostHandler;
+import su.onno.lifecycle.BeforeUnpostHandler;
 import su.onno.lifecycle.BeforeWriteHandler;
 import su.onno.lifecycle.Postable;
 import su.onno.annotations.DomainEvent;
@@ -250,12 +252,14 @@ public class PostingEngine {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void doUnpost(DocumentObject document) {
+        if (document instanceof BeforeUnpostHandler handler) {
+            OnnoPerformance.record("onno.document.before-unpost", 1, handler::beforeUnpost);
+        }
         DocumentDescriptor docDescriptor = registry.getDocumentDescriptor(document.getClass());
         Set<Class<?>> chronologicalRegisters = chronologicalRegistersForDocument(document.getId());
         if (!chronologicalRegisters.isEmpty()) {
             restoreChronologically(document, null, chronologicalRegisters, PostingMutation.UNPOST);
-            document.setPosted(false);
-            publishApplicationEvent(new DocumentUnpostedEvent(document));
+            afterSuccessfulUnpost(document);
             return;
         }
 
@@ -263,19 +267,65 @@ public class PostingEngine {
             unpostInTransaction(handle, docDescriptor, document.getId());
         }));
 
-        document.setPosted(false);
-
-        publishApplicationEvent(new DocumentUnpostedEvent(document));
+        afterSuccessfulUnpost(document);
     }
 
+    /*
+     * Everything below runs after the posting transaction has committed. The post is done and
+     * cannot be rolled back, so a failing callback (an AfterPostHandler, or an @EventListener
+     * behind the publisher) must not surface as a posting failure: the caller would report
+     * "posting failed" for a posted document, and the remaining callbacks would be skipped.
+     * Each callback is isolated and a failure is logged at ERROR. Work that must not be lost
+     * belongs in a @DomainEvent outbox row, which commits with the posting.
+     */
     private void afterSuccessfulPost(DocumentObject document) {
         document.setPosted(true);
-
+        publishChangeEvents(document, EntityChangedEvent.POSTED);
         if (document instanceof AfterPostHandler handler) {
-            OnnoPerformance.record("onno.document.after-post", 1, handler::afterPost);
+            afterCommit(document, "AfterPostHandler.afterPost()", () ->
+                    OnnoPerformance.record("onno.document.after-post", 1, handler::afterPost));
         }
+        afterCommit(document, "DocumentPostedEvent listener", () ->
+                publishApplicationEvent(new DocumentPostedEvent(document)));
+    }
 
-        publishApplicationEvent(new DocumentPostedEvent(document));
+    private void afterSuccessfulUnpost(DocumentObject document) {
+        document.setPosted(false);
+        publishChangeEvents(document, EntityChangedEvent.UNPOSTED);
+        afterCommit(document, "DocumentUnpostedEvent listener", () ->
+                publishApplicationEvent(new DocumentUnpostedEvent(document)));
+    }
+
+    /**
+     * The document change ({@code POSTED}/{@code UNPOSTED}) plus a wildcard register change: posting
+     * rewrote register movements, so open register views (balances, turnovers, movements) refresh
+     * whichever entry point posted — UI, REST, MCP, import, a job or direct Java.
+     */
+    private void publishChangeEvents(DocumentObject document, String changeType) {
+        afterCommit(document, "EntityChangedEvent listener", () -> {
+            publishApplicationEvent(new EntityChangedEvent(
+                    changeType,
+                    EntityChangedEvent.DOCUMENT,
+                    registry.getDocumentDescriptor(document.getClass()).logicalName(),
+                    document.getId(),
+                    document.getNumber()));
+        });
+        afterCommit(document, "EntityChangedEvent listener", () ->
+                publishApplicationEvent(new EntityChangedEvent(
+                        EntityChangedEvent.CHANGED,
+                        EntityChangedEvent.REGISTER,
+                        "*",
+                        document.getId(),
+                        null)));
+    }
+
+    private void afterCommit(DocumentObject document, String callback, Runnable action) {
+        try {
+            action.run();
+        } catch (RuntimeException e) {
+            log.error("{} failed after {} {} was committed; the posting stands",
+                    callback, document.getClass().getSimpleName(), document.getId(), e);
+        }
     }
 
     private void restoreChronologically(DocumentObject requested,

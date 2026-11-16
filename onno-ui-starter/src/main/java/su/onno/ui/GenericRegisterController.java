@@ -34,12 +34,13 @@ public class GenericRegisterController {
 
     @GetMapping("/{name}/balance")
     public Map<String, Object> balance(@PathVariable String name, @RequestParam Map<String, String> filters,
+            @RequestParam(required = false) String asOf,
             @RequestParam(required = false) String cursor, @RequestParam(defaultValue = "100") int limit,
             AccessSubject subject) {
         AccumulationRegisterDescriptor desc = query.require(name);
         access.requireRead(subject, desc);
         return KeysetWindow.envelope(query.balancePage(subject, desc, query.dimensionFilters(desc, filters),
-                null, false, cursor, limit));
+                null, false, cursor, limit, asOf));
     }
 
     @GetMapping("/{name}/turnover")

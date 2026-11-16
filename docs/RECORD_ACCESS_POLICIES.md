@@ -54,7 +54,8 @@ AccessSubjectContributor regions(RegionDirectory directory) {
 
 A controller method receives the subject by declaring a parameter of type `AccessSubject`; an
 `@McpTool` method may declare one too (or read `McpToolContext.subject()`); an action handler reads
-`ActionContext.subject()`.
+`ActionContext.subject()`, which is never `null`. Code that builds an `ActionContext` itself (a test,
+a custom dispatcher) passes the caller's subject, or `AccessSubject.system()` for trusted code.
 
 ### The scope — a predicate the database evaluates
 
@@ -115,8 +116,9 @@ too, and an explicit body value cannot override them.
 | CSV import upserts | an existing code/number outside the write scope is a row error, not an overwrite |
 | related lists | the parent record must be readable; junction rows are scoped |
 | ref pickers, mentions, comments, tags, presence | target/record scope applied; unreadable records are 404 or not readable |
-| notifications | a notification about a record the recipient can't read is withheld from its feed and stream |
+| notifications | a notification about a record the recipient can't read is withheld from its feed and stream (one rule for both), and the unread badge counts only what the feed shows |
 | task inbox | task visibility stays assignment-based; a subject label of an unreadable record is masked |
+| links to a renamed or removed entity | a former `previousNames` entry still resolves; a name that resolves to nothing is withheld/masked for a subject some policy narrows, never for ADMIN or unnarrowed subjects |
 | SSE `/api/events` | a record event reaches a scoped subscriber only if the record is in its scope (one query per event and distinct scope) |
 | MCP built-in tools | run as the caller's subject through the same services |
 | CRM inbox | the bound customer catalog's policy narrows readable contacts (on top of `readableWhen`) |
@@ -135,6 +137,12 @@ Set<UUID> visible = recordAccess.filter(subject, Tenant.class, ids, AccessMode.R
 ScopeClause clause = recordAccess.clause(subject, Tenant.class, AccessMode.READ, "t"); // for own SQL
 ```
 
+Every check takes a non-null subject (`null` throws even before the first policy is declared).
+`canReadRecord`/`canReadRoute` only narrow by record scope, for links stored as strings; they do not
+check entity grants or existence for an unnarrowed subject, so authorize with `can`/`require`. Parse
+such links with `RecordRoute.parse(route)`, and check many at once with
+`recordAccess.readable(subject, routes)` (one query per narrowed entity).
+
 Not covered in this release: field-level masking, and **media** (`/api/media/{key}` is not bound to a
 record — do not store customer-private files as media when external users exist).
 
@@ -145,8 +153,53 @@ on a non-ref field, an inherited `via` cycle, a register scoped by a non-dimensi
 can never match, a policy without a read scope, and a **dead** policy (none of its `appliesTo` roles
 may read the entity at all).
 
-Every scoped column gets an index (`CREATE INDEX IF NOT EXISTS idx_<table>_<column>`) at startup
-when `onno.schema.mode=apply`; otherwise the statements are logged as a warning.
+Every scoped column gets an index (`idx_<table>_<column>`, shortened with a hash past 63
+characters) when `onno.schema.mode` resolves to `apply` — the default; a blank value counts as
+`apply`, as it does for the schema itself. Any other mode, or
+`onno.access.records.create-indexes=false`, only logs the statements as a warning.
+
+On PostgreSQL the indexes are reconciled on a background thread, off the startup path, so neither
+startup nor writes to the table wait for them. A missing index is built with
+`CREATE INDEX CONCURRENTLY`; an index left INVALID by an interrupted build
+(`pg_index.indisvalid = false`) is dropped and rebuilt; a valid one issues no statement. An invalid
+index under that name that is not a plain index on the column is left in place with a warning. One
+node of a scaled-out deployment builds at a time, under a `pg_try_advisory_lock`. Until a build
+finishes, scoped queries on that table may scan it.
+
+Two concurrent index builds on one table, or a build and a concurrent drop, deadlock, and PostgreSQL
+cancels one of them. So this reconciliation and the framework's search-index reconciliation take
+turns under a shared advisory lock, on any node: each waits for the other rather than skip, and
+holds no pooled connection while it waits. Before it builds or repairs an index, the thread also
+waits while any other session — of any role — holds or awaits that table's
+`SHARE UPDATE EXCLUSIVE` lock: for example a `CREATE INDEX CONCURRENTLY` or a concurrent drop run by
+hand or by other tooling, or a manual `VACUUM`. Then the thread reads the index again, so an index
+that the other build created under the same name is kept. A valid index needs no statement, so it
+never waits. A table that stays busy for 30 minutes leaves its index for the next start, and a
+search-index reconciliation that runs that long leaves all of them. Autovacuum is not waited for,
+however long it runs: the build cancels it, as a build run by hand would, and waits for an
+autovacuum that prevents wraparound without a deadlock. Only a build or drop that these locks do not
+coordinate (run by hand or by other tooling), begun on the table while ours runs, can still collide
+with it; if our index is the one left invalid, the next start repairs it.
+
+The thread holds one pooled connection while it builds or waits for a busy table, and a build runs
+with that connection's session settings. A `statement_timeout` or `lock_timeout` set for the
+application's connections can cancel the build on a large table, and each start then drops the
+invalid index and tries again. Lift those limits for the application role, or build that index once
+by hand: drop the invalid one (`DROP INDEX CONCURRENTLY <name>`), then run the exact statement from
+the warning about the cancelled build. A valid index is left alone.
+
+A build also waits for transactions that write to that table, and for any transaction in the
+database that still holds an older snapshot (REPEATABLE READ or SERIALIZABLE, an open cursor, a long
+query). A session left idle in such a transaction stalls the build, and the builds queued after it,
+until it ends; `idle_in_transaction_session_timeout` bounds that.
+
+While a build runs, a schema change to that table waits for it to finish, and PostgreSQL queues
+every read and write of the table behind the waiting change. So a deploy that alters the table
+stalls both its own startup, where the schema change is applied, and the table until the build
+ends. On a large table, let the build finish (the log shows `Built record-scope index …`) before
+deploying a schema change to it.
+
+On other databases the plain `CREATE INDEX IF NOT EXISTS` statements run during startup.
 `onno.access.records.log-denials=true` logs every scope-based 404 at DEBUG on `su.onno.ui.RecordAccess`.
 
 ## Verifying a policy

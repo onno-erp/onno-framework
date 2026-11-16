@@ -98,21 +98,6 @@ public final class KeysetWindow {
         return new Page<>(rows, next, more);
     }
 
-    /** Transitional offset support: walk bounded seek windows, never SQL OFFSET or full-list slicing. */
-    public static <T> Page<T> legacyOffset(int offset, int limit,
-            java.util.function.BiFunction<String, Integer, Page<T>> window) {
-        String cursor = null;
-        int remaining = Math.max(0, offset);
-        while (remaining > 0) {
-            int take = Math.min(remaining, MAX_LIMIT);
-            Page<T> skipped = window.apply(cursor, take);
-            remaining -= skipped.rows().size();
-            if (!skipped.hasMore()) return new Page<>(List.of(), null, false);
-            cursor = skipped.nextCursor();
-        }
-        return window.apply(cursor, clampLimit(limit));
-    }
-
     /** Validate against JDBC metadata before binding a client position to a comparison. */
     public static boolean validPosition(Handle handle, String source, String projection, String where,
             Consumer<Query> binder, List<Order> order, List<Object> values) {

@@ -8,7 +8,7 @@ import {
 } from "react-aria-components";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { DialogPortalContext } from "@/components/ui/dialog-portal";
+import { DialogPortalContext, useOutsidePressGuard } from "@/components/ui/dialog-portal";
 import type { ActionSeverity } from "@/lib/types";
 import { useMessages } from "@/providers/messages-provider";
 
@@ -68,12 +68,14 @@ export function DialogShell({
   const descriptionId = useId();
   const ToneIcon = toneIcon[tone];
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
+  const shouldCloseOnInteractOutside = useOutsidePressGuard(open, portalContainer);
 
   return (
     <ModalOverlay
       isOpen={open}
       onOpenChange={onOpenChange}
       isDismissable={dismissable}
+      shouldCloseOnInteractOutside={shouldCloseOnInteractOutside}
       className={({ isEntering, isExiting }) =>
         cn(
           "fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 backdrop-blur-[1px]",

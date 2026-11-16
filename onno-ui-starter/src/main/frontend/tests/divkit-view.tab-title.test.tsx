@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { DivKitView, workspaceTabState } from "@/views/divkit-view";
+import { openRoute } from "@/lib/navigation";
+import { PageActionsBar } from "@/components/page-actions-bar";
+
+function CurrentRoute() {
+  const location = useLocation();
+  return <output data-testid="current-route">{location.pathname + location.search}</output>;
+}
 
 vi.mock("@divkitframework/react", () => ({
   DivKit: ({
@@ -229,7 +236,7 @@ describe("DivKitView tab titles", () => {
     act(() => window.dispatchEvent(new CustomEvent("onno:action", { detail: "onno://" + path.slice(1) })));
     await screen.findByTestId("content-" + path);
     expect(screen.queryByTestId("content-/documents/event_invoices/new")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "New Event Invoices", exact: true })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "New Event Invoices" })).toHaveLength(1);
   });
 
   it("templates the new-record tab around the localized entity title", async () => {
@@ -242,6 +249,55 @@ describe("DivKitView tab titles", () => {
     // tab.new = "New {entity}" with the localized entity name substituted.
     expect(await screen.findByTitle("New Клиенты")).toBeInTheDocument();
     expect(screen.getByTestId("icon-users")).toBeInTheDocument();
+  });
+
+  it("opens a page action's application path and preserves the existing tab's draft", async () => {
+    render(<MemoryRouter initialEntries={["/catalogs/customers"]}>
+      <DivKitView />
+      <CurrentRoute />
+      <PageActionsBar route="/" buttons={[
+        { key: "docs", label: "Documentation", server: false, url: "/documentation?topic=orders" },
+      ]} />
+    </MemoryRouter>);
+    const editor = await screen.findByRole("textbox", { name: "Editor /catalogs/customers" });
+    fireEvent.change(editor, { target: { value: "Unsaved draft" } });
+    const button = screen.getByRole("button", { name: "Documentation" });
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByTestId("current-route"))
+      .toHaveTextContent("/documentation?topic=orders"));
+    await screen.findByTestId("content-/documentation?topic=orders");
+    expect(screen.getAllByRole("button", { name: "Documentation" })).toHaveLength(2);
+    expect(editor).toHaveValue("Unsaved draft");
+    fireEvent.click(button);
+    expect(screen.getAllByTestId("content-/documentation?topic=orders")).toHaveLength(1);
+  });
+
+  it.each(["catalogs", "documents"])("uses the same detail pane for %s paths and onno URLs", async (kind) => {
+    render(<MemoryRouter initialEntries={["/catalogs/customers"]}><DivKitView /></MemoryRouter>);
+    const list = await screen.findByTestId("content-/catalogs/customers");
+    const path = `/${kind}/example/r-1`;
+    act(() => openRoute(path));
+    const record = await screen.findByTestId("content-" + path);
+    expect(list.parentElement).toHaveStyle({ visibility: "visible" });
+    act(() => openRoute("onno://" + path.slice(1)));
+    expect(screen.getAllByTestId("content-" + path)).toHaveLength(1);
+    expect(record.parentElement).toHaveStyle({ visibility: "visible" });
+  });
+
+  it("treats /app as a page rather than the onno://app profile-switch command", async () => {
+    render(<MemoryRouter initialEntries={["/catalogs/customers"]}><DivKitView /></MemoryRouter>);
+    await screen.findByTestId("content-/catalogs/customers");
+    act(() => openRoute("/app"));
+    await screen.findByTestId("content-/app");
+    expect(screen.getByTestId("content-/catalogs/customers")).toBeInTheDocument();
+  });
+
+  it("opens application paths on mobile", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 500 });
+    render(<MemoryRouter initialEntries={["/catalogs/customers"]}><DivKitView /></MemoryRouter>);
+    await screen.findByTestId("content-/catalogs/customers");
+    act(() => openRoute("/documentation"));
+    expect(await screen.findByTestId("content-/documentation")).toBeInTheDocument();
   });
 
 });

@@ -1,3 +1,4 @@
+import { openRoute } from "@/lib/navigation";
 import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { Ellipsis, Loader2 } from "lucide-react";
@@ -13,6 +14,7 @@ import { DynamicLucide } from "@/lib/icon-bridge";
 import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 import { api } from "@/lib/api";
 import { actionFeedbackFromError, applyActionResult } from "@/lib/action-feedback";
+import { surfaceRefreshCallback } from "@/lib/surface-refresh";
 import { cn } from "@/lib/utils";
 
 /**
@@ -117,9 +119,6 @@ export const ACTIONS_MENU_CUSTOM_COMPONENTS = new Map<string, { element: string 
   ["onno-actions-menu", { element: "onno-actions-menu" }],
 ]);
 
-function fire(url: string) {
-  window.dispatchEvent(new CustomEvent("onno:action", { detail: url }));
-}
 
 // "Open in list" (onno://{kind}/{name}?focus={id}, #410) moves the workspace focus to the list's
 // pane. Returning focus to the ⋯ trigger after the menu closes would be a focusin inside the
@@ -147,7 +146,7 @@ function actionSource(url: string): { kind: string; name: string; key: string; i
 
 // Run a post/unpost/custom-action url and apply its result. Errors self-toast via the api layer.
 // `inputs` carries an action-form dialog's submitted values (custom actions only).
-async function runAsync(url: string, inputs?: ActionFormValues): Promise<void> {
+async function runAsync(url: string, inputs: ActionFormValues | undefined, refresh: () => void): Promise<void> {
   const r = url.replace("onno://", "");
   if (r.startsWith("post/") || r.startsWith("unpost/")) {
     const unpost = r.startsWith("unpost/");
@@ -159,12 +158,13 @@ async function runAsync(url: string, inputs?: ActionFormValues): Promise<void> {
   }
   const [, kind, name, key, id] = r.split("/"); // [action, kind, name, key, id]
   const result = await api.runAction(kind, name, key, id, inputs);
-  applyActionResult(result);
+  applyActionResult(result, { refresh });
 }
 
 // Exported so the combined record surface (EntityFormWidget) can render the same cluster
 // inline — the form is already React, so it needs no custom-element mount.
 export function ActionsCluster({ items }: { items: ActionItem[] }) {
+  const sourceRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<Set<string>>(new Set());
   const skipReturnFocus = useRef(false);
@@ -173,7 +173,7 @@ export function ActionsCluster({ items }: { items: ActionItem[] }) {
 
   const run = useCallback((it: ActionItem, inputs?: ActionFormValues): Promise<void> | void => {
     if (!isAsync(it.url)) {
-      fire(it.url);
+      openRoute(it.url);
       return;
     }
     if (it.form?.length && !inputs) {
@@ -186,7 +186,7 @@ export function ActionsCluster({ items }: { items: ActionItem[] }) {
       n.add(it.url);
       return n;
     });
-    return runAsync(it.url, inputs)
+    return runAsync(it.url, inputs, surfaceRefreshCallback(sourceRef.current))
       .catch((error) => {
         actionFeedbackFromError(error);
       })
@@ -205,7 +205,7 @@ export function ActionsCluster({ items }: { items: ActionItem[] }) {
   const menu = items.filter((a) => a.placement === "menu");
 
   return (
-    <div className="flex items-center gap-2">
+    <div ref={sourceRef} className="flex items-center gap-2">
       {inline.map((a) => {
         const busy = pending.has(a.url);
         return (
@@ -269,7 +269,7 @@ export function ActionsCluster({ items }: { items: ActionItem[] }) {
                     } else {
                       skipReturnFocus.current = leavesPane(it.url);
                       setOpen(false);
-                      fire(it.url);
+                      openRoute(it.url);
                     }
                   }}
                   className={cn(
@@ -299,7 +299,7 @@ export function ActionsCluster({ items }: { items: ActionItem[] }) {
           dialog={formFor.formDialog}
           defaultsSource={formFor.dynamicForm ? actionSource(formFor.url) : undefined}
           onClose={() => setFormFor(null)}
-          onSubmit={(values) => runAsync(formFor.url, values).then(() => setOpen(false))}
+          onSubmit={(values) => runAsync(formFor.url, values, surfaceRefreshCallback(sourceRef.current)).then(() => setOpen(false))}
         />
       ) : null}
     </div>

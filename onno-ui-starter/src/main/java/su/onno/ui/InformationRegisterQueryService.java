@@ -5,9 +5,13 @@ import su.onno.access.AccessSubject;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.InformationRegisterDescriptor;
 import su.onno.metadata.MetadataRegistry;
+import su.onno.model.Periodicity;
 
 import org.jdbi.v3.core.Jdbi;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +27,7 @@ import java.util.UUID;
  */
 public class InformationRegisterQueryService {
 
+    private final MetadataRegistry registry;
     private final Jdbi jdbi;
     private final RefResolver refResolver;
     private final RecordScopeCompiler scopes;
@@ -34,9 +39,61 @@ public class InformationRegisterQueryService {
 
     public InformationRegisterQueryService(MetadataRegistry registry, Jdbi jdbi, RecordScopeCompiler scopes,
                                            UiAccessService access) {
+        this.registry = registry;
         this.jdbi = jdbi;
         this.scopes = scopes;
         this.refResolver = new RefResolver(registry, jdbi, scopes, access);
+    }
+
+    public InformationRegisterDescriptor require(String name) {
+        return registry.allInformationRegisters().stream()
+                .filter(d -> d.logicalName().equalsIgnoreCase(name))
+                .findFirst().orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Information register not found: " + name));
+    }
+
+    /**
+     * One keyset window of stored records, newest first: by {@code _period} then {@code _id} for a
+     * periodic register, by {@code _id} for a non-periodic one. The cursor is sealed to the caller's
+     * record-access fingerprint like every other feed. {@code filters} must name non-secret
+     * dimensions by field name; anything else is rejected rather than silently widening the read.
+     */
+    public KeysetPage records(AccessSubject subject, InformationRegisterDescriptor desc,
+                              LocalDateTime from, LocalDateTime to, Map<String, String> filters,
+                              String cursor, int limit) {
+        boolean periodic = desc.periodicity() != Periodicity.NONE;
+        if ((!periodic && (from != null || to != null)) || (from != null && to != null && from.isAfter(to))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid period range for this register");
+        }
+        var dimensions = desc.dimensions().stream().filter(d -> !d.secret()).toList();
+        var known = dimensions.stream().map(AttributeDescriptor::fieldName)
+                .collect(java.util.stream.Collectors.toSet());
+        var unknown = filters.keySet().stream().filter(k -> !known.contains(k)).sorted().toList();
+        if (!unknown.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Unknown filter " + String.join(", ", unknown) + "; filter by dimension field names: "
+                            + known.stream().sorted().collect(java.util.stream.Collectors.joining(", ")));
+        }
+        var equality = dimensions.stream().filter(d -> filters.containsKey(d.fieldName()))
+                .map(d -> d.columnName() + "," + filters.get(d.fieldName())).toList();
+        var allowed = dimensions.stream().map(AttributeDescriptor::columnName)
+                .collect(java.util.stream.Collectors.toSet());
+        ListFilter.Result scoped = scopes.clause(desc.javaClass(), subject, AccessMode.READ, desc.tableName())
+                .andInto(ListFilter.parse(equality, null, null, allowed));
+        StringBuilder where = new StringBuilder("1=1");
+        if (from != null) where.append(" AND _period >= :from");
+        if (to != null) where.append(" AND _period <= :to");
+        if (!scoped.isEmpty()) where.append(" AND (").append(scoped.sql()).append(")");
+
+        KeysetWindow.Raw window = KeysetWindow.fetch(jdbi, desc.tableName(), where.toString(), q -> {
+                    if (from != null) q.bind("from", from);
+                    if (to != null) q.bind("to", to);
+                    scoped.bindings().forEach(q::bind);
+                }, periodic ? "_period" : "_id", true, false,
+                new KeysetWindow.Position(cursor, null, null), limit,
+                scopes.policies().fingerprint(subject));
+        EntityQuerySupport.decorateRows(refResolver, allFields(desc), window.rows(), subject);
+        return window.decorated();
     }
 
     /**

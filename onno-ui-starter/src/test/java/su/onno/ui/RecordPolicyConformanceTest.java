@@ -11,6 +11,7 @@ import su.onno.ui.comments.CommentService;
 import su.onno.ui.conformance.LeakTestApp;
 import su.onno.ui.conformance.model.LkTenant;
 import su.onno.ui.conformance.model.LkTenantFacts;
+import su.onno.ui.conformance.model.LkUsage;
 import su.onno.ui.notifications.NotificationRequest;
 import su.onno.ui.notifications.NotificationService;
 import su.onno.ui.presence.PresenceRegistry;
@@ -113,7 +114,7 @@ class RecordPolicyConformanceTest {
                 "GET /api/documents/{name}/{id}/posting-preview", "POST /api/documents/{name}/{id}/unpost",
                 "DELETE /api/documents/{name}/{id}", "POST /api/documents/{name}/batch-delete",
                 "GET /api/registers/{name}/movements", "GET /api/registers/{name}/balance",
-                "GET /api/registers/{name}/turnover",
+                "GET /api/registers/{name}/turnover", "GET /api/information-registers/{name}/records",
                 // List feeds, groups, widget aggregates
                 "GET /api/list/catalogs/{name}", "GET /api/list/documents/{name}",
                 "GET /api/list/catalogs/{name}/groups", "GET /api/list/documents/{name}/groups",
@@ -139,6 +140,7 @@ class RecordPolicyConformanceTest {
                 "GET /api/divkit/documents/{name}", "GET /api/divkit/documents/{name}/{id}",
                 "GET /api/divkit/documents/{name}/new", "GET /api/divkit/documents/{name}/{id}/duplicate",
                 "GET /api/divkit/registers/{name}", "GET /api/divkit/pickers/{kind}/{name}",
+                "GET /api/divkit/record-refresh/{kind}/{name}/{id}",
                 // Task inbox: assignment decides visibility; subject labels are masked by scope
                 "GET /api/tasks")) {
             ROUTES.put(r, Route.SCOPED);
@@ -270,6 +272,9 @@ class RecordPolicyConformanceTest {
                 .title("LEAK-B-notification").link("catalogs/LkTenants/" + tenantB).build());
         notifications.notify(NotificationRequest.to(ownerA.toString()).type("assignment")
                 .title("alpha notification").link("catalogs/LkTenants/" + tenantA).build());
+        // A link whose entity resolves to nothing (removed): a narrowed recipient cannot be shown it.
+        notifications.notify(NotificationRequest.to(ownerA.toString()).type("assignment")
+                .title("LEAK-B-gone-notification").link("catalogs/LkRemoved/" + tenantA).build());
 
         B_IDS.addAll(List.of(ownerB.toString(), tenantB.toString(), instanceB.toString(), jobB.toString()));
     }
@@ -282,6 +287,20 @@ class RecordPolicyConformanceTest {
     }
 
     // ------------------------------------------------------------------------------- the suite
+
+    /**
+     * The fixture leaves {@code onno.schema.mode} unset, so its {@code apply} default must let the
+     * record-scope indexes be created (#460). A balance totals table gets no index from the schema,
+     * so this one exists only if {@link RecordScopeIndexes} ran.
+     */
+    @Test
+    void scopeIndexesAreCreatedUnderTheDefaultSchemaMode() {
+        String index = RecordScopeIndexes.indexName(registry.getRegisterDescriptor(LkUsage.class).totalsTableName(), "tenant");
+        int found = jdbi.withHandle(h -> h.createQuery(
+                        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.INDEXES WHERE UPPER(INDEX_NAME) = UPPER(:name)")
+                .bind("name", index).mapTo(Integer.class).one());
+        assertThat(found).as("record-scope index %s", index).isEqualTo(1);
+    }
 
     @Test
     void noEndpointLeaksAnotherOwnersRecords() throws Exception {
@@ -414,6 +433,7 @@ class RecordPolicyConformanceTest {
     }
 
     private void registersAreScopedByDimension() throws Exception {
+        assertThat((List<?>) jsonMap(ok(get("/api/information-registers/LkTenantFacts/records"))).get("rows")).hasSize(1);
         List<Map<String, Object>> movements = pageRows(ok(get("/api/registers/LkUsage/movements")));
         assertThat(movements).hasSize(1);
         List<Map<String, Object>> balance = pageRows(ok(get("/api/registers/LkUsage/balance")));
@@ -457,10 +477,19 @@ class RecordPolicyConformanceTest {
         assertThat((List<?>) snapshot.get("records")).isEmpty();
         status(post("/api/presence").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"path\":\"/catalogs/LkTenants/" + tenantB + "\",\"action\":\"enter\"}"), 404);
+        // A list or draft route carries no record id: presence on it is not narrowed by record scope.
+        ok(post("/api/presence").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"path\":\"/catalogs/LkTenants\",\"action\":\"enter\"}"));
+        ok(post("/api/presence").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"path\":\"/catalogs/LkTenants/new\",\"action\":\"enter\"}"));
+        List<String> presenceIds = ((List<?>) jsonMap(ok(get("/api/presence"))).get("records")).stream()
+                .map(r -> String.valueOf(((Map<?, ?>) r).get("id"))).toList();
+        assertThat(presenceIds).containsExactlyInAnyOrder("/catalogs/LkTenants", "new");
 
         Map<String, Object> feed = jsonMap(ok(get("/api/notifications").param("limit", "1")));
         assertThat((List<?>) feed.get("rows")).hasSize(1);
-        assertThat(feed.get("items")).isEqualTo(feed.get("rows"));
+        assertThat(feed).doesNotContainKey("items");
+        assertThat(feed.get("unreadCount")).isEqualTo(1);
         assertThat(feed.get("hasMore")).isEqualTo(false);
         assertThat(feed.get("nextCursor")).isNull();
 
@@ -473,6 +502,8 @@ class RecordPolicyConformanceTest {
         ok(get("/api/divkit/catalogs/LkTenants"));
         ok(get("/api/divkit/catalogs/LkTenants/" + tenantA));
         status(get("/api/divkit/catalogs/LkTenants/" + tenantB), 404);
+        ok(get("/api/divkit/record-refresh/catalogs/LkTenants/" + tenantA));
+        status(get("/api/divkit/record-refresh/catalogs/LkTenants/" + tenantB), 404);
         String draft = ok(get("/api/divkit/catalogs/LkTenants/new"));
         assertThat(draft).as("the policy default (the signed-in owner) pre-fills the New form")
                 .contains(ownerA.toString());
@@ -481,6 +512,8 @@ class RecordPolicyConformanceTest {
         ok(get("/api/divkit/documents/LkBuildJobs"));
         ok(get("/api/divkit/documents/LkBuildJobs/" + jobA));
         status(get("/api/divkit/documents/LkBuildJobs/" + jobB), 404);
+        ok(get("/api/divkit/record-refresh/documents/LkBuildJobs/" + jobA));
+        status(get("/api/divkit/record-refresh/documents/LkBuildJobs/" + jobB), 404);
         ok(get("/api/divkit/documents/LkBuildJobs/new"));
         ok(get("/api/divkit/documents/LkBuildJobs/" + jobA + "/duplicate"));
         status(get("/api/divkit/documents/LkBuildJobs/" + jobB + "/duplicate"), 404);
@@ -594,12 +627,17 @@ class RecordPolicyConformanceTest {
         publisher.publish("updated", "document", "LkBuildJobs", jobB, "LEAK-B");
         publisher.publishNotification(ownerA.toString(), Map.of("link", "catalogs/LkTenants/" + tenantB,
                 "title", "LEAK-B"));
+        // The stream withholds what the feed withholds: a link to an entity that resolves to nothing.
+        publisher.publishNotification(ownerA.toString(), Map.of("link", "catalogs/LkRemoved/" + tenantA,
+                "title", "LEAK-B-gone"));
+        publisher.publishNotification("staff", Map.of("link", "catalogs/LkRemoved/" + tenantA,
+                "title", "gone-for-staff"));
         publisher.publish("changed", "register", "*", jobB, null);
 
         String seenByA = String.join("\n", toA.sent);
         assertThat(seenByA).contains(tenantA.toString()).doesNotContain(tenantB.toString()).doesNotContain("LEAK-B");
         assertThat(toA.sent).anySatisfy(s -> assertThat(s).contains("entityName:*").contains("register"));
-        assertThat(String.join("\n", toStaff.sent)).contains(tenantB.toString());
+        assertThat(String.join("\n", toStaff.sent)).contains(tenantB.toString()).contains("gone-for-staff");
     }
 
     /** An emitter that records what would be written to the stream. */

@@ -24,13 +24,16 @@ hooks, context, router, and theme all work, and there is no second React on the 
 import { registerWidget, useState, useEffect, api, html, type WidgetProps } from "@onno/widget-sdk";
 ```
 
-- `registerWidget(type, Component)` — register (or override) the renderer for a widget type.
-- `registerListRenderer(type, Component, options?)` — register the **body renderer for a custom list view**:
-  the component an entity's server-side `list.custom("type")` resolves. Same registry as
-  `registerWidget`, list-shaped props (`ListRendererProps`): `rows` (the current window, fed by the
-  framework-owned search/filters/sort/pagination), `list` (the descriptor — `kind`, `name`, `title`,
-  resolved `columns`, `canWrite`), and `open(row)` / `openUrl(row)` to open a record's detail pane.
-  An unregistered type degrades to the default grid.
+- `registerWidget(type, Component, options?)` registers a dashboard widget.
+  Pass `{ override: true }` to replace a built-in widget.
+- `registerListRenderer(type, Component, options?)` registers the renderer for a
+  custom list view configured with `list.custom("type")`. List renderers have
+  their own registry, so they can reuse dashboard widget names. The component
+  receives `ListRendererProps`, including `rows`, the `list` descriptor, and
+  `open(row)` / `openUrl(row)` for opening records. If no renderer is registered,
+  the list falls back to the default grid.
+  A bundle built with an older SDK that registered list renderers or selection
+  widgets through `registerWidget` still resolves, with a console warning; rebuild it.
 - `React`, `useState`, `useEffect`, `useMemo`, `useRef`, `useCallback`, `useReducer`, `useContext`,
   `useLayoutEffect` — the host React and its hooks (you may equally `import ... from "react"`).
 - `useWidgetUpdates(widget, refresh, options?)` — refetch when the widget's bound entity changes,
@@ -45,7 +48,7 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
 - **UI primitives** — the host's real design-system controls, so a widget matches the product instead
   of shipping hand-rolled lookalikes. Import them **by name** (`import { DatePicker, Select, Button }
   from "@onno/widget-sdk"`) or off the `ui` object (`ui.Select`). Curated subset — `Button`, `Badge`,
-  `Input`, `Label`, `Textarea`, `Checkbox`, `Switch`, `Segmented`, `DatePicker`, `Card`
+  `Input`, `Label`, `Textarea`, `Checkbox`, `Switch`, `Segmented`, `DatePicker`, `RefSelect`, `Card`
   (+ `CardHeader`/`CardTitle`/`CardDescription`/`CardContent`), `Popover`
   (+ `PopoverTrigger`/`PopoverContent`), and `Select`
   (+ `SelectTrigger`/`SelectValue`/`SelectContent`/`SelectItem`/`SelectGroup`). They resolve to the
@@ -57,6 +60,17 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
   server-side `.config(key, value)` values. When the component is embedded through
   `EntityView.detail(DetailSpec)`, `widget.record` additionally carries the saved record's route
   `kind`, logical `name`, `id`, already-loaded `data`, and `readOnly` state.
+- **Navigation** — dispatch an `onno:action` event with an `onno://` URL. Entity routes use the
+  snake_case route name, not the logical name REST uses: for `@Document(name = "SalesOrders")`,
+
+  ```ts
+  window.dispatchEvent(new CustomEvent("onno:action", {
+    detail: `onno://documents/sales_orders/${id}`,
+  }));
+  ```
+
+  A link with the REST spelling (`SalesOrders`) still opens, but the record gets no live updates
+  and no localized tab title.
 
 ## Styling
 
@@ -263,6 +277,50 @@ registerListRenderer("inbox", Inbox, { ownsLoadingMore: true });
 Only the `EntityListWidget` props documented here (`list`, `renderer`, `toolbarPlacement`) are SDK
 contract. Others the host accepts — `initialPage`, `toolbarFooter`, `toolbarOptions.filterSidebar`
 and similar — are host-internal hooks for first-party workspaces and may change without notice.
+
+### Dates in the app's locale
+
+`Intl` with an `undefined` locale formats in the browser's language, so an `en-US` browser writes
+"Nov 6" in an app configured for `en-GB`. Pass `useLocale()` (in a component, re-rendering when
+`/api/config` lands) or `locale()` (anywhere else) instead: it returns `onno.ui.locale`, and
+undefined (the browser's locale) before config arrives, when none is set, or on a host older than
+contract v7.
+
+```tsx
+import { useLocale } from "@onno/widget-sdk";
+const when = new Intl.DateTimeFormat(useLocale(), { day: "numeric", month: "short" }).format(date);
+```
+
+### Reference pickers
+
+Import `RefSelect` to pick a catalog or document record. It is the same control as a generated
+form's reference field: a server-side typeahead (the catalog never loads whole), recent picks first,
+"+ New" opening the target's new-record form, and "Show all…" opening the target's full list —
+columns, filters, folders — in a picker dialog. Requires host contract v7.
+
+```tsx
+import { Label, RefSelect, useState } from "@onno/widget-sdk";
+
+function SupplierField({ eventId }: { eventId: string }) {
+  const [supplier, setSupplier] = useState<string | null>(null);
+  return <>
+    <Label htmlFor="supplier">Supplier</Label>
+    <RefSelect id="supplier" targetName="Contacts" fieldLabel="Supplier" placeholder="Not chosen yet"
+      value={supplier} onChange={setSupplier} clearable allowCreate={false}
+      filter="active = true" optionDecorator="com.example.ui.SupplierOptions"
+      optionContext={{ fieldPath: "vendor", formValues: { wedding: eventId } }} />
+  </>;
+}
+```
+
+`value` is the record id and clearing emits `null`. `filter` is a fixed WidgetFilter predicate
+applied to the dropdown and the dialog alike. `optionDecorator` names a server `RefOptionDecorator`
+bean by class; it receives `optionContext` and can badge, disable or hide options. `allowCreate`,
+`showAll`, `clearable` and `openButton` toggle the "+ New", "Show all…", clear and open-record
+affordances (on, on, off, off by default). `className` merges over the trigger, so a dense row can
+render it as a compact chip; the dropdown keeps a readable minimum width. Pass `valueLabel`
+when the widget already has the picked record's name: it shows at once, and stays for a user who
+may not read the target catalog.
 
 ### Date and time fields
 

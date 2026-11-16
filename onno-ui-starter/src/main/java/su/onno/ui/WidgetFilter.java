@@ -79,7 +79,7 @@ public final class WidgetFilter {
                 log.warn("Ignoring unparseable widget filter clause: {}", clause);
                 continue;
             }
-            String column = columnResolver.apply(m.group(1));
+            String column = columnResolver.apply(m.group(1)).toLowerCase(java.util.Locale.ROOT);;
             if (!IDENTIFIER.matcher(column).matches()
                     || !(allowedColumns.contains(column) || SYSTEM_COLUMNS.contains(column))) {
                 throw new IllegalArgumentException("Unknown widget filter field: " + m.group(1));

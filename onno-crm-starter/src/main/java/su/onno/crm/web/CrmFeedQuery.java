@@ -67,7 +67,7 @@ public final class CrmFeedQuery {
         } while (cursor != null);
     }
 
-    public Window inbox(String sort, boolean descending, String cursor, int limit, int offset,
+    public Window inbox(String sort, boolean descending, String cursor, int limit,
             String context, boolean count, BiConsumer<Handle, Sink> populate) {
         return temporary((handle, table) -> {
             populate.accept(handle, (id, value) -> {
@@ -86,16 +86,14 @@ public final class CrmFeedQuery {
             BiFunction<String, Integer, KeysetWindow.Page<UUID>> fetch = (c, n) -> KeysetWindow.fetch(
                     handle, table, "*", "1=1", q -> {}, order, c, n, context,
                     (rs, ctx) -> rs.getObject("_id", UUID.class));
-            var page = offset > 0 && cursor == null
-                    ? KeysetWindow.legacyOffset(offset, limit, fetch)
-                    : fetch.apply(cursor, limit);
+            var page = fetch.apply(cursor, limit);
             Long total = count ? handle.createQuery("SELECT COUNT(*) FROM " + table).mapTo(Long.class).one() : null;
             return new Window(page, total);
         });
     }
 
     /** Messages and comments share one SQL timeline, scoped by eligible conversation keys. */
-    public <T> KeysetWindow.Page<T> activity(String cursor, int limit, int offset, String context,
+    public <T> KeysetWindow.Page<T> activity(String cursor, int limit, String context,
             BiConsumer<Handle, Sink> populate, Function<Map<String, Object>, T> decorate) {
         return temporary((handle, table) -> {
             populate.accept(handle, (id, ignored) -> handle.createUpdate("INSERT INTO " + table + " (_id) VALUES (:id)")
@@ -112,9 +110,7 @@ public final class CrmFeedQuery {
                     new KeysetWindow.Order("_source", true), new KeysetWindow.Order("_id", true));
             BiFunction<String, Integer, KeysetWindow.Page<Map<String, Object>>> fetch = (c, n) -> KeysetWindow.fetch(
                     handle, source, "*", "1=1", q -> {}, order, c, n, context, new org.jdbi.v3.core.mapper.MapMapper());
-            var page = offset > 0 && cursor == null
-                    ? KeysetWindow.legacyOffset(offset, limit, fetch)
-                    : fetch.apply(cursor, limit);
+            var page = fetch.apply(cursor, limit);
             return page.map(decorate);
         });
     }

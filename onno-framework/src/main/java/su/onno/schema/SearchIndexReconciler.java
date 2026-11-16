@@ -5,6 +5,7 @@ import org.jdbi.v3.core.Jdbi;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,21 +30,44 @@ import java.util.stream.Collectors;
  * <p>Every statement is best-effort: a failure (no {@code pg_trgm}, insufficient privileges, a
  * lock timeout) is logged and the rest continues — search falls back to {@code LIKE} scans.
  * Runs under a {@code pg_try_advisory_lock} so only one node of a scaled-out deployment builds at
- * a time. A no-op on non-PostgreSQL dialects.
+ * a time, and also takes {@link #BUILD_LOCK_KEY}, waiting for it, so it never builds alongside
+ * another background index reconciliation. While it waits it holds no connection; after 30
+ * minutes it gives up and leaves the indexes for the next start. A no-op on non-PostgreSQL
+ * dialects.
  */
 public final class SearchIndexReconciler {
 
     private static final Logger log = LoggerFactory.getLogger(SearchIndexReconciler.class);
 
-    private static final long LOCK_KEY =
+    static final long LOCK_KEY =
             ((long) "onno".hashCode() << 32) | ("search-indexes".hashCode() & 0xFFFFFFFFL);
+
+    /**
+     * The advisory lock every background index reconciliation holds while it inspects, builds and
+     * drops indexes: this one, and the UI starter's record-scope indexes. Two concurrent
+     * {@code CREATE INDEX CONCURRENTLY} builds on one table, or a build and a concurrent drop,
+     * deadlock, so the reconciliations take turns: each waits for this lock rather than skip.
+     */
+    public static final long BUILD_LOCK_KEY =
+            ((long) "onno".hashCode() << 32) | ("index-builds".hashCode() & 0xFFFFFFFFL);
+
+    private static final long BUILD_LOCK_POLL_MILLIS = 1_000;
+
+    /** How long to wait for {@link #BUILD_LOCK_KEY} before leaving the search indexes for the next start. */
+    static final Duration BUILD_LOCK_WAIT = Duration.ofMinutes(30);
 
     private final SchemaGenerator generator;
     private final SearchIndexMode mode;
+    private final Duration buildLockWait;
 
     public SearchIndexReconciler(SchemaGenerator generator, SearchIndexMode mode) {
+        this(generator, mode, BUILD_LOCK_WAIT);
+    }
+
+    SearchIndexReconciler(SchemaGenerator generator, SearchIndexMode mode, Duration buildLockWait) {
         this.generator = generator;
         this.mode = mode;
+        this.buildLockWait = buildLockWait;
     }
 
     /**
@@ -70,20 +94,67 @@ public final class SearchIndexReconciler {
         if (dialect != SqlDialect.POSTGRESQL) {
             return;
         }
-        jdbi.useHandle(handle -> {
-            Boolean locked = handle.createQuery("SELECT pg_try_advisory_lock(:key)")
-                    .bind("key", LOCK_KEY).mapTo(Boolean.class).one();
-            if (!Boolean.TRUE.equals(locked)) {
-                log.debug("Search index reconciliation already running on another node; skipping.");
+        // Polls rather than block in pg_advisory_lock: a statement blocked on the lock holds a
+        // snapshot, and the lock holder's concurrent build waits for every older snapshot. Each
+        // attempt runs on its own short-lived connection, so waiting holds no pooled connection.
+        long deadline = System.nanoTime() + buildLockWait.toNanos();
+        boolean announced = false;
+        while (true) {
+            Attempt attempt = jdbi.withHandle(this::attempt);
+            if (attempt == Attempt.SKIPPED) {
+                log.debug("Search index reconciliation is running or waiting on another node; skipping.");
                 return;
+            }
+            if (attempt == Attempt.DONE) {
+                return;
+            }
+            if (System.nanoTime() >= deadline) {
+                log.warn("Another index reconciliation kept running for {}; search indexes are left for the "
+                        + "next start", buildLockWait);
+                return;
+            }
+            if (!announced) {
+                log.info("Waiting for another index reconciliation to finish before search indexes");
+                announced = true;
+            }
+            try {
+                Thread.sleep(BUILD_LOCK_POLL_MILLIS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    /** One try: this reconciliation's lock, then the shared build lock, then the work. */
+    private Attempt attempt(Handle handle) {
+        if (!tryLock(handle, LOCK_KEY)) {
+            return Attempt.SKIPPED;
+        }
+        try {
+            if (!tryLock(handle, BUILD_LOCK_KEY)) {
+                return Attempt.BUSY;
             }
             try {
                 reconcile(handle);
+                return Attempt.DONE;
             } finally {
-                handle.createQuery("SELECT pg_advisory_unlock(:key)")
-                        .bind("key", LOCK_KEY).mapTo(Boolean.class).one();
+                unlock(handle, BUILD_LOCK_KEY);
             }
-        });
+        } finally {
+            unlock(handle, LOCK_KEY);
+        }
+    }
+
+    private enum Attempt { DONE, SKIPPED, BUSY }
+
+    private static boolean tryLock(Handle handle, long key) {
+        return Boolean.TRUE.equals(handle.createQuery("SELECT pg_try_advisory_lock(:key)")
+                .bind("key", key).mapTo(Boolean.class).one());
+    }
+
+    private static void unlock(Handle handle, long key) {
+        handle.createQuery("SELECT pg_advisory_unlock(:key)").bind("key", key).mapTo(Boolean.class).one();
     }
 
     private void reconcile(Handle handle) {

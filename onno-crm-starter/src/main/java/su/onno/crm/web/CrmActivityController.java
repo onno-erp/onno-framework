@@ -52,15 +52,22 @@ public class CrmActivityController {
                         String direction,String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine,String accountLabel,
                         List<su.onno.crm.service.CrmAttachments.View> attachments,
                         /* Sanitized email HTML; null for plain-text messages and notes. Render isolated. */
-                        String bodyHtml) {
+                        String bodyHtml,
+                        /* Sender account used for the reply, if present. */
+                        String senderAccount) {
         public Entry {
             attachments=attachments==null?List.of():List.copyOf(attachments);
         }
         @SuppressWarnings("unused") // Compatibility constructor for Java clients.
         public Entry(String id,UUID conversationId,String subject,String channel,String kind,String direction,
                 String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine,String accountLabel,
+                List<su.onno.crm.service.CrmAttachments.View> attachments,String bodyHtml) {
+            this(id,conversationId,subject,channel,kind,direction,authorName,body,at,deliveryStatus,authorAvatarUrl,mine,accountLabel,attachments,bodyHtml,null);
+        }
+        public Entry(String id,UUID conversationId,String subject,String channel,String kind,String direction,
+                String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine,String accountLabel,
                 List<su.onno.crm.service.CrmAttachments.View> attachments) {
-            this(id,conversationId,subject,channel,kind,direction,authorName,body,at,deliveryStatus,authorAvatarUrl,mine,accountLabel,attachments,null);
+            this(id,conversationId,subject,channel,kind,direction,authorName,body,at,deliveryStatus,authorAvatarUrl,mine,accountLabel,attachments,null,null);
         }
         public Entry(String id,UUID conversationId,String subject,String channel,String kind,String direction,
                 String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine,String accountLabel) {
@@ -71,22 +78,12 @@ public class CrmActivityController {
             this(id,conversationId,subject,channel,kind,direction,authorName,body,at,deliveryStatus,authorAvatarUrl,mine,null,List.of());
         }
     }
-    public record Feed(List<Entry> rows, String nextCursor, boolean hasMore) {
-        /** Deprecated alias for one release. */
-        @com.fasterxml.jackson.annotation.JsonProperty("entries")
-        public List<Entry> entries() { return rows; }
-    }
+    public record Feed(List<Entry> rows, String nextCursor, boolean hasMore) {}
     private void require(Principal principal){
         workspaces.requireAccess(principal,false);
     }
-    /** Source-compatible Java overload; the HTTP API uses cursor. */
-    public Feed read(UUID customer,int offset,int limit,Principal principal) {
-        return read(customer,offset,limit,null,principal);
-    }
-    @GetMapping public Feed read(@PathVariable UUID customer,@RequestParam(defaultValue="0") int offset,
-            @RequestParam(defaultValue="100") int limit,@RequestParam(required=false) String cursor,Principal principal) {
+    @GetMapping public Feed read(@PathVariable UUID customer,@RequestParam(defaultValue="100") int limit,@RequestParam(required=false) String cursor,Principal principal) {
         require(principal);
-        if(offset<0)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"offset must be non-negative");
         UUID canonical=contacts.canonical(customer);
         contacts.requireRead(canonical,principal);
         var redirects=contacts.redirects();
@@ -95,7 +92,7 @@ public class CrmActivityController {
         Map<UUID,Conversation> selectedConversations=new HashMap<>();
         Map<UUID,String> accountLabels=new HashMap<>();
         String context="crm-activity:"+canonical+":"+principal.getName()+":"+new TreeSet<>(access.roles(principal));
-        var page=feeds.activity(cursor,limit,offset,context,(handle,sink)->feeds.scan(handle,batch->{
+        var page=feeds.activity(cursor,limit,context,(handle,sink)->feeds.scan(handle,batch->{
             var related=batch.stream().filter(c->c.getCustomer()!=null
                     && canonical.equals(CrmContactService.canonical(c.getCustomer(),redirects))).toList();
             for(var conversation:workspaces.accessible(related,principal,false))sink.add(conversation.getId(),null);
@@ -115,7 +112,7 @@ public class CrmActivityController {
                 return new Entry("message:"+id,conversationId,conversation.getSubject(),channel,
                         message.getKind().name(),message.getDirection().name(),message.getAuthorName(),message.getBody(),
                         message.getSentAt(),message.getDeliveryStatus().name(),author==null?null:messageAvatars.get(author),
-                        author!=null&&author.equals(me.recordId()),accountLabel,attachments.viewsOf(message),message.getBodyHtml());
+                        author!=null&&author.equals(me.recordId()),accountLabel,attachments.viewsOf(message),message.getBodyHtml(),message.getSenderAccount());
             }
             var note=comments.find(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));
             String author=note.authorId();

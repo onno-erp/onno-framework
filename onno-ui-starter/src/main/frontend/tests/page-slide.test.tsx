@@ -5,7 +5,7 @@ import { usePageSlide } from "@/lib/use-page-slide";
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 it("snaps on mount and breakpoints, slides forward/back, and cancels interrupted motion", async () => {
   const cancel = vi.fn();
-  const animate = vi.fn(() => ({ finished: new Promise(() => {}), cancel }));
+  const animate = vi.fn((_keyframes: Keyframe[]) => ({ finished: new Promise(() => {}), cancel }));
   Object.defineProperty(HTMLElement.prototype, "animate", {configurable:true, value:animate});
   vi.stubGlobal("matchMedia", () => ({matches:false}));
   function Pages({page, enabled = true}: {page:string; enabled?:boolean}) {

@@ -231,7 +231,8 @@ public class CatalogQueryService {
                 scopes.policies().fingerprint(subject), search, eq, in, like, prefix, ge, le, widgetFilter);
         String col = surface.safeSort(sortColumn);
 
-        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le,
+                surface.filterableColumns(), surface.numericColumns());
         WidgetFilter.Result wf = widgetFilter(desc, surface, widgetFilter);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
@@ -288,7 +289,8 @@ public class CatalogQueryService {
                       List<String> prefix, List<String> ge, List<String> le,
                       String widgetFilter) {
         EntitySurfaceDescriptor surface = surface(desc);
-        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le,
+                surface.filterableColumns(), surface.numericColumns());
         WidgetFilter.Result wf = widgetFilter(desc, surface, widgetFilter);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
@@ -325,7 +327,8 @@ public class CatalogQueryService {
         boolean date = isTemporalColumn(desc, groupColumn);
         String groupExpr = ListGroups.groupExpression(groupColumn, date, granularity);
 
-        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le,
+                surface.filterableColumns(), surface.numericColumns());
         WidgetFilter.Result wf = widgetFilter(desc, surface, widgetFilter);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);

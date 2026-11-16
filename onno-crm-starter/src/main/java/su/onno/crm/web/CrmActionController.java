@@ -24,7 +24,7 @@ public class CrmActionController {
             CatalogQueryService catalogs,@Value("${onno.ui.read-only:false}") boolean readOnly) {
         this.workspaces=workspaces;this.actions=actions;this.access=access;this.catalogs=catalogs;this.readOnly=readOnly;
     }
-    private boolean allowed(Action action,Principal principal) {
+    private boolean allowed(Action<?> action,Principal principal) {
         return action.isServer() && action.scope()!=ActionScope.TOOLBAR &&
             (action.roles().isEmpty() || access.hasAnyRole(principal,action.roles()));
     }
@@ -36,7 +36,7 @@ public class CrmActionController {
         boolean writable=!readOnly && workspaces.permitted(definition,principal,true);
         var record=row(id);
         return actions.resolvedForEntity(Conversation.class).stream().filter(a->allowed(a,principal)).map(a->{
-            var state=UiActionResolver.recordActionState(a,record);
+            var state=UiActionResolver.recordActionState(a,record,catalogs.forClass(Conversation.class).attributes());
             return Map.of("id",a.key(),"label",state.label(),"visible",state.visible(),"enabled",writable&&state.enabled());
         }).filter(a->Boolean.TRUE.equals(a.get("visible"))).toList();
     }
@@ -47,10 +47,9 @@ public class CrmActionController {
         var action=actions.find(Conversation.class,key);
         if(action==null)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Unknown action");
         if(!allowed(action,principal))throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-        var state=UiActionResolver.recordActionState(action,row(id));
+        var state=UiActionResolver.recordActionState(action,row(id),catalogs.forClass(Conversation.class).attributes());
         if(!state.visible() || !state.enabled())throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Action unavailable");
-        var result=action.handler().apply(ActionContext.from("catalogs","CrmConversations",id,principal.getName(),body)
-                .withSubject(subject));
+        var result=action.handler().apply(ActionContext.from("catalogs","CrmConversations",id,principal.getName(),body,subject));
         return result==null?ActionResult.ok():result;
     }
 }

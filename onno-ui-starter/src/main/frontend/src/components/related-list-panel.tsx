@@ -1,7 +1,7 @@
 import { useRequestScope } from "@/hooks/use-request-scope";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "@/components/ui/toast";
 import { Plus, Trash2 } from "lucide-react";
+import { notifyError } from "@/lib/notify-error";
 import type { AttributeMeta, EntityRecord, RelatedListMeta } from "@/lib/types";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -69,12 +69,12 @@ export function RelatedListPanel({
     if (!parentId) { setLoading(false); return; }
     setLoading(true);
     try {
-      const page = await api.getRelatedList(parentKind, parentName, parentId, meta.name);
+      const page = await api.getRelatedList(parentKind, parentName, parentId, meta.name, undefined, { silent: true });
       if (!current()) return;
       setRows(page.rows);
       setNextCursor(page.nextCursor);
     } catch (e) {
-      if (current()) toast.error(`Couldn't load ${title}: ${e instanceof Error ? e.message : String(e)}`);
+      if (current()) notifyError(e, { format: (m) => `Couldn't load ${title}: ${m}` });
     } finally {
       if (current()) setLoading(false);
     }
@@ -85,14 +85,14 @@ export function RelatedListPanel({
     const current = requests.capture();
     setLoading(true);
     try {
-      const page = await api.getRelatedList(parentKind, parentName, parentId, meta.name, nextCursor);
+      const page = await api.getRelatedList(parentKind, parentName, parentId, meta.name, nextCursor, { silent: true });
       if (!current()) return;
       setRows(previous => {
         const have = new Set(previous.map(row => row.id ?? row._id));
         return [...previous, ...page.rows.filter(row => !have.has(row.id ?? row._id))];
       });
       setNextCursor(page.nextCursor);
-    } catch (failure) { if (current()) toast.error(String(failure)); }
+    } catch (failure) { if (current()) notifyError(failure); }
     finally { if (current()) setLoading(false); }
   };
 
@@ -109,11 +109,11 @@ export function RelatedListPanel({
       await api.createCatalogItem(meta.sourceName, {
         [meta.viaField]: parentId,
         [meta.displayField]: targetId,
-      });
+      }, { silent: true });
       setAdding(false);
       await reload();
     } catch (e) {
-      toast.error(`Couldn't add: ${e instanceof Error ? e.message : String(e)}`);
+      notifyError(e, { format: (m) => `Couldn't add: ${m}` });
     } finally {
       setBusy(false);
     }
@@ -122,10 +122,10 @@ export function RelatedListPanel({
   const remove = async (rowId: string) => {
     setBusy(true);
     try {
-      await api.deleteCatalogItem(meta.sourceName, rowId);
+      await api.deleteCatalogItem(meta.sourceName, rowId, { silent: true });
       await reload();
     } catch (e) {
-      toast.error(`Couldn't remove: ${e instanceof Error ? e.message : String(e)}`);
+      notifyError(e, { format: (m) => `Couldn't remove: ${m}` });
     } finally {
       setBusy(false);
     }

@@ -83,6 +83,7 @@ public class UiEventPublisher {
     private final UiAccessService access;
     private final Supplier<SseEmitter> emitterFactory;
     private RecordScopeCompiler scopes;
+    private RecordAccess recordAccess;
     private org.jdbi.v3.core.Jdbi jdbi;
     private MetadataRegistry registry;
 
@@ -125,11 +126,15 @@ public class UiEventPublisher {
                 KEEPALIVE_SECONDS, KEEPALIVE_SECONDS, TimeUnit.SECONDS);
     }
 
-    /** Enable per-record scope filtering of record events (set by the auto-configuration). */
+    /**
+     * Enable per-record scope filtering of record events (set by the auto-configuration). Notification
+     * links are gated by the same {@link RecordAccess#canReadRoute} rule as the REST feed.
+     */
     public void setRecordScopes(RecordScopeCompiler scopes, org.jdbi.v3.core.Jdbi jdbi, MetadataRegistry registry) {
         this.scopes = scopes;
         this.jdbi = jdbi;
         this.registry = registry;
+        this.recordAccess = scopes == null || jdbi == null ? null : new RecordAccess(scopes, access, jdbi, false);
     }
 
     /**
@@ -287,22 +292,15 @@ public class UiEventPublisher {
     /** The catalog/document an event is about, or {@code null} when it is not about one record. */
     private RecordType recordTypeOf(String entityType, String entityName) {
         if (registry == null || entityName == null || "*".equals(entityName)) return null;
-        String normalized = entityName.replace(" ", "").replace("_", "").toLowerCase();
         boolean catalog = "catalog".equals(entityType) || "comment".equals(entityType);
         boolean document = "document".equals(entityType) || "comment".equals(entityType);
         if (catalog) {
-            for (CatalogDescriptor d : registry.allCatalogs()) {
-                if (d.logicalName().replace(" ", "").replace("_", "").toLowerCase().equals(normalized)) {
-                    return new RecordType(d.javaClass(), d.tableName());
-                }
-            }
+            CatalogDescriptor d = EntityNames.catalog(registry, entityName);
+            if (d != null) return new RecordType(d.javaClass(), d.tableName());
         }
         if (document) {
-            for (DocumentDescriptor d : registry.allDocuments()) {
-                if (d.logicalName().replace(" ", "").replace("_", "").toLowerCase().equals(normalized)) {
-                    return new RecordType(d.javaClass(), d.tableName());
-                }
-            }
+            DocumentDescriptor d = EntityNames.document(registry, entityName);
+            if (d != null) return new RecordType(d.javaClass(), d.tableName());
         }
         return null;
     }
@@ -319,11 +317,11 @@ public class UiEventPublisher {
 
         RecordGate(RecordType record, Object id) {
             this.record = record;
-            this.id = asUuid(id);
+            this.id = RecordRoute.uuidOrNull(id);
         }
 
         boolean admits(Subscriber subscriber) {
-            if (scopes == null || record == null || subscriber.subject() == null) return true;
+            if (scopes == null || record == null) return true;
             ScopeClause clause = scopes.clause(record.type(), subscriber.subject(), AccessMode.READ, record.table());
             if (clause.isAll()) return true;
             if (id == null) return false; // a scoped viewer never gets an unidentifiable record event
@@ -341,24 +339,17 @@ public class UiEventPublisher {
         }
     }
 
-    /** A gate for a notification whose {@code link} routes to one catalog/document record. */
-    private RecordGate recordGateForLink(Object link) {
-        if (link == null) return new RecordGate(null, null);
-        String[] parts = java.util.Arrays.stream(link.toString().split("[/?#]"))
-                .filter(p -> !p.isBlank()).toArray(String[]::new);
-        if (parts.length < 3) return new RecordGate(null, null);
-        String type = "catalogs".equals(parts[0]) ? "catalog" : "documents".equals(parts[0]) ? "document" : null;
-        if (type == null || asUuid(parts[2]) == null) return new RecordGate(null, null);
-        return new RecordGate(recordTypeOf(type, parts[1]), parts[2]);
-    }
-
-    private static UUID asUuid(Object id) {
-        if (id == null) return null;
-        if (id instanceof UUID u) return u;
+    /**
+     * Whether a notification linking to {@code link} may reach {@code subscriber}: the REST feed's
+     * {@link RecordAccess#canReadRoute} rule, so the live toast and the refetched feed always agree.
+     */
+    private boolean linkReadable(Subscriber subscriber, Object link) {
+        if (recordAccess == null || link == null) return true;
         try {
-            return UUID.fromString(id.toString());
-        } catch (IllegalArgumentException notAUuid) {
-            return null;
+            return recordAccess.canReadRoute(subscriber.subject(), link.toString());
+        } catch (RuntimeException e) {
+            log.debug("Record-scope check for a notification failed; not delivering: {}", e.getMessage());
+            return false;
         }
     }
 
@@ -413,9 +404,9 @@ public class UiEventPublisher {
         if (recipientId == null) {
             return;
         }
-        RecordGate gate = recordGateForLink(payload.get("link"));
+        Object link = payload.get("link");
         for (Subscriber subscriber : subscribers) {
-            if (recipientId.equals(subscriber.userId()) && gate.admits(subscriber)) {
+            if (recipientId.equals(subscriber.userId()) && linkReadable(subscriber, link)) {
                 send(subscriber, "notification", payload);
             }
         }

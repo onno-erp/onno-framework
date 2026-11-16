@@ -56,9 +56,9 @@ class CrmActivityControllerTest {
   when(conversations.findAllActive()).thenReturn(List.of(first,second,hidden));when(workspaces.canAccess(first,principal,false)).thenReturn(true);when(workspaces.canAccess(second,principal,false)).thenReturn(true);
   message(first,"Email");
   message(second,"WhatsApp");
-  var feed=controller.read(customer,0,100,principal);assertThat(feed.entries()).extracting(CrmActivityController.Entry::body).containsExactly("WhatsApp","Email");
+  var feed=controller.read(customer,100,null,principal);assertThat(feed.rows()).extracting(CrmActivityController.Entry::body).containsExactly("WhatsApp","Email");
   verify(messages,never()).findByConversationAndDeletionMarkFalseOrderBySentAtAsc(Ref.of(Conversation.class,hidden.getId()));verify(comments,never()).list(any(),any(),eq(hidden.getId()));
-  assertThat(controller.read(customer,0,1,principal).hasMore()).isTrue();
+  assertThat(controller.read(customer,1,null,principal).hasMore()).isTrue();
  }
  /**
   * The chat pane renders from this feed rather than from /conversations/{id}/messages, so a reply's
@@ -72,7 +72,7 @@ class CrmActivityControllerTest {
   var reply=message(c,"");reply.setKind(MessageKind.AGENT_REPLY);reply.setDirection(MessageDirection.OUTBOUND);
   reply.setAttachments("/api/media/2026/09/quote.pdf\n/api/media/2026/09/plan.png");
   when(messages.findByConversationAndDeletionMarkFalseOrderBySentAtAsc(Ref.of(Conversation.class,c.getId()))).thenReturn(List.of(reply));
-  var entry=controller.read(customer,0,100,principal).entries().getFirst();
+  var entry=controller.read(customer,100,null,principal).rows().getFirst();
   assertThat(entry.attachments()).extracting(su.onno.crm.service.CrmAttachments.View::filename)
     .containsExactly("quote.pdf","plan.png");
   assertThat(entry.attachments()).extracting(su.onno.crm.service.CrmAttachments.View::image)
@@ -89,9 +89,9 @@ class CrmActivityControllerTest {
     new su.onno.ui.comments.Comment(UUID.randomUUID(),"catalogs","crm_conversations",c.getId(),null,"Admin","Unlinked",null,now.minusSeconds(2),null));
   for(var note:notes){jdbc.useHandle(h->h.execute("INSERT INTO onno_comments VALUES (?,?,?,false,'catalogs','crm_conversations')",note.id(),c.getId(),java.sql.Timestamp.from(note.createdAt())));when(comments.find(note.id())).thenReturn(Optional.of(note));}
   when(avatars.avatarsFor(any())).thenReturn(Map.of("alice-id","/media/alice.png","ben-id","/media/ben.png"));
-  var feed=controller.read(customer,0,100,principal);
-  assertThat(feed.entries()).extracting(CrmActivityController.Entry::mine).containsExactly(true,false,false);
-  assertThat(feed.entries()).extracting(CrmActivityController.Entry::authorAvatarUrl).containsExactly("/media/alice.png","/media/ben.png",null);
+  var feed=controller.read(customer,100,null,principal);
+  assertThat(feed.rows()).extracting(CrmActivityController.Entry::mine).containsExactly(true,false,false);
+  assertThat(feed.rows()).extracting(CrmActivityController.Entry::authorAvatarUrl).containsExactly("/media/alice.png","/media/ben.png",null);
  }
  @Test void accountContextComesOnlyFromReadableConversations() {
   var controller=controller();var visible=conversation(Channel.EMAIL);var hidden=conversation(Channel.EMAIL);
@@ -100,7 +100,7 @@ class CrmActivityControllerTest {
   when(inboxes.findActiveById(inbox.getId())).thenReturn(Optional.of(inbox));
   when(conversations.findAllActive()).thenReturn(List.of(visible,hidden));when(workspaces.canAccess(visible,principal,false)).thenReturn(true);
   message(visible,"Hello");
-  assertThat(controller.read(customer,0,100,principal).entries()).extracting(CrmActivityController.Entry::accountLabel).containsExactly("Sales · sales@example.com");
+  assertThat(controller.read(customer,100,null,principal).rows()).extracting(CrmActivityController.Entry::accountLabel).containsExactly("Sales · sales@example.com");
   verify(inboxes,never()).findActiveById(hidden.getInbox().id());
  }
  @Test void readOnlyModeRejectsManualActivities() {

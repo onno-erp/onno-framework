@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "@/components/ui/toast";
 import { Check } from "lucide-react";
 import { api } from "@/lib/api";
+import { notifyError } from "@/lib/notify-error";
 import type { DashboardWidgetMeta, SettingMeta } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -66,11 +67,12 @@ export function SettingWidget({ widget }: { widget: DashboardWidgetMeta }) {
     if (!meta) return;
     setSaving(true);
     try {
-      await api.saveSettings({ [meta.name]: value });
+      // Silent: this widget owns the failure toast (with its "Couldn't save" context).
+      await api.saveSettings({ [meta.name]: value }, { silent: true });
       toast.success("Setting saved");
       setBaseline(value);
     } catch (e) {
-      toast.error(`Couldn't save: ${e instanceof Error ? e.message : String(e)}`);
+      notifyError(e, { format: (m) => `Couldn't save: ${m}` });
     } finally {
       setSaving(false);
     }

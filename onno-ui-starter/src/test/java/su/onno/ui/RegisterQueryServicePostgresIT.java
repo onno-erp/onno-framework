@@ -50,6 +50,7 @@ class RegisterQueryServicePostgresIT {
         MetadataRegistry registry = new MetadataRegistry();
         MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
         registry.registerAccumulation(scanner.scanRegister(RevenueRegisterFixture.class));
+        registry.registerAccumulation(scanner.scanRegister(RegisterQueryServiceSignedTotalsTest.BalanceRegisterFixture.class));
         new SchemaGenerator(registry).execute(jdbi);
 
         service = new RegisterQueryService(registry, jdbi);
@@ -72,30 +73,47 @@ class RegisterQueryServicePostgresIT {
     }
 
     @Test
+    void historicalBalanceCastsCutoffAndUuidFilterOnPostgres() {
+        var balance = service.require("TestBalance");
+        jdbi.useHandle(h -> {
+            h.execute("DELETE FROM " + balance.tableName());
+            h.execute("INSERT INTO " + balance.tableName()
+                    + " (_id, _period, _active, _document_ref, _movement_type, property, amount)"
+                    + " SELECT _id, _period, _active, _document_ref, _movement_type, property, amount FROM "
+                    + descriptor.tableName());
+        });
+        var rows = service.balance(AccessSubject.system(), balance,
+                Map.of("property", property.toString()), "2024-06-01T10:00:00");
+        assertThat(rows).hasSize(1);
+        assertThat((BigDecimal) rows.getFirst().get("amount")).isEqualByComparingTo("100");
+        assertThat(service.balance(AccessSubject.system(), balance, Map.of(), "2024-06-01T09:59:59")).isEmpty();
+    }
+
+    @Test
     void turnover_withStringDateBounds_castsAndAggregatesOnPostgres() {
-        List<Map<String, Object>> rows = service.turnover(AccessSubject.system(), 
+        List<Map<String, Object>> rows = service.turnover(AccessSubject.system(),
                 descriptor, "1970-01-01T00:00:00", "2999-12-31T23:59:59", Map.of());
 
         assertThat(rows).hasSize(1);
-        assertThat(rows.get(0)).containsEntry("property", property);
-        assertThat((BigDecimal) rows.get(0).get("amount")).isEqualByComparingTo("100.00");
+        assertThat(rows.getFirst()).containsEntry("property", property);
+        assertThat((BigDecimal) rows.getFirst().get("amount")).isEqualByComparingTo("100.00");
     }
 
     @Test
     void turnover_convertsUuidFilterFromHttpTextBeforeBindingOnPostgres() {
-        List<Map<String, Object>> rows = service.turnover(AccessSubject.system(), 
+        List<Map<String, Object>> rows = service.turnover(AccessSubject.system(),
                 descriptor, "1970-01-01T00:00:00", "2999-12-31T23:59:59",
                 Map.of("property", property.toString()));
 
         assertThat(rows).hasSize(1);
-        assertThat(rows.get(0)).containsEntry("property", property);
+        assertThat(rows.getFirst()).containsEntry("property", property);
     }
 
     @Test
     void turnover_boundsCompareAsTimestamps_notLexically() {
         // A window that starts after the movement must exclude it — proving the bound is
         // compared as a timestamp, not as a string.
-        List<Map<String, Object>> rows = service.turnover(AccessSubject.system(), 
+        List<Map<String, Object>> rows = service.turnover(AccessSubject.system(),
                 descriptor, "2025-01-01T00:00:00", "2999-12-31T23:59:59", Map.of());
 
         assertThat(rows).isEmpty();
@@ -103,15 +121,15 @@ class RegisterQueryServicePostgresIT {
 
     @Test
     void movements_withStringDateBounds_returnsRowOnPostgres() {
-        List<Map<String, Object>> rows = service.movements(AccessSubject.system(), 
+        List<Map<String, Object>> rows = service.movements(AccessSubject.system(),
                 descriptor, "2024-01-01T00:00:00", "2024-12-31T23:59:59");
 
         assertThat(rows).hasSize(1);
-        assertThat(rows.get(0)).containsEntry("property", property);
+        assertThat(rows.getFirst()).containsEntry("property", property);
     }
 
     @Test
-    void movementsWindow_isBoundedByStartAndSize_andCounts() {
+    void movementsPage_isBoundedByStartAndSize_andCounts() {
         // Two more (newer) movements → 3 total; the page is newest-first by _period.
         insertMovement(LocalDateTime.of(2024, 7, 1, 10, 0), new BigDecimal("200.00"));
         insertMovement(LocalDateTime.of(2024, 8, 1, 10, 0), new BigDecimal("300.00"));
@@ -119,17 +137,18 @@ class RegisterQueryServicePostgresIT {
         assertThat(service.movementsCount(AccessSubject.system(), descriptor, null, null, null)).isEqualTo(3L);
 
         // First window of 2, default order (_period DESC) → Aug then Jul.
-        List<Map<String, Object>> first = service.movementsWindow(AccessSubject.system(), 
-                descriptor, null, null, null, null, true, 0, 2);
+        var firstPage = service.movementsPage(AccessSubject.system(),
+                descriptor, null, null, null, null, true, null, 2);
+        List<Map<String, Object>> first = firstPage.rows();
         assertThat(first).hasSize(2);
-        assertThat((BigDecimal) first.get(0).get("amount")).isEqualByComparingTo("300.00");
+        assertThat((BigDecimal) first.getFirst().get("amount")).isEqualByComparingTo("300.00");
         assertThat((BigDecimal) first.get(1).get("amount")).isEqualByComparingTo("200.00");
 
         // Second window → only the remaining (oldest) row.
-        List<Map<String, Object>> second = service.movementsWindow(AccessSubject.system(), 
-                descriptor, null, null, null, null, true, 2, 2);
+        List<Map<String, Object>> second = service.movementsPage(AccessSubject.system(),
+                descriptor, null, null, null, null, true, firstPage.nextCursor(), 2).rows();
         assertThat(second).hasSize(1);
-        assertThat((BigDecimal) second.get(0).get("amount")).isEqualByComparingTo("100.00");
+        assertThat((BigDecimal) second.getFirst().get("amount")).isEqualByComparingTo("100.00");
 
         // The count honours the period window (timestamp comparison, not lexical).
         assertThat(service.movementsCount(AccessSubject.system(), descriptor, "2024-07-15T00:00:00", "2999-12-31T00:00:00", null))
@@ -137,21 +156,39 @@ class RegisterQueryServicePostgresIT {
     }
 
     @Test
-    void movementsWindow_sortsByAValidatedColumn_elseFallsBack() {
+    void movementsPage_numberRangeOnAResourceBindsNumericOnPostgres() {
+        // Postgres has no "numeric >= character varying" operator: a number-range bound must bind
+        // as a number (H2 would coerce a string silently and hide the failure).
+        insertMovement(LocalDateTime.of(2024, 7, 1, 10, 0), new BigDecimal("200.00"));
+        insertMovement(LocalDateTime.of(2024, 8, 1, 10, 0), new BigDecimal("300.00"));
+
+        ListFilter.Result range = ListFilter.parse(null, null, null, null,
+                List.of("amount,150"), List.of("amount,300"),
+                service.movementFilterColumns(descriptor), service.numericFilterColumns(descriptor));
+
+        assertThat(service.numericFilterColumns(descriptor)).containsExactly("amount");
+        assertThat(service.movementsCount(AccessSubject.system(), descriptor, null, null, range)).isEqualTo(2L);
+        List<Map<String, Object>> rows = service.movementsPage(AccessSubject.system(),
+                descriptor, null, null, range, null, true, null, 10).rows();
+        assertThat(rows).extracting(r -> ((BigDecimal) r.get("amount")).intValue()).containsExactly(300, 200);
+    }
+
+    @Test
+    void movementsPage_sortsByAValidatedColumn_elseFallsBack() {
         insertMovement(LocalDateTime.of(2024, 7, 1, 10, 0), new BigDecimal("200.00"));
         insertMovement(LocalDateTime.of(2024, 8, 1, 10, 0), new BigDecimal("300.00"));
 
         // Sort by the resource ascending — proves a client-supplied (validated) sort column is honoured.
-        List<Map<String, Object>> rows = service.movementsWindow(AccessSubject.system(), 
-                descriptor, null, null, null, "amount", false, 0, 10);
+        List<Map<String, Object>> rows = service.movementsPage(AccessSubject.system(),
+                descriptor, null, null, null, "amount", false, null, 10).rows();
         assertThat(rows).hasSize(3);
-        assertThat((BigDecimal) rows.get(0).get("amount")).isEqualByComparingTo("100.00");
+        assertThat((BigDecimal) rows.getFirst().get("amount")).isEqualByComparingTo("100.00");
         assertThat((BigDecimal) rows.get(2).get("amount")).isEqualByComparingTo("300.00");
 
         // An unknown sort column falls back to the default (_period DESC) instead of failing.
-        List<Map<String, Object>> fallback = service.movementsWindow(AccessSubject.system(), 
-                descriptor, null, null, null, "bogus", true, 0, 10);
-        assertThat((BigDecimal) fallback.get(0).get("amount")).isEqualByComparingTo("300.00");
+        List<Map<String, Object>> fallback = service.movementsPage(AccessSubject.system(),
+                descriptor, null, null, null, "bogus", true, null, 10).rows();
+        assertThat((BigDecimal) fallback.getFirst().get("amount")).isEqualByComparingTo("300.00");
     }
 
     private void insertMovement(LocalDateTime period, BigDecimal amount) {

@@ -175,7 +175,7 @@ class MetadataToolFactoryTest {
     }
 
     @Test
-    void registerMovementsReadsBeyondOneThousandRowsWithCursorAndLegacyOffset() {
+    void registerMovementsReadsBeyondOneThousandRowsWithCursor() {
         SyncToolSpecification movements = movementTool();
         CallToolResult first = callMovements(movements, Map.of("name", "Cash"));
         assertThat(first.isError()).isNotEqualTo(true);
@@ -186,11 +186,16 @@ class MetadataToolFactoryTest {
         assertThat(movementRows(continued).getFirst()).containsEntry("sequence", 902);
         assertThat(movementRows(first).getFirst()).containsEntry("sequence", 1002);
 
-        CallToolResult next = callMovements(movements, Map.of("name", "Cash", "offset", 1000));
-        assertThat(movementRows(next)).hasSize(2);
-        assertThat(movementRows(next).getFirst()).containsEntry("sequence", 2);
-        assertThat(movementRows(callMovements(movements, Map.of("name", "Cash", "offset", 1002))))
-                .isEmpty();
+        int total = movementRows(first).size();
+        var current = first;
+        while (Boolean.TRUE.equals(((Map<?, ?>) ((Map<?, ?>) current.structuredContent()).get("result")).get("hasMore"))) {
+            var payload = (Map<?, ?>) ((Map<?, ?>) current.structuredContent()).get("result");
+            current = callMovements(movements, Map.of("name", "Cash", "cursor", payload.get("nextCursor")));
+            total += movementRows(current).size();
+        }
+        assertThat(total).isEqualTo(1002);
+        assertThat(((Map<?, ?>) ((Map<?, ?>) current.structuredContent()).get("result")).get("nextCursor")).isNull();
+
     }
 
     @Test
@@ -198,11 +203,11 @@ class MetadataToolFactoryTest {
         var movements = movementTool();
         var result = callMovements(movements, Map.of("name", "Cash", "filters", Map.of("name", "Alpha"),
                 "from", "2026-01-01T00:00:10", "to", "2026-01-01T00:00:20",
-                "limit", 2, "offset", 1, "sort", "_period", "descending", false));
+                "limit", 2, "sort", "_period", "descending", false));
         assertThat(result.isError()).isNotEqualTo(true);
         assertThat(movementRows(result)).hasSize(2);
-        assertThat(movementRows(result).getFirst()).containsEntry("sequence", 11).containsEntry("name", "Alpha");
-        assertThat(movementRows(result).getLast()).containsEntry("sequence", 12);
+        assertThat(movementRows(result).getFirst()).containsEntry("sequence", 10).containsEntry("name", "Alpha");
+        assertThat(movementRows(result).getLast()).containsEntry("sequence", 11);
 
         var beta = callMovements(movements, Map.of("name", "Cash", "filters", Map.of("name", "Beta")));
         assertThat(movementRows(beta)).hasSize(1);
@@ -212,7 +217,7 @@ class MetadataToolFactoryTest {
     @Test
     void registerMovementsRejectsInvalidPagingAndUnknownDimensions() {
         var movements = movementTool();
-        for (var arguments : List.of(Map.of("limit", 0), Map.of("limit", 1001), Map.of("offset", -1),
+        for (var arguments : List.of(Map.of("limit", 0), Map.of("limit", 1001),
                 Map.of("filters", Map.of("unknown", "value")))) {
             Map<String, Object> args = new java.util.LinkedHashMap<>(arguments);
             args.put("name", "Cash");
@@ -254,13 +259,29 @@ class MetadataToolFactoryTest {
         when(registerQuery.require("Cash")).thenReturn(cash);
         when(registerQuery.balancePage(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(cash),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.isNull(),
-                org.mockito.ArgumentMatchers.eq(false), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq(100)))
+                org.mockito.ArgumentMatchers.eq(false), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq(100), org.mockito.ArgumentMatchers.isNull()))
                 .thenReturn(new su.onno.query.KeysetWindow.Page<>(List.of(Map.of("amount", 10)), "next", true));
         SyncToolSpecification balance = byName(factory(new OnnoMcpProperties()).build(), "register_balance");
         CallToolResult result = balance.callHandler().apply(exchange(),
                 new CallToolRequest("register_balance", Map.of("name", "Cash")));
         assertThat(result.isError()).isNotEqualTo(true);
         assertThat(movementRows(result)).containsExactly(Map.of("amount", 10));
+        assertThat(balance.tool().inputSchema().properties()).doesNotContainKey("offset");
+    }
+
+    @Test
+    void registerBalanceRetainsAsOfInThePagedContract() {
+        when(registerQuery.require("Cash")).thenReturn(cash);
+        when(registerQuery.balancePage(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(cash),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.eq(false), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.eq(100), org.mockito.ArgumentMatchers.eq("2024-03-31")))
+                .thenReturn(new su.onno.query.KeysetWindow.Page<>(List.of(Map.of("amount", 42)), null, false));
+        var balance = byName(factory(new OnnoMcpProperties()).build(), "register_balance");
+        var result = balance.callHandler().apply(exchange(), new CallToolRequest("register_balance",
+                Map.of("name", "Cash", "asOf", "2024-03-31")));
+        assertThat(movementRows(result)).containsExactly(Map.of("amount", 42));
+        assertThat(balance.tool().inputSchema().properties()).containsKey("asOf");
     }
 
     private static McpSyncServerExchange exchange() {

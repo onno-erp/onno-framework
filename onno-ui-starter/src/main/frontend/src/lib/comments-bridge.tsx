@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import { SurfaceHost } from "@/lib/surface-refresh";
 import { EntityCommentsWidget, type CommentTarget } from "@/components/entity-comments-widget";
 import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 
@@ -84,9 +85,11 @@ export function CommentsPortals() {
     <>
       {live.map((m) =>
         createPortal(
-          <IslandErrorBoundary label={`${m.target.name} comments`}>
-            <EntityCommentsWidget target={m.target} />
-          </IslandErrorBoundary>,
+          <SurfaceHost.Provider value={m.el}>
+            <IslandErrorBoundary label={`${m.target.name} comments`}>
+              <EntityCommentsWidget target={m.target} />
+            </IslandErrorBoundary>
+          </SurfaceHost.Provider>,
           m.el,
           String(m.id)
         )

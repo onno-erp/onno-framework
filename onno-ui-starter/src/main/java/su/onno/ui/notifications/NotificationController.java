@@ -26,7 +26,7 @@ import java.util.UUID;
  *
  * <ul>
  *   <li>{@code GET /api/notifications} — one newest-first timeline window {@code {rows, nextCursor,
- *       hasMore, unreadCount}}; {@code items} aliases {@code rows} for one release;
+ *       hasMore, unreadCount}};
  *       {@code ?unread=true} restricts to unread, {@code ?cursor=} resumes.</li>
  *   <li>{@code POST /api/notifications/{id}/read} — mark one read.</li>
  *   <li>{@code POST /api/notifications/read-all} — mark every unread one read.</li>
@@ -63,7 +63,6 @@ public class NotificationController {
         Map<String, Object> out = new LinkedHashMap<>();
         if (recipient == null) {
             out.put("rows", List.of());
-            out.put("items", List.of());
             out.put("nextCursor", null);
             out.put("hasMore", false);
             out.put("unreadCount", 0);
@@ -76,7 +75,6 @@ public class NotificationController {
         // withheld — its title snapshots the record's label.
         var rows = page.items().stream().map(NotificationController::toJson).toList();
         out.put("rows", rows);
-        out.put("items", rows); // deprecated alias for one release
         out.put("nextCursor", page.nextCursor());
         out.put("hasMore", page.hasMore());
         out.put("unreadCount", notifications.unreadCount(recipient, visibility));

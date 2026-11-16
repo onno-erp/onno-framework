@@ -58,13 +58,11 @@ public class RecordAccess {
         return compiler.policies();
     }
 
-    @SuppressWarnings("unused") // Public API for consuming applications.
     public RecordScopeCompiler compiler() {
         return compiler;
     }
 
     /** The effective scope of {@code type} for {@code subject} ({@link RecordScope#all()} when unscoped). */
-    @SuppressWarnings("unused") // Public API for consuming applications.
     public RecordScope scopeFor(AccessSubject subject, Class<?> type, AccessMode mode) {
         return compiler.policies().scopeFor(type, subject, mode);
     }
@@ -119,102 +117,150 @@ public class RecordAccess {
     }
 
     /**
-     * Whether a UI route to one record — {@code catalogs|documents/{name}/{id}} (leading slash and
-     * trailing segments allowed) — is readable by a record-scoped {@code subject}. Anything that is
-     * not such a route (a page, a list, a non-UUID id), an unknown entity, or an unscoped subject
-     * yields {@code true}: this narrows by record scope only; entity grants are checked elsewhere.
+     * Whether a UI route is readable by {@code subject} as far as record scope goes. A route that
+     * addresses no record ({@link RecordRoute#parse} is empty: a page, a list, a {@code new} draft)
+     * yields {@code true}; a record route follows {@link #canReadRecord(AccessSubject, RecordRoute)}.
+     * Entity grants are checked elsewhere.
      */
-    @SuppressWarnings("unused") // Public API for consuming applications.
     public boolean canReadRoute(AccessSubject subject, String route) {
-        if (route == null || compiler.policies().isEmpty()) return true;
-        String[] parts = java.util.Arrays.stream(route.split("[/?#]"))
-                .filter(p -> !p.isBlank()).toArray(String[]::new);
-        if (parts.length < 3) return true;
-        return canReadRecord(subject, parts[0], parts[1], parts[2]);
+        return RecordRoute.parse(route).map(r -> canReadRecord(subject, r)).orElse(true);
     }
 
-    /** As {@link #canReadRoute} for an already split {@code kind}/{@code name}/{@code id}. */
+    /**
+     * Whether {@code subject} may read record {@code id} of the catalog/document {@code kind}/{@code name}
+     * ({@code name} is the decoded logical name; a former {@code previousNames} entry also resolves).
+     * An id that is not a UUID is denied — it addresses no record — whether or not policies are
+     * declared. Otherwise as {@link #canReadRecord(AccessSubject, RecordRoute)}.
+     */
     public boolean canReadRecord(AccessSubject subject, String kind, String name, String id) {
-        if (subject == null || compiler.policies().isEmpty()) return true;
-        UUID uuid;
-        try {
-            uuid = UUID.fromString(id);
-        } catch (IllegalArgumentException | NullPointerException notARecord) {
-            return true;
+        requireSubject(subject);
+        UUID uuid = RecordRoute.uuidOrNull(id);
+        return uuid != null && canReadRecord(subject, new RecordRoute(kind, name, uuid));
+    }
+
+    /**
+     * Whether {@code subject} may read the record {@code route} addresses. A {@code null} subject
+     * throws (as in {@link RecordPolicies#scopeFor}) whether or not policies are declared. A subject no
+     * policy narrows (superuser, exempt, or not covered) is never narrowed here; for a subject some
+     * policy narrows, an unknown entity is denied, since no policy can be ruled out for it. Entity
+     * grants are not checked for an unnarrowed subject: to authorize access in application code use
+     * {@link #can} or {@link #require}.
+     */
+    public boolean canReadRecord(AccessSubject subject, RecordRoute route) {
+        return readable(subject, List.of(route)).contains(route);
+    }
+
+    /**
+     * The subset of {@code routes} {@code subject} may read, by the rule of
+     * {@link #canReadRecord(AccessSubject, RecordRoute)} — with one query per narrowed entity rather
+     * than per route, for a feed or snapshot of many links.
+     */
+    public Set<RecordRoute> readable(AccessSubject subject, Collection<RecordRoute> routes) {
+        requireSubject(subject);
+        if (routes == null || routes.isEmpty()) return Set.of();
+        if (!narrowsReads(subject)) return new LinkedHashSet<>(routes);
+        var registry = compiler.policies().registry();
+        Map<Class<?>, List<RecordRoute>> byType = new java.util.LinkedHashMap<>();
+        for (RecordRoute r : routes) {
+            Class<?> type = EntityNames.recordClass(registry, r.kind(), r.name());
+            if (type != null) byType.computeIfAbsent(type, t -> new ArrayList<>()).add(r);
         }
-        Class<?> type = entityClass(kind, name);
-        if (type == null || !compiler.isScoped(type, subject, AccessMode.READ)) return true;
-        return !filter(subject, type, List.of(uuid), AccessMode.READ).isEmpty();
+        Set<RecordRoute> out = new LinkedHashSet<>();
+        byType.forEach((type, typed) -> {
+            if (!compiler.isScoped(type, subject, AccessMode.READ)) {
+                out.addAll(typed);
+                return;
+            }
+            Set<UUID> ids = filter(subject, type, typed.stream().map(RecordRoute::id).toList(), AccessMode.READ);
+            for (RecordRoute r : typed) {
+                if (ids.contains(r.id())) out.add(r);
+            }
+        });
+        return out;
     }
 
-    /** Normalized record target of an internal UI route; arbitrary external links have no target. */
-    public record RouteTarget(String kind, String name, UUID id) {}
-
-    public static RouteTarget routeTarget(String route) {
-        if (route == null) return null;
-        String[] parts = java.util.Arrays.stream(route.split("[/?#]"))
-                .filter(p -> !p.isBlank()).toArray(String[]::new);
-        if (parts.length < 3 || !(parts[0].equals("catalogs") || parts[0].equals("documents"))) return null;
-        try {
-            return new RouteTarget(parts[0], normalizeRouteName(parts[1]), UUID.fromString(parts[2]));
-        } catch (IllegalArgumentException invalid) { return null; }
+    /**
+     * Whether some policy narrows what {@code subject} reads (false with no policies or for a
+     * superuser) — when false, no record-scope check can change an answer for it.
+     */
+    public boolean narrowsReads(AccessSubject subject) {
+        requireSubject(subject);
+        if (subject.superuser()) return false;
+        for (Class<?> type : compiler.policies().all().keySet()) {
+            if (compiler.isScoped(type, subject, AccessMode.READ)) return true;
+        }
+        return false;
     }
 
-    private static String normalizeRouteName(String name) {
-        return java.net.URLDecoder.decode(name, java.nio.charset.StandardCharsets.UTF_8)
-                .replace(" ", "").replace("_", "").toLowerCase(java.util.Locale.ROOT);
+    private static void requireSubject(AccessSubject subject) {
+        if (subject == null) {
+            throw new IllegalArgumentException("AccessSubject is required; pass AccessSubject.system() for trusted code");
+        }
     }
 
-    /** SQL counterpart of canReadRoute for normalized notification targets, applied before LIMIT. */
+    /** Normalize notification targets with the same parser used by route authorization. */
+    public static RecordRoute routeTarget(String link) {
+        return RecordRoute.parse(link)
+                .map(r -> new RecordRoute(r.kind(), normalizedRouteName(r.name()), r.id())).orElse(null);
+    }
+
+    private static String normalizedRouteName(String name) {
+        return name.replace(" ", "").replace("_", "").toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /** SQL equivalent of readable(), applied before the notification page limit and badge count. */
     public ScopeClause notificationScope(AccessSubject subject) {
-        List<String> clauses = new ArrayList<>();
+        requireSubject(subject);
+        if (!narrowsReads(subject)) return ScopeClause.ALL;
+        var registry = compiler.policies().registry();
+        Map<Class<?>, List<String>> names = new java.util.LinkedHashMap<>();
+        registry.allCatalogs().forEach(d -> {
+            var aliases = new ArrayList<String>(); aliases.add(d.logicalName());
+            if (d.previousNames() != null) aliases.addAll(d.previousNames());
+            names.put(d.javaClass(), aliases);
+        });
+        registry.allDocuments().forEach(d -> {
+            var aliases = new ArrayList<String>(); aliases.add(d.logicalName());
+            if (d.previousNames() != null) aliases.addAll(d.previousNames());
+            names.put(d.javaClass(), aliases);
+        });
+        List<String> visible = new ArrayList<>();
+        visible.add("_target_kind IS NULL"); // External links and non-record routes carry no target.
         Map<String, Object> bindings = new java.util.LinkedHashMap<>();
-        var registry = compiler.policies().registry();
-        List<Class<?>> types = new ArrayList<>();
-        registry.allCatalogs().forEach(d -> types.add(d.javaClass()));
-        registry.allDocuments().forEach(d -> types.add(d.javaClass()));
         int index = 0;
-        for (Class<?> type : types) {
-            if (!compiler.isScoped(type, subject, AccessMode.READ)) continue;
+        for (var entry : names.entrySet()) {
+            Class<?> type = entry.getKey();
             ScopedEntity entity = compiler.policies().entity(type);
-            String suffix = "nt" + index++;
             String kind = entity.kind() == ScopedEntity.Kind.CATALOG ? "catalogs" : "documents";
-            String alias = "_" + suffix;
-            ScopeClause scope = compiler.clause(type, subject, AccessMode.READ, alias);
-            String sql = scope.sql();
-            for (var entry : scope.bindings().entrySet()) {
-                sql = sql.replace(":" + entry.getKey(), ":" + suffix + entry.getKey());
-                bindings.put(suffix + entry.getKey(), entry.getValue());
+            String prefix = "nt" + index++;
+            String alias = "_" + prefix;
+            List<String> matchingNames = new ArrayList<>();
+            for (String name : entry.getValue()) {
+                // Current names win over previousNames belonging to another entity.
+                if (EntityNames.recordClass(registry, kind, name) != type) continue;
+                String parameter = prefix + "name" + matchingNames.size();
+                matchingNames.add("_target_name = :" + parameter);
+                bindings.put(parameter, normalizedRouteName(name));
             }
-            bindings.put(suffix + "kind", kind);
-            bindings.put(suffix + "name", normalizeRouteName(entity.logicalName()));
-            String target = "_target_kind = :" + suffix + "kind AND _target_name = :" + suffix + "name";
-            clauses.add("(NOT (COALESCE(" + target + ", false)) OR (_target_id IS NOT NULL AND EXISTS (SELECT 1 FROM "
-                    + entity.tableName() + " " + alias + " WHERE " + alias + "._id = _target_id"
-                    + (sql.isEmpty() ? "" : " AND (" + sql + ")")
-                    + (entityGrant(subject, entity, AccessMode.READ) ? "" : " AND 1 = 0") + ")))" );
-        }
-        return new ScopeClause(String.join(" AND ", clauses), bindings);
-    }
-
-    private Class<?> entityClass(String kind, String name) {
-        String normalized = name == null ? "" : java.net.URLDecoder.decode(name, java.nio.charset.StandardCharsets.UTF_8)
-                .replace(" ", "").replace("_", "").toLowerCase(java.util.Locale.ROOT);
-        var registry = compiler.policies().registry();
-        if ("catalogs".equals(kind)) {
-            for (var d : registry.allCatalogs()) {
-                if (d.logicalName().replace(" ", "").replace("_", "").toLowerCase(java.util.Locale.ROOT).equals(normalized)) {
-                    return d.javaClass();
+            bindings.put(prefix + "kind", kind);
+            String target = "_target_kind = :" + prefix + "kind AND (" + String.join(" OR ", matchingNames) + ")";
+            if (compiler.isScoped(type, subject, AccessMode.READ)) {
+                ScopeClause scope = compiler.clause(type, subject, AccessMode.READ, alias);
+                String predicate = scope.sql();
+                for (var bound : scope.bindings().entrySet()) {
+                    predicate = predicate.replaceAll(":" + java.util.regex.Pattern.quote(bound.getKey()) + "(?![A-Za-z0-9_])",
+                            java.util.regex.Matcher.quoteReplacement(":" + prefix + bound.getKey()));
+                    bindings.put(prefix + bound.getKey(), bound.getValue());
                 }
+                target += " AND EXISTS (SELECT 1 FROM " + entity.tableName() + " " + alias
+                        + " WHERE " + alias + "._id = _target_id"
+                        + (predicate.isEmpty() ? "" : " AND (" + predicate + ")")
+                        + (entityGrant(subject, entity, AccessMode.READ) ? "" : " AND 1 = 0") + ")";
             }
-        } else if ("documents".equals(kind)) {
-            for (var d : registry.allDocuments()) {
-                if (d.logicalName().replace(" ", "").replace("_", "").toLowerCase(java.util.Locale.ROOT).equals(normalized)) {
-                    return d.javaClass();
-                }
-            }
+            visible.add("(" + target + ")");
         }
-        return null;
+        // Unknown record entities remain hidden for narrowed subjects, matching readable().
+        return new ScopeClause("(" + String.join(" OR ", visible) + ")", bindings);
     }
 
     /** Entity-level grant (role + {@link UiEntityAccessPolicy}) for {@code mode}. */
@@ -231,6 +277,14 @@ public class RecordAccess {
                     subject instanceof AccessSubject.User u ? u.username() : subject, type.getSimpleName(), id, mode);
         }
         return new ResponseStatusException(HttpStatus.NOT_FOUND);
+    }
+
+    /** Log a scope-based 404 decided elsewhere (query/command services), when enabled. */
+    void logDenial(AccessSubject subject, String entity, Object id, AccessMode mode) {
+        if (logDenials && log.isDebugEnabled()) {
+            log.debug("Record access denied: subject={} entity={} id={} mode={}",
+                    subject instanceof AccessSubject.User u ? u.username() : subject, entity, id, mode);
+        }
     }
 
     private ScopedEntity requireEntity(Class<?> type) {

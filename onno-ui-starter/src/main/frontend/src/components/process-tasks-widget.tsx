@@ -1,8 +1,11 @@
 import { useRequestScope } from "@/hooks/use-request-scope";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSurfaceRefresh } from "@/lib/surface-refresh";
+import { openRoute } from "@/lib/navigation";
 import { CheckCircle2, Clock3, Loader2, Search, UserRoundPlus } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
+import { notifyError } from "@/lib/notify-error";
 import type {
   DashboardWidgetMeta,
   ProcessWorkItem,
@@ -145,6 +148,7 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
   useEffect(() => {
     void reload();
   }, [reload]);
+  useSurfaceRefresh(() => { void reload(); });
 
   useEffect(() => {
     let current = true;
@@ -172,7 +176,7 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
       toast.success("Task claimed");
       await reload();
     } catch (failure) {
-      toast.error(failure instanceof Error ? failure.message : "Could not claim task");
+      notifyError(failure, { fallback: "Could not claim task" });
       await reload();
     } finally {
       setBusy(null);
@@ -187,7 +191,7 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
       setCompleting(null);
       await reload();
     } catch (failure) {
-      toast.error(failure instanceof Error ? failure.message : "Could not complete task");
+      notifyError(failure, { fallback: "Could not complete task" });
       setCompleting(null);
       await reload();
     } finally {
@@ -209,7 +213,7 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
       setHistoryCursor(page.nextCursor);
     } catch (failure) {
       if (current()) {
-        toast.error(failure instanceof Error ? failure.message : "Could not load task history");
+        notifyError(failure, { fallback: "Could not load task history" });
         setHistoryTask(null);
       }
     } finally {
@@ -341,11 +345,9 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
                                   return;
                                 }
                                 event.preventDefault();
-                                window.dispatchEvent(new CustomEvent("onno:action", {
-                                  detail: `onno://${task.subject!.kind}/${
+                                openRoute(`onno://${task.subject!.kind}/${
                                     toSnakeCase(task.subject!.entityName)
-                                  }/${task.subject!.id}`,
-                                }));
+                                  }/${task.subject!.id}`);
                               }}
                             >
                               Open {subjectLabel}
@@ -591,7 +593,7 @@ function DelegateTaskDialog({
       toast.success(`Task delegated to ${target.display}`);
       await onDelegated();
     } catch (failure) {
-      toast.error(failure instanceof Error ? failure.message : "Could not delegate task");
+      notifyError(failure, { fallback: "Could not delegate task" });
     } finally {
       setSubmitting(false);
     }

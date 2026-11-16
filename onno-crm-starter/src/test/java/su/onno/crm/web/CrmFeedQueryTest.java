@@ -44,7 +44,7 @@ class CrmFeedQueryTest {
             var feed = new CrmFeedQuery(springJdbi, repository, metadata,
                     new org.springframework.jdbc.datasource.DataSourceTransactionManager(pool));
             var nested = new org.springframework.jdbc.core.JdbcTemplate(pool);
-            var result = feed.inbox("unreadCount", false, null, 1, 0, "single-pool", false, (h, sink) -> {
+            var result = feed.inbox("unreadCount", false, null, 1, "single-pool", false, (h, sink) -> {
                 assertThat(nested.queryForObject("SELECT 1", Integer.class)).isEqualTo(1);
                 sink.add(visible, 10);
             });
@@ -54,34 +54,33 @@ class CrmFeedQueryTest {
         }
     }
 
-    @Test void inboxUsesStableTypedKeysOptionalCountAndLegacyOffset() {
+    @Test void inboxUsesStableTypedKeysOptionalCount() {
         var values=new LinkedHashMap<UUID,Object>();for(int i=1;i<=6;i++)values.put(new UUID(0,i),i>4?null:10);
-        var first=inbox(values,null,2,0,false,"alice");assertThat(first.total()).isNull();
+        var first=inbox(values,null,2,false,"alice");assertThat(first.total()).isNull();
         assertThat(first.page().rows()).containsExactly(new UUID(0,1),new UUID(0,2));
         values.put(new UUID(0,0),20);
-        var rest=inbox(values,first.page().nextCursor(),100,0,true,"alice");
+        var rest=inbox(values,first.page().nextCursor(),100,true,"alice");
         assertThat(rest.page().rows()).containsExactly(new UUID(0,3),new UUID(0,4),new UUID(0,5),new UUID(0,6));
         assertThat(rest.page().nextCursor()).isNull();assertThat(rest.total()).isEqualTo(7);
-        assertThat(inbox(values,"damaged",2,0,false,"alice").page().rows()).containsExactly(new UUID(0,0),new UUID(0,1));
-        assertThat(inbox(values,null,2,2,false,"alice").page().rows()).containsExactly(new UUID(0,2),new UUID(0,3));
-        assertThatThrownBy(()->inbox(values,first.page().nextCursor(),2,0,false,"bob"))
+        assertThat(inbox(values,"damaged",2,false,"alice").page().rows()).containsExactly(new UUID(0,0),new UUID(0,1));
+        assertThatThrownBy(()->inbox(values,first.page().nextCursor(),2,false,"bob"))
                 .isInstanceOfSatisfying(ResponseStatusException.class,e->assertThat(e.getStatusCode().value()).isEqualTo(400));
     }
-    private CrmFeedQuery.Window inbox(Map<UUID,Object> values,String cursor,int size,int offset,boolean count,String context) {
-        return query.inbox("unreadCount",true,cursor,size,offset,context,count,(h,sink)->values.forEach(sink::add));
+    private CrmFeedQuery.Window inbox(Map<UUID,Object> values,String cursor,int size,boolean count,String context) {
+        return query.inbox("unreadCount",true,cursor,size,context,count,(h,sink)->values.forEach(sink::add));
     }
     @Test void activityUnionsSourcesBeforePagingAndNeverReadsHiddenConversationEntries() {
         var ids=new ArrayList<>();String cursor=null;
         do {
-            var page=query.activity(cursor,2,0,"customer:alice",(h,sink)->sink.add(visible,null),row->row.get("_source")+":"+row.get("_id"));
+            var page=query.activity(cursor,2,"customer:alice",(h,sink)->sink.add(visible,null),row->row.get("_source")+":"+row.get("_id"));
             ids.addAll(page.rows());cursor=page.nextCursor();
         }while(cursor!=null);
         assertThat(ids).hasSize(6).doesNotHaveDuplicates();assertThat(ids.getFirst()).isEqualTo("note:"+new UUID(0,6));
         assertThat(ids).doesNotContain("message:"+new UUID(0,100));
-        var first=query.activity(null,1,0,"customer:alice",(h,sink)->sink.add(visible,null),row->row.get("_id"));
-        assertThatThrownBy(()->query.activity(first.nextCursor(),1,0,"customer:bob",(h,sink)->sink.add(visible,null),row->row))
+        var first=query.activity(null,1,"customer:alice",(h,sink)->sink.add(visible,null),row->row.get("_id"));
+        assertThatThrownBy(()->query.activity(first.nextCursor(),1,"customer:bob",(h,sink)->sink.add(visible,null),row->row))
                 .isInstanceOf(ResponseStatusException.class);
-        assertThat(query.activity("damaged",1,0,"customer:alice",(h,sink)->sink.add(visible,null),row->row.get("_id")).rows())
+        assertThat(query.activity("damaged",1,"customer:alice",(h,sink)->sink.add(visible,null),row->row.get("_id")).rows())
                 .containsExactly(new UUID(0,6));
     }
     @Test void sourceTraversalIsBatchedWithoutUsingTheUnboundedRepositoryMethod() {

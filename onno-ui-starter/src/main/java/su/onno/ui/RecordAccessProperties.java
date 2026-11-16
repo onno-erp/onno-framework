@@ -18,9 +18,12 @@ public class RecordAccessProperties {
     private boolean logDenials = false;
 
     /**
-     * Create an index for every column a record policy scopes by (if missing) at startup, so a
-     * scoped list never degrades to a full table scan. Skipped when {@code onno.schema.mode} does
-     * not allow DDL; a missing index is then logged as a warning.
+     * Create an index for every column a record policy scopes by (if missing), so a scoped list
+     * never degrades to a full table scan. Skipped when {@code onno.schema.mode} does not resolve
+     * to {@code apply} (blank counts as {@code apply}); the statements are then logged as a
+     * warning. On PostgreSQL the indexes are built in the background with
+     * {@code CREATE INDEX CONCURRENTLY}, so neither startup nor writes wait, and an index left
+     * invalid by an interrupted build is rebuilt; other databases build them at startup.
      */
     private boolean createIndexes = true;
 

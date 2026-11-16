@@ -16,6 +16,12 @@ every `/api/**` route is authenticated, reads need only the session cookie (or a
 
 ## Endpoints
 
+Historical register balances: `register_balance` accepts optional `asOf`: an inclusive
+ISO-8601 local date-time (`2024-03-31T18:00`) or a date (`2024-03-31`, the whole day); offsets are rejected with `400`. REST: `GET /api/registers/{name}/balance?asOf=2024-03-31T23:59:59`.
+With `asOf`, BALANCE registers sum active movements through the cutoff (receipts minus expenses),
+grouped by dimensions; dimension filters and record access policies apply before aggregation.
+Without `asOf`, reads keep the fast materialized totals path. The 5,000-row limit still applies.
+
 ```text
 GET /api/catalogs/{name}/{id}            one catalog row
 GET /api/catalogs/{name}/children?parent={uuid}   hierarchical children (hierarchical catalogs); folders=true: folders only, with hasChildFolders
@@ -27,9 +33,11 @@ POST /api/ref-options/search                  bounded contextual reference optio
 POST /api/ref-options/recent                  remember a picked reference value (204, CSRF)
 POST /api/ref-options/decorate                which of a picker window's ids the dropdown would offer (CSRF)
 GET /api/divkit/pickers/{kind}/{name}         list descriptor for the "Show all..." picker dialog
+GET /api/divkit/record-refresh/{kind}/{name}/{id}  saved record and current header actions for the open form
 GET /api/registers/{name}/movements
 GET /api/registers/{name}/balance
 GET /api/registers/{name}/turnover?from=&to=
+GET /api/information-registers/{name}/records?from=&to=&cursor=&limit=
 GET /api/process-definitions                 latest versions plus typed graph descriptors
 GET /api/processes                           caller-visible process instances
 POST /api/processes/{definitionKey}          start; body is the definition's typed payload as JSON
@@ -44,6 +52,28 @@ GET /api/tasks/{workItemId}/history       ordered task audit trail
 POST /api/tasks/{workItemId}/delegate     body: {"targetActorId":"identity-record-uuid","reason":"…"}
 POST /api/tasks/{workItemId}/complete        body: {"outcome":"ENUM_CONSTANT"}
 ```
+
+Information-register records return one keyset window of stored rows, including periodic
+history, in the same envelope as the catalog/document feeds: `{rows, nextCursor, hasMore}`.
+Use `from` / `to` as optional inclusive ISO local date-times (for example
+`2024-03-31T23:59:59`); the API reads stored periods without changing bucket granularity.
+Pass dimension Java field names as equality query parameters, for example
+`?customer=<uuid>&region=North`. Reference and enumeration dimensions use their stored UUIDs.
+Only declared non-secret dimensions participate in filtering; any other query parameter is
+rejected with `400` instead of being ignored.
+
+`limit` defaults to 100 and is clamped to 1..500. Pass the previous `nextCursor` back as `cursor`
+for the next window; `nextCursor` is `null` (and `hasMore` false) on the last one. The cursor is
+sealed to the caller's record access, so a cursor issued to another user is rejected with `400`.
+Rows are ordered by period descending, then ID descending to break ties; nonperiodic (`NONE`)
+registers order by ID descending and reject `from` / `to` with `400`.
+Invalid dates and reversed ranges also return `400`.
+
+The response uses logical names: `id`, `period` (periodic registers only), dimension/resource/
+attribute field names, and reference `*Display` / `*Ref` sidecars. `@AccessControl` gates the route
+(`403` without a read grant); record policies filter rows before pagination, and restricted references
+are masked by the common resolver. Secret attributes carry the common redacted sentinel.
+Unknown register names return `404`. This is a read-only route; it does not expose SQL or writes.
 
 The optional `onno-crm-starter` adds a focused command surface for its packaged inbox widget:
 
@@ -104,6 +134,11 @@ token mappings fail atomically.
 }], "nextCursor": null, "hasMore": false}
 ```
 
+For a mounted record form, `GET /api/divkit/record-refresh/{kind}/{name}/{id}` returns
+`{record, actions, readOnly}`. Pass the form's `profile` and `viewport` to preserve action placement.
+The response applies the same access rules as the record surface. `record` uses the logical
+representation and `actions` uses the form descriptor's header action shape.
+
 Action handlers use the successful response `{refresh, feedback}`. Feedback has `severity`
 (`info|success|warning|error`) and `presentation` (`toast|dialog|inline`). Text is structured through
 `ActionToast`, `ActionDialog`, or `ActionFeedback`; navigation is static action declaration
@@ -163,26 +198,26 @@ No SQL OFFSET or full-result in-memory slicing is used for pagination. SQL COUNT
 | `/api/list/registers/{name}/movements`, `/api/registers/{name}/movements` | Validated sort (default `_period DESC`) + `_id`; active movements, date/filter/record scope |
 | `/api/list/registers/{name}/balance`, `/api/registers/{name}/balance` | Validated sort + remaining dimension primary-key columns; BALANCE registers only |
 | `/api/registers/{name}/turnover` | Grouped dimension tuple; record/dimension/period filters before aggregation and pagination |
-| `/api/notifications` | `_created_at DESC, _id DESC`; recipient and target record scope before LIMIT; `items` alias retained |
+| `/api/notifications` | `_created_at DESC, _id DESC`; recipient and target record scope before LIMIT; no legacy array alias |
 | `/api/comments/{kind}/{name}/{id}` | `_created_at ASC, _id ASC`; parent record read access required |
 | `/api/{catalogs|documents}/{name}/{id}/related/{relatedName}` | Parent access and junction scope; catalog `_code, _id` or information register `_id` |
 | `/api/catalogs/{name}/children`, `/api/catalogs/{name}/tree` | `_is_folder DESC, _description ASC, _id ASC`; paged children or flat nodes with parent links |
 | `/api/crm/inbox-workspaces/{key}` | Validated sort + UUID; workspace, customer and personal-account checks precede SQL page selection |
-| `/api/crm/contacts/{customer}/activity` | SQL UNION of messages/notes; time, source and UUID DESC; only readable conversations; `entries` alias retained |
+| `/api/crm/contacts/{customer}/activity` | SQL UNION of messages/notes; time, source and UUID DESC; only readable conversations; no legacy array alias |
 | `/api/crm/inbox-workspaces/{key}/conversations/{id}/comments` | Shared comment page after workspace authorization |
 | `/api/processes`, `/api/tasks` | Start/creation time + UUID; instance participation or task assignment applied in SQL |
 | Process history, executions, task history | Requested instance/task authorization; sequence or entry time + UUID |
 
-**Compatibility, one release.** Deprecated numeric `offset` parameters on register movement/list
-and CRM inbox/activity reads remain supported by bounded seek traversal. They are not returned as
-cursors. Deep offsets still cost proportional work, so migrate to `cursor`. Notification `items`
-and CRM activity `entries` are aliases of the exact same `rows`; remove clients' dependency on
-these keys before the following release. Legacy unpaged Java register methods reject overflow
-rather than returning an apparently complete partial accounting result. Register SDK methods
-return `CollectionPage<EntityRecord>` and accept `PageRequest`; widgets must follow the cursor.
-The legacy SDK `listCatalog`/`listDocuments` methods remain explicitly bounded previews (500);
-use `listCatalogPage`/`listDocumentsPage` for continuation. Aggregate widgets consume every turnover
-page before computing totals.
+**Breaking release.** Numeric `offset` pagination and the notification `items` / CRM activity
+`entries` aliases are removed. Use `cursor` and read `rows`; no positional traversal helper is
+retained. Legacy bounded Java preview methods remain explicitly bounded and reject accounting
+result overflow rather than returning apparently complete partial totals. Register SDK methods
+return `CollectionPage<EntityRecord>` and accept `PageRequest`; widgets follow `nextCursor`.
+Catalog/document previews remain capped at 500; use `listCatalogPage` / `listDocumentsPage`
+for continuation. Aggregate widgets consume every turnover page before computing totals.
+Historical balance pages accept `asOf` as an inclusive local date-time or a whole local date;
+access scope is applied before summation, filters to the resulting balances, and cursors are
+bound to the cutoff. Omit `asOf` to use current materialized totals.
 
 **Backward/focus navigation.** Catalog/document pages additionally expose `prevCursor`,
 `hasPrevious` and optional `focus`. `before=<prevCursor>` requests the preceding window;
@@ -460,7 +495,7 @@ must `addEventListener("updated", …)` (etc.) per event name you care about.
 For authenticated MCP clients, `register_movements` and `register_balance` return the same
 `{rows,nextCursor,hasMore}` page in MCP's `result` wrapper. Both accept `cursor`, `limit`
 (default 100, maximum 500) and dimension-name `filters`. Movements additionally accept inclusive
-`from`/`to`, validated `sort`, `descending`, and deprecated `offset` for one release. Filters and
+`from`/`to`, validated `sort`, and `descending`. Filters and
 record scope are applied in SQL before seeking. Unknown dimensions and invalid movement page
 bounds produce an MCP error. See [Collection pagination](#collection-pagination) for the contract.
 
@@ -512,7 +547,24 @@ When `onno.crm.channels.gmail.enabled=true`, `CrmChannelAccess`-protected `POST 
 returns `{ "url": "https://accounts.google.com/…" }`. The session-bound, single-use GET callback at
 `/api/crm/gmail/callback` exchanges the authorization code and returns to the local `returnPath` supplied to the authorize request.
 Credentials are never returned. Existing `/api/crm/channels` includes Gmail health and actions;
-message reading and reply enqueueing retain the standard CRM endpoints and authorization.
+message reading and reply enqueueing retain the standard CRM endpoints and authorization. New
+connections ask for `gmail.readonly`, `gmail.send` and `gmail.modify`; only the first two are required.
+
+The delivery connection (`GET /api/crm/conversations/{id}/delivery`) adds `senders:[{id,label}]` and
+the default `sender` (the conversation's own mailbox address); the reply command accepts an optional
+`from` among those ids (else 400). Gmail offers shared mailboxes and the caller's own personal one.
+
+Mail search and restore, all requiring inbox workspace access (restore: write access) and limited to
+shared mailboxes and the caller's own personal ones (any other `account` is 404):
+
+- `GET /api/crm/gmail/accounts` → `[{address,label,canModify}]`.
+- `GET /api/crm/gmail/search?account=&q=&pageToken=` (`q` required, at most 500 characters) →
+  `{messages:[{id,threadId,from,subject,snippet,date,archived,conversationId}],nextPageToken}`, 20 per
+  page over all mail including archived (spam and trash excluded); `date` is ISO-8601,
+  `conversationId` is null unless the thread is already in the CRM and readable.
+- `POST /api/crm/gmail/restore` `{account,messageId,toInbox}` → `{conversationId,movedToInbox}`;
+  imports the whole thread and, with `toInbox` and the modify grant, moves it back to the Inbox.
+  Idempotent. Gmail failures answer 429, 404, 409 (reconnect) or 502.
 
 ### CRM inbox workspace API
 
@@ -545,8 +597,7 @@ multi-select chips through the widget SDK.
 The scoped inbox renders the standard `EntityListWidget` header and body-view controls. Its feed
 accepts repeated `in=field,value`, `sort`, `dir`, `limit` (default 100, maximum 500), and an opaque
 `cursor`. Responses contain `{rows,nextCursor,hasMore}` plus workspace/list metadata; `nextCursor`
-is null at the end. `total` is included only with `count=exact`. The deprecated numeric `offset`
-remains for one release and walks bounded seek windows without SQL OFFSET.
+is null at the end. `total` is included only with `count=exact`. Numeric `offset` pagination is no longer supported.
 
 Host workspace selectors and facet resolvers are Java callbacks. `CrmFeedQuery` scans source
 conversations in batches of at most 500, applies workspace/customer/personal-account access and
@@ -569,9 +620,21 @@ selected-row toolbar. It does not alter generated record reads or grant command 
 
 The CRM Inbox presents one row per contact and a chronological timeline across its channel conversations, internal comments and system events. Underlying conversations retain provider routing and email thread identifiers. The reply selector changes only the destination, and defaults to the latest incoming message's conversation; an unsent draft keeps its selected destination.
 
-`GET /api/crm/contacts/{customer}/activity?cursor=&limit=100` returns `{rows,nextCursor,hasMore}` (newest first, default 100, maximum 500). `entries` remains an alias of `rows` for one release; deprecated numeric `offset` walks bounded seek windows. No total is calculated. Messages and internal notes are combined by SQL UNION ALL, restricted to authorized conversation keys before seeking on `(time DESC, source DESC, UUID DESC)`. Files, HTML, author photos and account labels are resolved only for the selected page. Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
+`GET /api/crm/contacts/{customer}/activity?cursor=&limit=100` returns `{rows,nextCursor,hasMore}` (newest first, default 100, maximum 500). Only the `rows` key and cursor continuation are supported. No total is calculated. Messages and internal notes are combined by SQL UNION ALL, restricted to authorized conversation keys before seeking on `(time DESC, source DESC, UUID DESC)`. Files, HTML, author photos and account labels are resolved only for the selected page. Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`; message entries also retain `senderAccount`, the account used to send the reply, or null. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
 
 `POST /api/crm/contacts/{customer}/activity` accepts `conversationId`, `type` (`QUOTED`, `CALL_PLANNED`, `CALL_COMPLETED`, `MEETING_PLANNED`, `OTHER`), nonblank `details` up to 7000 characters, and optional local `scheduledFor`. It requires write access to the matching contact's conversation. It stores an internal `SYSTEM_EVENT` without sending a channel message or changing the sales stage. Planned dates are descriptive event text, not reminders or calendar invitations. Domain workflows can also append system events through the existing conversation-message repository.
+
+### Print form downloads (optional `onno-print-starter`)
+
+`GET /api/print/{kind}/{name}/{id}` lists the print forms the caller may use for a record as
+`[{key, label, format, url}]` (`format` is `docx` or `xlsx`). `GET {url}` returns the filled file
+with `Content-Disposition: attachment`. Both apply the same entity read access and record scope as
+`GET /api/{kind}/{name}/{id}` (a record outside scope is `404`), plus the form's optional roles
+(`403`). The response is a binary file, not JSON. `?format=pdf` (or the template format) picks the
+output when a PDF converter is configured; `formats` in the listing says which values are accepted.
+`POST /api/print/batch/{kind}/{name}/{form}` with `{"ids":[…]}` (CSRF) returns a zip, skipping ids
+outside the caller's scope. Template management (`/api/print/templates/**`) is admin-only; see
+`onno-print-starter/README.md`.
 
 ### Record tag API
 

@@ -4,9 +4,9 @@ import type {
   ChatMessageRenderer,
   ChatMessageRendererProps,
   DashboardWidgetMeta,
-  ListRendererComponent,
   ListRendererOptions,
   ListRendererProps,
+  ListSelectionProps,
   OnnoEvents,
   OnnoHost,
   OnnoReadApi,
@@ -31,10 +31,13 @@ export type {
   ListRendererDescriptor,
   ListRendererOptions,
   ListRendererProps,
+  ListSelectionProps,
   OnnoReadApi,
   OnnoEvents,
   OnnoHost,
   OnnoUi,
+  RefSelectOptionContext,
+  RefSelectProps,
   UiEvent,
   UiEventFilter,
 } from "./types";
@@ -94,19 +97,16 @@ export const {
 } = host.React;
 
 /**
- * Register (or override) the renderer for a widget type. Call once at plugin load. Last registration
- * wins; already-rendered hosts re-resolve, so registration timing is not load-bearing.
+ * Register a widget renderer at plugin load. Pass `{ override: true }` to replace a built-in.
+ * Already-rendered hosts re-resolve when registrations change.
  */
-export const registerWidget: (
-  widgetType: string,
-  component: ComponentType<{ widget: DashboardWidgetMeta }>
-) => void = host.registerWidget;
+export const registerWidget: OnnoHost["registerWidget"] = host.registerWidget;
 
 /**
- * Register the body renderer for a custom <em>list</em> view — the component an entity's
- * {@code ListSpec.custom("type")} resolves. Same registry as {@link registerWidget}, but the
- * component receives the list-renderer contract ({@link ListRendererProps}: the current window of
- * rows, the list descriptor, and an open-record callback) instead of a dashboard-widget descriptor.
+ * Register the body renderer for a custom list view configured with
+ * {@code ListSpec.custom("type")}. List renderers have their own registry.
+ * The component receives {@link ListRendererProps}, including the current
+ * rows, the list descriptor, and a callback for opening a record.
  * The framework keeps the toolbar and the data feed; the component only draws the rows.
  *
  * @example
@@ -129,19 +129,24 @@ export const registerListRenderer = (
   component: ComponentType<ListRendererProps>,
   options?: ListRendererOptions
 ): void => {
-  // The host reads the opt-out as a static marker on the component, so it survives the shared registry.
-  if (options?.ownsLoadingMore) (component as ListRendererComponent).ownsLoadingMore = true;
-  // The host registry stores both prop shapes; the list island renders this entry with
-  // ListRendererProps (dashboards never resolve a type an EntityView declared for its list).
-  host.registerWidget(rendererType, component as unknown as ComponentType<{ widget: DashboardWidgetMeta }>);
+  if (!host.registerListRenderer) {
+    throw new Error("@onno/widget-sdk: upgrade onno-ui-starter to register list renderers.");
+  }
+
+  host.registerListRenderer(rendererType, component, options);
 };
 
-/** Props for a ListSpec.selectionWidget: current selection and a callback after a successful operation. */
-export type ListSelectionProps = { ids: string[]; complete: () => void };
-
 /** Register a selection toolbar component; server commands must still enforce authorization. */
-export const registerListSelection = (type: string, component: ComponentType<ListSelectionProps>): void =>
-  host.registerWidget(type, component as unknown as ComponentType<{ widget: DashboardWidgetMeta }>);
+export const registerListSelection = (
+  type: string,
+  component: ComponentType<ListSelectionProps>
+): void => {
+  if (!host.registerListSelection) {
+    throw new Error("@onno/widget-sdk: upgrade onno-ui-starter to register selection widgets.");
+  }
+
+  host.registerListSelection(type, component);
+};
 
 /** `htm` bound to the host's `React.createElement` — JSX-like markup with no build step, if wanted. */
 export const html = host.html;
@@ -291,6 +296,7 @@ export const {
   DatePicker,
   DateTimePicker,
   ColorPicker,
+  RefSelect,
   Card,
   CardHeader,
   CardTitle,
@@ -364,6 +370,22 @@ export function useTranslate(): Translate {
   const subscribe = useCallback(
     (listener: () => void) => (bridge ? bridge.subscribe(listener) : () => {}), [bridge]);
   const snapshot = useCallback(() => (bridge ? bridge.get() : identityTranslate), [bridge]);
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
+}
+
+/**
+ * The app's configured locale (`onno.ui.locale`, e.g. `en-GB`) for `Intl` date and number formats, so a
+ * widget writes dates the way the shell's lists and calendars do. Undefined before `/api/config` lands,
+ * when none is configured, or on a host older than contract v7: `Intl` then uses the browser's locale.
+ */
+export const locale = (): string | undefined => host.messages?.locale?.();
+
+/** {@link locale}, re-rendering the widget when the configured locale arrives. */
+export function useLocale(): string | undefined {
+  const bridge = host.messages;
+  const subscribe = useCallback(
+    (listener: () => void) => (bridge ? bridge.subscribe(listener) : () => {}), [bridge]);
+  const snapshot = useCallback(() => bridge?.locale?.(), [bridge]);
   return useSyncExternalStore(subscribe, snapshot, snapshot);
 }
 

@@ -14,7 +14,7 @@ class DynamicActionProviderTest {
     void provider_isLateBound_andPreservesItsDeclarationPosition() {
         AtomicInteger evaluations = new AtomicInteger();
         List<String> liveKeys = new ArrayList<>(List.of("one", "two"));
-        ActionSpec spec = new ActionSpec();
+        ActionSpec<Object> spec = new ActionSpec<>();
         spec.action("before").label("Before");
         spec.dynamic(live -> {
             evaluations.incrementAndGet();

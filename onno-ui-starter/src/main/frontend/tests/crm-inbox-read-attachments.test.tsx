@@ -23,7 +23,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView; });
 const config = {folders:[], fields:[], actions:[{key:"reply",label:"Reply",visible:true},{key:"sendReply",label:"Send reply",visible:true}], showAvatar:false, listTitle:"customerDisplay",listSubtitle:"subject",listPreview:"lastMessagePreview"};
-const activity = {entries:[{id:"message:one",conversationId:"chat",kind:"CUSTOMER_MESSAGE",direction:"INBOUND",channel:"EMAIL",authorName:"Person",body:"Hello from the customer",at:"2026-10-05T10:00:00",attachments:[]}],hasMore:false};
+const activity = {rows:[{id:"message:one",conversationId:"chat",kind:"CUSTOMER_MESSAGE",direction:"INBOUND",channel:"EMAIL",authorName:"Person",body:"Hello from the customer",at:"2026-10-05T10:00:00",attachments:[]}],hasMore:false};
 const connected = {connected:true,label:"Email",replyCapability:"AVAILABLE",maxAttachments:2,maxTextLength:8000};
 function mount(options: {sidebar?: boolean; activity?: Promise<Response>; contact?: Promise<Response>; delivery?: Promise<Response>; read?: Promise<Response>} = {}) {
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -69,7 +69,7 @@ it.each([
   [{...connected,maxAttachments:0,attachmentReason:"Files are not supported"}, "Files are not supported"],
 ])("keeps unavailable attachments disabled with a hover explanation", async (delivery, reason) => {
   const {container,fetcher} = mount({delivery:Promise.resolve(response(delivery))});
-  const button = await screen.findByRole("button",{name:"Attach files",exact:true});
+  const button = await screen.findByRole("button",{name:"Attach files"});
   await waitFor(() => expect(button.parentElement).toHaveAttribute("title",reason));
   expect(button).toBeDisabled();
   const picker = container.querySelector<HTMLInputElement>('input[type="file"]')!;
@@ -81,7 +81,7 @@ it.each([
 });
 it("opens the picker and uploads for an available channel without sending a message", async () => {
   const {container,fetcher} = mount();
-  const button = await screen.findByRole("button",{name:"Attach files",exact:true});
+  const button = await screen.findByRole("button",{name:"Attach files"});
   await waitFor(() => expect(button).toBeEnabled());
   const picker = container.querySelector<HTMLInputElement>('input[type="file"]')!;
   const click = vi.spyOn(picker,"click");
@@ -113,7 +113,7 @@ it("keeps sender identity separate and sends an edited email subject", async () 
 
 it("rejects files over the configured limit without posting their bytes", async () => {
   const {container,fetcher}=mount();
-  await waitFor(()=>expect(screen.getByRole("button",{name:"Attach files",exact:true})).toBeEnabled());
+  await waitFor(()=>expect(screen.getByRole("button",{name:"Attach files"})).toBeEnabled());
   const file=new File(["test"],"too-large.pdf",{type:"application/pdf"});
   Object.defineProperty(file,"size",{value:26*1024*1024});
   fireEvent.change(container.querySelector('input[type="file"]')!,{target:{files:[file]}});
@@ -122,7 +122,7 @@ it("rejects files over the configured limit without posting their bytes", async 
 });
 it("allows a 23 MB file under the configured 25 MB limit", async () => {
   const {container,fetcher}=mount();
-  await waitFor(()=>expect(screen.getByRole("button",{name:"Attach files",exact:true})).toBeEnabled());
+  await waitFor(()=>expect(screen.getByRole("button",{name:"Attach files"})).toBeEnabled());
   const file=new File(["test"],"proposal.pdf",{type:"application/pdf"});
   Object.defineProperty(file,"size",{value:23*1024*1024});
   fireEvent.change(container.querySelector('input[type="file"]')!,{target:{files:[file]}});
@@ -132,7 +132,7 @@ it("allows a 23 MB file under the configured 25 MB limit", async () => {
 
 it("accepts dropped files without sending a reply and keeps the target visible across children", async () => {
   const {container,fetcher}=mount();
-  await waitFor(()=>expect(screen.getByRole("button",{name:"Attach files",exact:true})).toBeEnabled());
+  await waitFor(()=>expect(screen.getByRole("button",{name:"Attach files"})).toBeEnabled());
   const zone=container.querySelector('[data-file-drop-zone]')!;
   const transfer={types:["Files"],files:[new File(["test"],"test.pdf",{type:"application/pdf"})],dropEffect:"none"};
   fireEvent.dragEnter(zone,{dataTransfer:transfer});
@@ -149,7 +149,7 @@ it("accepts dropped files without sending a reply and keeps the target visible a
 });
 it("leaves text drags alone and rejects files when the channel cannot attach", async () => {
   const {container,fetcher}=mount({delivery:Promise.resolve(response({...connected,maxAttachments:0,attachmentReason:"Files are not supported"}))});
-  await waitFor(()=>expect(screen.getByRole("button",{name:"Attach files",exact:true}).parentElement).toHaveAttribute("title","Files are not supported"));
+  await waitFor(()=>expect(screen.getByRole("button",{name:"Attach files"}).parentElement).toHaveAttribute("title","Files are not supported"));
   const zone=container.querySelector('[data-file-drop-zone]')!;
   expect(fireEvent.dragOver(zone,{dataTransfer:{types:["text/plain"]}})).toBe(true);
   expect(screen.queryByText("Drop files to attach")).not.toBeInTheDocument();
@@ -175,7 +175,7 @@ it("opens Manage connections through the host navigation action", async () => {
 
 it("plays received audio inline without preloading and retains a download fallback", async () => {
   const file={url:"/api/media/voice.ogg",filename:"voice.ogg",contentType:"audio/ogg",size:100,image:false};
-  const {container}=mount({activity:Promise.resolve(response({ ...activity, entries:[{...activity.entries[0],body:"",attachments:[file]}]}))});
+  const {container}=mount({activity:Promise.resolve(response({ ...activity, rows:[{...activity.rows[0],body:"",attachments:[file]}]}))});
   const player=await screen.findByLabelText("voice.ogg", {selector:"audio"});
   expect(player.tagName).toBe("AUDIO");
   expect(player).not.toHaveAttribute("controls");
@@ -189,7 +189,7 @@ it("plays received audio inline without preloading and retains a download fallba
 
 it("chooses a contact email independently from the sending account", async () => {
   const {fetcher}=mount({delivery:Promise.resolve(response({...connected,recipient:"personal@example.com",recipients:["personal@example.com","work@example.com"]}))});
-  const recipient=await screen.findByRole("combobox",{name:"To",exact:true});
+  const recipient=await screen.findByRole("combobox",{name:"To"});
   expect(recipient).toHaveTextContent("personal@example.com");
   fireEvent.keyDown(recipient,{key:"ArrowDown"});
   fireEvent.click(await screen.findByRole("option",{name:"work@example.com"}));

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, normalizeExtensionApiPath } from "@/lib/api";
 import { installPluginHost } from "@/lib/plugin-host";
+import { RefSelect } from "@/components/ref-select";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -44,5 +45,13 @@ describe("plugin read API", () => {
     vi.stubGlobal("fetch", vi.fn());
     await expect(installPluginHost().api.getJson("/api/../auth/me")).rejects.toThrow();
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("plugin UI primitives", () => {
+  it("hands widgets the form's reference picker on host contract v7", () => {
+    const host = installPluginHost();
+    expect(host.ui.RefSelect).toBe(RefSelect);
+    expect(host.version).toBeGreaterThanOrEqual(7);
   });
 });

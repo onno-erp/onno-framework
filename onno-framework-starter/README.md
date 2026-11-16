@@ -161,6 +161,10 @@ After a post (or unpost) transaction commits, the framework publishes a Spring a
 **Spring-bean-reachable "after post" extension point**: unlike the domain `AfterPostHandler.afterPost()`
 (which has no access to your beans) and the Kafka outbox (which requires that starter), an
 `@EventListener` is an ordinary bean with full DI, ideal for firing an external integration.
+The listener runs after the post has committed, so an exception it throws is logged and does not
+fail the post. (Spring still skips later listeners of that same event, so keep listeners
+independent or catch inside them.) Use a `@DomainEvent` outbox row when the
+reaction must be guaranteed.
 
 ```java
 @Component
