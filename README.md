@@ -384,6 +384,8 @@ adapters.
 
 Custom widgets can show action feedback with the shared `toast` export from
 `@onno/widget-sdk`; see [widget SDK](onno-widget-sdk/README.md#action-notifications).
+They can open pages and records without reloading the workspace using
+[`Link`, `navigate` and `openRecord`](onno-widget-sdk/README.md#in-app-navigation).
 
 The CRM starter supports application-authored inbox workspaces with independent chat-selection
 rules, folders, presentation and team read/write permissions. See

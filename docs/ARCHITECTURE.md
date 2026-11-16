@@ -615,6 +615,11 @@ uses `@onno/widget-sdk` (bundled in the Gradle plugin — no npm needed). See th
 "Authoring a custom widget" section. Discovered plugin assets are copied to a stable temporary serve
 directory at startup so continuous builds cannot corrupt an in-flight classpath JAR read.
 
+The widget SDK's `navigate`, `openRecord`, and `Link` are provided by host contract v8.
+In-app transitions go through the same workspace navigation helper as built-in actions, so the
+host applies its own tab and pane placement rules. For native browser link actions, `Link` exposes
+an `href` that includes the configured UI prefix.
+
 Consumer widgets may opt into additional browser packages with
 `onnoWidgets.npmDependencies.put(name, version)`. The plugin writes them into its isolated managed
 npm workspace and esbuild bundles them into the consumer's widget module. React, React DOM, the
