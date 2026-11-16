@@ -87,6 +87,14 @@ public class OnnoMcpAutoConfiguration {
                 catalogCommands, documentCommands, properties, uiProperties, json);
     }
 
+    /** Read-only {@code period_close_status} tool, when period close is enabled. */
+    @Bean
+    @ConditionalOnBean(su.onno.period.PeriodCloseService.class)
+    @ConditionalOnMissingBean
+    public PeriodCloseMcpTools periodCloseMcpTools(su.onno.period.PeriodCloseService periods) {
+        return new PeriodCloseMcpTools(periods);
+    }
+
     @Bean
     public McpToolProvider annotatedMcpToolProvider(ConfigurableListableBeanFactory beanFactory,
                                                    OnnoMcpProperties properties, UiProperties uiProperties,

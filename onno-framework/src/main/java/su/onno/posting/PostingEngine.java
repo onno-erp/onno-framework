@@ -20,6 +20,8 @@ import su.onno.model.DocumentObject;
 import su.onno.model.PostingOrder;
 import su.onno.model.TabularSectionRow;
 import su.onno.performance.OnnoPerformance;
+import su.onno.period.PeriodCloseService;
+import su.onno.period.PeriodOperation;
 import su.onno.repository.RegisterRepositoryImpl;
 import su.onno.rules.BusinessRuleValidator;
 import su.onno.types.Ref;
@@ -80,6 +82,7 @@ public class PostingEngine {
     private final OutboxWriter outboxWriter;
     private final PostEventPublisher eventPublisher;
     private final PostedDocumentLoader documentLoader;
+    private PeriodCloseService periodClose;
 
     public PostingEngine(Jdbi jdbi, MetadataRegistry registry,
                          Map<Class<?>, RegisterRepositoryImpl<?>> repositoryMap) {
@@ -110,6 +113,14 @@ public class PostingEngine {
         this.outboxWriter = outboxWriter;
         this.eventPublisher = eventPublisher;
         this.documentLoader = documentLoader;
+    }
+
+    /**
+     * Enables period-close enforcement: post, repost, unpost and every document a chronological
+     * restoration would repost are rejected inside a closed period.
+     */
+    public void setPeriodCloseService(PeriodCloseService periodClose) {
+        this.periodClose = periodClose;
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -167,6 +178,7 @@ public class PostingEngine {
 
         OnnoPerformance.record("onno.document.post.transaction", 1, () -> jdbi.useTransaction(handle -> {
             claimUnpostedDocument(handle, docDescriptor, document.getId());
+            requirePeriodOpen(handle, document, context, PeriodOperation.POST);
             persistPosting(handle, docDescriptor, document, context);
             publishDomainEvents(handle, document, EventTiming.AFTER_POST);
         }));
@@ -188,6 +200,7 @@ public class PostingEngine {
         DocumentDescriptor descriptor = registry.getDocumentDescriptor(document.getClass());
         OnnoPerformance.record("onno.document.repost.transaction", 1, () -> jdbi.useTransaction(handle -> {
             claimPostedDocument(handle, descriptor, document.getId(), false);
+            requirePeriodOpen(handle, document, context, PeriodOperation.REPOST);
             unpostMovements(handle, document.getId());
             persistPosting(handle, descriptor, document, context);
             publishDomainEvents(handle, document, EventTiming.AFTER_POST);
@@ -214,6 +227,7 @@ public class PostingEngine {
 
         DocumentDescriptor docDescriptor = registry.getDocumentDescriptor(document.getClass());
         PostingContext context = buildPostingContext(document);
+        requirePeriodOpenForPreview(document, context);
 
         List<PostingPreview.RegisterPreview> registers = context.touchedRepositories().stream()
                 .map(repo -> {
@@ -345,8 +359,16 @@ public class PostingEngine {
                                 case UNPOST -> claimPostedDocument(
                                         handle, requestedDescriptor, requested.getId(), true);
                             }
+                            requirePeriodOpen(handle, requested, requestedContext, switch (mutation) {
+                                case POST -> PeriodOperation.POST;
+                                case REPOST -> PeriodOperation.REPOST;
+                                case UNPOST -> PeriodOperation.UNPOST;
+                            });
                             List<DocumentObject> laterDocuments =
                                     loadLaterDocuments(handle, requested, chronologicalRegisters);
+                            for (DocumentObject later : laterDocuments) {
+                                requirePeriodOpen(handle, later, null, PeriodOperation.RESTORE);
+                            }
                             List<DocumentObject> reverse = new ArrayList<>(laterDocuments);
                             reverse.sort(documentOrder().reversed());
                             for (DocumentObject later : reverse) {
@@ -444,6 +466,10 @@ public class PostingEngine {
                                      DocumentDescriptor descriptor,
                                      UUID documentId) {
         claimPostedDocument(handle, descriptor, documentId, true);
+        if (periodClose != null) {
+            periodClose.requirePostingOpen(handle, descriptor, documentId, null, List.of(),
+                    PeriodOperation.UNPOST, true);
+        }
         // Unlike a repost, standalone unposting has no replacement movements to restore a
         // constrained balance. Check while the original rows still identify the touched keys.
         for (RegisterRepositoryImpl<?> repo : repositoryMap.values()) {
@@ -452,6 +478,36 @@ public class PostingEngine {
             checkNonNegativeBalances(handle, persistence.getDescriptor(), documentId);
             persistence.deactivateRecords(handle, documentId);
         }
+    }
+
+    /**
+     * Period-close guard for {@code document} on the posting transaction: its own and stored date
+     * against the closes of its context and of every register it stages or already moved.
+     */
+    private void requirePeriodOpen(Handle handle, DocumentObject document, PostingContext context,
+                                   PeriodOperation operation) {
+        if (periodClose == null) return;
+        periodClose.requirePostingOpen(handle, registry.getDocumentDescriptor(document.getClass()),
+                document.getId(), document.getDate(), periodClose.organizationOf(document),
+                stagedRegisters(context), operation, true);
+    }
+
+    /** A preview changes nothing, so a granted override is not audited. */
+    private void requirePeriodOpenForPreview(DocumentObject document, PostingContext context) {
+        if (periodClose == null) return;
+        jdbi.useHandle(handle -> periodClose.requirePostingOpen(handle,
+                registry.getDocumentDescriptor(document.getClass()), document.getId(),
+                document.getDate(), periodClose.organizationOf(document), stagedRegisters(context),
+                document.isPosted() ? PeriodOperation.REPOST : PeriodOperation.POST, false));
+    }
+
+    private static List<AccumulationRegisterDescriptor> stagedRegisters(PostingContext context) {
+        if (context == null) return List.of();
+        List<AccumulationRegisterDescriptor> staged = new ArrayList<>();
+        for (RegisterRepositoryImpl<?> repository : context.touchedRepositories()) {
+            staged.add(repository.getPersistence().getDescriptor());
+        }
+        return staged;
     }
 
     private void unpostMovements(Handle handle, UUID documentId) {

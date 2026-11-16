@@ -22,6 +22,8 @@ public class OnnoProperties {
 
     private final Repository repository = new Repository();
 
+    private final PeriodClose periodClose = new PeriodClose();
+
     public List<String> getScanPackages() {
         return scanPackages;
     }
@@ -40,6 +42,58 @@ public class OnnoProperties {
 
     public Repository getRepository() {
         return repository;
+    }
+
+    public PeriodClose getPeriodClose() {
+        return periodClose;
+    }
+
+    /** Accounting period close ({@code onno.period-close.*}). */
+    public static class PeriodClose {
+
+        /**
+         * Enables period close: documents dated on or before a closed date cannot be created,
+         * changed, deleted, posted, reposted or unposted. With no period closed nothing is
+         * rejected. Set to {@code false} to remove the service and every check.
+         */
+        private boolean enabled = true;
+
+        /**
+         * Roles allowed to close and reopen periods through the UI page and {@code /api/period-close}.
+         * {@code ADMIN} is always allowed.
+         */
+        private List<String> manageRoles = new ArrayList<>();
+
+        /**
+         * Roles whose signed-in holders may change documents inside a closed period without
+         * reopening it. Each bypassed operation is written to the audit trail. Empty by default:
+         * nobody is exempt, not even {@code ADMIN} — list {@code ADMIN} here to exempt administrators.
+         */
+        private List<String> overrideRoles = new ArrayList<>();
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public List<String> getManageRoles() {
+            return manageRoles;
+        }
+
+        public void setManageRoles(List<String> manageRoles) {
+            this.manageRoles = manageRoles;
+        }
+
+        public List<String> getOverrideRoles() {
+            return overrideRoles;
+        }
+
+        public void setOverrideRoles(List<String> overrideRoles) {
+            this.overrideRoles = overrideRoles;
+        }
     }
 
     /** Repository guardrails ({@code onno.repository.*}). */

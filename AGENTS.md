@@ -668,6 +668,32 @@ repositories are unscoped** — custom code serving a user from a repository mus
 `RecordAccess.require(subject, Type.class, id, AccessMode.READ)`. See
 [docs/RECORD_ACCESS_POLICIES.md](docs/RECORD_ACCESS_POLICIES.md).
 
+### Period Close
+
+A period close is a change-prohibition date: documents dated on or before it cannot be created,
+changed, delete-marked, posted, reposted or unposted. Use `PeriodCloseService` — do not hand-roll
+date checks in `beforeWrite`.
+
+```java
+periods.close(PeriodScope.global(), LocalDate.of(2026, 10, 31), "admin", "October closed");
+periods.close(PeriodScope.context("Finance"), LocalDate.of(2026, 11, 30), "admin", null);
+periods.reopen(PeriodScope.global(), LocalDate.of(2026, 9, 30), "admin", "late invoice"); // reason required
+```
+
+Scopes are global, per `context`, per accumulation register, or per organization (the
+`@PeriodCloseOrganization` field of a document); the date is inclusive. Closes are soft by default —
+`@PeriodAdjustment` documents may still be written and posted into the period (audited) while every
+other document stays locked; `close(scope, date, true, actor, reason)` is a hard close that admits
+nothing until reopened. Enforcement is in core posting (including every later document a
+`CHRONOLOGICAL` restoration would repost), repository saves and the generic UI/REST/import/MCP
+command path; a rejection is a `PeriodClosedException` (HTTP 409, also from `posting-preview`).
+`ADMIN` and `onno.period-close.manage-roles` close and reopen; `onno.period-close.override-roles`
+(empty by default — `ADMIN` is not exempt unless listed) or an explicit
+`periods.override(new PeriodOverride(actor, reason), ...)` bypass a close, and every close, reopen
+and bypass is audited. Mark non-accounting documents `@PeriodCloseExempt`. The admin page is served
+at `/period-close` (`PeriodClosePage.ROUTE`); link it from a `Layout` section. See
+[docs/PERIOD_CLOSE.md](docs/PERIOD_CLOSE.md).
+
 ### Contexts And Future Services
 
 Use `context` on annotations to mark bounded contexts. At first, contexts live in one monolith.

@@ -188,8 +188,30 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
     public OnnoBeforeConvertCallback onnoBeforeConvertCallback(MetadataRegistry registry,
                                                                 su.onno.numbering.NumberGenerator numberGenerator,
                                                                 su.onno.security.SecretCipher secretCipher,
-                                                                OnnoMetrics metrics) {
-        return new OnnoBeforeConvertCallback(registry, numberGenerator, secretCipher, metrics);
+                                                                OnnoMetrics metrics,
+                                                                org.springframework.beans.factory.ObjectProvider<su.onno.period.PeriodCloseService> periodClose) {
+        OnnoBeforeConvertCallback callback =
+                new OnnoBeforeConvertCallback(registry, numberGenerator, secretCipher, metrics);
+        callback.setPeriodCloseService(periodClose.getIfAvailable());
+        return callback;
+    }
+
+    /**
+     * Period close ("change-prohibition date"). Owns the {@code onno_period_close} and
+     * {@code onno_period_close_audit} tables, created here when missing. Disable with
+     * {@code onno.period-close.enabled=false}.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+            prefix = "onno.period-close", name = "enabled", havingValue = "true", matchIfMissing = true)
+    public su.onno.period.PeriodCloseService periodCloseService(
+            Jdbi jdbi, MetadataRegistry registry,
+            org.springframework.beans.factory.ObjectProvider<su.onno.period.PeriodCloseOverridePolicy> overridePolicy) {
+        su.onno.period.PeriodCloseService service = new su.onno.period.PeriodCloseService(jdbi, registry);
+        service.ensureSchema();
+        service.setOverridePolicy(overridePolicy.getIfAvailable());
+        return service;
     }
 
     /**
@@ -382,10 +404,12 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
                                          OutboxWriter outboxWriter,
                                          su.onno.posting.PostEventPublisher postEventPublisher,
                                          su.onno.posting.PostedDocumentLoader postedDocumentLoader,
-                                         OnnoMetrics metrics) {
+                                         OnnoMetrics metrics,
+                                         org.springframework.beans.factory.ObjectProvider<su.onno.period.PeriodCloseService> periodClose) {
         PostingEngine engine = new PostingEngine(
                 jdbi, registry, repositoryImplMap, outboxWriter, postEventPublisher,
                 postedDocumentLoader);
+        engine.setPeriodCloseService(periodClose.getIfAvailable());
         return new TimedPostingService(engine, metrics);
     }
 
