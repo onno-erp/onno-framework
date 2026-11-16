@@ -1,7 +1,6 @@
 pluginManagement {
-    // The desktop packaging and app-UI plugins live in sibling builds so `id("su.onno.desktop")`
-    // and `id("su.onno.ui")` resolve locally without first publishing them to a repository.
-    includeBuild("onno-desktop-gradle-plugin")
+    // The app-UI plugin lives in a sibling build so `id("su.onno.ui")` resolves locally without
+    // first publishing it to a repository.
     includeBuild("onno-ui-gradle-plugin")
     repositories {
         gradlePluginPortal()
@@ -20,10 +19,7 @@ include(
     "onno-import-starter",
     "onno-print-starter",
     "onno-cluster-starter",
-    "onno-kafka-starter",
-    "onno-observability-starter",
     "onno-crm-starter",
     "onno-crm-channels-starter",
-    "onno-desktop-starter",
     "example"
 )

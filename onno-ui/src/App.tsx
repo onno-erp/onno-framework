@@ -2,7 +2,6 @@ import { useEffect, type ReactNode } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient, startQueryInvalidation } from "./lib/query";
 import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router";
-import { api } from "./lib/api";
 import { ThemeProvider } from "./providers/theme-provider";
 import { BrandingProvider } from "./providers/branding-provider";
 import { MessagesProvider, useMessages } from "./providers/messages-provider";
@@ -20,7 +19,6 @@ import { UpdateNotice } from "./components/shell/update-notice";
 import { Toaster } from "./components/ui/toast";
 import { BASE_PATH } from "./lib/base-path";
 import { CommandFeedbackProvider } from "./lib/command-feedback";
-import { configureTelemetry, recordRouteView } from "./lib/telemetry";
 import { AppConfigProvider, type AppDefinition } from "./lib/app-config";
 
 function ProtectedApp() {
@@ -31,24 +29,6 @@ function ProtectedApp() {
   // A one-time-password session may only change its password: the server refuses every other API
   // call, so don't boot the shell for it.
   const authenticated = !!user && !user.passwordChangeRequired;
-
-  useEffect(() => {
-    if (!authenticated) return;
-    let cancelled = false;
-    api
-      .getConfig()
-      .then((cfg) => {
-        if (!cancelled) configureTelemetry(cfg?.telemetry);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [authenticated]);
-
-  useEffect(() => {
-    recordRouteView(location.pathname);
-  }, [location.pathname]);
 
   // Server change events invalidate the matching TanStack queries (app data stays live).
   useEffect(() => (authenticated ? startQueryInvalidation() : undefined), [authenticated]);

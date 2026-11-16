@@ -27,7 +27,6 @@ Implemented:
 - Configurable catalog/document autonumbering prefixes
 - Optimistic locking fields and generic UI conflict checks
 - Durable outbox table and core outbox writer
-- Kafka starter foundation with CloudEvent relay, service registry, and remote reference client
 - Typed-Java posting (`Postable.handlePosting`) writing document-to-register movements
 - Complete durable typed business processes: version-pinned definitions and explicit typed
   migrations; human, automatic, decision, timer, structured parallel fork/join, subprocess, and
@@ -45,7 +44,7 @@ Implemented:
 - Period close (`PeriodCloseService`): global / per-context / per-register / per-organization, soft or hard change-prohibition dates, `@PeriodAdjustment` documents, enforced in core posting (including chronological restoration), repository saves and the generic command path; audited close, reopen, adjustment and role override; `/api/period-close`, the `period_close_status` MCP tool and the `@onno/ui` `<PeriodClose />` admin component. See `docs/PERIOD_CLOSE.md`.
 - Domain event metadata and outbox publication hooks
 - `onno-auth-starter` with session-based defaults, JSON login/logout, CSRF cookie, in-memory users via `onno.auth.users`, plus OIDC and resource-server modes
-- Integration starters: MCP server (`onno-mcp-starter`), CSV import (`onno-import-starter`), Word/Excel print forms with batch printing, admin-uploaded templates and PDF (`onno-print-starter`), Kafka outbox relay (`onno-kafka-starter`), native desktop packaging (`onno-desktop-starter` + Gradle plugin)
+- Integration starters: MCP server (`onno-mcp-starter`), CSV import (`onno-import-starter`), Word/Excel print forms with batch printing, admin-uploaded templates and PDF (`onno-print-starter`)
 - Horizontal scale-out: cross-node delivery of live-UI entity-change events via a pluggable `ClusterEventBus` (`onno-cluster-starter`, default Postgres `LISTEN`/`NOTIFY`), an advisory-locked schema apply, and a fail-fast remember-me key guard
 - Media uploads with a pluggable `MediaStorage` SPI
 - The UI is the npm package `@onno/ui`: a React shell with a default list, record form and register report for every readable entity, built from the model the server describes (`/api/ui/model`, `/api/ui/view/**`). An app's own UI is an ordinary Vite app in `src/main/ui` — one `defineApp({ entities, pages, navigation, extensions })` call with typed entity customizations, React pages composed from `@onno/ui`'s blocks, widgets and typed data hooks, and the starters' packages (`@onno/crm`, `@onno/print`). The `su.onno.ui` Gradle plugin builds it into the jar and generates `model.gen.ts` from the Java model. (This replaces the earlier Java UI DSL — `Layout`/`Page`/`EntityView` beans — the DivKit renderer and the widget plugin.)
@@ -63,14 +62,13 @@ It should remain friendly to normal Java:
 - Use registers for auditable balances and turnovers.
 - Use Spring Security and conventional identity providers for authentication and authorization.
 - Use contexts to mark future service boundaries.
-- Use the outbox and Kafka starter when a monolith starts growing into services.
+- Use the outbox, drained by an application-owned relay, when a monolith starts growing into services.
 
 ## Near-Term Next Work
 
 Good next slices:
 - UI widgets for hierarchy browsing and posting-preview inspection
 - Richer live collaboration signals, such as record-level locks and stale-record banners (record-level **presence markers** now ship — see below)
-- Auto-scheduled / retrying Kafka outbox relay (today `OutboxRelay.relayPending()` is driven by the app's own `@Scheduled` bean)
 - More generated test fixtures from business models
 - A native mobile client on the same `/api/ui` model and `onno://` link protocol the web UI uses
 
@@ -96,7 +94,8 @@ Production direction:
 
 ## Future Service Work
 
-The Kafka starter is a foundation, not a full distributed business engine yet.
+The framework ships the transactional outbox table, not a broker transport; service splits are not a
+full distributed business engine yet.
 
 Remaining deeper work:
 - Automatic remote `Ref<T>` resolution inside the framework resolvers

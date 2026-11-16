@@ -6,8 +6,8 @@
      `./gradlew generateConfigDocs`; `./gradlew check` fails if this file drifts. -->
 
 Every `onno.*` configuration property, by module, with type and default. Each integration starter is
-auto-configured on the classpath and gated by its own `onno.<module>.enabled` flag (default `true`,
-except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail.*`,
+auto-configured on the classpath and gated by its own `onno.<module>.enabled` flag (default `true`).
+Standard Spring keys (`spring.datasource.*`, `spring.mail.*`,
 `spring.security.oauth2.client.*`) are used where noted and are not repeated here.
 
 > **You don't edit the tables below.** They are generated from each starter's
@@ -104,7 +104,7 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 | `onno.auth.oidc.roles.prefix` | `String` | `ROLE_` | Prefix prepended to each mapped role so `hasRole(..)` works (Spring convention). |
 | `onno.auth.oidc.roles.realm-roles` | `Boolean` | `true` | Keycloak preset: map realm-level roles (`realm_access.roles`). |
 | `onno.auth.oidc.roles.sources` | `List<RoleSource>` | — | Explicit role sources. When empty, the Provider preset supplies defaults. Each source names a claim and the shape of its value. |
-| `onno.auth.public-paths` | `List<String>` | — | Public API/config endpoints permitted without authentication so the login screen can render and authenticate. The SPA shell itself (everything outside `/api/**`) is public by default; only `/api/**` requires a session. Legacy configuration: custom values are combined with the mandatory framework paths. Prefer `onno.auth.additional-public-paths` for new configurations. The defaults are: `/error`, `/api/theme`, `/api/config`, `/api/branding`, `/api/auth/login`, `/api/auth/login/{method}` and `/api/auth/login/{method}/challenge` (application login methods), `/api/auth/me`, `/api/auth/csrf`, `/api/ui/login`, `/api/desktop/ready`, `/api/desktop/manifest`. |
+| `onno.auth.public-paths` | `List<String>` | — | Public API/config endpoints permitted without authentication so the login screen can render and authenticate. The SPA shell itself (everything outside `/api/**`) is public by default; only `/api/**` requires a session. Legacy configuration: custom values are combined with the mandatory framework paths. Prefer `onno.auth.additional-public-paths` for new configurations. The defaults are: `/error`, `/api/theme`, `/api/config`, `/api/branding`, `/api/auth/login`, `/api/auth/login/{method}` and `/api/auth/login/{method}/challenge` (application login methods), `/api/auth/me`, `/api/auth/csrf`, `/api/ui/login`. |
 | `onno.auth.session.remember-me.allow-ephemeral-key` | `Boolean` | `false` | When key is blank, allow the app to start anyway with a built-in non-secret dev key. Off by default so a multi-node deployment fails fast instead of silently signing cookies a load-balanced peer can't verify. Turn on only for single-node/dev — never with a real secret expectation. |
 | `onno.auth.session.remember-me.enabled` | `Boolean` | `true` | Whether to issue and honour the persistent remember-me cookie. |
 | `onno.auth.session.remember-me.key` | `String` | — | Secret that signs the remember-me cookie. Set a stable, non-guessable value in production so cookies survive restarts, can't be forged, and validate across every node of a horizontally-scaled deployment. When blank, startup fails fast unless allowEphemeralKey is set (a blank key would otherwise sign cookies with a secret that peer nodes reject, breaking login under a load balancer). |
@@ -143,7 +143,7 @@ OIDC and resource-server modes also read the standard `spring.security.oauth2.cl
 | `onno.print.batch.max-records` | `Integer` | `200` | Most records one batch print request may include; larger selections are rejected. |
 | `onno.print.enabled` | `Boolean` | `true` | Master switch for print forms. When false, no PrintService, print endpoints or record "Print" actions are registered, even if PrintForm beans exist. |
 | `onno.print.pdf.gotenberg.timeout` | `Duration` | `60s` | Timeout of one Gotenberg conversion request. |
-| `onno.print.pdf.gotenberg.url` | `URI` | — | Base URL of a Gotenberg service, e.g. http://localhost:3000. Setting it enables PDF output. |
+| `onno.print.pdf.gotenberg.url` | `URI` | — | Base URL of a Gotenberg service (for a local one, port 3000 on localhost). Setting it enables PDF output. |
 | `onno.print.pdf.libreoffice.command` | `String` | — | The soffice executable (a name on the PATH or an absolute path, e.g. /Applications/LibreOffice.app/Contents/MacOS/soffice). Setting it enables PDF output. |
 | `onno.print.pdf.libreoffice.timeout` | `Duration` | `120s` | Timeout of one LibreOffice conversion. |
 | `onno.print.templates.enabled` | `Boolean` | `true` | Whether admins may upload replacement templates (stored in the onno_print_templates table) that take precedence over the built-in ones. |
@@ -160,45 +160,6 @@ OIDC and resource-server modes also read the standard `spring.security.oauth2.cl
 | `onno.cluster.node-id` | `String` | — | Stable id identifying this node when filtering out its own `NOTIFY` echoes. Defaults to a random per-JVM UUID; set it only if you want a deterministic id in logs. |
 | `onno.cluster.poll-timeout` | `Duration` | `5s` | How long the listener blocks waiting for notifications before looping to re-check for shutdown. Bounds shutdown latency; does not affect delivery speed. |
 | `onno.cluster.reconnect-backoff-max` | `Duration` | `30s` | Upper bound on the exponential backoff between reconnect attempts after the listener drops. |
-
-## Kafka — `onno-kafka-starter` (`OnnoKafkaProperties`, prefix `onno.kafka`)
-
-| Property | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `onno.kafka.enabled` | `Boolean` | `true` | Master switch for the outbound relay beans. |
-| `onno.kafka.inbound.auto-offset-reset` | `String` | `latest` | Kafka offset reset policy applied when no committed offset exists (`latest` / `earliest`). |
-| `onno.kafka.inbound.concurrency` | `Integer` | `1` | Listener container concurrency (number of consumer threads). |
-| `onno.kafka.inbound.dead-letter-topic` | `String` | — | When set, messages that fail handling (or are malformed) are published here instead of being redelivered. |
-| `onno.kafka.inbound.enabled` | `Boolean` | `false` | Opt-in switch for the inbound consumer. Off by default. |
-| `onno.kafka.inbound.group-id` | `String` | — | Consumer group id. When blank, defaults to `<serviceName>-inbound`. |
-| `onno.kafka.inbound.topics` | `List<String>` | — | Topics to consume. When empty, defaults to the outbound `onno.kafka.topic`. |
-| `onno.kafka.relay-batch-size` | `Integer` | `100` | Maximum number of outbox rows drained per `relayPending()` call. |
-| `onno.kafka.remote-services` | `Map<String,String>` | — | Service name to base-URL map used by `RemoteRefClient` to resolve cross-service refs. |
-| `onno.kafka.service-name` | `String` | `onno-service` | CloudEvent `source` for emitted events; also the prefix for the default inbound group id. |
-| `onno.kafka.topic` | `String` | `onno.domain-events` | Outbound topic events are published to (and the inbound default when no inbound topics are set). |
-
-The outbound relay is **not** auto-scheduled — call `OutboxRelay.relayPending()` from your own
-`@Scheduled` bean. Requires a `KafkaTemplate` and an `OutboxWriter` (from the core).
-
-## onno-observability-starter
-
-| Property | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `onno.telemetry.allowed-dimensions` | `Set<String>` | — | Low-cardinality dimension keys allowed to leave the application. |
-| `onno.telemetry.browser-sample-rate` | `Double` | `1` | Fraction of browser sessions captured, from 0 through 1. |
-| `onno.telemetry.enabled` | `Boolean` | `false` | Master switch. Disabled by default; onno-cloud enables it through injected environment variables. |
-
-## Desktop — `onno-desktop-starter` (`DesktopProperties`, prefix `onno.desktop`)
-
-| Property | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `onno.desktop.enabled` | `Boolean` | `true` | Whether the desktop endpoints and data relocation are active. |
-| `onno.desktop.home` | `String` | `` | Per-user data home the shell passes at launch (via `--onno.desktop.home`). When set, an embedded H2 file datasource is relocated under `<home>/data` so the database lives in the OS app-data directory rather than next to the binary. Left unset during `bootRun`/dev, so normal runs are untouched. |
-
-Window appearance is configured in code via a `DesktopApp` bean (`DesktopSpec`), not properties.
-The `onno-desktop-gradle-plugin` is configured through the `onnoDesktop { … }` Gradle extension
-(`productName`, `identifier`, `bundleTargets`, `iconSource`, macOS signing) — see
-[onno-desktop-starter/README.md](../onno-desktop-starter/README.md).
 
 ## onno-crm-channels-starter
 

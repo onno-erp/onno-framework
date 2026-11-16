@@ -12,7 +12,7 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
 
 - **Add public paths with `onno.auth.additional-public-paths`.** The framework's own public paths
   (`/error`, `/api/theme`, `/api/config`, `/api/branding`, `/api/auth/login`, `/api/auth/me`,
-  `/api/auth/csrf`, `/api/ui/login`, `/api/desktop/ready`, `/api/desktop/manifest`) always stay
+  `/api/auth/csrf`, `/api/ui/login`) always stay
   public; your patterns are added to them. `onno.auth.csrf-ignored-paths` defaults to just
   `[/api/auth/login]` — SSO callback paths (e.g. `/api/auth/telegram/**`) must be added to **both**.
 - **A blank `onno.auth.session.remember-me.key` fails startup on purpose.** Earlier versions

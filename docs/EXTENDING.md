@@ -14,9 +14,8 @@ Pick the one that matches what you're adding. Most "integrations" are **connecto
 | Surface | You're adding… | Mechanism |
 | --- | --- | --- |
 | **Connector** | a binding to an external system (a PMS, a bank, a marketplace, an ERP) | a Spring Boot auto-configuration starter that exposes a typed client + sync service |
-| **SPI** | a pluggable implementation of a framework contract | a `@Bean` implementing an SPI interface (`MediaStorage`, `MailDispatcher`, `MailEventVerifier`, an additive `AuthMethodsContributor` login button, a read-only record-menu `RecordActionContributor` or list-selection `SelectionDownloadContributor`, a `PdfConverter` for print forms, a custom `SecurityFilterChain`/`UserDetailsService`, a Kafka `EventHandler`) |
+| **SPI** | a pluggable implementation of a framework contract | a `@Bean` implementing an SPI interface (`MediaStorage`, `MailDispatcher`, `MailEventVerifier`, an additive `AuthMethodsContributor` login button, a read-only record-menu `RecordActionContributor` or list-selection `SelectionDownloadContributor`, a `PdfConverter` for print forms, a custom `SecurityFilterChain`/`UserDetailsService`) |
 | **UI** | a screen, component, outlet contribution or record command | an npm package of React components on `@onno/ui` (rendered by the host app's pages, or passed to `defineApp({ extensions })`), plus `Commands`/`Checks`/`PickerOptions` beans for behaviour (see [onno-ui/README.md](../onno-ui/README.md)) |
-| **Observability** | a semantic business outcome or timed operation | inject `TelemetryRecorder`; keep names and dimensions low-cardinality and free of customer data (see [onno-observability-starter/README.md](../onno-observability-starter/README.md)) |
 | **MCP** | an agent-callable application or integration operation | `@McpTool` on a Spring bean method, or an `McpToolProvider` bean for direct SDK access (see [onno-mcp-starter/README.md](../onno-mcp-starter/README.md#custom-tools)) |
 | **Skill / plugin** | guidance that makes an AI agent good at your domain | a Claude skill published through a plugin marketplace (see [.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json)) |
 
@@ -132,7 +131,7 @@ collide and config stays predictable.
   against in your README and in your registry entry — the published surface is the
   `su.onno:*` artifacts on Maven Central.
 - **Tag your repo** `onno-framework` and `onno-extension` on GitHub so others can find it.
-- **Reserved plugin id:** the Gradle plugin id `su.onno.desktop` is the framework's; don't reuse it.
+- **Reserved plugin id:** the Gradle plugin id `su.onno.ui` is the framework's; don't reuse it.
 
 ## Reuse these domain seams (don't reinvent them)
 

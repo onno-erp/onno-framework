@@ -25,8 +25,8 @@ The `su.onno.process` model applies the same typed-Java principle to durable bus
 the starter persists instances/work and the web starter exposes an authenticated human task inbox.
 
 Java packages are always `su.onno.*`. The published Maven group is `su.onno` (core,
-Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle plugin id is
-`su.onno.desktop`.
+Apache-2.0) and `su.onno.enterprise` (commercial connectors). The UI Gradle plugin id is
+`su.onno.ui`.
 
 ## Modules
 
@@ -36,16 +36,12 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 | `onno-framework-starter` | `su.onno` | Spring Boot auto-configuration that wires the core: metadata registry, repositories, schema initializer, posting and process services, timer/subprocess polling, number generation, secret cipher, background jobs. |
 | `onno-web-starter` | `su.onno` (package `su.onno.web`) | The web layer: generic REST controllers under `/api/**`, access control and record policies, commands/checks/picker endpoints, media uploads, SSE event stream, comment threads, per-user notifications; serves the bundled default UI and the `/api/ui` model. |
 | `onno-ui` | (npm `@onno/ui`) | The UI: the React shell, default screens, page building blocks and typed data hooks apps import. `onno-web-starter` builds it into the default shell. |
-| `onno-observability-starter` | `su.onno` | Opt-in privacy-safe business and UX telemetry, a bounded non-blocking exporter, and deployment-version context. Included transitively by the web starter but disabled by default. |
 | `onno-crm-starter` | `su.onno` | Composable messaging: inboxes, conversations/messages, channel identities, and the `@onno/crm` React components. Explicit host customer bindings enable it; customers, employees, sales models and navigation remain host-owned. |
 | `onno-auth-starter` | `su.onno` | Spring Security: database (runtime-managed accounts), in-memory, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
 | `onno-mcp-starter` | `su.onno` | Model Context Protocol server exposing the model + CRUD + register reads + posting as AI-agent tools, generated from the registry. |
 | `onno-import-starter` | `su.onno` | CSV import (preview, mapping, upsert, dry-run, document grouping) through the same command path as the UI. |
 | `onno-print-starter` | `su.onno` | Print forms: `PrintForm<T>` beans fill Word (`.docx`) / Excel (`.xlsx`) templates via Apache POI; record-menu actions, list batch printing (zip), admin-uploaded template overrides (`onno_print_templates`), optional PDF via a `PdfConverter` (Gotenberg / LibreOffice). |
 | `onno-cluster-starter` | `su.onno` | Cross-node delivery of `ClusterEvent`s (entity changes, process-task invalidations, presence, and notifications) for horizontal scale-out via a pluggable `ClusterEventBus` SPI (default Postgres `LISTEN`/`NOTIFY`; no-op on H2). Keeps the SSE live UI, task inboxes, collaboration markers, and notification delivery in sync across instances. |
-| `onno-kafka-starter` | `su.onno` | Transactional outbox → Kafka relay as CloudEvents, de-duplicating inbox, service registry, remote `Ref` client. |
-| `onno-desktop-starter` | `su.onno` | Runs the app as a native desktop window (Tauri shell), config-as-code window manifest, H2/session relocation. |
-| `onno-desktop-gradle-plugin` | (`su.onno.desktop` plugin) | Packages a Spring Boot app into a native `.dmg`/`.msi`/`.AppImage` via jlink + Tauri. |
 | `onno-ui-gradle-plugin` | (`su.onno.ui` plugin) | Builds an app's own React UI (`src/main/ui`, a Vite app on `@onno/ui`) into its jar and generates `model.gen.ts` from the Java model. |
 | `example` | (not published) | The Onno Books retailer app: a compact end-to-end consumer and smoke-test fixture. |
 | `onno-tochka-starter`, `onno-yookassa-starter`, `onno-ozon-starter`, … | `su.onno.enterprise` | Commercial connectors in the separate [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo. |
@@ -438,7 +434,7 @@ H2, the bundled forms, and headless clients on one round-trip-safe representatio
 All endpoints are under `/api/**`, authenticated, and (for mutations) CSRF-protected. `{name}` is
 the entity's annotation **logical name** (e.g. `Properties`, not the class `Property` or a localized title), matched
 case-insensitively with spaces/underscores stripped. **There is no anonymous manifest endpoint** —
-the only `/manifest` route is the desktop shell's `/api/desktop/manifest`; agents introspect the
+agents introspect the
 model via the real generated endpoints below or the MCP `describe_metadata` tool. The read-response
 contract (logical keys, `FieldDisplay`/`FieldRef` expansion, storage compatibility, and
 `__SECRET_SET__` redaction) is in
@@ -476,7 +472,6 @@ cancellation comes from `cancellationAssignment(payload)`; inbox/task authorizat
 | Presence | `POST /api/presence` (body `{path, action}`) — mark presence on any route (`enter`/`heartbeat`/`leave`); the server derives the identity from the path (a record, an entity list, or any page/dashboard), gating entity routes on read access while a page is visible to any signed-in user. Identity from the session, heartbeat-kept + TTL-expired, relayed across nodes over the `ClusterEventBus`. `GET /api/presence` — the ambient snapshot (routes the caller may see) that seeds the client store behind the tab/row/sidebar collaborator avatars (the viewer's photo, initials fallback); kept live by `presence` SSE deltas (web-starter) |
 | Auth | `POST /api/auth/login`, `POST /api/auth/login/{method}[/challenge]` (application `LoginMethod` beans), `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/csrf` (auth-starter) |
 | Import | `POST /api/import/{catalogs,documents}/{name}/csv[/preview]` (import-starter) |
-| Desktop | `GET /api/desktop/ready`, `GET /api/desktop/manifest` (desktop-starter) |
 | MCP | `POST /mcp` — streamable-HTTP MCP transport (mcp-starter) |
 
 Catalog/document attributes declared with `@Attribute(secret = true)` are write-only and are excluded
@@ -615,7 +610,7 @@ cross-site session iframe additionally needs `onno.auth.embedding.cross-site-coo
 
 `/api/**` requires authentication (except the public allowlist: `/error`, `/api/theme`,
 `/api/config`, `/api/branding`, `/api/auth/login`, `/api/auth/login/{method}[/challenge]`, `/api/auth/me`, `/api/auth/csrf`,
-`/api/ui/login`, `/api/desktop/**`). **Per-entity RBAC is deny-by-default**: a
+`/api/ui/login`). **Per-entity RBAC is deny-by-default**: a
 catalog/document/register is invisible
 and uneditable unless its `@AccessControl` read/write roles grant the caller; the `ADMIN` role is a
 superuser. Override the whole thing by setting `onno.auth.enabled=false` and supplying your own
@@ -768,13 +763,6 @@ entity table bypasses the recorder.
   them) and win over the built-in file until reset. PDF output (`?format=pdf`, `spec.pdf()`) goes
   through one `PdfConverter` bean — `GotenbergPdfConverter` or `LibreOfficePdfConverter` from
   `onno.print.pdf.*`, or the application's own.
-- **Kafka** (`onno-kafka-starter`) — drains the `onno_outbox` to a Kafka topic as CloudEvents via
-  `OutboxRelay.relayPending()` (call it from your own `@Scheduled`); optional de-duplicating inbox
-  dispatches to `EventHandler` beans; `RemoteRefClient` resolves references against other services.
-- **Desktop** (`onno-desktop-starter` + `onno-desktop-gradle-plugin`) — a `DesktopApp` bean
-  declares the window (config-as-code); the starter serves `/api/desktop/{ready,manifest}` and
-  relocates the H2 file + session store under the per-user home; the Gradle plugin
-  (`id("su.onno.desktop")`, task `packageDesktop`) jlinks a runtime and runs `cargo tauri build`.
 
 ## Events & outbox
 
@@ -806,7 +794,8 @@ repository save/delete or posting mutation; a rollback cannot leave a phantom ev
 insert failure rolls back the business mutation. Direct application calls to
 `OutboxWriter.append(...)` join an active Spring JDBC transaction; posting internals use the
 transaction-bound `append(Handle, ...)` overload.
-`onno-kafka-starter` relays those rows when you want cross-service streaming.
+The framework ships no broker transport: a relay of your own (for example a scheduled job publishing to your broker) reads those rows when you want
+cross-service streaming.
 
 The `entityType` vocabulary is open: the modelled kinds are `catalog`, `document`, and `register`,
 but other modules emit their own. Comment-thread posts and deletes (`onno-web-starter`; not a modelled
@@ -841,7 +830,7 @@ Running more than one instance behind a load balancer needs these, beyond a shar
   over a pluggable `ClusterEventBus` (`su.onno.cluster`, an SPI swappable like `MediaStorage`);
   the default uses Postgres `LISTEN`/`NOTIFY` (no extra infrastructure) and is a no-op on H2. A
   received event is pushed straight to the local SSE stream and is **never** re-published as a Spring
-  event, so business `@EventListener`s (cache, search, post-hooks, the kafka outbox) still run exactly
+  event, so business `@EventListener`s (cache, search, post-hooks) still run exactly
   once, on the node that made the change. `DocumentPostedEvent`/`DocumentUnpostedEvent` are node-local
   by design; their cross-node *visibility* rides on the `posted`/`unposted` `EntityChangedEvent`. To
   swap in Kafka/Redis, expose your own `ClusterEventBus` bean (`@ConditionalOnMissingBean`).
@@ -894,10 +883,9 @@ are in [docs/licensing/MODULE-SPLIT-PLAN.md](licensing/MODULE-SPLIT-PLAN.md).
 The same starter mechanism is open to anyone — community extensions are first-class, not a fork.
 There are six extension surfaces: **connectors** (auto-config starters wrapping an external
 system), **SPI implementations** (`MediaStorage`, `MailDispatcher`, an additive
-`AuthMethodsContributor` login button, custom `SecurityFilterChain`/`UserDetailsService`, Kafka
-`EventHandler`), **UI** (npm packages of React components on `@onno/ui`, `ExtensionSlot` contributions, and
+`AuthMethodsContributor` login button, custom `SecurityFilterChain`/`UserDetailsService`), **UI** (npm packages of React components on `@onno/ui`, `ExtensionSlot` contributions, and
 `Commands` beans),
-**observability** (`TelemetryRecorder` semantic outcomes and timings), **MCP**
+**MCP**
 (`@McpTool` methods and `McpToolProvider` beans), and Claude **skills/plugins** (via
 [.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json)).
 

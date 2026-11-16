@@ -196,10 +196,8 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     public UiConfigController uiConfigController(UiProperties properties,
                                           WebProperties webProperties,
                                           UiMessages uiMessages,
-                                          org.springframework.beans.factory.ObjectProvider<UpdateChecker> updateChecker,
-                                          org.springframework.beans.factory.ObjectProvider<
-                                                  su.onno.observability.TelemetrySink> telemetrySink) {
-        return new UiConfigController(properties, webProperties, uiMessages, updateChecker, telemetrySink);
+                                          org.springframework.beans.factory.ObjectProvider<UpdateChecker> updateChecker) {
+        return new UiConfigController(properties, webProperties, uiMessages, updateChecker);
     }
 
     /**

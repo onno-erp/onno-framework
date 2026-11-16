@@ -32,10 +32,6 @@ Auto-configuration (`UiAutoConfiguration`) kicks in when the starter is on the c
 `MetadataRegistry` bean exists (contributed by `onno-framework-starter`) and `onno.web.enabled` is not
 `false`. Every readable entity then has a REST API and a default screen.
 
-The starter includes `onno-observability-starter` transitively. Telemetry stays disabled unless
-`onno.telemetry.enabled=true`; then the browser reports sampled route views, normalized `/api/**`
-timings and error types through `POST /api/telemetry/events`. The collector token never reaches the
-browser. See [onno-observability-starter](../onno-observability-starter/README.md).
 
 ## Configuration
 

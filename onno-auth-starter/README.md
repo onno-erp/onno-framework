@@ -80,13 +80,11 @@ Framework public paths (always public):
 /api/auth/me
 /api/auth/csrf
 /api/ui/login
-/api/desktop/ready
-/api/desktop/manifest
 ```
 
 These are the `/api/**` paths reachable unauthenticated: the login endpoint plus non-sensitive
 bootstrap endpoints (theme, config, branding, current-auth-state, CSRF token, the login screen's
-methods, and the desktop shell's readiness probe and window manifest). Everything else under
+and methods). Everything else under
 `/api/**` is `authenticated()`; everything else (the UI shell and assets) is `permitAll()`. Add your
 own public patterns with `onno.auth.additional-public-paths`; they are combined with this list,
 which always stays public.

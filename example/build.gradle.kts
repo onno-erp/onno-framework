@@ -2,7 +2,6 @@ plugins {
     application
     id("org.springframework.boot")
     id("io.spring.dependency-management")
-    id("su.onno.desktop")
     // Builds the app UI in src/main/ui (a Vite app on @onno/ui) into the jar.
     id("su.onno.ui")
 }

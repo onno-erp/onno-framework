@@ -231,9 +231,9 @@ domain classes.
 | Foundation | [`onno-framework`](onno-framework), [`onno-framework-starter`](onno-framework-starter) |
 | Application surface | [`onno-web-starter`](onno-web-starter), [`onno-auth-starter`](onno-auth-starter) |
 | Composable messaging | [`onno-crm-starter`](onno-crm-starter) |
-| Data and integration | [`onno-import-starter`](onno-import-starter), [`onno-print-starter`](onno-print-starter), [`onno-kafka-starter`](onno-kafka-starter), [`onno-cluster-starter`](onno-cluster-starter) |
-| AI and operations | [`onno-mcp-starter`](onno-mcp-starter), [`onno-observability-starter`](onno-observability-starter) |
-| Native and custom UI | [`onno-desktop-starter`](onno-desktop-starter), [`onno-desktop-gradle-plugin`](onno-desktop-gradle-plugin), [`onno-ui-gradle-plugin`](onno-ui-gradle-plugin), [`@onno/ui`](onno-ui) |
+| Data and integration | [`onno-import-starter`](onno-import-starter), [`onno-print-starter`](onno-print-starter), [`onno-cluster-starter`](onno-cluster-starter) |
+| AI | [`onno-mcp-starter`](onno-mcp-starter) |
+| Custom UI | [`onno-ui-gradle-plugin`](onno-ui-gradle-plugin), [`@onno/ui`](onno-ui) |
 | Consumer examples | [`example`](example) |
 
 Spring Boot starters expose auto-configuration through

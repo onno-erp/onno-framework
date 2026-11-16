@@ -461,7 +461,7 @@ UI allowlist. Media inputs stream the file to `MediaStorage` and persist the ret
 - `OutboxWriter.append(aggregateType, aggregateId, eventType, payload)` → `onno_outbox`; the
   starter wires it to join active Spring JDBC transactions. Posting uses
   `append(Handle, ...)` so the business mutation and outbox row commit or roll back together.
-  `onno-kafka-starter` relays committed rows as CloudEvents.
+  An application-owned relay reads committed rows.
 
 ## Schema & migration (packages `su.onno.schema`, `su.onno.migration`)
 

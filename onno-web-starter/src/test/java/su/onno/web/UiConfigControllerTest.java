@@ -2,7 +2,6 @@ package su.onno.web;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
-import su.onno.observability.TelemetrySink;
 
 import java.util.Map;
 
@@ -17,7 +16,7 @@ class UiConfigControllerTest {
     private static UiConfigController controller(UiProperties ui, WebProperties web) {
         StaticListableBeanFactory none = new StaticListableBeanFactory();
         return new UiConfigController(ui, web, UiMessages.defaults(),
-                none.getBeanProvider(UpdateChecker.class), none.getBeanProvider(TelemetrySink.class));
+                none.getBeanProvider(UpdateChecker.class));
     }
 
     @Test

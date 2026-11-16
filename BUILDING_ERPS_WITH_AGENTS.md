@@ -31,8 +31,8 @@ Use this file as the agent handoff document in the consuming ERP repo. It explai
 - enumerations for closed state sets
 - constants for singleton settings
 - lifecycle hooks and rules for invariants
-- Spring Boot starters for schema, repositories, generic APIs, UI, auth, MCP, import, observability,
-  clustering, desktop, Kafka, and integrations
+- Spring Boot starters for schema, repositories, generic APIs, UI, auth, MCP, import, print,
+  clustering, and integrations
 
 Do not start from database tables or controllers. Start from the business model. The framework turns that model into persistence, repositories, generic APIs, metadata, and UI surfaces.
 
@@ -68,8 +68,6 @@ Optional starters (same group and `$onnoVersion`):
 implementation("su.onno:onno-auth-starter:$onnoVersion")    // security: in-memory, OIDC/SSO, JWT
 implementation("su.onno:onno-mcp-starter:$onnoVersion")     // MCP server for AI agents
 implementation("su.onno:onno-import-starter:$onnoVersion")  // CSV import
-implementation("su.onno:onno-kafka-starter:$onnoVersion")   // outbox → Kafka
-implementation("su.onno:onno-desktop-starter:$onnoVersion") // native desktop
 ```
 
 Commercial vertical connectors ship from the separately licensed

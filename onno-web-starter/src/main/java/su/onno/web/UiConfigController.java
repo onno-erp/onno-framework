@@ -8,13 +8,12 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.BiConsumer;
-import su.onno.observability.TelemetrySink;
 
 /**
  * The UI's configuration, each piece served once: {@code /api/theme} (the {@code onno.ui.theme}
  * tokens), {@code /api/branding} (app name, logos, marks, favicon and palette — public, because the
  * login screen paints it before sign-in) and {@code /api/config} (read-only mode, locale, chrome
- * strings, the update notice and telemetry). The business model ({@code /api/ui/model}) carries none
+ * strings and the update notice). The business model ({@code /api/ui/model}) carries none
  * of these.
  */
 @RestController
@@ -26,17 +25,14 @@ public class UiConfigController {
     private final BrandingConfig branding;
     private final UiMessages messages;
     private final ObjectProvider<UpdateChecker> updateChecker;
-    private final ObjectProvider<TelemetrySink> telemetrySink;
 
     public UiConfigController(UiProperties properties, WebProperties webProperties, UiMessages messages,
-                          ObjectProvider<UpdateChecker> updateChecker,
-                          ObjectProvider<TelemetrySink> telemetrySink) {
+                          ObjectProvider<UpdateChecker> updateChecker) {
         this.properties = properties;
         this.webProperties = webProperties;
         this.branding = properties.getBranding().toConfig();
         this.messages = messages;
         this.updateChecker = updateChecker;
-        this.telemetrySink = telemetrySink;
     }
 
     @GetMapping("/theme")
@@ -69,12 +65,6 @@ public class UiConfigController {
             update.put("latest", s.latestVersion());
             update.put("url", s.releaseUrl());
             out.put("update", update);
-        }
-        TelemetrySink sink = telemetrySink.getIfAvailable();
-        if (sink != null) {
-            out.put("telemetry", Map.of(
-                    "enabled", true,
-                    "sampleRate", sink.browserSampleRate()));
         }
         return out;
     }

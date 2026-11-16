@@ -13,8 +13,6 @@ These framework bootstrap paths are always public, whatever `onno.auth.public-pa
 /api/auth/me
 /api/auth/csrf
 /api/ui/login
-/api/desktop/ready
-/api/desktop/manifest
 ```
 
 Add your own anonymous endpoints with `onno.auth.additional-public-paths` (or `public-paths`; both

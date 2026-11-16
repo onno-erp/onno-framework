@@ -16,7 +16,7 @@ import java.util.function.Consumer;
  * <p><strong>This is a best-effort live-UI signal, not a guaranteed-delivery event log.</strong> An
  * event dropped during a reconnect is acceptable — the browser re-fetches the affected surface on its
  * next interaction. Durable, exactly-once domain-event distribution is the job of the outbox relay
- * ({@code su.onno.messaging.OutboxWriter} + {@code onno-kafka-starter}), not this bus.
+ * ({@code su.onno.messaging.OutboxWriter} plus an application-owned relay), not this bus.
  */
 public interface ClusterEventBus {
 

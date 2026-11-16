@@ -20,7 +20,6 @@ Extend onno without forking. Ship a separate artifact that a host app opts into.
 | SPI implementation | Bean implementing a framework extension point |
 | UI add-on | An npm package of React components next to the starter (`src/main/ui`, like `@onno/print`, `@onno/crm`) that apps render from their pages or contribute through `defineApp({ extensions })`; server actions as `Commands<E>` beans |
 | Skill/plugin | Agent guidance for a domain or integration |
-| Observability exporter | Consumer of the observability export SPI |
 | MCP tool pack | Additive `@McpTool` methods or `McpToolProvider` beans |
 
 Use `docs/EXTENDING.md` for public community integrations and `../onno/reference/connectors.md` for

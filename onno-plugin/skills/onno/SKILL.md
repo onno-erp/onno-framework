@@ -24,7 +24,7 @@ plain, compiler-checked Java; presentation is typed React in the app's `src/main
 string-mapped config.
 
 Java packages are `su.onno.*`. Maven group is `su.onno` (open core, Apache-2.0);
-commercial connectors are `su.onno.enterprise`. Desktop Gradle plugin id is `su.onno.desktop`.
+commercial connectors are `su.onno.enterprise`. UI Gradle plugin id is `su.onno.ui`.
 Requires Java 21 and Spring Boot 3.4.x.
 
 ## Focused sibling skills
@@ -301,12 +301,11 @@ formatting. Close that gap in the same pass you model the business, not "later":
 ## Inspecting a running app
 
 Most `/api/**` routes are authenticated; the documented bootstrap allowlist (theme/config/branding,
-login/me/CSRF, and desktop probes by default) is public. Cookie-mode mutations are
+login/me/CSRF and the login screen by default) is public. Cookie-mode mutations are
 **CSRF-protected**; resource-server bearer mode disables CSRF. Two traps:
 
-1. **There is no anonymous manifest endpoint.** `/api/ui/metadata/manifest` does not exist (the only
-   `/manifest` is the desktop shell's). Introspect the model via the real generated endpoints or the
-   MCP `describe_metadata` tool.
+1. **There is no anonymous manifest endpoint.** `/api/ui/metadata/manifest` does not exist. Introspect the model via
+   the real generated endpoints or the MCP `describe_metadata` tool.
 2. **The SPA fallback is navigation-only.** Unknown `/api/**` routes and missing assets return
    `404`; only HTML `GET` navigation under `onno.ui.path` falls back to `index.html`.
 
@@ -361,8 +360,7 @@ the JSON read contract (logical `FieldDisplay`/`FieldRef` companions, storage co
 Core (`onno-framework` + `-starter`), plus opt-in starters: `onno-web-starter`, `onno-auth-starter`,
 `onno-mcp-starter`, `onno-import-starter`, `onno-print-starter` (Word/Excel print forms via
 `PrintForm<T>` beans), `onno-cluster-starter` (cross-node live-UI sync for
-horizontal scale-out), `onno-kafka-starter`, `onno-observability-starter`,
-`onno-desktop-starter` (+ Gradle plugin), `onno-ui-gradle-plugin`, and the npm packages `@onno/ui`, `@onno/crm`, `@onno/print`.
+horizontal scale-out), `onno-ui-gradle-plugin`, and the npm packages `@onno/ui`, `@onno/crm`, `@onno/print`.
 Optional starters use their documented `onno.<module>.enabled` switches where provided. The full
 module map is in
 [docs/ARCHITECTURE.md](https://github.com/onno-erp/onno-framework/blob/main/docs/ARCHITECTURE.md); every `onno.*` property is in

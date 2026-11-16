@@ -115,9 +115,8 @@ No auth code moves; nothing to do here.
 `example` depends on `:onno-hospedajes-starter` and wires it through the
 `com.example.integration.hospedajes` package.
 - **OSS `example`:** remove the hospedajes dependency, the `integration/hospedajes` package, and
-  the `onno.hospedajes.*` config block; keep it a pure-core demo (framework, ui, auth, mcp,
-  desktop). This is the public "hello world ERP".
-- **Vertical showcase** (the hospedajes/guesty integration + Tauri desktop bundle): the integration
+  the `onno.hospedajes.*` config block; keep it a pure-core demo (framework, ui, auth, mcp). This is the public "hello world ERP".
+- **Vertical showcase** (the hospedajes/guesty integration): the integration
   source is carried into `onno-enterprise` for reference and can be rebuilt as a `rentals-example`
   there — the sales demo and reference "vertical solution".
 

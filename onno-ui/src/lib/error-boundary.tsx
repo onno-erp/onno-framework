@@ -1,5 +1,4 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { recordUiError } from "./telemetry";
 
 /**
  * Error boundary around each data-owning part of a page (a list, a form, a chart): a throwing
@@ -21,7 +20,6 @@ export class ErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    recordUiError(error.name || "render", this.props.label);
     console.error(
       `[onno] "${this.props.label ?? "unknown"}" failed to render`,
       error,

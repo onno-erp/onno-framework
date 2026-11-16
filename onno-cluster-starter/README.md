@@ -20,7 +20,7 @@ This starter closes that gap with a small SPI and a database-backed default:
 
 It is a **best-effort live-UI signal, not a guaranteed event log.** An event dropped during a
 reconnect is fine — the browser re-fetches the affected surface on its next interaction. For durable,
-exactly-once domain-event distribution between *services*, use the outbox relay (`onno-kafka-starter`).
+exactly-once domain-event distribution between *services*, use the transactional outbox (`onno_outbox`) with an application-owned relay.
 
 ## How it works
 
@@ -34,7 +34,7 @@ node B: LISTEN ◄────────────────────�
 
 A received event is pushed straight to the SSE stream — it is **never re-published as a Spring
 `ApplicationEvent`**. So business `@EventListener`s (cache revalidation, search indexing, post-hooks,
-the kafka outbox) still run exactly once, on the node that made the change. A node filters out its own
+the outbox) still run exactly once, on the node that made the change. A node filters out its own
 `NOTIFY` echo by the event's `originNodeId`.
 
 ## Activation

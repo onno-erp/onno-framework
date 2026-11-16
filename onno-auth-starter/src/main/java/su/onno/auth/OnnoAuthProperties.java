@@ -57,8 +57,7 @@ public class OnnoAuthProperties {
      * Prefer {@code onno.auth.additional-public-paths} for new configurations.
      * The defaults are: {@code /error}, {@code /api/theme}, {@code /api/config}, {@code /api/branding},
      * {@code /api/auth/login}, {@code /api/auth/login/{method}} and {@code /api/auth/login/{method}/challenge}
-     * (application login methods), {@code /api/auth/me}, {@code /api/auth/csrf}, {@code /api/ui/login},
-     * {@code /api/desktop/ready}, {@code /api/desktop/manifest}.
+     * (application login methods), {@code /api/auth/me}, {@code /api/auth/csrf}, {@code /api/ui/login}.
      */
     private List<String> publicPaths = new ArrayList<>(FRAMEWORK_PUBLIC_PATHS);
 
@@ -87,12 +86,7 @@ public class OnnoAuthProperties {
             // bootstrapped before sign-in; it's only ever this caller's own session token.
             "/api/auth/csrf",
             // The login screen description. Public so it can render before sign-in.
-            "/api/ui/login",
-            // Desktop shell liveness + window manifest. The native shell polls these
-            // before any user can log in, so they must be reachable unauthenticated;
-            // both are non-sensitive (readiness probe + window geometry/title).
-            "/api/desktop/ready",
-            "/api/desktop/manifest");
+            "/api/ui/login");
 
     /**
      * Request paths exempted from CSRF protection in the cookie-based modes

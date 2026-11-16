@@ -17,7 +17,7 @@ to future agents that may not have the full conversation context.
 - The framework is **open-core**. The modules in this repo are Apache-2.0 (see [`LICENSE`](LICENSE)
   and [`NOTICE`](NOTICE)); commercial vertical connectors live in the separate `onno-enterprise` repo.
 - Published Maven coordinates use `group = "su.onno"` (Maven Central). The Java packages
-  are still `su.onno.*` and the desktop plugin id is `su.onno.desktop` — only the publish
+  are still `su.onno.*` and the UI Gradle plugin id is `su.onno.ui` — only the publish
   coordinate changed. Releases are tag-driven (`vX.Y.Z`); the latest is in the git tags.
 - Java 21 is required. The Gradle wrapper is the source of truth for builds.
 - `onno-web-starter` builds the default UI shell from the top-level `onno-ui` npm package with Node 22.22
@@ -37,16 +37,12 @@ to future agents that may not have the full conversation context.
 | `onno-framework-starter` | Spring Boot auto-configuration for the core framework. |
 | `onno-web-starter` | The web layer, Java package `su.onno.web`: generic REST API, access control and record policies, commands/checks, picker options, comments/notifications/presence/tags/media, the SSE event stream, and serving the React app plus its `/api/ui` model. |
 | `onno-ui` | npm package `@onno/ui`: the React shell, default screens, page building blocks and typed data hooks apps import. Built by `onno-web-starter` (default shell) and by apps through `su.onno.ui`. |
-| `onno-observability-starter` | Opt-in privacy-safe business/UX telemetry API, browser intake, and bounded asynchronous HTTP export. |
 | `onno-crm-starter` | Composable inbox and messaging around explicitly bound host customer/employee catalogs. Host owns sales, business fields and navigation. |
 | `onno-auth-starter` | Security and auth API auto-configuration: database (runtime-managed accounts), in-memory, OIDC/SSO, and resource-server (JWT) modes. |
 | `onno-mcp-starter` | MCP server exposing the model + CRUD + register reads + posting as AI-agent tools. |
 | `onno-import-starter` | CSV import (preview, mapping, upsert, dry-run) through the UI command path. |
 | `onno-print-starter` | Print forms: typed `PrintForm<T>` beans fill Word/Excel templates; record ⋯ menu, list batch zip, admin template uploads, optional PDF. |
 | `onno-cluster-starter` | Cross-node delivery of entity-change events for horizontal scale-out via a pluggable `ClusterEventBus` (default Postgres LISTEN/NOTIFY; no-op on H2). |
-| `onno-kafka-starter` | Kafka/event transport helpers (outbox relay, CloudEvents, remote refs). |
-| `onno-desktop-starter` | Desktop runtime support and bundled Tauri shell resources. |
-| `onno-desktop-gradle-plugin` | Gradle plugin for native desktop packaging. |
 | `onno-ui-gradle-plugin` | Gradle plugin (`su.onno.ui`) that builds an app's own React UI (`src/main/ui`, a Vite app on `@onno/ui`) into its jar, generates `model.gen.ts` from the Java model, and seeds a starter UI (`onnoUiInit`). |
 | `example` | Local example app and smoke-test consumer inside the multi-module build. Do not publish it. |
 | `community/` | Community integrations registry: `registry.json` (source of truth) + `registry.schema.json`. `INTEGRATIONS.md` is generated from it by the `generateIntegrationsDoc` Gradle task. |
@@ -58,7 +54,7 @@ Community extensions (connectors, SPI implementations, UI add-ons, skills) are b
 ### Before Editing
 
 1. Read the relevant module's `build.gradle.kts`.
-2. Check whether the change belongs in core, a starter, the desktop plugin, the UI frontend, or one of the example apps.
+2. Check whether the change belongs in core, a starter, a Gradle plugin, the UI frontend, or one of the example apps.
 3. Prefer extending existing framework concepts over adding parallel mechanisms.
 4. Keep public API changes intentional. If you change annotations, model base classes, repository contracts, or auto-configuration properties, update docs and tests in the same pass — see [Keeping docs in sync](#keeping-docs-in-sync).
 5. Preserve user changes in the working tree. Do not reset, checkout, or clean files unless the user explicitly asks.
@@ -160,7 +156,7 @@ If a tool creates a cache that appears in `git status`, remove it unless it is i
 The reusable surface is the set of published modules under `su.onno:*` on Maven Central.
 External projects consume them with a plain `mavenCentral()` (no credentials), or from `mavenLocal()`
 (`-SNAPSHOT`) during development. Avoid requiring consumers to use `includeBuild` except for local
-desktop-plugin development.
+Gradle-plugin development.
 
 Spring Boot starters must expose auto-configuration through:
 
@@ -877,8 +873,7 @@ Likely outputs:
 - annotation `context`
 - background jobs
 - outbox events
-- `onno-kafka-starter` configuration
-- remote reference resolution plans
+- an application-owned relay draining the `onno_outbox` table
 
 ## Modeling Workflow
 
@@ -1047,7 +1042,7 @@ class CheckInListener {
 ```
 
 The domain `AfterPostHandler.afterPost()` hook still exists, but it has no Spring access — prefer the
-event for anything that touches beans. Neither requires the Kafka outbox (that's only for cross-service
+event for anything that touches beans. Neither requires the outbox (that's only for cross-service
 event streaming).
 
 `PostingEngine` also publishes document `EntityChangedEvent` notifications

@@ -33,7 +33,10 @@
         "./skills/onno-mcp",
         "./skills/onno-testing-release",
         "./skills/onno-extensions",
-        "./skills/onno-connectors"
+        "./skills/onno-connectors",
+        "./skills/onno-crm-adopt",
+        "./skills/onno-crm-channel-setup",
+        "./skills/onno-crm-channel-debug"
       ]
     }
   ]
