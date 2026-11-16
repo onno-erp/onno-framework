@@ -10,7 +10,6 @@ import su.onno.model.CatalogObject;
 import su.onno.types.Ref;
 import su.onno.ui.divkit.SurfaceDivBuilder;
 
-import lombok.Getter;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
@@ -33,7 +32,6 @@ class ListScheduleViewsTest {
     }
 
     @Catalog(name = "ScheduleVisits")
-    @Getter
     static class Visit extends CatalogObject {
         @Attribute
         private LocalDateTime startsAt;
@@ -45,6 +43,12 @@ class ListScheduleViewsTest {
         private Ref<Doctor> doctor;
         @Attribute(length = 80)
         private String patient;
+
+        public LocalDateTime getStartsAt() { return startsAt; }
+        public LocalDateTime getEndsAt() { return endsAt; }
+        public LocalDate getFollowUp() { return followUp; }
+        public Ref<Doctor> getDoctor() { return doctor; }
+        public String getPatient() { return patient; }
     }
 
     private final MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
