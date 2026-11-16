@@ -127,6 +127,8 @@ public final class KeysetWindow {
                         case java.sql.Types.DATE -> value instanceof java.sql.Date || value instanceof java.time.LocalDate;
                         case java.sql.Types.TIMESTAMP, java.sql.Types.TIMESTAMP_WITH_TIMEZONE ->
                                 value instanceof java.sql.Timestamp || value instanceof java.time.LocalDateTime;
+                        case java.sql.Types.TIME, java.sql.Types.TIME_WITH_TIMEZONE ->
+                                value instanceof java.sql.Time || value instanceof java.time.LocalTime;
                         case java.sql.Types.BOOLEAN, java.sql.Types.BIT -> value instanceof Boolean;
                         default -> "uuid".equalsIgnoreCase(metadata.getColumnTypeName(column))
                                 || "java.util.UUID".equals(metadata.getColumnClassName(column))

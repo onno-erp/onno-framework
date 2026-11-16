@@ -369,6 +369,24 @@ Two semantics that bite every integration:
 `GET /api/documents/{name}/{id}/posting-preview` (and the MCP `posting_preview` tool) dry-run the
 movements without writing them.
 
+### Period close
+
+`PeriodCloseService` (`su.onno.period`) holds change-prohibition dates per scope — global, bounded
+context, accumulation register, or organization (`@PeriodCloseOrganization` field) — soft or hard,
+in the framework-owned `onno_period_close` table. A document
+dated on or before the latest applicable close date cannot be created, changed, delete-marked,
+posted, reposted or unposted. The check is authoritative below controllers: `PostingEngine` runs it
+inside the posting transaction (and for every later document a chronological restoration would
+repost, so a backdated change cannot cascade into a closed period), `OnnoBeforeConvertCallback`
+runs it on repository saves, and `DocumentCommandService` on the generic UI/REST/import/MCP path.
+Rejections throw `PeriodClosedException` (HTTP 409 `period-closed`, including from
+`posting-preview`). Close/reopen (`ADMIN` + `onno.period-close.manage-roles`; reopen needs a
+reason) and overrides (`onno.period-close.override-roles`, or an explicit
+`PeriodCloseService.override(...)` block) are audited in `onno_period_close_audit`. The UI starter
+serves `/api/period-close` and a built-in `/period-close` page; the MCP starter adds the read-only
+`period_close_status` tool. `@PeriodCloseExempt` opts a document type out; `@PeriodAdjustment`
+document types may still change a soft-closed period (audited as adjustments). Full contract: [PERIOD_CLOSE.md](PERIOD_CLOSE.md).
+
 ## Query paths
 
 There is no universal query DSL. Catalog and document API reads use the UI starter's dedicated
@@ -410,7 +428,10 @@ the prior storage-shaped response remains available explicitly with `?representa
 aliases and reject unequal duplicates. Temporal values are normalized at the read/write boundary:
 `LocalDate` is `yyyy-MM-dd`, and `LocalDateTime` is offset-free ISO wall time. Offset- or
 zone-bearing `LocalDateTime` writes are rejected with a field-specific `400` rather than silently
-discarding the offset. JDBC timestamp variants remain normalized on reads. This keeps PostgreSQL,
+discarding the offset. `LocalTime` is `HH:mm[:ss[.fraction]]`. `Instant` is an absolute moment:
+it is stored as `TIMESTAMP WITH TIME ZONE` (UTC), written with an explicit `Z`/offset (offset-free
+writes are a `400`), and read back as ISO UTC (`…Z`); the web client renders and edits it in
+`onno.ui.time-zone`, else the viewer's browser zone. JDBC timestamp variants remain normalized on reads. This keeps PostgreSQL,
 H2, the bundled forms, and headless clients on one round-trip-safe representation.
 
 All endpoints are under `/api/**`, authenticated, and (for mutations) CSRF-protected. `{name}` is

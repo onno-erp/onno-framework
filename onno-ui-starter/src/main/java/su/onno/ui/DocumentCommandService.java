@@ -64,6 +64,7 @@ public class DocumentCommandService {
     private final AttributeValidator attributeValidator = new AttributeValidator();
     private final WriteLifecycle lifecycle;
     private final RecordWriteGuard guard;
+    private su.onno.period.PeriodCloseService periodClose;
 
     public DocumentCommandService(MetadataRegistry registry, Jdbi jdbi, UiProperties properties,
                                   NumberGenerator numberGenerator, PostingService postingService,
@@ -80,6 +81,21 @@ public class DocumentCommandService {
         this.secretCipher = secretCipher;
         this.lifecycle = new WriteLifecycle(registry, secretCipher);
         this.guard = new RecordWriteGuard(registry, query.scopes(), access, jdbi);
+    }
+
+    /** Enables period-close enforcement on create, update and delete (posting is guarded in core). */
+    public void setPeriodCloseService(su.onno.period.PeriodCloseService periodClose) {
+        this.periodClose = periodClose;
+    }
+
+    private void requirePeriodOpen(DocumentDescriptor desc, UUID id, Map<String, Object> body,
+                                   su.onno.period.PeriodOperation operation) {
+        if (periodClose == null) return;
+        Object writtenDate = body == null ? null : body.get("date");
+        String organizationField = periodClose.organizationFieldName(desc);
+        Object organization = body == null || organizationField == null ? null : body.get(organizationField);
+        periodClose.requireDocumentOpen(desc, id,
+                writtenDate == null ? null : requireWriteDate(writtenDate), organization, operation);
     }
 
     public Map<String, Object> create(DocumentDescriptor desc, Map<String, Object> requestBody, AccessSubject subject) {
@@ -116,6 +132,7 @@ public class DocumentCommandService {
             }
         }
         errors.throwIfAny();
+        requirePeriodOpen(desc, id, body, su.onno.period.PeriodOperation.CREATE);
 
         List<String> columns = new ArrayList<>(List.of(
                 "_id", "_number", "_date", "_posted", "_deletion_mark", "_version"));
@@ -194,6 +211,7 @@ public class DocumentCommandService {
             }
         }
         errors.throwIfAny();
+        requirePeriodOpen(desc, id, body, su.onno.period.PeriodOperation.UPDATE);
 
         List<String> setClauses = new ArrayList<>();
         if (body.containsKey("number")) setClauses.add("_number = :_number");
@@ -361,6 +379,8 @@ public class DocumentCommandService {
         if (stored instanceof su.onno.lifecycle.BeforeDeleteHandler handler) {
             handler.beforeDelete();
         }
+
+        requirePeriodOpen(desc, id, null, su.onno.period.PeriodOperation.DELETE);
 
         // Unpost first if posted
         Map<String, Object> row = jdbi.withHandle(h ->
@@ -546,6 +566,10 @@ public class DocumentCommandService {
             field.set(target, toLocalDate(value));
         } else if (fieldType == LocalDateTime.class) {
             field.set(target, toLocalDateTime(value));
+        } else if (fieldType == java.time.LocalTime.class) {
+            field.set(target, TemporalValues.toLocalTime(value));
+        } else if (fieldType == java.time.Instant.class) {
+            field.set(target, TemporalValues.toInstant(value));
         } else if (fieldType == UUID.class) {
             field.set(target, value instanceof UUID u ? u : UUID.fromString(value.toString()));
         } else if (fieldType.isEnum()) {

@@ -108,7 +108,7 @@ public record Cursor(String column, boolean descending, Object value, UUID id) {
                 return null;
             }
             if (!("d".equals(parts[2]) || "a".equals(parts[2]))) return null;
-            if (!java.util.Set.of("S", "Z", "B", "U", "N", "L", "D", "T", "A").contains(parts[3])) return null;
+            if (!java.util.Set.of("S", "Z", "B", "U", "N", "L", "D", "T", "A", "M").contains(parts[3])) return null;
             boolean descending = "d".equals(parts[2]);
             Object value = decodeValue(parts[3], parts[4]);
             return new Cursor(parts[1], descending, value, UUID.fromString(parts[5]));
@@ -159,7 +159,7 @@ public record Cursor(String column, boolean descending, Object value, UUID id) {
             for (int n = 2; n < parts.length; n += 2) {
                 String tag = parts[n];
                 String value = uncomponent(parts[n + 1]);
-                if (!java.util.Set.of("S", "Z", "B", "U", "N", "L", "D", "T", "A").contains(tag)) return null;
+                if (!java.util.Set.of("S", "Z", "B", "U", "N", "L", "D", "T", "A", "M").contains(tag)) return null;
                 if ("B".equals(tag) && !"true".equals(value) && !"false".equals(value)) return null;
                 values.add(decodeValue(tag, value));
             }
@@ -231,7 +231,9 @@ public record Cursor(String column, boolean descending, Object value, UUID id) {
         if (v instanceof BigDecimal || v instanceof Double || v instanceof Float) return "N";
         if (v instanceof Number) return "L"; // Long/Integer/Short/Byte
         if (v instanceof Timestamp || v instanceof Instant
-                || v instanceof LocalDateTime) return "D";
+                || v instanceof LocalDateTime
+                || v instanceof java.time.OffsetDateTime) return "D";
+        if (v instanceof java.sql.Time || v instanceof java.time.LocalTime) return "M";
         return "S";
     }
 
@@ -253,6 +255,8 @@ public record Cursor(String column, boolean descending, Object value, UUID id) {
             case "D" -> Timestamp.valueOf(LocalDateTime.parse(raw));
             // Legacy (pre-precision) tokens: epoch millis.
             case "T" -> new Timestamp(Long.parseLong(raw));
+            // A time of day (a LocalTime attribute's TIME column) binds back as java.sql.Time.
+            case "M" -> java.sql.Time.valueOf(java.time.LocalTime.parse(raw));
             default -> raw;
         };
     }
@@ -265,6 +269,8 @@ public record Cursor(String column, boolean descending, Object value, UUID id) {
     private static LocalDateTime localDateTime(Object v) {
         if (v instanceof Timestamp ts) return ts.toLocalDateTime();
         if (v instanceof Instant i) return Timestamp.from(i).toLocalDateTime();
+        // H2 surfaces TIMESTAMP WITH TIME ZONE (an Instant attribute) as an OffsetDateTime.
+        if (v instanceof java.time.OffsetDateTime odt) return Timestamp.from(odt.toInstant()).toLocalDateTime();
         if (v instanceof LocalDateTime ldt) return ldt;
         if (v instanceof LocalDate ld) return ld.atStartOfDay();
         throw new IllegalArgumentException("Unsupported temporal type: " + v.getClass());

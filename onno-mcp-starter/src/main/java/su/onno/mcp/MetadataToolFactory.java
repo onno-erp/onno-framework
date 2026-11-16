@@ -456,10 +456,23 @@ public class MetadataToolFactory implements McpToolProvider {
                         "javaType", target.javaTypeName()
                 )).toList());
             }
+            String format = temporalFormat(a.javaType());
+            if (format != null) f.put("format", format);
             if (a.required()) f.put("required", true);
             out.add(f);
         }
         return out;
+    }
+
+    /** The write/read string shape of a temporal field, so an agent does not have to guess it. */
+    static String temporalFormat(Class<?> type) {
+        if (type == java.time.LocalDate.class) return "yyyy-MM-dd";
+        if (type == java.time.LocalDateTime.class) return "yyyy-MM-ddTHH:mm[:ss] (wall time, no offset)";
+        if (type == java.time.LocalTime.class) return "HH:mm[:ss] (time of day, no zone)";
+        if (type == java.time.Instant.class) {
+            return "yyyy-MM-ddTHH:mm[:ss]Z or with ±HH:mm offset (absolute moment; read back in UTC)";
+        }
+        return null;
     }
 
     // ---- tool construction ------------------------------------------------------------

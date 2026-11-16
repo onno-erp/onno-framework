@@ -106,6 +106,18 @@ final class NewEntityDefaults {
                 } catch (IllegalArgumentException invalidDateTime) {
                     continue;
                 }
+            } else if (attr.javaType() == java.time.LocalTime.class) {
+                try {
+                    coerced = TemporalValues.toLocalTime(value).toString();
+                } catch (IllegalArgumentException invalidTime) {
+                    continue;
+                }
+            } else if (attr.javaType() == java.time.Instant.class) {
+                try {
+                    coerced = TemporalValues.toWriteInstant(value).toString();
+                } catch (IllegalArgumentException invalidInstant) {
+                    continue;
+                }
             } else {
                 // Other values are carried verbatim; the command path performs final validation.
                 coerced = value;
@@ -143,6 +155,9 @@ final class NewEntityDefaults {
         }
         if (value instanceof LocalDateTime dateTime) {
             return dateTime.toString();
+        }
+        if (value instanceof java.time.LocalTime || value instanceof java.time.Instant) {
+            return value.toString();
         }
         return value;
     }

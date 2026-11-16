@@ -26,6 +26,8 @@ import { RefSelect } from "@/components/ref-select";
 import { RestrictedRef, isRestrictedRef } from "@/components/restricted-ref";
 import { DatePicker } from "@/components/date-picker";
 import { DateTimePicker } from "@/components/date-time-picker";
+import { TimePicker } from "@/components/time-picker";
+import { InstantPicker } from "@/components/instant-picker";
 import { MapEditor } from "@/components/map-editor";
 import { ImagePicker, GalleryPicker } from "@/components/image-picker";
 import { FilePicker } from "@/components/file-picker";
@@ -1445,6 +1447,28 @@ function AttrControl({
         placeholder={placeholder || "Enter to set — leave blank to keep current"}
         value={(value as string) ?? ""}
         onChange={(e) => onChange(e.target.value)}
+      />
+    );
+  }
+
+  if (attr.javaType === "LocalTime") {
+    return (
+      <TimePicker
+        value={(value as string) ?? ""}
+        onChange={onChange}
+        aria-label={attr.displayName}
+        isInvalid={invalid}
+      />
+    );
+  }
+
+  if (attr.javaType === "Instant") {
+    return (
+      <InstantPicker
+        value={(value as string) ?? ""}
+        onChange={onChange}
+        aria-label={attr.displayName}
+        isInvalid={invalid}
       />
     );
   }

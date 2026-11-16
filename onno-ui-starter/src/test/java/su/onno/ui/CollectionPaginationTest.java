@@ -73,8 +73,13 @@ class CollectionPaginationTest {
                     + " (_id,_period,_active,_movement_type,site,product,amount) VALUES (?, TIMESTAMP '2026-11-10 00:00:00',true,'RECEIPT','A',?,1)",
                     new UUID(0, i), "P" + i);
         });
-        var first = registers.turnoverPage(subject, stock, "2020-01-01", "2030-01-01", Map.of(), null, 500);
-        var last = registers.turnoverPage(subject, stock, "2020-01-01", "2030-01-01", Map.of(), first.nextCursor(), 500);
+        // The HTTP controller passes every request parameter (incl. cursor/limit) as filters;
+        // those must not change the cursor context between pages.
+        var first = registers.turnoverPage(subject, stock, "2020-01-01", "2030-01-01",
+                Map.of("from", "2020-01-01", "to", "2030-01-01", "limit", "500"), null, 500);
+        var last = registers.turnoverPage(subject, stock, "2020-01-01", "2030-01-01",
+                Map.of("from", "2020-01-01", "to", "2030-01-01", "limit", "500", "cursor", first.nextCursor()),
+                first.nextCursor(), 500);
         assertThat(first.rows()).hasSize(500); assertThat(last.rows()).hasSize(10);
         assertThat(last.nextCursor()).isNull();
         assertThatThrownBy(() -> registers.turnover(subject, stock, "2020-01-01", "2030-01-01", Map.of()))

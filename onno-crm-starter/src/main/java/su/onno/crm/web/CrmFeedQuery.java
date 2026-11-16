@@ -120,7 +120,7 @@ public final class CrmFeedQuery {
             return transactions.execute(status -> jdbi.withHandle(handle -> {
                 String table = "onno_crm_page_" + UUID.randomUUID().toString().replace("-", "");
                 handle.execute("CREATE TEMPORARY TABLE " + table
-                        + " (_id UUID PRIMARY KEY, _sort_text TEXT, _sort_number DECIMAL(38,10), _sort_time TIMESTAMP)");
+                        + " (_id UUID PRIMARY KEY, _sort_text VARCHAR, _sort_number DECIMAL(38,10), _sort_time TIMESTAMP)");
                 try { return work.apply(handle, table); }
                 finally { handle.execute("DROP TABLE " + table); }
             }));

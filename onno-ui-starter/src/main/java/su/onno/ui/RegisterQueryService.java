@@ -239,11 +239,36 @@ public class RegisterQueryService {
 
     /** Convert dimension-name filters using metadata, never raw request SQL. */
     public ListFilter.Result dimensionFilters(AccumulationRegisterDescriptor desc, Map<String, String> values) {
-        List<String> eq = new ArrayList<>();
+        // Bind each value as the dimension's declared JDBC type, so numeric/boolean/UUID equality
+        // compares typed values (5 matches 5.00) rather than a dialect-specific text rendering.
+        List<String> conditions = new ArrayList<>();
+        Map<String, Object> bindings = new java.util.LinkedHashMap<>();
         for (var dim : desc.dimensions()) {
-            if (values.containsKey(dim.fieldName())) eq.add(dim.columnName() + "," + values.get(dim.fieldName()));
+            if (!values.containsKey(dim.fieldName())) continue;
+            String bind = "dimEq_" + dim.columnName();
+            conditions.add(dim.columnName() + " = :" + bind);
+            bindings.put(bind, typedDimensionValue(dim, values.get(dim.fieldName())));
         }
-        return ListFilter.parse(eq, List.of(), List.of(), movementColumns(desc));
+        return new ListFilter.Result(String.join(" AND ", conditions), bindings);
+    }
+
+    private static Object typedDimensionValue(AttributeDescriptor dim, String raw) {
+        try {
+            return filterValue(dim, raw);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Invalid value for dimension " + dim.fieldName(), e);
+        }
+    }
+
+    /** Only the register's dimension filters — never paging/transport parameters. */
+    private static Map<String, String> dimensionValues(AccumulationRegisterDescriptor desc, Map<String, String> values) {
+        Map<String, String> out = new java.util.TreeMap<>();
+        if (values == null) return out;
+        for (var dim : desc.dimensions()) {
+            if (values.containsKey(dim.fieldName())) out.put(dim.fieldName(), values.get(dim.fieldName()));
+        }
+        return out;
     }
 
     /** Balance rows (distinct dimension combinations) matching the filters — for the scroller. */
@@ -405,8 +430,11 @@ public class RegisterQueryService {
     }
 
     public su.onno.query.KeysetWindow.Page<Map<String, Object>> turnoverPage(AccessSubject subject,
-            AccumulationRegisterDescriptor desc, String from, String to, Map<String, String> filters,
+            AccumulationRegisterDescriptor desc, String from, String to, Map<String, String> requestFilters,
             String cursor, int limit) {
+        // The controller passes every request parameter; keep only dimensions so cursor/limit
+        // never leak into the SQL or the cursor context (page 2 would otherwise mismatch page 1).
+        Map<String, String> filters = dimensionValues(desc, requestFilters);
         ScopeClause scope = scope(subject, desc, desc.tableName());
         String dimColumns = desc.dimensions().stream()
                 .map(AttributeDescriptor::columnName)

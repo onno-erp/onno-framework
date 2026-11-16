@@ -102,10 +102,9 @@ final class EntityWriteSupport {
                 return temporal;
             }
         } catch (IllegalArgumentException invalidTemporal) {
-            if (attr.javaType() == java.time.LocalDateTime.class) {
-                throw new ValidationException(
-                        attr.displayName() + " " + TemporalValues.LOCAL_DATE_TIME_WRITE_MESSAGE,
-                        attr.fieldName());
+            String message = TemporalValues.writeMessage(attr.javaType());
+            if (message != null) {
+                throw new ValidationException(attr.displayName() + " " + message, attr.fieldName());
             }
             throw invalidTemporal;
         }

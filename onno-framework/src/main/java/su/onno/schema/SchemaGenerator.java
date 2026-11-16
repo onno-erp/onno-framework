@@ -367,6 +367,10 @@ public class SchemaGenerator {
             return "DATE";
         } else if (javaType == LocalDateTime.class) {
             return "TIMESTAMP";
+        } else if (javaType == java.time.LocalTime.class) {
+            return "TIME";
+        } else if (javaType == java.time.Instant.class) {
+            return "TIMESTAMP WITH TIME ZONE";
         } else if (PolyRef.class.isAssignableFrom(javaType)) {
             return "VARCHAR(" + Math.max(length, 512) + ")";
         } else if (Ref.class.isAssignableFrom(javaType)) {
@@ -379,6 +383,7 @@ public class SchemaGenerator {
                         + (fieldContext == null ? "" : " for column '" + fieldContext + "'")
                         + ". Supported types: String, int/Integer, long/Long, boolean/Boolean, "
                         + "double/Double, float/Float, BigDecimal, UUID, LocalDate, LocalDateTime, "
+                        + "LocalTime, Instant, "
                         + "enums, Ref subtypes, and PolyRef.");
     }
 }

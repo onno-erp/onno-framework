@@ -171,6 +171,11 @@ class RecordPolicyConformanceTest {
         }
         ROUTES.put("GET /api/settings", Route.ADMIN_ONLY);
         ROUTES.put("PUT /api/settings", Route.ADMIN_ONLY);
+        // Period close: close dates and their audit trail, never entity rows.
+        ROUTES.put("GET /api/period-close", Route.NO_ENTITY_DATA);
+        ROUTES.put("GET /api/period-close/audit", Route.NO_ENTITY_DATA);
+        ROUTES.put("POST /api/period-close/close", Route.NO_ENTITY_DATA);
+        ROUTES.put("POST /api/period-close/reopen", Route.NO_ENTITY_DATA);
     }
 
     @Autowired WebApplicationContext context;

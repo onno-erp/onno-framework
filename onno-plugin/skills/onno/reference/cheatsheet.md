@@ -44,10 +44,15 @@ reuse across documents/sections. Share implementation through a base row class.
 | `searchIndex` | boolean | `false` | PostgreSQL trigram index for substring search on this String attribute. Opt in only for fields users search by on large tables. |
 
 **Supported attribute field types:** `String`, `int`/`Integer`, `long`/`Long`, `boolean`/`Boolean`,
-`double`/`Double`, `float`/`Float`, `BigDecimal`, `UUID`, `LocalDate`, `LocalDateTime`, Java `enum`s
-(`@Enumeration`), and `Ref<T>`. **There is no `LocalTime`** (nor `Instant` / `OffsetDateTime` /
-`ZonedDateTime`) — schema generation throws `IllegalArgumentException` at startup for any other type.
-Model a time-of-day as a `LocalDateTime`, or a `String`/`int` if you only need the clock value.
+`double`/`Double`, `float`/`Float`, `BigDecimal`, `UUID`, `LocalDate`, `LocalDateTime`, `LocalTime`,
+`Instant`, Java `enum`s (`@Enumeration`), and `Ref<T>`. There is no `OffsetDateTime` / `ZonedDateTime`
+— schema generation throws `IllegalArgumentException` at startup for any other type.
+
+**Picking a temporal type:** `LocalDate` = a calendar day; `LocalDateTime` = a zone-less wall time
+(document dates, "the 10:00 slot" in one site); `LocalTime` = a time of day (opening hours, shift
+start/end) → `TIME`; `Instant` = an absolute moment (appointment start, "sent at") → stored in UTC
+(`TIMESTAMP WITH TIME ZONE`), sent as ISO with `Z`/offset, shown in `onno.ui.time-zone` or the
+viewer's browser zone.
 
 **Naming rule — entity/attribute `name` must be ASCII / URL-safe.** It becomes the REST route segment
 (`/api/catalogs/{name}`), the derived table name, and the access-check key. Derived table/column
@@ -214,6 +219,27 @@ validation exception/payload.
   Preview stages/returns movements without claiming the document, checking negative balances, or
   simulating chronological restoration, so it is not a guarantee that post succeeds. Save and
   commit before posting.
+
+## Period close (package `su.onno.period`)
+
+- `PeriodCloseService` bean (off with `onno.period-close.enabled=false`):
+  `close(scope, closedThrough, actor, reason)` (soft), `close(scope, closedThrough, hard, actor, reason)`,
+  `reopen(scope, closedThroughOrNull, actor, reason)`
+  (reason required), `locks()`, `closedThrough(scope)`, `audit(limit)`,
+  `override(new PeriodOverride(actor, reason), action)`.
+- `PeriodScope.global()` / `.context("Finance")` / `.register("Cash")` / `.organization(orgRef)`;
+  text form `global`, `context:<name>`, `register:<name>`, `organization:<id>`. Close date is
+  inclusive. Organization scope needs `@PeriodCloseOrganization` on the document's org field.
+- Soft close (default) admits `@PeriodAdjustment` document types (audited `ADJUSTMENT`) and
+  overrides; hard close admits nothing. Turning hard into soft is a `reopen` at the same date.
+- Rejects create/update/delete/post/repost/unpost of documents dated on or before the close date
+  with `PeriodClosedException` (HTTP 409 `period-closed`) — in `PostingEngine` (incl. later
+  documents of a `CHRONOLOGICAL` restoration), repository saves, and the generic command path.
+- `@PeriodCloseExempt` on a `@Document` class opts a non-accounting document out.
+- Roles: `onno.period-close.manage-roles` (+`ADMIN`) close/reopen; `onno.period-close.override-roles`
+  bypass (empty by default; `ADMIN` only when listed). All audited in `onno_period_close_audit`.
+- UI: `GET /api/period-close`, `GET /audit`, `POST /close`, `POST /reopen`; built-in page
+  `PeriodClosePage.ROUTE` (`/period-close`) — link it via `section(...).page(...)`.
 
 ## Runtime query paths
 

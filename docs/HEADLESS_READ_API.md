@@ -306,6 +306,13 @@ Temporal columns are database-independent ISO strings:
 |-----------|---------------------|-------------------------------|
 | `LocalDate` | `yyyy-MM-dd` | `yyyy-MM-dd` |
 | `LocalDateTime` | offset-free `yyyy-MM-ddTHH:mm[:ss[.fraction]]` | the same offset-free ISO representation |
+| `LocalTime` | `HH:mm[:ss[.fraction]]` | the same |
+| `Instant` | ISO UTC `yyyy-MM-ddTHH:mm:ss[.fraction]Z` | ISO date-time **with** `Z` or `±HH:mm`; offset-free values are a `400` |
+
+`Instant` is an absolute moment, stored as `TIMESTAMP WITH TIME ZONE` and always read back in UTC.
+Clients choose the display zone; the bundled UI uses `onno.ui.time-zone` (exposed as `timeZone` in
+`/api/config`) or, when unset, the viewer's browser zone. List `ge`/`le` bounds accept the same
+`HH:mm` / offset-bearing shapes and compare natively.
 
 `LocalDateTime` is a business wall-clock value, not an instant. Offset- or zone-bearing writes such
 as `2026-06-04T10:00+03:00` and `2026-06-04T10:00Z` are rejected with a field-specific `400`
