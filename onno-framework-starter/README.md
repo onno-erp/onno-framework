@@ -45,13 +45,22 @@ This is the only property the starter exposes. Everything else is derived from y
     `append(...)` joins an active Spring transaction; posting uses its handle-bound overload)
   - register persistence/repository maps, `PostingService` (wrapping a `PostingEngine`)
   - information-register, constant and enumeration persistence/managers
-  - the UI layout model (`LayoutSet`, `UiLayout`, resolvers) assembled from your `Layout` beans
+  - the `CommandRegistry`, `CheckRegistry` and `PickerOptionsService` over your `Commands`,
+    `Checks` and `PickerOptions` beans
   - `BackgroundJobs` and `ScheduledJobRegistrar` — only when a JobRunr `JobScheduler` bean is present
     (`@ConditionalOnBean(JobScheduler.class)`)
 - **`OnnoRepositoriesAutoConfiguration`** — replaces Spring Boot's stock
   `JdbcRepositoriesAutoConfiguration` with one that excludes `RegisterRepository` subtypes, and
   scans register repositories separately. Register repositories are register-shaped (append-only
   movement records) rather than aggregate-shaped, so they need their own factory.
+
+### TypeScript model for the UI
+
+`su.onno.spring.codegen.TypeScriptModelGenerator` writes `model.gen.ts` — the entities, their
+fields and record types, enumerations (values and `@EnumLabel` labels), information registers,
+constants and `@AccessControl` roles — for an app's React UI. The `su.onno.ui` Gradle plugin
+([onno-ui-gradle-plugin](../onno-ui-gradle-plugin/README.md)) runs it as `generateUiModel` before
+every UI build.
 
 ### Schema generation
 
@@ -81,8 +90,7 @@ path binds the stable UUID into movement and totals tables, converts enum filter
 and restores the enum constant on typed reads.
 
 The converters also read enums (and `Ref<T>`) back from a **`varchar` column that holds the UUID as
-text**, not just a native `uuid` column. Enum constant names are not a persisted format in 2.0;
-convert old rows with `Ui2MigrationTool.migrateEnumNames(...)` before upgrading.
+text**, not just a native `uuid` column. Enum constant names are not a persisted format.
 
 ## Usage
 

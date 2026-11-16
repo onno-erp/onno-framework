@@ -7,20 +7,20 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import su.onno.crm.domain.Conversation;
 import su.onno.crm.repository.ConversationRepository;
-import su.onno.ui.UiAccessService;
+import su.onno.web.AccessService;
 
 /** Membership and permission checks shared by all dedicated CRM conversation endpoints. */
 @Service
 public class CrmInboxWorkspaceService {
     private final List<CrmInboxWorkspace> definitions;
     private final ConversationRepository conversations;
-    private final UiAccessService access;
+    private final AccessService access;
     private final CrmWorkspaceService configuration;
     private final CrmContactService contacts;
     /** Personal-account privacy. Required: a subclass must not be able to opt out by omission. */
     private final CrmConnectionAccounts connectionAccounts;
     public CrmInboxWorkspaceService(List<CrmInboxWorkspace> definitions, ConversationRepository conversations,
-                                    UiAccessService access, CrmWorkspaceService configuration, CrmContactService contacts,
+                                    AccessService access, CrmWorkspaceService configuration, CrmContactService contacts,
                                     CrmConnectionAccounts connectionAccounts) {
         this.definitions=List.copyOf(definitions);this.conversations=conversations;this.access=access;this.configuration=configuration;this.contacts=contacts;
         this.connectionAccounts=java.util.Objects.requireNonNull(connectionAccounts,"connectionAccounts");

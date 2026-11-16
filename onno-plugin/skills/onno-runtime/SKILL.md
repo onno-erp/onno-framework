@@ -1,11 +1,12 @@
 ---
 name: onno-runtime
 description: >-
-  Verify and debug a running onno-framework app through authenticated REST, DivKit/generic UI
-  endpoints, SSE events, MCP tools, generated read APIs, auth/CSRF, import/media endpoints, and
-  build or Maven-local publication checks. Use when inspecting runtime behavior, testing model
-  metadata, reading catalogs/documents/registers, posting/unposting documents, checking generated
-  JSON response contracts, or distinguishing framework bugs from modeling mistakes.
+  Verify and debug a running onno-framework app through authenticated REST, the UI model/view
+  endpoints (/api/ui/model, /api/ui/view/...), commands, SSE events, MCP tools, generated read
+  APIs, auth/CSRF, import/media endpoints, and build or Maven-local publication checks. Use when
+  inspecting runtime behavior, testing model metadata, reading catalogs/documents/registers,
+  posting/unposting documents, checking generated JSON response contracts, or distinguishing
+  framework bugs from modeling mistakes.
 ---
 
 # onno Runtime Verification
@@ -42,7 +43,9 @@ curl -fsS -b "$jar" "$base/api/catalogs/Books/$book_id" | jq -e '.id'
 order_id=$(curl -fsS -b "$jar" "$base/api/list/documents/Orders?limit=1" | jq -er '.rows[0].id')
 curl -fsS -b "$jar" "$base/api/documents/Orders/$order_id" | jq -e '.items'
 curl -fsS -b "$jar" "$base/api/registers/Book%20Stock/balance" | jq -e .
-curl -fsS -b "$jar" "$base/api/divkit/shell" | jq -e '.nav'
+curl -fsS -b "$jar" "$base/api/ui/model" | jq -e '.entities | length > 0'
+curl -fsS -b "$jar" "$base/api/ui/view/documents/orders" | jq -e '.list'
+curl -fsS -b "$jar" "$base/api/commands/documents/Orders?id=$order_id" | jq -e '.commands'
 
 curl -NsS --max-time 3 -b "$jar" "$base/api/events" 2>/dev/null | grep -q '^event:ready'
 
@@ -66,9 +69,9 @@ Use the narrowest useful command while iterating, then broaden:
 ```bash
 ./gradlew :onno-framework:test
 ./gradlew :onno-framework-starter:compileJava
-./gradlew :onno-ui-starter:buildFrontend
-./gradlew :onno-ui-starter:typecheckFrontend
-./gradlew :onno-ui-starter:compileJava
+./gradlew :onno-web-starter:buildFrontend
+./gradlew :onno-web-starter:typecheckFrontend
+./gradlew :onno-web-starter:compileJava
 ./gradlew clean check
 ./gradlew publishToMavenLocal
 ```
@@ -79,8 +82,8 @@ project-dependency builds can miss.
 ## Bug Triage
 
 A framework bug contradicts the documented contract: generated endpoint shape, annotation behavior,
-posting/register integrity, schema migration, or `onno.*` config. A modeling mistake is missing
-`EntityView`, wrong route/name, missing RBAC roles, wrong context, or an invalid save/post sequence.
+posting/register integrity, schema migration, or `onno.*` config. A modeling mistake is wrong
+route/name, missing RBAC roles, wrong context, or an invalid save/post sequence.
 
 Reduce framework bugs to the smallest repro and check for duplicate issues before filing. Confirm
 with the user before creating public GitHub issues.

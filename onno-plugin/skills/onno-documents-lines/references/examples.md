@@ -150,34 +150,34 @@ public enum OrderStatus {
 The enum constrains values; it does not enforce legal transitions. Recheck transition rules in the
 application command/service that changes status.
 
-## Typed Entity View
+## UI Customization
 
-```java
-@Component
-public class SalesOrderView implements EntityView<SalesOrder> {
-    @Override public Class<SalesOrder> entity() { return SalesOrder.class; }
+`src/main/ui/entities/salesOrders.ts`, registered in `main.tsx` as
+`entities: { "Sales Orders": salesOrders }`. Line columns are `"section.field"`; every name is
+checked against the generated model.
 
-    @Override
-    public void list(ListSpec<SalesOrder> list) {
-        list.columns(SalesOrder::getNumber, SalesOrder::getDate, SalesOrder::getCustomer,
-                SalesOrder::getStatus, SalesOrder::getTotal)
-            .sortBy(SalesOrder::getDate, true);
-        list.filter(SalesOrder::getStatus).multiOptions();
-    }
+```ts
+import type { EntityCustomization } from "@onno/ui";
 
-    @Override
-    public void fields(EntityConfigBuilder<SalesOrder> f) {
-        f.refField(SalesOrder::getCustomer).label("Customer");
-        f.field(SalesOrder::getTotal).format("currency:USD").hideInForm();
-        f.rowRefField(SalesOrder::getItems, SalesOrderLine::getProduct).label("Product");
-        f.rowField(SalesOrder::getItems, SalesOrderLine::getQuantity).label("Quantity");
-        f.rowField(SalesOrder::getItems, SalesOrderLine::getUnitPrice)
-                .label("Unit price").format("currency:USD");
-        f.rowField(SalesOrder::getItems, SalesOrderLine::getAmount)
-                .label("Amount").format("currency:USD");
-    }
-}
+export const salesOrders: EntityCustomization<"Sales Orders"> = {
+  list: {
+    columns: ["number", "date", "customer", "status", "total"],
+    sort: "-date",
+    filters: [{ field: "status", label: "Status" }],
+  },
+  fields: {
+    customer: { label: "Customer" },
+    total: { format: { money: "USD" }, hideInForm: true },
+    "items.product": { label: "Product" },
+    "items.quantity": { label: "Quantity" },
+    "items.unitPrice": { label: "Unit price", format: { money: "USD" } },
+    "items.amount": { label: "Amount", format: { money: "USD" } },
+  },
+};
 ```
+
+Status transitions ("Approve", "Cancel") are `Commands<SalesOrder>` with `availableWhen` — see
+`onno-commands`.
 
 ## Repository
 

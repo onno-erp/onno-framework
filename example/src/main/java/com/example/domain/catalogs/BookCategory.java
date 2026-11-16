@@ -16,7 +16,7 @@ import lombok.Setter;
  * folders (Fiction &amp; Fantasy, Non-fiction), which the reference picker's "Show all…" dialog
  * browses as a folder tree (#411).
  */
-@Catalog(name = "Categories", title = "Category", codePrefix = "CAT-", context = "Catalog", hierarchical = true)
+@Catalog(name = "Categories", codePrefix = "CAT-", context = "Catalog", hierarchical = true)
 @AccessControl(readRoles = {"MANAGER"}, writeRoles = {"MANAGER"})
 @Getter
 @Setter

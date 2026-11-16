@@ -6,7 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import su.onno.crm.service.*;
-import su.onno.ui.UiAccessService;
+import su.onno.web.AccessService;
 
 /** User-owned organization never expands a workspace's conversation access. */
 @RestController
@@ -14,8 +14,8 @@ import su.onno.ui.UiAccessService;
 public class CrmChatGroupController {
     private final CrmChatGroupService groups;
     private final CrmInboxWorkspaceService workspaces;
-    private final UiAccessService access;
-    public CrmChatGroupController(CrmChatGroupService groups,CrmInboxWorkspaceService workspaces,UiAccessService access) {
+    private final AccessService access;
+    public CrmChatGroupController(CrmChatGroupService groups,CrmInboxWorkspaceService workspaces,AccessService access) {
         this.groups=groups;this.workspaces=workspaces;this.access=access;
     }
     private String scope(String workspace,Principal principal) {

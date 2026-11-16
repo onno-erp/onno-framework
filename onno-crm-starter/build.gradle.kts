@@ -1,11 +1,10 @@
 plugins {
     `java-library`
-    id("su.onno.widgets")
 }
 
 dependencies {
     api(project(":onno-framework-starter"))
-    api(project(":onno-ui-starter"))
+    api(project(":onno-web-starter"))
 
     implementation(libs.spring.boot.autoconfigure)
     implementation(libs.spring.boot.starter.data.jdbc)
@@ -28,10 +27,6 @@ dependencies {
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 
-onnoWidgets {
-    // Compiled into this starter's jar, so every consuming app receives the CRM renderer.
-    npmDependencies.put("lucide-react", "^0.469.0")
-}
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"

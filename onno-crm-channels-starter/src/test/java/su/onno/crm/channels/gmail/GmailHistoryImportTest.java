@@ -15,7 +15,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import su.onno.crm.domain.*;
 import su.onno.crm.service.CrmConnectionAccounts.Scope;
 import su.onno.crm.service.CrmHistoryImport;
-import su.onno.ui.media.MediaStorage;
+import su.onno.web.media.MediaStorage;
 
 class GmailHistoryImportTest {
     private static final String MAILBOX = "wedding@studio.test";

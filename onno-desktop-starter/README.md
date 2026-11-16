@@ -41,9 +41,8 @@ the application defines no `DesktopApp` bean — a default `DesktopApp` (applica
 
 ## Describing the window (`DesktopApp`)
 
-Define one `DesktopApp` bean to describe how the app presents itself. It is the desktop peer of
-`su.onno.ui.Layout`: fluent top-level setters plus nested lambda builders, producing the immutable
-`DesktopManifest` the shell reads at boot.
+Define one `DesktopApp` bean to describe how the app presents itself: fluent top-level setters plus
+nested lambda builders, producing the immutable `DesktopManifest` the shell reads at boot.
 
 ```java
 @Component

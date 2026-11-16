@@ -457,7 +457,7 @@ public class OnnoAuthAutoConfiguration {
                             // Point at the SPA's own /login route. This suppresses Spring's
                             // default OAuth login-page generator (which would otherwise shadow the
                             // SPA at GET /login) and makes unauthenticated browser requests redirect
-                            // to the server-driven DivKit login screen instead.
+                            // to the SPA login screen instead.
                             .loginPage("/login")
                             .userInfoEndpoint(userInfo -> userInfo
                                     .oidcUserService(oidcUserService(oidc))))

@@ -8,8 +8,8 @@ import java.security.Principal;
 import su.onno.crm.domain.*;
 import su.onno.crm.repository.*;
 import su.onno.crm.service.*;
-import su.onno.ui.*;
-import su.onno.ui.comments.CommentService;
+import su.onno.web.*;
+import su.onno.web.comments.CommentService;
 import su.onno.types.Ref;
 class CrmActivityControllerTest {
  final CrmContactService contacts=mock(CrmContactService.class);
@@ -17,19 +17,19 @@ class CrmActivityControllerTest {
  final ConversationMessageRepository messages=mock(ConversationMessageRepository.class);
  final InboxRepository inboxes=mock(InboxRepository.class);
  final CrmInboxWorkspaceService workspaces=mock(CrmInboxWorkspaceService.class);
- final UiAccessService access=mock(UiAccessService.class);
+ final AccessService access=mock(AccessService.class);
  final CurrentUserResolver users=mock(CurrentUserResolver.class);
  final CommentService comments=mock(CommentService.class);
- final su.onno.ui.comments.CommentAuthorAvatars avatars=mock(su.onno.ui.comments.CommentAuthorAvatars.class);
+ final su.onno.web.comments.CommentAuthorAvatars avatars=mock(su.onno.web.comments.CommentAuthorAvatars.class);
  /** Every key resolves; what is under test is whether the files reach the feed at all. */
  final su.onno.crm.service.CrmAttachments attachments=new su.onno.crm.service.CrmAttachments(
-   new su.onno.ui.media.MediaStorage(){
-    public su.onno.ui.media.StoredMedia store(java.io.InputStream c,String filename,String type,long size){throw new UnsupportedOperationException();}
-    @Override public Optional<su.onno.ui.media.LoadedMedia> load(String key){
-     return Optional.of(new su.onno.ui.media.LoadedMedia(new org.springframework.core.io.ByteArrayResource("file".getBytes()),
+   new su.onno.web.media.MediaStorage(){
+    public su.onno.web.media.StoredMedia store(java.io.InputStream c,String filename,String type,long size){throw new UnsupportedOperationException();}
+    @Override public Optional<su.onno.web.media.LoadedMedia> load(String key){
+     return Optional.of(new su.onno.web.media.LoadedMedia(new org.springframework.core.io.ByteArrayResource("file".getBytes()),
        key.endsWith(".png")?"image/png":"application/pdf",4,key.substring(key.lastIndexOf('/')+1)));}
-   },new su.onno.ui.media.MediaProperties());
- final UiProperties ui=new UiProperties();
+   },new su.onno.web.media.MediaProperties());
+ final WebProperties ui=new WebProperties();
  org.jdbi.v3.core.Jdbi jdbc;
  String conversationTable,messageTable;
  final Map<UUID,Conversation> records=new HashMap<>();
@@ -85,9 +85,9 @@ class CrmActivityControllerTest {
   var me=mock(CurrentUserResolver.CurrentUser.class);when(me.recordId()).thenReturn("alice-id");when(users.resolve(principal)).thenReturn(me);
   var now=Instant.now();
   var notes=List.of(
-    new su.onno.ui.comments.Comment(UUID.randomUUID(),"catalogs","crm_conversations",c.getId(),"alice-id","Alice","Mine",null,now,null),
-    new su.onno.ui.comments.Comment(UUID.randomUUID(),"catalogs","crm_conversations",c.getId(),"ben-id","Alice","Other author with same name",null,now.minusSeconds(1),null),
-    new su.onno.ui.comments.Comment(UUID.randomUUID(),"catalogs","crm_conversations",c.getId(),null,"Admin","Unlinked",null,now.minusSeconds(2),null));
+    new su.onno.web.comments.Comment(UUID.randomUUID(),"catalogs","crm_conversations",c.getId(),"alice-id","Alice","Mine",null,now,null),
+    new su.onno.web.comments.Comment(UUID.randomUUID(),"catalogs","crm_conversations",c.getId(),"ben-id","Alice","Other author with same name",null,now.minusSeconds(1),null),
+    new su.onno.web.comments.Comment(UUID.randomUUID(),"catalogs","crm_conversations",c.getId(),null,"Admin","Unlinked",null,now.minusSeconds(2),null));
   for(var note:notes){jdbc.useHandle(h->h.execute("INSERT INTO onno_comments VALUES (?,?,?,false,'catalogs','crm_conversations')",note.id(),c.getId(),java.sql.Timestamp.from(note.createdAt())));when(comments.find(note.id())).thenReturn(Optional.of(note));}
   when(avatars.avatarsFor(any())).thenReturn(Map.of("alice-id","/media/alice.png","ben-id","/media/ben.png"));
   var feed=controller.read(customer,100,null,principal);

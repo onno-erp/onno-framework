@@ -2,11 +2,11 @@
 
 A small **bookstore back-office**, and the reference application for
 [onno-framework](../README.md). The business is declared as typed Java metadata under
-`com.example`; the framework generates the schema, REST API, and the server-driven (DivKit) admin UI
-from it. Nothing here hand-writes tables, DTOs, or CRUD controllers.
+`com.example`; the framework generates the schema, REST API, and a default React admin UI (a list
+and form for every readable entity, navigation grouped by bounded context) from it. Nothing here hand-writes tables, DTOs, or CRUD controllers.
 
-It is deliberately **small and end-to-end** — one coherent domain, the core starters only
-(framework + UI + auth), every feature wired so it actually works rather than half-scaffolded.
+It is deliberately **small and end-to-end** — one coherent domain, the core starters
+(framework + web + auth, plus CRM and print), every feature wired so it actually works rather than half-scaffolded.
 
 ## What's modeled
 
@@ -18,19 +18,40 @@ It is deliberately **small and end-to-end** — one coherent domain, the core st
 | Inventory | `StockReceipt` document → `BookStock` (BALANCE register). Receiving raises stock; an order lowers it. Because the register is `BALANCE`, the engine **refuses to post an oversold order**. |
 | Reports | `BookSales` (TURNOVER register) — units and revenue by book and seller, written when an order is posted. |
 | People | `Customer`, `Supplier`, `Employee` (`Position` enum). Employees double as the login identity directory. |
-| Settings | one `@Constant` (store name), editable on the built-in Settings page. |
+| Settings | one `@Constant` (store name), editable on the admin-only Settings page (`/settings`). |
 | Dashboard | admin-only home page — KPI tiles, an orders-by-status pie, revenue over time, recent orders. |
 | Comments | a per-order message thread with replies, reactions, `@` mentions, and `#` document references. |
 
-## Two roles, two UI profiles
+## The UI: React for screens, Java for behaviour
 
-The demo automatically signs anonymous visitors in as `manager@onnobooks.local`, which resolves to
-the **default profile** (`MainLayout`): home is the Orders list, no Employees nav. The password never
-needs to reach the browser for this flow. `admin@onnobooks.local`/`admin` resolves to the **admin
-profile** (`AdminLayout`): home is the dashboard, and the People section includes Employees. The split
-is enforced by per-entity RBAC (`@AccessControl` — `Employee` writes are ADMIN-only) and by
-role-scoped UI profiles (onno has no per-page RBAC, so the dashboard simply doesn't exist in the
-manager profile). Remove `onno.auth.demo.auto-login-username` before any non-demo use.
+| Where | What |
+| --- | --- |
+| `src/main/ui/main.tsx` | The UI entry point: one `defineApp({ entities, pages, navigation })` call. |
+| `src/main/ui/pages/` | One component per page: the dashboard at `/`, Sales Ops (`/ops`), the Book Sales report (`/registers/book_sales`), Suppliers (`/catalogs/suppliers`), My tasks, Team, Settings, the Support inbox, Pipeline. |
+| `src/main/ui/entities/` | One `EntityCustomization` per entity (`orders.ts`, `books.ts`, …): list columns, grouping, subtotals, filters, the Customers map, the Books shelf view, the Orders row tint, form field layout and inputs, picker cascades, command placement, the conversations panel under a customer. |
+| `src/main/ui/components/` | The app's own components: `OrdersBoard`, `OrderActivity` (data through `useRecords`), `BookTiles` (the Books "Shelf" view), `CustomerConversations`, `SelectedOrders`. |
+| `src/main/ui/lib/` | Shared measures (`count`/`sum` over orders and sales) and module checks (CRM, sales). |
+| `com.example.commands.OrderCommands` | `Commands<Order>`: advance/cancel, "Change status" and "Assign" groups, request approval, input-form and feedback demos — on the UI, REST and MCP alike. |
+| `com.example.checks.ScheduleEventChecks` | `Checks<ScheduleEvent>`: the live schedule-conflict check on the event form. |
+| `com.example.pickers.EmployeeAvailability` | `PickerOptions<ScheduleEvent>`: badges each participant available/unavailable for the chosen time. |
+| `com.example.IdentityConfiguration` | `IdentityLink`: a login is linked to its `Employee` row by email. |
+| `com.example.print` | Print forms: a Word invoice and an Excel pick list on the Orders record menu. |
+| `application.yaml` → `onno.ui.branding` | App name, logos, favicon and primary colours. |
+
+The UI is an ordinary Vite app in `src/main/ui` on `@onno/ui`. The `su.onno.ui` Gradle plugin
+generates `model.gen.ts` from the Java model and builds the app into the jar (`./gradlew
+:example:buildUi`); the server serves it in place of the default shell. A new project gets the same
+layout from `./gradlew onnoUiInit`. For hot reload, run the backend and `npm run dev` in
+`src/main/ui` (after one `npm install` at the repository root).
+
+## Two roles
+
+The demo automatically signs anonymous visitors in as `manager@onnobooks.local`: home is the Orders
+board and there is no Employees or Settings nav. The password never needs to reach the browser for
+this flow. `admin@onnobooks.local`/`admin` gets the dashboard as home, Employees under People, and
+Settings. The UI decides what to show with page `roles` and `useHasRole("ADMIN")`; the server enforces
+access on every call (`@AccessControl` — `Employee` writes are ADMIN-only; the settings API is
+admin-only). Remove `onno.auth.demo.auto-login-username` before any non-demo use.
 
 ## Running it
 

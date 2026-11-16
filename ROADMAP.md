@@ -1,8 +1,8 @@
 # onno Framework Roadmap
 
 This project is a modern Java/Spring framework for modeling business processes with explicit domain concepts:
-catalogs, documents, tabular sections, registers, constants, enumerations, background jobs, UI metadata,
-agent-readable manifests, and future service boundaries.
+catalogs, documents, tabular sections, registers, constants, enumerations, background jobs, commands,
+a React UI driven by the model, an agent-readable model surface, and future service boundaries.
 
 ## Current State
 
@@ -12,14 +12,14 @@ Implemented:
 - Information registers, enumerations, constants, background jobs
 - JDBI-based schema generation and persistence primitives
 - Spring Boot starter auto-configuration
-- React/Vite UI starter with generic metadata, catalog, document, and register APIs
+- Web starter (`onno-web-starter`) with the generic catalog, document and register APIs and the `/api/ui` model
 - UI auth foundation with login screen, protected routes, `GET /api/auth/me`, JSON `POST /api/auth/login` and `/api/auth/logout`, session cookies, CSRF
 - Production auth modes shipped in `onno-auth-starter`: `in-memory`, `oidc` (Keycloak/Zitadel/custom SSO), and `resource-server` (stateless JWT bearer)
 - Per-entity, deny-by-default RBAC via `@AccessControl(readRoles, writeRoles)` enforced across REST, UI, and MCP (`ADMIN` is a superuser)
 - Document post/unpost rights separate from write access: `@AccessControl(postRoles, unpostRoles)` narrows who may post, re-post or unpost (and delete a posted document) on REST, MCP and the built-in UI actions; `BeforeUnpostHandler` lets the domain veto an unpost
 - Record-level access policies (`RecordAccessPolicy` + `RecordScope`): declarative, query-pushed-down "which records" rules for external users, enforced on every generic read/write path (lists, aggregates, search, refs, writes, actions, import, comments, tags, presence, notifications, SSE, MCP, CRM inbox) with a shipped leak-test conformance suite
 - Structured reference resolution for API rows via `{column}_display` and `{column}_ref`
-- Record change history: opt-in `@Catalog/@Document(history = true)` field-level audit log (who, when, old and new value; tabular-section rows; post/unpost/delete events) recorded on the generic command path and typed repository saves, with a History panel on the record surface and `GET /api/history/{kind}/{name}/{id}` under the record's own read access
+- Record change history: opt-in `@Catalog/@Document(history = true)` field-level audit log (who, when, old and new value; tabular-section rows; post/unpost/delete events) recorded on the generic command path and typed repository saves, with a History panel on the default record page (`<RecordHistory />`) and `GET /api/history/{kind}/{name}/{id}` under the record's own read access
 - Server-sent UI event stream (`GET /api/events`) for live refresh of catalogs, documents, registers, and comment threads
 - Agent-readable business model surface via the MCP server (`onno-mcp-starter`, `describe_metadata` tool) — there is no anonymous HTTP manifest endpoint
 - Application-defined MCP tools via authenticated, role-scoped `@McpTool` Spring bean methods, with an SDK-level `McpToolProvider` extension point
@@ -35,22 +35,22 @@ Implemented:
   instances/tokens/transitions; role/user candidate work items; claim/delegate/complete commands;
   durable task audit; authenticated process/task APIs; stable identity-record ownership; typed
   task-to-domain links; employee-backed delegation picker; background timer/subprocess advancement;
-  and the live task widget
-- Shared typed field tokens across queries and UI authoring: getter references for list columns,
-  filters, field hints, related lists, form dependencies, state-aware rows, and widget field config
+  and the live task inbox (`TaskInbox`)
+- Shared typed field tokens across Java APIs: getter references for register queries, command
+  predicates and titles, and check dependencies
 - Declarative business rule metadata (`Validated` / `BusinessRule`) and lightweight validation
 - Diff-based schema migration: `onno_schema_history` with metadata snapshots, renames via `previousNames`, modes (`apply`/`plan`/`validate`/`off`), destructive-change gating, and versioned `AppMigration` data migrations
 - Hierarchical catalog children/tree APIs
 - Dry-run posting previews
-- Period close (`PeriodCloseService`): global / per-context / per-register / per-organization, soft or hard change-prohibition dates, `@PeriodAdjustment` documents, enforced in core posting (including chronological restoration), repository saves and the generic command path; audited close, reopen, adjustment and role override; `/api/period-close`, the `period_close_status` MCP tool and a built-in `/period-close` admin page. See `docs/PERIOD_CLOSE.md`.
+- Period close (`PeriodCloseService`): global / per-context / per-register / per-organization, soft or hard change-prohibition dates, `@PeriodAdjustment` documents, enforced in core posting (including chronological restoration), repository saves and the generic command path; audited close, reopen, adjustment and role override; `/api/period-close`, the `period_close_status` MCP tool and the `@onno/ui` `<PeriodClose />` admin component. See `docs/PERIOD_CLOSE.md`.
 - Domain event metadata and outbox publication hooks
 - `onno-auth-starter` with session-based defaults, JSON login/logout, CSRF cookie, in-memory users via `onno.auth.users`, plus OIDC and resource-server modes
 - Integration starters: MCP server (`onno-mcp-starter`), CSV import (`onno-import-starter`), Word/Excel print forms with batch printing, admin-uploaded templates and PDF (`onno-print-starter`), Kafka outbox relay (`onno-kafka-starter`), native desktop packaging (`onno-desktop-starter` + Gradle plugin)
 - Horizontal scale-out: cross-node delivery of live-UI entity-change events via a pluggable `ClusterEventBus` (`onno-cluster-starter`, default Postgres `LISTEN`/`NOTIFY`), an advisory-locked schema apply, and a fail-fast remember-me key guard
-- Server-driven DivKit UI layer (`/api/divkit/**`) alongside the bundled React/Vite SPA, plus media uploads with a pluggable `MediaStorage` SPI
-- UI configuration decoupled from domain: sidebar sections live in `Layout` beans, dashboard widgets live in `Page` beans, and per-field hints live in `EntityView` or `Layout` configuration.
-- Unified pages ("everything is a page"): the home dashboard, settings, entity list surfaces, and arbitrary custom routes are all `Page` beans served through one pipeline (`GET /api/divkit/{*route}` catch-all). The framework renders a sensible default at every route; a registered `Page` bean overrides it — including at a default surface route (`/catalogs|documents|registers/{name}`). Pages support `bare()` (no header) and are linked in the nav with `section(...).page(route, label, icon)`.
-- Custom widgets: a consumer authors a React component in `src/main/widgets/*.tsx` (via `@onno/widget-sdk`) and applies the `su.onno.widgets` Gradle plugin, which compiles it (managed Node + esbuild, React aliased to the host SPA) into an `onno-plugins/*.js` module served under `{onno.ui.path}/plugins/**` and auto-loaded at boot — a widget type the framework has no built-in for, with no frontend project to maintain.
+- Media uploads with a pluggable `MediaStorage` SPI
+- The UI is the npm package `@onno/ui`: a React shell with a default list, record form and register report for every readable entity, built from the model the server describes (`/api/ui/model`, `/api/ui/view/**`). An app's own UI is an ordinary Vite app in `src/main/ui` — one `defineApp({ entities, pages, navigation, extensions })` call with typed entity customizations, React pages composed from `@onno/ui`'s blocks, widgets and typed data hooks, and the starters' packages (`@onno/crm`, `@onno/print`). The `su.onno.ui` Gradle plugin builds it into the jar and generates `model.gen.ts` from the Java model. (This replaces the earlier Java UI DSL — `Layout`/`Page`/`EntityView` beans — the DivKit renderer and the widget plugin.)
+- Replaceable UI SDK: the default record host shares its public `useRecordForm` controller with custom hosts; typed field bindings (`useRecordField`/`RecordField`) carry validation and picker context; custom list bodies receive the same pagination, selection and scoped select-all callbacks. Metadata, control props and rendering primitives are public (`docs/UI_SDK.md`).
+- Entity behaviour as Java beans exposed on every surface: `Commands` (REST, UI and one MCP tool per command, with roles, inputs and per-record availability enforced by the server), live form `Checks`, reference `PickerOptions`, and the login → record `IdentityLink`.
 
 ## Design Direction
 
@@ -72,12 +72,11 @@ Good next slices:
 - Richer live collaboration signals, such as record-level locks and stale-record banners (record-level **presence markers** now ship — see below)
 - Auto-scheduled / retrying Kafka outbox relay (today `OutboxRelay.relayPending()` is driven by the app's own `@Scheduled` bean)
 - More generated test fixtures from business models
-- Tabular-section field hints in the authored UI DSL
-- A native (Flutter) client driven by the same DivKit contract the React SPA uses today
+- A native mobile client on the same `/api/ui` model and `onno://` link protocol the web UI uses
 
 Recently shipped (formerly on this list): role-aware deny-by-default authorization
 (`@AccessControl`), OIDC/Keycloak production auth, diff-based migration with snapshots and model
-diffs, the server-driven DivKit UI layer, horizontal scale-out (`onno-cluster-starter`), and
+diffs, the React-only UI on `@onno/ui`, horizontal scale-out (`onno-cluster-starter`), and
 record-level presence markers (live "who else is viewing this record" avatars, cluster-relayed).
 
 ## Auth Direction
@@ -89,7 +88,7 @@ Current auth ships in `onno-auth-starter` with three modes selected by `onno.aut
 - 401 JSON entry point for unauthenticated API calls; SPA login screen wired to it.
 - Per-entity authorization is deny-by-default via `@AccessControl(readRoles, writeRoles)`; `ADMIN` is a superuser.
 - Any consumer can set `onno.auth.enabled=false` and override the `SecurityFilterChain`, `UserDetailsService`, or `PasswordEncoder` bean.
-- Delegated "connect external account" / "Connect with X" flows (distinct from logging a user *in*) belong to the connector boundary, including its authorization redirect/callback endpoint. Generic UI action results carry structured feedback and refresh intent only; the turnkey authorization-code mechanics (`AuthorizationCodeFlow` + `TokenStore` that seeds a connector's `OAuthTokenManager`) live in the commercial `onno-connector-support`.
+- Delegated "connect external account" / "Connect with X" flows (distinct from logging a user *in*) belong to the connector boundary, including its authorization redirect/callback endpoint. Generic command results carry structured feedback, refresh intent and an optional in-app `navigateTo` only; the turnkey authorization-code mechanics (`AuthorizationCodeFlow` + `TokenStore` that seeds a connector's `OAuthTokenManager`) live in the commercial `onno-connector-support`.
 
 Production direction:
 - Replace the demo `InMemoryUserDetailsManager` with a JDBC-backed `UserDetailsService` for real deployments.

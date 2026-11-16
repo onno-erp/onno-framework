@@ -26,7 +26,7 @@ public class OrderInvoicePrint extends PrintForm<Order> {
 
     @Override
     protected void configure(PrintFormSpec spec) {
-        spec.label("Invoice (Word)").icon("file-text");
+        spec.label("Invoice (Word)");
     }
 
     @Override

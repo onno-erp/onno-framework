@@ -1,0 +1,23 @@
+{
+  "name": "onno-books-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@onno/crm": "2.0.0",
+    "@onno/crm-channels": "2.0.0",
+    "@onno/print": "2.0.0",
+    "@onno/ui": "2.0.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "typescript": "~5.6.2",
+    "vite": "^6.4.5"
+  }
+}

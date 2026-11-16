@@ -111,7 +111,7 @@ or high-value tests.
 
 ```bash
 curl -fsS -b "$jar" "$base/api/registers/Stock/movements" | jq -e .
-curl -fsS -b "$jar" "$base/api/registers/Stock/balance?product=$product_id" | jq -e .
+curl -fsS -b "$jar" "$base/api/registers/Stock/balance" --data-urlencode "where={\"product\":\"$product_id\"}" -G | jq -e .
 curl -fsS -b "$jar" \
   "$base/api/registers/Sales/turnover?from=2026-07-01T00:00:00&to=2026-08-01T00:00:00" | jq -e .
 ```

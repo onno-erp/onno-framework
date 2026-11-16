@@ -1,6 +1,6 @@
 # Headless Read API
 
-The generic REST API under `/api/**` (served by `onno-ui-starter`) gives catalog and document
+The generic REST API under `/api/**` (served by `onno-web-starter`) gives catalog and document
 consumers a logical JSON contract: system fields and model attributes use the same names on reads
 and writes (`id`, `description`, `taxId`, …), references expand alongside them, and secrets are
 redacted. The previous storage-shaped contract remains available with
@@ -19,8 +19,20 @@ every `/api/**` route is authenticated, reads need only the session cookie (or a
 Historical register balances: `register_balance` accepts optional `asOf`: an inclusive
 ISO-8601 local date-time (`2024-03-31T18:00`) or a date (`2024-03-31`, the whole day); offsets are rejected with `400`. REST: `GET /api/registers/{name}/balance?asOf=2024-03-31T23:59:59`.
 With `asOf`, BALANCE registers sum active movements through the cutoff (receipts minus expenses),
-grouped by dimensions; dimension filters and record access policies apply before aggregation.
-Without `asOf`, reads keep the fast materialized totals path. The 5,000-row limit still applies.
+grouped by dimensions; record access policies apply before aggregation and `where` then selects
+balance rows. Without `asOf`, reads keep the fast materialized totals path. The 5,000-row limit still applies.
+
+Accumulation-register reads return the logical vocabulary: dimension/resource field names with their
+reference sidecars (`bookDisplay`, `bookRef`, …), plus `id`, `period`, `recorder` (the posting
+document's id) and `movementType` (`RECEIPT`/`EXPENSE`) on movement rows. Each takes an optional
+`where` — the same structured JSON predicate as the list feed — whose keys are the dimension and
+resource field names plus `period`, `recorder` and `movementType` for movements and turnover (it
+selects the movements read or summed), and the dimension and resource field names for a balance (it
+selects balance rows; a resource compares the balance). An unknown key is a `400`.
+`GET /api/list/registers/{name}/aggregate` is the register counterpart of the catalog/document
+`/aggregate` read (same parameters and envelope): it aggregates movements, sums resources signed
+(receipts add, expenses subtract — a sum is the turnover), counts movements for `count`, and
+defaults `dateField` to `period`.
 
 ```text
 GET /api/catalogs/{name}/{id}            one catalog row
@@ -32,12 +44,15 @@ GET /api/list/documents/{name}?cursor=&limit=&from=&to=  one document window
 POST /api/ref-options/search                  bounded contextual reference options
 POST /api/ref-options/recent                  remember a picked reference value (204, CSRF)
 POST /api/ref-options/decorate                which of a picker window's ids the dropdown would offer (CSRF)
-GET /api/divkit/pickers/{kind}/{name}         list descriptor for the "Show all..." picker dialog
-GET /api/divkit/record-refresh/{kind}/{name}/{id}  saved record and current header actions for the open form
-GET /api/registers/{name}/movements
-GET /api/registers/{name}/balance
-GET /api/registers/{name}/turnover?from=&to=
-GET /api/information-registers/{name}/records?from=&to=&cursor=&limit=
+GET /api/ui/pickers/{kind}/{name}             list descriptor for the "Show all..." picker dialog
+GET /api/ui/record-refresh/{kind}/{name}/{id} saved record and current record actions for the open form
+GET /api/history/{kind}/{name}/{id}?cursor=&limit=  field-level change history (entities with history = true)
+GET /api/registers/{name}/movements?from=&to=&where=&cursor=&limit=    {rows, nextCursor, hasMore}
+GET /api/registers/{name}/balance?asOf=&where=&cursor=&limit=&{dimension}=
+GET /api/registers/{name}/turnover?from=&to=&where=&cursor=&limit=&{dimension}=
+GET /api/list/registers/{name}/aggregate?metric=&field=&groupBy=&groupByDate=&seriesBy=&where=&dateField=&from=&to=
+GET /api/information-registers/{name}/records?from=&to=&where=&cursor=&limit=
+GET /api/information-registers/{name}/slice-last?at=&where=
 GET /api/process-definitions                 latest versions plus typed graph descriptors
 GET /api/processes                           caller-visible process instances
 POST /api/processes/{definitionKey}          start; body is the definition's typed payload as JSON
@@ -57,10 +72,17 @@ Information-register records return one keyset window of stored rows, including 
 history, in the same envelope as the catalog/document feeds: `{rows, nextCursor, hasMore}`.
 Use `from` / `to` as optional inclusive ISO local date-times (for example
 `2024-03-31T23:59:59`); the API reads stored periods without changing bucket granularity.
-Pass dimension Java field names as equality query parameters, for example
-`?customer=<uuid>&region=North`. Reference and enumeration dimensions use their stored UUIDs.
-Only declared non-secret dimensions participate in filtering; any other query parameter is
+Narrow with `where`, the structured JSON predicate, for example
+`?where={"customer":"<uuid>","region":"North"}`; its keys are the dimension, resource and
+attribute field names plus `id` and `period`. Reference and enumeration values use their stored
+UUIDs. Secret attributes are never filterable; an unknown field, and any other query parameter, is
 rejected with `400` instead of being ignored.
+
+`slice-last` returns the slice of last values as a plain list: for every dimension tuple, the record
+in force `at` an inclusive ISO local date-time (default now) — the current price per product, the
+rate on a date. A non-periodic register has one record per tuple, so its slice is its records (and
+`at` is a `400`). `where` selects among the slice's rows (a resource compares the value in force).
+Record policies apply; at most 5,000 rows, ordered by the dimensions.
 
 `limit` defaults to 100 and is clamped to 1..500. Pass the previous `nextCursor` back as `cursor`
 for the next window; `nextCursor` is `null` (and `hasMore` false) on the last one. The cursor is
@@ -75,7 +97,7 @@ attribute field names, and reference `*Display` / `*Ref` sidecars. `@AccessContr
 are masked by the common resolver. Secret attributes carry the common redacted sentinel.
 Unknown register names return `404`. This is a read-only route; it does not expose SQL or writes.
 
-The optional `onno-crm-starter` adds a focused command surface for its packaged inbox widget:
+The optional `onno-crm-starter` adds a focused command surface for its inbox (`@onno/crm`):
 
 ```text
 GET  /api/crm/conversations/{id}/delivery       response: {"connected":true,"label":"Telegram @bot","maxTextLength":4096}
@@ -90,7 +112,7 @@ Delivery enqueues in the same transaction as the CRM message through `CrmMessage
 A successful provider send is `SENT`; it does not imply a delivery/read receipt.
 
 These routes require a permitted host `CrmInboxWorkspace`, `?workspace=<key>`, and host customer read access. Writes also require workspace write permission.
-Business actions are host-authored through ordinary `ActionSpec` handlers. See
+Business actions are host-authored as ordinary `Commands<Conversation>` commands. See
 [onno-crm-starter/README.md](../onno-crm-starter/README.md) for the module integration contract.
 
 Process actors are always derived from the authenticated principal; usernames and roles are never
@@ -100,10 +122,11 @@ claimed by the caller. `ADMIN` is the process superuser. Completion outcome name
 against the active `HumanTask`'s declared enum before the persisted graph advances. Process
 mutations use the same CSRF requirements as other session-authenticated `/api/**` writes.
 Only a claimed task's current assignee (or `ADMIN`) may delegate it; a nonblank reason is required
-and the transfer is durable. `GET /api/task-assignees?q=` searches the configured layout identity
+and the transfer is durable. `GET /api/task-assignees?q=` searches the `IdentityLink` identity
 catalog and returns `{actorId, username, display, avatarUrl}`. `actorId` is the stable catalog record
 UUID; username/display/avatar are live presentation data. `avatarUrl` is present when the identity
-catalog has an attribute configured with the `avatar` or `image` field widget.
+catalog has a photo attribute (a `String` named `avatar`, `avatarUrl`, `photo`, `photoUrl`,
+`picture`, `image` or `imageUrl`).
 
 Definition responses include `{key,title,version,payloadType,graph}`. `graph.startStepKey` and each
 node's `{stepKey,type,routes}` are safe structural metadata; payload-dependent assignments are not
@@ -134,32 +157,37 @@ token mappings fail atomically.
 }], "nextCursor": null, "hasMore": false}
 ```
 
-For a mounted record form, `GET /api/divkit/record-refresh/{kind}/{name}/{id}` returns
-`{record, actions, readOnly}`. Pass the form's `profile` and `viewport` to preserve action placement.
-The response applies the same access rules as the record surface. `record` uses the logical
-representation and `actions` uses the form descriptor's header action shape.
+For a mounted record form, `GET /api/ui/record-refresh/{kind}/{name}/{id}` returns
+`{record, actions, commands, readOnly[, canPost]}` under the same access rules as the record view.
+`record` uses the logical representation; `actions` are the record actions the viewer may perform
+now, data only — `{key, url[, title][, danger]}` (`unpost`, `duplicate`, `delete`, `openInList`, or a
+module's key such as `print-invoice` with its `title`); the client names, icons and places them.
 
-Action handlers use the successful response `{refresh, feedback, navigateTo}`.
-`navigateTo` is optional and carries an application route for a single successful action. Feedback has `severity`
-(`info|success|warning|error`) and `presentation` (`toast|dialog|inline`). Text is structured through
-`ActionToast`, `ActionDialog`, or `ActionFeedback`. `ActionResult.open(ref)` returns the referenced
-catalog/document's route; `ActionResult.navigate(route)` chooses a page or record destination. Only navigation targets are accepted — an application path or `onno://` / `onno://{catalogs|documents|registers|information-registers}/{name}[/{id}]`; command URLs (`logout`, `delete/`, `action/`, `redirect/`, `open/`, `download/`) and external URLs are rejected by `ActionResult` and ignored by the SPA, so a route built from stored or user data cannot trigger a side effect or leave the app.
-Clients apply feedback and source refresh before navigating; the destination's normal access
-checks still apply. Fixed navigation remains available as action declaration metadata. Batch
-responses retain their count/feedback summary without per-record navigation. An expected
-`ActionRejectedException` is HTTP 422 whose body is the feedback object itself:
+Command handlers answer `{refresh, feedback, navigateTo}` (`CommandResult.success(...)`,
+`.info|warning|error`, `.title(...)`, `.detail(...)`, `.andRefresh()`). Feedback is meaning only:
+`severity` (`info|success|warning|error`), an optional `title`, `message` and `details`. The client
+decides how to show it — short success/info/warning as a toast, errors and anything with details as
+a dialog. `navigateTo` is optional and carries a destination for a single successful command:
+`CommandResult.open(ref)` returns the referenced catalog/document's route and
+`CommandResult.navigate(route)` / `.andNavigate(route)` choose a page or record. Only navigation
+targets are accepted — an application path or `onno://` /
+`onno://{catalogs|documents|registers|information-registers}/{name}[/{id}]`; command URLs (`logout`,
+`delete/`, `action/`, `redirect/`, `open/`, `download/`) and external URLs are rejected by
+`CommandResult` and ignored by the client, so a route built from stored or user data cannot trigger
+a side effect or leave the app. Clients apply feedback and refresh before navigating; the
+destination's normal access checks still apply. Batch responses keep their count/feedback summary
+without per-record navigation.
+An expected `CommandRejectedException` is HTTP 422 whose body is the feedback object itself, plus
+the inputs to fix; a client with the input form open shows it there and keeps the form open:
 
 ```json
 {
   "severity": "error",
-  "presentation": "inline",
   "title": "Approval blocked",
   "message": "The room is occupied",
   "details": ["Main Stage · Onegin · 18:00–21:00"],
   "fieldErrors": { "reason": ["Only soft conflicts may be justified"] },
-  "formErrors": ["A justification cannot override a hard conflict"],
-  "dismissLabel": null,
-  "keepFormOpen": true
+  "formErrors": ["A justification cannot override a hard conflict"]
 }
 ```
 
@@ -189,8 +217,8 @@ prove their feed identity and are rejected as foreign; restart without a cursor 
 The cursor is a position, not an authorization credential or a snapshot: SQL/access checks still
 run on every request, and edits to sort values can move records.
 
-**Implementation.** `su.onno.query.KeysetWindow` is the shared forward SQL helper. The public
-UI `KeysetWindow` adapter retains catalog/document backward/focus navigation and their optimized
+**Implementation.** `su.onno.query.KeysetWindow` is the shared forward SQL helper. The web
+starter's `KeysetWindow` adapter retains catalog/document backward/focus navigation and their optimized
 non-null seek predicates, while using the same codec, limits and JDBC type validation. Sort
 identifiers are validated metadata. Order tuples are unique; nullable keys are NULLS LAST in both
 directions. Queries fetch at most `limit + 1`; the extra row detects continuation and is discarded.
@@ -201,10 +229,10 @@ No SQL OFFSET or full-result in-memory slicing is used for pagination. SQL COUNT
 | `/api/list/catalogs/{name}`, `/api/list/documents/{name}` | Validated sort + `_id`; search, filters, record scope and document date bounds before seeking |
 | `/api/list/registers/{name}/movements`, `/api/registers/{name}/movements` | Validated sort (default `_period DESC`) + `_id`; active movements, date/filter/record scope |
 | `/api/list/registers/{name}/balance`, `/api/registers/{name}/balance` | Validated sort + remaining dimension primary-key columns; BALANCE registers only |
-| `/api/registers/{name}/turnover` | Grouped dimension tuple; record/dimension/period filters before aggregation and pagination |
+| `/api/registers/{name}/turnover` | Grouped dimension tuple; record/dimension/period/`where` filters before aggregation and pagination |
+| `/api/information-registers/{name}/records` | Period DESC + `_id` DESC (nonperiodic: `_id`); `where` and record scope before seeking |
 | `/api/notifications` | `_created_at DESC, _id DESC`; recipient and target record scope before LIMIT; no legacy array alias |
 | `/api/comments/{kind}/{name}/{id}` | `_created_at ASC, _id ASC`; parent record read access required |
-| `/api/{catalogs|documents}/{name}/{id}/related/{relatedName}` | Parent access and junction scope; catalog `_code, _id` or information register `_id` |
 | `/api/catalogs/{name}/children`, `/api/catalogs/{name}/tree` | `_is_folder DESC, _description ASC, _id ASC`; paged children or flat nodes with parent links |
 | `/api/crm/inbox-workspaces/{key}` | Validated sort + UUID; workspace, customer and personal-account checks precede SQL page selection |
 | `/api/crm/contacts/{customer}/activity` | SQL UNION of messages/notes; time, source and UUID DESC; only readable conversations; no legacy array alias |
@@ -221,10 +249,10 @@ shape is gone). Java methods that return a plain `List` (for example `ProcessEng
 `RecordHistory.list(id)`) return the **complete** result: they follow the cursor through bounded
 windows with `su.onno.query.KeysetWindow.drain(...)` and never silently truncate. Request paths
 must use the paged variants. The explicitly bounded `*Bounded` register previews keep their
-`truncated` flag. Register SDK methods
-return `CollectionPage<EntityRecord>` and accept `PageRequest`; widgets follow `nextCursor`.
-Catalog/document previews remain capped at 500; use `listCatalogPage` / `listDocumentsPage`
-for continuation. Aggregate widgets consume every turnover page before computing totals.
+`truncated` flag; the paged register variants are `movementsPage` / `balancePage` /
+`turnoverPage`. In `@onno/ui`, `getMovements` / `getBalance` / `getTurnover` take `cursor`/`limit`
+and return the envelope, `allRegisterRows` follows the cursor, and `useMovements` / `useBalance` /
+`useTurnover` read every window (500 rows at a time) before a component computes totals.
 Historical balance pages accept `asOf` as an inclusive local date-time or a whole local date;
 access scope is applied before summation, filters to the resulting balances, and cursors are
 bound to the cutoff. Omit `asOf` to use current materialized totals.
@@ -237,11 +265,9 @@ which wins over `focus`. Forward/backward tokens share the same feed context.
 
 **Bounded exceptions.** Arrays are retained for selector/configuration responses: reference search
 max 200, mentions max 500, settings/process definitions max 500, tag selectors max 500, CRM workspace
-and account choices max 100, notification types max 100. Calendar items reject overflow above 500
-with 422 and ask for a narrower window. Tags/settings likewise reject oversized results rather
+and account choices max 100, notification types max 100. Tags/settings likewise reject oversized results rather
 than silently hiding editable definitions. `/tree?ids=` is a bounded nested-path lookup (200 ids,
-at most 65 levels). Embedded detail related-list previews are capped at 100; continue through the
-paged related endpoint. Group/aggregate visualization buckets are bounded and explicitly signal
+at most 65 levels). Group/aggregate visualization buckets are bounded and explicitly signal
 truncation. Owned tabular sections and static model/graph metadata are aggregate payloads, not
 independent collection feeds. Trusted business repository reads remain separate from user-facing
 collection transports and must not be silently capped, particularly during posting.
@@ -256,10 +282,35 @@ membership. This is not a constant-time indexed workspace query. Schema-backed s
 introduced by hosts without changing the wire contract. Responses from replaced/unmounted UI
 scopes are ignored, so delayed pages cannot be appended to a different record.
 
-Reference pickers remain context-aware bounded searches. Recent picks are read through the same
-record scope and filters. They do not grant visibility or bypass the collection contract.
+Reference pickers remain context-aware bounded searches (`POST /api/ref-options/search`). With an
+empty `query` it leads with up to five of the caller's recent picks, each flagged `_recent: true`,
+then the ordinary options without duplicates, still within `limit`; send `"recent": false` to omit
+them. Picks are remembered with `POST /api/ref-options/recent` (`{targetKind, targetName, id}`); a
+recent pick is re-read through the same search, so it obeys the deletion mark, record scope and the
+request's `where` like any other option. The "Show all..." picker dialog pages the ordinary list
+feed with the field's `where` (plus the parent for folder navigation on a hierarchical catalog) and
+checks each window with `POST /api/ref-options/decorate` (`ids` plus the `/search` context), which
+answers `offered` ids and their `decorations`. Recent picks do not grant visibility or bypass the
+collection contract. See [onno-web-starter/README](../onno-web-starter/README.md) for the complete
+list contract.
 
-Catalog/document single-record, hierarchy, related-catalog, list-feed, reference-option,
+Row predicates are sent as `where`: URL-encoded JSON on the list feed, its `/groups` and
+`/aggregate` (and a JSON object field on the ref-option `/search` and `/decorate` bodies). Keys are
+logical field names (`code`, `description`, `number`, `date`, `posted`, `id`, attributes); a value is
+a literal (equality), `null` (IS NULL) or an operator object — `eq`, `not` (`{"not": null}` is IS NOT
+NULL), `in`, `notIn`, `gt`, `gte`, `lt`, `lte`, `contains`, `startsWith` (case-insensitive) — plus
+`and`/`or` arrays and a `not` object. Refs and enums are UUID strings (an enum also accepts its
+constant name), dates ISO strings. It applies to the window, focus, count, groups and aggregates,
+always within the caller's record scope:
+
+```text
+GET /api/list/documents/Orders?where={"posted":true,"total":{"gte":100},"or":[{"note":{"contains":"rush"}},{"client":null}]}
+```
+
+An unknown field or operator, a malformed value, nesting deeper than 8 or an `in` list over 500
+values is a `400`.
+
+Catalog/document single-record, hierarchy, list-feed, reference-option,
 create/update/duplicate, and post/unpost entity responses all accept
 `?representation=logical|storage`. Omitted means `logical`; an unknown value is `400`. Registers
 and aggregate/group responses retain their own storage/aggregation contracts and do not use this
@@ -562,11 +613,12 @@ must `addEventListener("updated", …)` (etc.) per event name you care about.
 ## MCP register movements
 
 For authenticated MCP clients, `register_movements` and `register_balance` return the same
-`{rows,nextCursor,hasMore}` page in MCP's `result` wrapper. Both accept `cursor`, `limit`
-(default 100, maximum 500) and dimension-name `filters`. Movements additionally accept inclusive
-`from`/`to`, validated `sort`, and `descending`. Filters and
-record scope are applied in SQL before seeking. Unknown dimensions and invalid movement page
-bounds produce an MCP error. See [Collection pagination](#collection-pagination) for the contract.
+`{rows,nextCursor,hasMore}` page in MCP's `result` wrapper, in the logical vocabulary above. Both
+accept `cursor`, `limit` (default 100, maximum 500) and `where` (the structured predicate; reference
+and enumeration values use UUID strings). Movements additionally accept inclusive `from`/`to`,
+validated `sort`, and `descending` (default true); balance accepts `asOf`. The predicate and record
+scope are applied in SQL before seeking. Unknown `where` fields and invalid page bounds produce an
+MCP error. See [Collection pagination](#collection-pagination) for the contract.
 
 ## Notes for a public read view
 
@@ -640,10 +692,10 @@ shared mailboxes and the caller's own personal ones (any other `account` is 404)
 `CrmInboxWorkspace` beans activate scoped inbox mode, separate from persisted channel accounts.
 `GET /api/crm/inbox-workspaces` returns only accessible `{key,label,canWrite}` entries.
 `GET /api/crm/inbox-workspaces/{key}?q=&cursor=&limit=100` returns
-`{key,label,config,canWrite,rows,nextCursor,hasMore}` plus list/filter metadata. `total` is optional
-and requires `count=exact`. Rows use camel-case fields and display/color/ref sidecars. Workspace
-selection and access precede page selection; see the scoped inbox pagination details below.
-The workspace choice list and channel-account choices are hard-capped at 100.
+`{key,label,config,canWrite,list,channelAccounts,rows,nextCursor,hasMore}`. `total` is optional
+and requires `count=exact`. Rows use logical camel-case fields and `...Display`/`...Color`/`...Ref`
+sidecars. Workspace selection and access precede page selection; see the scoped inbox pagination
+details below. The workspace choice list and channel-account choices are hard-capped at 100.
 
 Every existing `/api/crm/conversations/{id}/...` command/read requires the
 `workspace` query parameter. Membership and the workspace's read/write roles are independently
@@ -656,16 +708,17 @@ notes. GET accepts `cursor`/`limit` and returns the common page envelope; POST a
 
 Business merging and any undo are host commands; see the [CRM composition guide](../onno-crm-starter/README.md).
 
-Inbox workspace pages accept `widget.config("workspace", "support")` to bind a page to one workspace.
+A page binds `<CrmInbox workspace="support" />` to one workspace.
 The scoped feed accepts `status` UUIDs and `channel`/`priority` enum names (`all` by default);
 filters apply after workspace membership and before pagination.
 
 Inbox filters accept comma-separated status UUIDs or channel/priority enum names (OR within a field,
-AND between fields); omitted values default to `all`. The inbox reuses the host `OptionsFacet`
-multi-select chips through the widget SDK.
+AND between fields); omitted values default to `all`. The inbox reuses `@onno/ui`'s `OptionsFacet`
+multi-select chips.
 
-The scoped inbox renders the standard `EntityListWidget` header and body-view controls. Its feed
-accepts repeated `in=field,value`, `sort`, `dir`, `limit` (default 100, maximum 500), and an opaque
+The scoped inbox renders the standard `EntityListView` header and body-view controls. Its feed
+accepts repeated `in=field,value`, `sort`, `dir` (without `sort` it orders by `lastMessageAt`
+descending; a `sort` without `dir` is ascending), `limit` (default 100, maximum 500), and an opaque
 `cursor`. Responses contain `{rows,nextCursor,hasMore}` plus workspace/list metadata; `nextCursor`
 is null at the end. `total` is included only with `count=exact`. Numeric `offset` pagination is no longer supported.
 
@@ -682,9 +735,6 @@ cursor is 400; a malformed token restarts. NULL values sort last, with UUID as u
 ### Optional WhatsApp webhook
 
 With `onno.crm.channels.whatsapp.enabled=true`, `GET /api/crm/whatsapp/webhook` accepts `hub.mode=subscribe`, `hub.verify_token`, and `hub.challenge`, returning the plain challenge only after token validation. `POST` accepts Meta JSON with `X-Hub-Signature-256`, verifies the raw-body HMAC before parsing, limits payloads to 1 MiB, and returns 200 after applying recognized configured-account events. Missing/invalid signatures return 403; malformed payloads return 400. This exact path needs public access and a CSRF exemption in cookie-auth hosts. Other CRM endpoints retain their normal authorization.
-
-UI list descriptors may include `selectionWidget`, an optional registered widget type for the
-selected-row toolbar. It does not alter generated record reads or grant command authorization.
 
 ### Unified contact activity
 
@@ -747,13 +797,13 @@ contact data or send messages. The UI refreshes groups after changes and when th
 
 ### Opening a workspace conversation
 
-In workspace mode, `/api/divkit/catalogs/crm_conversations/{id}` (also the logical-name aliases)
-is a CRM-owned conversation view. It verifies host customer permissions and workspace membership, then renders the
-chat using an accessible inbox workspace. Its feed is
+In workspace mode, the app renders `@onno/crm`'s `CrmConversationPage` at
+`/catalogs/crm_conversations/:id`; the server verifies host customer permissions and workspace
+membership, using an accessible inbox workspace. Its feed is
 `GET /api/crm/inbox-workspaces/{key}/conversation/{id}`; it returns only that contact's conversations
 within the authorized workspace and retains normal filtering/pagination. Foreign records return
 403 and missing records return 404. Generic catalog/message read and export restrictions remain
-unchanged. Without workspace definitions, the normal framework catalog view remains in use.
+unchanged. Without workspace definitions, the normal default catalog form remains in use.
 
 Host applications contribute header actions through the shared extension slots. The CRM starter
 supplies authorized commands but no default action-button contributions. Customer lifecycle stages,
@@ -765,16 +815,16 @@ forms and any template catalog belong to the host, with the standard generic rea
 as other conversation commands. The target must occur in application `CrmStateConfiguration`.
 The host owns status records and editing; `CrmStateConfiguration` binds them without copying them.
 
-Inbox workspaces declare optional toolbar filters with `CrmInboxWorkspace.list(list -> ...)`,
-using `ListSpec.filter` and its standard options/text/date controls. Scoped feeds return `filters`
-and accept `eq/in/like/prefix/ge/le` only for declared filters; membership and contact access are
-checked before filtering. No toolbar filters are supplied implicitly.
+Inbox toolbar filters are the `filters` of `<CrmInbox list={…} />`, with the standard
+options/text/date controls; workspace beans add server-resolved facets (`CrmInboxWorkspace.facet`).
+Scoped feeds accept `eq/in/like/prefix/ge/le`; membership and contact access are checked before
+filtering. No toolbar filters are supplied implicitly.
 
 CRM channels use extensible string keys with connector-owned `CrmChannelDefinition` metadata
 (`GET /api/crm/channels/types`); no fixed channel enumeration or Channels page is installed.
-The optional settings widget uses `crm.channel.settings` extension contributions; bundled provider
-setup and branding live in the channels starter. Workspace `.list(...)`/`.view(...)` uses ordinary
-`ListSpec` resolution for both the inbox renderer and table. Status bindings read an existing host
+`<CrmConnections setups={[channelSetups]} />` takes provider setup forms as components; bundled provider
+setup and branding live in the channels starter (`@onno/crm-channels`). The inbox's columns, sort and
+filters are `<CrmInbox list={…} />` props. Status bindings read an existing host
 catalog or enumeration through `CrmStateConfiguration.catalog(...)`/`.enumeration(...)`, with no
 CRM status table or mirrored records. Channel keys and status UUIDs are breaking storage changes.
 
@@ -789,11 +839,11 @@ Priority is optional: bind a host catalog/enum with `CrmPriorityBinding.catalog(
 `.enumeration(...)`; use `.options()` in an ordinary priority filter. No priority enum, default or
 implicit column/filter is installed. The priority UUID is scoped to that host source.
 Assignment, close/reopen, status-change and manual identity-linking HTTP actions are not bundled.
-Host `EntityView<Conversation>` beans declare ordinary `ActionSpec` ROW/DETAIL handlers; extension
-buttons receive their descriptors and call `context.execute(key, inputs)`. The scoped action API is
+Host `Commands<Conversation>` beans declare ordinary record commands; extension buttons receive
+their descriptors and call `context.execute(key, inputs)`. The scoped API is
 `/api/crm/inbox-workspaces/{workspace}/conversations/{id}/actions` (GET descriptors, POST `/{key}`
-with `{inputs:{...}}`). It checks workspace write access, application read-only mode, action roles
-and record visibility/enabled rules. CRM adds no business-field mutations or automatic history
+with `{inputs:{...}}`). It checks workspace write access, application read-only mode, command roles
+and the commands' `availableWhen`/`enabledWhen` rules. CRM adds no business-field mutations or automatic history
 messages for these actions. Hosts own the handler and any desired history records. Connector code
 can still use the low-level identity-link service for provider routing.
 
@@ -802,7 +852,7 @@ can still use the low-level identity-link service for provider routing.
 Scoped inbox feeds include `list.channelAccounts` (`id`, `channel`, `label`) from readable workspace
 conversations before applying filters/pagination. Hidden conversations never contribute account choices.
 Activity feed entries include `accountLabel` (inbox description and address) after conversation access
-checks. Manual activity writes honor `onno.ui.read-only` in addition to customer/workspace write checks.
+checks. Manual activity writes honor `onno.web.read-only` in addition to customer/workspace write checks.
 Folder configuration supports `matchNone: true` for visible empty categories; omitted/false preserves
 existing empty-criteria matching. See the [CRM guide](../onno-crm-starter/README.md#unified-inbox-controls-and-manual-activity).
 
@@ -819,9 +869,9 @@ rechecks ownership on its one-use callback. Each mailbox has separate credential
 Personal inbox ownership restricts scoped conversation reads/writes and contact projections.
 Generic CRM catalogs/exports/events are unavailable to all roles once personal accounts exist,
 preventing ADMIN from bypassing per-account privacy. Host contacts retain host catalog permissions.
-`UiEntityAccessPolicy.includesAdministrators()` defaults false; privacy policies explicitly opt in.
+`EntityAccessPolicy.includesAdministrators()` defaults false; privacy policies explicitly opt in.
 See `onno-crm-starter/README.md` and `onno-crm-channels-starter/README.md` for response fields,
-widget options, lifecycle behavior and remaining shared-only provider limits.
+component props, lifecycle behavior and remaining shared-only provider limits.
 
 Telegram business onboarding uses `POST /api/crm/telegram/business/{account UUID}/authorize`
 (account ownership, workspace write access and CSRF required). The returned one-use Telegram link

@@ -63,7 +63,8 @@ Use `Ref<T>` for references between concepts. Do not embed whole objects.
 4. Implement documents and tabular sections.
 5. Implement registers and posting logic.
 6. Add typed processes, constants, jobs, and integrations when required.
-7. Author UI with `Layout`, `Page`, and `EntityView`.
+7. Add server commands (`Commands<E>`) for actions beyond CRUD, then the UI in `src/main/ui`:
+   entity customizations, pages, navigation.
 8. Add focused tests and verify the running app.
 9. Summarize what was modeled, what was assumed, and what remains ambiguous.
 
@@ -76,8 +77,10 @@ dense public API lookup; code wins if the cheat sheet drifts.
   `@EnumLabel`.
 - Name real business nouns. Delete copied scaffold entities and placeholder fields.
 - Seed New-form defaults with idempotent `OnFillingHandler.onFilling()` or Java initializers.
-- Use `EntityView.fields(...)` for order, groups, widths, widgets, placeholders, formats, and hints.
-- Keep UI placement out of domain annotations; nav and pages belong to `Layout`/`Page`.
+- Use the UI entity customization's `fields` for order, groups, widths, inputs, placeholders,
+  formats, and hints.
+- Keep UI placement out of domain annotations; nav and pages belong to `defineApp` in
+  `src/main/ui/main.tsx`.
 - Update docs and skills in the same change when public framework behavior changes.
 
 ## Related Skills
@@ -85,5 +88,6 @@ dense public API lookup; code wins if the cheat sheet drifts.
 - `onno-modeling-interview` for what to ask the user and how to extract a model from answers.
 - `onno-catalogs-enums`, `onno-documents-lines`, and `onno-registers` for implementing each concept.
 - `onno-posting` for rules, register movement code, negative balance behavior, and events.
-- `onno-ui` for Layout/Page/EntityView, custom widgets, localization, and list/form polish.
+- `onno-ui` (overview, localization), `onno-ui-entities` (list/form polish), `onno-ui-pages`
+  (pages, navigation, widgets) and `onno-commands` (actions, live checks, picker options).
 - `onno-runtime` for authenticated API/MCP verification.

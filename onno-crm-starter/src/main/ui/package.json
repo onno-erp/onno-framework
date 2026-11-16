@@ -1,0 +1,14 @@
+{
+  "name": "@onno/crm",
+  "version": "2.0.0",
+  "description": "The CRM inbox and contact screens for onno apps (onno-crm-starter).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "peerDependencies": {
+    "@onno/ui": "*",
+    "react": "^19.2.7"
+  }
+}

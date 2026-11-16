@@ -6,7 +6,7 @@ connected to every other node.
 
 ## Why it exists
 
-The live UI uses Server-Sent Events: `UiEventPublisher` fans an `EntityChangedEvent` out to the
+The live UI uses Server-Sent Events: `EventPublisher` fans an `EntityChangedEvent` out to the
 `SseEmitter`s **held in that JVM**. With a single node that is the whole story. With several nodes, a
 browser connected to node B never sees a change made on node A, because the event never leaves A.
 
@@ -29,7 +29,7 @@ node A: write ──► EntityChangedEvent ──► local SSE clients (synchron
                                      └──► ClusterEntityChangeRelay ──► bus.publish ──► pg_notify
                                                                                           │
 node B: LISTEN ◄──────────────────────────────────────────────────────────────────────┘
-        getNotifications ──► ClusterUiBridge ──► UiEventPublisher.publish ──► node B's SSE clients
+        getNotifications ──► ClusterEventBridge ──► EventPublisher.publish ──► node B's SSE clients
 ```
 
 A received event is pushed straight to the SSE stream — it is **never re-published as a Spring

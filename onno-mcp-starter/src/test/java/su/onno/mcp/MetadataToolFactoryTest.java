@@ -7,13 +7,13 @@ import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.model.AccumulationType;
 import su.onno.model.PostingOrder;
-import su.onno.ui.CatalogCommandService;
-import su.onno.ui.CatalogQueryService;
-import su.onno.ui.DocumentCommandService;
-import su.onno.ui.DocumentQueryService;
-import su.onno.ui.RegisterQueryService;
-import su.onno.ui.UiAccessService;
-import su.onno.ui.UiProperties;
+import su.onno.web.CatalogCommandService;
+import su.onno.web.CatalogQueryService;
+import su.onno.web.DocumentCommandService;
+import su.onno.web.DocumentQueryService;
+import su.onno.web.RegisterQueryService;
+import su.onno.web.AccessService;
+import su.onno.web.WebProperties;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonMapper;
@@ -53,8 +53,7 @@ class MetadataToolFactoryTest {
             "Clients", "Clients", "cat_clients", Object.class, 12, false, true, "C-", "Rentals",
             List.of("RENTALS"), List.of("RENTALS"),
             List.of(new AttributeDescriptor("name", "Name", "name", String.class, 100,
-                    true, false, "", 0, 0, true, true, true, 0, "", "", "",
-                    AttributeDescriptor.Constraints.NONE, false)));
+                    true, false, "", 0, 0, AttributeDescriptor.Constraints.NONE, false)));
 
     private final AccumulationRegisterDescriptor cash = new AccumulationRegisterDescriptor(
             "Cash", "Cash", "reg_cash", "reg_cash_totals", Object.class,
@@ -67,13 +66,13 @@ class MetadataToolFactoryTest {
     }
 
     private MetadataToolFactory factory(OnnoMcpProperties props) {
-        return factory(props, new UiProperties());
+        return factory(props, new WebProperties());
     }
 
-    private MetadataToolFactory factory(OnnoMcpProperties props, UiProperties uiProperties) {
-        UiAccessService access = new UiAccessService(registry);
+    private MetadataToolFactory factory(OnnoMcpProperties props, WebProperties webProperties) {
+        AccessService access = new AccessService(registry);
         return new MetadataToolFactory(registry, null, access, catalogQuery, documentQuery, registerQuery,
-                catalogCommands, documentCommands, props, uiProperties, json);
+                catalogCommands, documentCommands, props, webProperties, json);
     }
 
     private static Set<String> names(List<SyncToolSpecification> tools) {
@@ -124,7 +123,7 @@ class MetadataToolFactoryTest {
 
     @Test
     void uiReadOnlyGateRemovesMutationToolsButKeepsPostingPreview() {
-        UiProperties ui = new UiProperties();
+        WebProperties ui = new WebProperties();
         ui.setReadOnly(true);
 
         Set<String> names = names(factory(new OnnoMcpProperties(), ui).build());
@@ -154,7 +153,7 @@ class MetadataToolFactoryTest {
         when(catalogQuery.require("Clients")).thenReturn(clients);
         SyncToolSpecification listCatalog = byName(factory(new OnnoMcpProperties()).build(), "list_catalog");
 
-        // A null exchange yields a null principal -> deny by default in UiAccessService.
+        // A null exchange yields a null principal -> deny by default in AccessService.
         CallToolResult result = listCatalog.callHandler()
                 .apply(null, new CallToolRequest("list_catalog", Map.of("name", "Clients")));
 
@@ -199,17 +198,17 @@ class MetadataToolFactoryTest {
     }
 
     @Test
-    void registerMovementsCombinesDimensionPeriodPaginationAndSortFilters() {
+    void registerMovementsCombinesWherePeriodPaginationAndSort() {
         var movements = movementTool();
-        var result = callMovements(movements, Map.of("name", "Cash", "filters", Map.of("name", "Alpha"),
+        var result = callMovements(movements, Map.of("name", "Cash", "where", Map.of("name", "Alpha"),
                 "from", "2026-01-01T00:00:10", "to", "2026-01-01T00:00:20",
-                "limit", 2, "sort", "_period", "descending", false));
+                "limit", 2, "sort", "period", "descending", false));
         assertThat(result.isError()).isNotEqualTo(true);
         assertThat(movementRows(result)).hasSize(2);
         assertThat(movementRows(result).getFirst()).containsEntry("sequence", 10).containsEntry("name", "Alpha");
         assertThat(movementRows(result).getLast()).containsEntry("sequence", 11);
 
-        var beta = callMovements(movements, Map.of("name", "Cash", "filters", Map.of("name", "Beta")));
+        var beta = callMovements(movements, Map.of("name", "Cash", "where", Map.of("name", "Beta")));
         assertThat(movementRows(beta)).hasSize(1);
         assertThat(movementRows(beta).getFirst()).containsEntry("sequence", 1002);
     }
@@ -217,14 +216,14 @@ class MetadataToolFactoryTest {
     @Test
     void registerMovementsRejectsInvalidPagingAndUnknownDimensions() {
         var movements = movementTool();
-        for (var arguments : List.of(Map.of("limit", 0), Map.of("limit", 1001),
-                Map.of("filters", Map.of("unknown", "value")))) {
+        for (var arguments : List.of(Map.of("limit", 0), Map.of("limit", 501),
+                Map.of("where", Map.of("unknown", "value")))) {
             Map<String, Object> args = new java.util.LinkedHashMap<>(arguments);
             args.put("name", "Cash");
             assertThat(callMovements(movements, args).isError()).isTrue();
         }
         var injected = callMovements(movements,
-                Map.of("name", "Cash", "filters", Map.of("name", "Alpha' OR 1=1 --")));
+                Map.of("name", "Cash", "where", Map.of("name", "Alpha' OR 1=1 --")));
         assertThat(movementRows(injected)).isEmpty();
     }
 
@@ -238,7 +237,7 @@ class MetadataToolFactoryTest {
                     + "true, CASE WHEN X = 1002 THEN 'Beta' ELSE 'Alpha' END, X FROM SYSTEM_RANGE(1, 1002)");
             h.execute("INSERT INTO reg_cash (_period, _active, name, sequence) VALUES (TIMESTAMP '2027-01-01 00:00:00', false, 'Alpha', 1003)");
         });
-        var factory = new MetadataToolFactory(registry, new UiAccessService(registry), catalogQuery,
+        var factory = new MetadataToolFactory(registry, new AccessService(registry), catalogQuery,
                 documentQuery, new RegisterQueryService(registry, jdbi), catalogCommands, documentCommands,
                 new OnnoMcpProperties(), json);
         return byName(factory.build(), "register_movements");
@@ -258,30 +257,33 @@ class MetadataToolFactoryTest {
     void registerBalanceReturnsTheSamePageEnvelope() {
         when(registerQuery.require("Cash")).thenReturn(cash);
         when(registerQuery.balancePage(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(cash),
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.isNull(),
-                org.mockito.ArgumentMatchers.eq(false), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq(100), org.mockito.ArgumentMatchers.isNull()))
+                org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.eq(false), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.eq(100), org.mockito.ArgumentMatchers.isNull()))
                 .thenReturn(new su.onno.query.KeysetWindow.Page<>(List.of(Map.of("amount", 10)), "next", true));
         SyncToolSpecification balance = byName(factory(new OnnoMcpProperties()).build(), "register_balance");
         CallToolResult result = balance.callHandler().apply(exchange(),
                 new CallToolRequest("register_balance", Map.of("name", "Cash")));
-        assertThat(result.isError()).isNotEqualTo(true);
-        assertThat(movementRows(result)).containsExactly(Map.of("amount", 10));
+        assertThat(result.isError()).as(result.content().toString()).isNotEqualTo(true);
+        assertThat(result.content().toString()).contains("10", "next");
         assertThat(balance.tool().inputSchema().properties()).doesNotContainKey("offset");
     }
 
     @Test
-    void registerBalanceRetainsAsOfInThePagedContract() {
+    void registerBalanceForwardsInclusiveCutoffWhereAndCursor() {
         when(registerQuery.require("Cash")).thenReturn(cash);
         when(registerQuery.balancePage(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(cash),
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.isNull(),
-                org.mockito.ArgumentMatchers.eq(false), org.mockito.ArgumentMatchers.isNull(),
-                org.mockito.ArgumentMatchers.eq(100), org.mockito.ArgumentMatchers.eq("2024-03-31")))
+                org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq("{\"name\":\"Main\"}"),
+                org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq(false),
+                org.mockito.ArgumentMatchers.eq("c1"), org.mockito.ArgumentMatchers.eq(100),
+                org.mockito.ArgumentMatchers.eq("2024-03-31T23:59:59")))
                 .thenReturn(new su.onno.query.KeysetWindow.Page<>(List.of(Map.of("amount", 42)), null, false));
         var balance = byName(factory(new OnnoMcpProperties()).build(), "register_balance");
         var result = balance.callHandler().apply(exchange(), new CallToolRequest("register_balance",
-                Map.of("name", "Cash", "asOf", "2024-03-31")));
-        assertThat(movementRows(result)).containsExactly(Map.of("amount", 42));
-        assertThat(balance.tool().inputSchema().properties()).containsKey("asOf");
+                Map.of("name", "Cash", "asOf", "2024-03-31T23:59:59", "where", Map.of("name", "Main"), "cursor", "c1")));
+        assertThat(result.isError()).as(result.content().toString()).isNotEqualTo(true);
+        assertThat(result.content().toString()).contains("42");
+        assertThat(balance.tool().inputSchema().properties()).containsKey("asOf").containsKey("where");
     }
 
     private static McpSyncServerExchange exchange() {

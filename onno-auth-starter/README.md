@@ -56,7 +56,7 @@ to contribute nothing and wire your own security.
 | `onno.auth.mode` | `in-memory` | Backend: `database`, `in-memory`, `oidc`, or `resource-server`. See [modes](#authentication-modes). |
 | `onno.auth.database.password-min-length` | `8` | `database` mode: minimum length of a password a holder or administrator chooses. |
 | `onno.auth.database.seed-password-change-required` | `true` | `database` mode: accounts seeded from `onno.auth.users` must set a new password at first sign-in. When `false`, every seed password must satisfy the policy or startup fails. |
-| `onno.auth.public-paths` | see below | Ant patterns permitted without authentication, on top of the implicit "everything outside `/api/**`". **Setting this REPLACES the defaults — it does not append.** Repeat every default below (plus your additions) or the login screen 401s (dropped `/api/config`, `/api/auth/login`, …). |
+| `onno.auth.additional-public-paths` | — | Your Ant patterns permitted without authentication, combined with the framework's public paths below (which always stay public) and the implicit "everything outside `/api/**`". `onno.auth.public-paths` is the older name for the same thing and is also combined. |
 | `onno.auth.users[*].username` | — | `in-memory`: an account. `database`: a first-boot seed, copied into the empty store once and ignored afterwards. |
 | `onno.auth.users[*].password` | — | Plaintext password; BCrypt-encoded at startup. Missing username **or** password fails startup. |
 | `onno.auth.users[*].roles` | `[]` | Role names (stored as `ROLE_*` authorities by Spring's `User.roles(...)`). |
@@ -69,7 +69,7 @@ to contribute nothing and wire your own security.
 | `onno.auth.session.remember-me.key` | — | Secret signing the remember-me cookie. **Set a stable value** so cookies survive restarts and can't be forged. When blank, startup **fails fast** unless `allow-ephemeral-key=true`. |
 | `onno.auth.session.remember-me.allow-ephemeral-key` | `false` | Dev escape hatch: when `true`, a blank `key` uses a built-in fixed (non-secret) dev key instead of failing startup. It is deliberately constant — not random — so remember-me cookies still survive restarts in dev. Never enable in production (the key is public). |
 
-Default `public-paths`:
+Framework public paths (always public):
 
 ```
 /error
@@ -79,16 +79,17 @@ Default `public-paths`:
 /api/auth/login
 /api/auth/me
 /api/auth/csrf
-/api/divkit/login
+/api/ui/login
 /api/desktop/ready
 /api/desktop/manifest
 ```
 
 These are the `/api/**` paths reachable unauthenticated: the login endpoint plus non-sensitive
-bootstrap endpoints (theme, config, branding, current-auth-state, CSRF token, the DivKit login screen,
-and the desktop shell's readiness probe and window manifest). Everything else under `/api/**` is
-`authenticated()`; everything else (the SPA shell) is `permitAll()`. Remember: overriding
-`onno.auth.public-paths` **replaces** this whole list — repeat the entries you still need.
+bootstrap endpoints (theme, config, branding, current-auth-state, CSRF token, the login screen's
+methods, and the desktop shell's readiness probe and window manifest). Everything else under
+`/api/**` is `authenticated()`; everything else (the UI shell and assets) is `permitAll()`. Add your
+own public patterns with `onno.auth.additional-public-paths`; they are combined with this list,
+which always stays public.
 
 ## How authentication works
 
@@ -232,11 +233,11 @@ onno:
   screen.
 - **Policy.** Minimum length (`onno.auth.database.password-min-length`), at most 72 bytes (bcrypt),
   not equal to the username, different from the current password.
-- **Identity.** Accounts are logins, not business records. Link one to an employee with
-  `Layout.identity(Employee.class, "email")` as before.
-- **UI.** Put `b.widget("Users").type("users")` on an admin page (account list, create, roles,
-  disable, reset, sign out) and `b.widget("Password").type("changePassword")` wherever holders should
-  change their own password.
+- **Identity.** Accounts are logins, not business records. Link one to an employee with an
+  `IdentityLink.of(Employee.class, "email")` bean.
+- **UI.** Render `@onno/ui`'s `<UserAccounts />` on an admin page (account list, create, roles,
+  disable, reset, sign out) and `<ChangePassword />` wherever holders should change their own
+  password.
 
 | Method | Path | Auth | Body | Response |
 |--------|------|------|------|----------|
@@ -443,13 +444,13 @@ onno:
 | `roles.client-roles` | `false` | Keycloak preset: also map `resource_access.<client-id>.roles`. |
 | `roles.client-id` | — | Keycloak preset: client whose roles are mapped; **required** when `client-roles: true`. |
 
-### Server-driven login screen
+### Login screen methods
 
 The available methods are exposed to the UI through the `su.onno.auth.spi.AuthMethodsProvider` bean
-(contract in `onno-framework`), so the UI module can build the login screen server-side without
-depending on this module. In the onno UI this drives the DivKit login card (`GET /api/divkit/login`):
-the server emits a password form and/or one button per SSO provider, and adding an IdP needs no client
-change.
+(contract in `onno-framework`), so the web starter can describe the login screen without depending on
+this module. `GET /api/ui/login` answers plain JSON — a password form and/or one button per SSO
+provider, plus any demo accounts — and the React login screen renders it, so adding an IdP needs no
+client change.
 
 `AuthMethodsProvider` is the single source of the password flag, mode, and logout URL. To **add** a
 sign-in button without replacing it — e.g. a connector that is itself an identity provider — register
@@ -487,7 +488,7 @@ AuthMethodsContributor telegramLogin() {
 - **`buttonLabel`**, when set, replaces the default `"Continue with {provider}"` framing entirely —
   use it when the label is already a complete localized phrase, so it isn't double-wrapped into a
   mixed-language string. Leave it null to keep the default framing (override the wording via the
-  `login.sso` key in [`onno.ui.messages`](../onno-ui-starter/README.md)).
+  `login.sso` key in [`onno.ui.messages`](../onno-web-starter/README.md)).
 
 The three- and four-argument constructors remain (they default `monochrome = false` and
 `buttonLabel = null`), so existing buttons need no change. When a deployment offers both a password
@@ -507,7 +508,7 @@ form behind a back link — so it stays uncluttered; single-method screens rende
 - **It owns the whole chain.** The bean is `@ConditionalOnMissingBean(SecurityFilterChain.class)`, so
   if your app already defines a `SecurityFilterChain`, this starter's chain is **not** applied (its
   controller and the auth beans still are). To customize selectively, prefer overriding the narrower
-  beans or `onno.auth.public-paths`.
+  beans or `onno.auth.additional-public-paths`.
 - **OIDC needs the `spring.security.oauth2.client.*` registration.** Setting `mode: oidc` without a
   configured client registration fails startup — the mode expects a `ClientRegistrationRepository`.
 - **Register the post-logout redirect URI.** If `post-logout-redirect-uri` (the app origin) is not in
@@ -517,6 +518,6 @@ form behind a back link — so it stays uncluttered; single-method screens rende
   handling is on (`server.forward-headers-strategy=framework`) so `{baseUrl}` expands to the public
   origin and not the internal `http://localhost`.
 
-ADMIN bypasses entity role checks and ordinary `UiEntityAccessPolicy` gates. Policies explicitly
+ADMIN bypasses entity role checks and ordinary `EntityAccessPolicy` gates. Policies explicitly
 returning `includesAdministrators() == true` enforce additional privacy boundaries even for ADMIN
 (for example, CRM personal-account records must use owner-scoped APIs).

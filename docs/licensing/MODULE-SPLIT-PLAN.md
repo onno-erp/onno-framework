@@ -137,7 +137,7 @@ No auth code moves; nothing to do here.
 4. Phase 5 — CI/docs cleanup.
 
 ## Risks / gotchas
-- **Don't move `su.onno.auth.spi`** — `onno-ui-starter` (Apache-2.0) depends on it. The SPI
+- **Don't move `su.onno.auth.spi`** — `onno-web-starter` (Apache-2.0) depends on it. The SPI
   is the free contract; only implementations are commercial.
 - **License irreversibility:** once you tag a release as Apache-2.0, that release is forever
   Apache-2.0. Make sure no proprietary code is in `su.onno` modules *before* the public

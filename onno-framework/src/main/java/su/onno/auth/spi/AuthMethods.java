@@ -5,7 +5,7 @@ import java.util.List;
 /**
  * Describes how a user may authenticate, so the login screen can be composed server-side rather than
  * hardcoded in the client. Produced by an {@link AuthMethodsProvider} and consumed by the UI module
- * to build a server-driven (DivKit) login surface.
+ * to build a login screen.
  *
  * <p>Deliberately plain data with no Spring / Spring Security types, because it crosses the
  * {@code onno-framework} seam shared by the auth and UI modules.

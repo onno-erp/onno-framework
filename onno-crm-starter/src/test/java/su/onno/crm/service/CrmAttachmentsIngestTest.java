@@ -5,10 +5,10 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.util.unit.DataSize;
-import su.onno.ui.media.LoadedMedia;
-import su.onno.ui.media.MediaProperties;
-import su.onno.ui.media.MediaStorage;
-import su.onno.ui.media.StoredMedia;
+import su.onno.web.media.LoadedMedia;
+import su.onno.web.media.MediaProperties;
+import su.onno.web.media.MediaStorage;
+import su.onno.web.media.StoredMedia;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

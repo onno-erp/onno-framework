@@ -17,14 +17,14 @@ import su.onno.numbering.NumberGenerator;
 import su.onno.schema.SchemaGenerator;
 import su.onno.security.SecretCipher;
 import su.onno.types.Ref;
-import su.onno.ui.CatalogCommandService;
-import su.onno.ui.CatalogQueryService;
-import su.onno.ui.DocumentCommandService;
-import su.onno.ui.DocumentQueryService;
-import su.onno.ui.RecordScopeCompiler;
-import su.onno.ui.RegisterQueryService;
-import su.onno.ui.UiAccessService;
-import su.onno.ui.UiProperties;
+import su.onno.web.CatalogCommandService;
+import su.onno.web.CatalogQueryService;
+import su.onno.web.DocumentCommandService;
+import su.onno.web.DocumentQueryService;
+import su.onno.web.RecordScopeCompiler;
+import su.onno.web.RegisterQueryService;
+import su.onno.web.AccessService;
+import su.onno.web.WebProperties;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -93,7 +93,7 @@ class McpRecordPolicyLeakTest {
                 RecordAccessPolicy.forCatalog(McpTenant.class).appliesTo("CUSTOMER")
                         .read(RecordScope.eq("owner", Subject.recordId()))));
         RecordScopeCompiler compiler = new RecordScopeCompiler(policies);
-        UiAccessService access = new UiAccessService(registry);
+        AccessService access = new AccessService(registry);
         CatalogQueryService catalogQuery = new CatalogQueryService(registry, jdbi, compiler, access);
         AtomicInteger seq = new AtomicInteger();
         NumberGenerator numbers = new NumberGenerator() {
@@ -105,7 +105,7 @@ class McpRecordPolicyLeakTest {
                 return "C" + seq.incrementAndGet();
             }
         };
-        CatalogCommandService catalogCommands = new CatalogCommandService(registry, jdbi, new UiProperties(),
+        CatalogCommandService catalogCommands = new CatalogCommandService(registry, jdbi, new WebProperties(),
                 numbers, catalogQuery, access, event -> { }, new SecretCipher(null));
 
         AccessSubject system = AccessSubject.system();
@@ -119,7 +119,7 @@ class McpRecordPolicyLeakTest {
         props.setWritesEnabled(true);
         tools = new MetadataToolFactory(registry, null, access, catalogQuery, mock(DocumentQueryService.class),
                 mock(RegisterQueryService.class), catalogCommands, mock(DocumentCommandService.class), props,
-                new UiProperties(), new JacksonMcpJsonMapper(new ObjectMapper().findAndRegisterModules()));
+                new WebProperties(), new JacksonMcpJsonMapper(new ObjectMapper().findAndRegisterModules()));
     }
 
     @Test

@@ -8,7 +8,6 @@ import java.util.function.UnaryOperator;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
-import su.onno.crm.domain.Conversation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -22,16 +21,15 @@ class CrmInboxWorkspaceBuilderTest {
     }
 
     @Test
-    void defaultsWriteRolesToReadRolesAndKeepsListAndFacets() {
+    void defaultsWriteRolesToReadRolesAndKeepsFacets() {
         var workspace = CrmInboxWorkspace.builder("sales", "Sales")
                 .readRoles("SALES")
                 .selection(conversation -> true)
-                .list(list -> list.filter(Conversation::getSubject).label("Subject").contains())
                 .facet(facet("stage"))
                 .build();
 
         assertThat(workspace.writeRoles()).isEqualTo(Set.of("SALES"));
-        assertThat(workspace.filters()).extracting(f -> f.field()).containsExactly("subject", "stage");
+        assertThat(workspace.facets()).extracting(CrmInboxWorkspace.Facet::key).containsExactly("stage");
         assertThat(workspace.configure().apply(null)).isNull();
     }
 
@@ -59,8 +57,7 @@ class CrmInboxWorkspaceBuilderTest {
     @Test
     void canonicalConstructorValidatesFacets() {
         Function<List<CrmInboxWorkspace.Facet>, CrmInboxWorkspace> create = facets -> new CrmInboxWorkspace("sales", "Sales",
-                Set.of("SALES"), Set.of("SALES"), c -> true, UnaryOperator.identity(),
-                list -> list.filter(Conversation::getSubject).contains(), facets);
+                Set.of("SALES"), Set.of("SALES"), c -> true, UnaryOperator.identity(), facets);
         assertThatThrownBy(() -> create.apply(null)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> create.apply(Arrays.asList(facet("stage"), null))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> create.apply(List.of(facet("stage"), facet("stage")))).isInstanceOf(IllegalArgumentException.class);
@@ -74,7 +71,6 @@ class CrmInboxWorkspaceBuilderTest {
         assertThat(tags.options()).isEmpty();
         library.add(new CrmInboxWorkspace.FacetOption("vip", "VIP", "#F59E0B"));
         assertThat(tags.options()).extracting(CrmInboxWorkspace.FacetOption::value).containsExactly("vip");
-        assertThat(tags.definition().options()).hasSize(1);
         assertThatThrownBy(() -> new CrmInboxWorkspace.Facet("tags", "Tags", (CrmInboxWorkspace.FacetOptions) null,
                 (conversations, principal) -> Map.of())).isInstanceOf(NullPointerException.class);
     }

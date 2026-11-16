@@ -7,7 +7,7 @@ import java.util.function.Consumer;
  * deployment — the mechanism that keeps live-UI updates in sync when more than one instance runs
  * behind a load balancer.
  *
- * <p>It is swappable exactly like {@code su.onno.ui.media.MediaStorage}: the framework wires a
+ * <p>It is swappable exactly like {@code su.onno.web.media.MediaStorage}: the framework wires a
  * {@link NoOpClusterEventBus} when nothing better is available, {@code onno-cluster-starter} supplies
  * a Postgres {@code LISTEN}/{@code NOTIFY} default on a Postgres datasource, and a commercial build
  * can replace either by exposing its own {@code ClusterEventBus} bean (e.g. Kafka- or Redis-backed),

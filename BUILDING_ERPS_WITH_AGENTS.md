@@ -17,7 +17,7 @@ Use this file as the agent handoff document in the consuming ERP repo. It explai
 > extensions, or call the runtime API. You can also invoke focused entries such as
 > `/onno:onno-modeling-interview`, `/onno:onno-catalogs-enums`,
 > `/onno:onno-documents-lines`, `/onno:onno-registers`, `/onno:onno-posting`,
-> `/onno:onno-ui-entity-views`, `/onno:onno-runtime-api`, `/onno:onno-schema-migrations`,
+> `/onno:onno-ui-entities`, `/onno:onno-ui-pages`, `/onno:onno-commands`, `/onno:onno-runtime-api`, `/onno:onno-schema-migrations`,
 > `/onno:onno-testing-release`, and `/onno:onno-extensions`.
 
 ## What The Framework Does
@@ -53,7 +53,7 @@ repositories {
 
 dependencies {
     implementation("su.onno:onno-framework-starter:$onnoVersion")
-    implementation("su.onno:onno-ui-starter:$onnoVersion")
+    implementation("su.onno:onno-web-starter:$onnoVersion")
 
     runtimeOnly("com.h2database:h2")
 }
@@ -103,7 +103,7 @@ onno:
 ```
 
 `onno.scan-packages` (there is no `onno.base-packages` alias) points at the package where catalogs,
-documents, registers, constants, jobs, layouts, pages, and entity views live. It is optional — if you
+documents, registers, constants, jobs, and behaviour beans (commands, checks, picker options) live. It is optional — if you
 omit it, the framework scans from your `@SpringBootApplication` package.
 
 ## Recommended Project Layout
@@ -115,20 +115,19 @@ src/main/java/com/acme/erp/
     catalogs/
     documents/
     registers/
-    ui/
+    commands/
   inventory/
     catalogs/
     documents/
     registers/
-    ui/
   finance/
     catalogs/
     documents/
     registers/
-    ui/
   shared/
     enums/
     constants/
+src/main/ui/                 # the React app (optional): main.tsx, entities/, pages/, components/
 ```
 
 Use packages to reflect bounded contexts. Good ERP code should read like the business.
@@ -141,7 +140,7 @@ When an AI agent is asked to build an ERP, it should work in this order:
 2. Extract candidate catalogs, documents, registers, enumerations, constants, jobs, and contexts.
 3. Confirm only the ambiguous parts.
 4. Implement one vertical slice end to end.
-5. Add UI layout and entity views for the slice.
+5. Add commands for the slice's actions, then UI customizations and pages where the default screens are not enough.
 6. Add tests for metadata scanning, rules, posting, and any custom services.
 7. Run the app and inspect the generated API and UI (via `/api/catalogs|documents|registers/{name}` or the MCP `describe_metadata` tool).
 8. Summarize assumptions and the next slice.
@@ -153,7 +152,7 @@ Do not ask for every detail before coding. Get enough to build a useful first pa
 Start with:
 
 ```text
-I will model this ERP as catalogs, documents, registers, rules, and UI views.
+I will model this ERP as catalogs, documents, registers, rules, and commands.
 First I need to understand the business workflow.
 ```
 
@@ -284,40 +283,41 @@ public class CompanyName {
 
 ## UI Rules
 
-Do not put UI layout annotations on new domain classes.
+Do not put UI annotations on domain classes. Every entity a user may read already has a default
+list and form; customize only what differs.
 
-Use Java UI configurer classes:
-
-- `Layout` for navigation, shell style, sections, and persona-specific menus
-- `Page` for dashboards and custom screens
-- `EntityView` for list columns and field-level hints
-
-An entity should only appear in the UI when it has an `EntityView`. Treat views as the UI allowlist.
-
-Prefer this:
+- **Behaviour is Java.** What can be done with records beyond editing is a `Commands<E>` bean; live
+  form checks are `Checks<E>`; picker decorations are `PickerOptions<E>`; the login → employee link
+  is an `IdentityLink` bean. The server enforces them on REST, in the UI and over MCP.
+- **Presentation is React.** Apply `id("su.onno.ui")`, run `./gradlew onnoUiInit`, and declare the
+  differences in `src/main/ui/main.tsx` with `defineApp` from `@onno/ui`: per-entity
+  customizations (`entities/*.ts`), pages, and the navigation. Field names and enum values are typed
+  from the generated `model.gen.ts`.
 
 ```java
 @Component
-public class CustomerView implements EntityView {   // not generic — name the target via entity()
-    @Override
-    public Class<?> entity() {
-        return Customer.class;
-    }
+public class InvoiceCommands implements Commands<Invoice> {
+    public Class<Invoice> entity() { return Invoice.class; }
 
-    @Override
-    public void list(ListSpec spec) {
-        spec.column("code", "Code");
-        spec.column("name", "Name");
-    }
-
-    @Override
-    public void fields(EntityConfigBuilder fields) {
-        fields.field("name").order(10).width("full");
+    public void define(CommandSpec<Invoice> c) {
+        c.command("markPaid").title("Mark paid")
+                .roles("ACCOUNTANT")
+                .availableWhen(row -> !row.bool(Invoice::getPaid))
+                .run(ctx -> { invoices.markPaid(ctx.id()); return CommandResult.reload(); });
     }
 }
 ```
 
-Keep UI configuration in `Layout`, `Page`, and `EntityView` beans rather than on domain classes.
+```ts
+// src/main/ui/entities/invoices.ts
+export const invoices: EntityCustomization<"Invoices"> = {
+  list: { columns: ["number", "date", "customer", "total", "paid"], sort: "-date" },
+  fields: { total: { format: { money: "EUR" } } },
+  commands: { markPaid: { placement: "row", icon: "check" } },
+};
+```
+
+See [onno-ui/README.md](onno-ui/README.md) and the reference app in `example/`.
 
 ## Posting And Rules
 
@@ -409,7 +409,7 @@ The generated API and screens should read like the business to a business user:
 
 - names should be business terms
 - contexts should match business areas
-- visible entities should have `EntityView`s (the view layer is the UI allowlist)
+- `@AccessControl` roles decide which entities each role sees
 - refs should point to meaningful catalogs/documents
 - registers should clearly represent balances, turnover, or historical facts
 

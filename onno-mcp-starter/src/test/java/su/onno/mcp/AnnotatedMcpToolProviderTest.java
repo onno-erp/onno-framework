@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import su.onno.ui.UiProperties;
+import su.onno.web.WebProperties;
 
 import java.security.Principal;
 import java.util.List;
@@ -82,7 +82,7 @@ class AnnotatedMcpToolProviderTest {
 
     @Test
     void uiReadOnlyGateOmitsNonReadOnlyAnnotatedTools() {
-        UiProperties ui = new UiProperties();
+        WebProperties ui = new WebProperties();
         ui.setReadOnly(true);
         try (GenericApplicationContext context = contextWith(SampleTools.class)) {
             assertThat(new AnnotatedMcpToolProvider(

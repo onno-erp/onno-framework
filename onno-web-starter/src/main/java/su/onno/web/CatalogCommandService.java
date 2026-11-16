@@ -1,0 +1,450 @@
+package su.onno.web;
+
+import su.onno.access.AccessMode;
+import su.onno.access.AccessSubject;
+import su.onno.events.EntityChangedEvent;
+import su.onno.history.HistoryActor;
+import su.onno.history.HistoryActors;
+import su.onno.history.RecordHistory;
+import su.onno.history.RecordImage;
+import su.onno.metadata.AttributeDescriptor;
+import su.onno.metadata.CatalogDescriptor;
+import su.onno.metadata.MetadataRegistry;
+import su.onno.model.CatalogObject;
+import su.onno.numbering.NumberGenerator;
+import su.onno.security.SecretCipher;
+import su.onno.validation.AttributeValidator;
+import su.onno.validation.ValidationErrors;
+
+import org.jdbi.v3.core.Jdbi;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+
+/**
+ * Write-side commands for catalogs — create, update, delete. Extracted from
+ * {@code GenericCatalogController} so the REST API and other callers (e.g. the MCP
+ * server, import, batch, actions) share one write path, and read-only mode,
+ * {@link AccessService} write checks and record policies are enforced in a single place
+ * against the caller's {@link AccessSubject}: an existing record must be inside the write scope
+ * (404 otherwise), the written record must still satisfy it (403, rolled back), and every
+ * reference written must be readable (422). See {@link RecordWriteGuard}.
+ *
+ * <p>It lives in the web starter, not in core, for the same reason as {@link CommandService}: a write
+ * on behalf of a caller needs the caller's {@link AccessSubject}, the compiled record policies and
+ * {@code onno.web.read-only}, and answers in HTTP terms. Trusted code writes through the typed core
+ * repositories, which are unscoped by design.</p>
+ */
+public class CatalogCommandService {
+
+    private final Jdbi jdbi;
+    private final WebProperties properties;
+    private final NumberGenerator numberGenerator;
+    private final CatalogQueryService query;
+    private final AccessService access;
+    private final ApplicationEventPublisher events;
+    private final SecretCipher secretCipher;
+    private final AttributeValidator attributeValidator = new AttributeValidator();
+    private final WriteLifecycle lifecycle;
+    private final RecordWriteGuard guard;
+    private RecordHistory history = RecordHistory.disabled();
+
+    public CatalogCommandService(MetadataRegistry registry, Jdbi jdbi, WebProperties properties,
+                                 NumberGenerator numberGenerator, CatalogQueryService query,
+                                 AccessService access, ApplicationEventPublisher events,
+                                 SecretCipher secretCipher) {
+        this.jdbi = jdbi;
+        this.properties = properties;
+        this.numberGenerator = numberGenerator;
+        this.query = query;
+        this.access = access;
+        this.events = events;
+        this.secretCipher = secretCipher;
+        this.lifecycle = new WriteLifecycle(registry, secretCipher);
+        this.guard = new RecordWriteGuard(registry, query.scopes(), access, jdbi);
+    }
+
+    /**
+     * The change-history recorder for catalogs that opted in with {@code @Catalog(history = true)}.
+     * Defaults to the inert {@link RecordHistory#disabled()}; the auto-configuration wires the real one.
+     */
+    public void setHistory(RecordHistory history) {
+        this.history = history == null ? RecordHistory.disabled() : history;
+    }
+
+    // Each command binds the caller as the history actor for its duration, so the write and anything
+    // it triggers on this thread (lifecycle hooks saving other records) is attributed to them.
+
+    public Map<String, Object> create(CatalogDescriptor desc, Map<String, Object> requestBody, AccessSubject subject) {
+        return HistoryActors.callAs(HistoryActor.of(subject), () -> createRecord(desc, requestBody, subject));
+    }
+
+    public Map<String, Object> update(CatalogDescriptor desc, UUID id, Map<String, Object> requestBody,
+                                       AccessSubject subject) {
+        return HistoryActors.callAs(HistoryActor.of(subject), () -> updateRecord(desc, id, requestBody, subject));
+    }
+
+    public void delete(CatalogDescriptor desc, UUID id, AccessSubject subject) {
+        HistoryActors.runAs(HistoryActor.of(subject), () -> deleteRecord(desc, id, subject));
+    }
+
+    private Map<String, Object> createRecord(CatalogDescriptor desc, Map<String, Object> requestBody, AccessSubject subject) {
+        EntityWriteSupport.requireWritable(properties);
+        access.requireWrite(subject, desc);
+        Map<String, Object> body = EntityWriteAliases.catalog(desc, requestBody);
+        guard.applyDefaults(desc.javaClass(), body, subject);
+        guard.requireReadableRefs(desc.attributes(), body, subject);
+        TabularSectionWriteSupport.requireReadableRefs(desc.tabularSections(), body, guard, subject);
+        requireReadableParent(desc, body, subject);
+
+        UUID id = UUID.randomUUID();
+        String code = resolveCode(desc, body);
+        body.put("code", code); // resolved once; the INSERT below echoes it rather than regenerating
+
+        // Run the same write lifecycle the repository path runs (onFilling + beforeWrite + rules),
+        // then fold any field a hook derived back into the body so the INSERT captures it. (#158)
+        ValidationErrors errors = new ValidationErrors();
+        attributeValidator.validate(body, desc.attributes(), errors);
+        TabularSectionWriteSupport.validate(desc.tabularSections(), body, errors);
+        CatalogObject entity = instantiate(desc.javaClass());
+        if (entity != null) {
+            entity.setId(id);
+            entity.setCode(code);
+            entity.setDescription(asString(body.getOrDefault("description", "")));
+            entity.setFolder(Boolean.TRUE.equals(body.get("folder")));
+            entity.setParent(parseUuid(body.get("parent")));
+            lifecycle.applyBody(entity, desc.attributes(), body, errors);
+            TabularSectionWriteSupport.overlay(entity, desc.tabularSections(), lifecycle, body, errors);
+            Map<String, Object> before = lifecycle.snapshot(entity, desc.attributes());
+            if (EntityWriteSupport.bake(lifecycle, entity, true, errors)) {
+                lifecycle.writeBackDerived(entity, desc.attributes(), before, body);
+                TabularSectionWriteSupport.writeBack(entity, desc.tabularSections(), lifecycle, body);
+                body.put("code", entity.getCode());
+                body.put("description", entity.getDescription());
+                body.put("folder", entity.isFolder());
+                body.put("parent", entity.getParent());
+            }
+        }
+        if (errors.isEmpty()) TabularSectionWriteSupport.validate(desc.tabularSections(), body, errors);
+        TabularSectionWriteSupport.requireReadableRefs(desc.tabularSections(), body, guard, subject);
+        errors.throwIfAny();
+
+        List<String> columns = new ArrayList<>(List.of(
+                "_id", "_code", "_description", "_deletion_mark", "_is_folder", "_parent", "_version"));
+        List<String> values = new ArrayList<>(List.of(
+                ":_id", ":_code", ":_description", ":_deletion_mark", ":_is_folder", ":_parent", ":_version"));
+
+        for (AttributeDescriptor attr : desc.attributes()) {
+            columns.add(attr.columnName());
+            values.add(":" + attr.columnName());
+        }
+
+        String sql = "INSERT INTO " + desc.tableName() +
+                " (" + String.join(", ", columns) + ")" +
+                " VALUES (" + String.join(", ", values) + ")";
+
+        jdbi.useTransaction(h -> {
+            var update = h.createUpdate(sql)
+                    .bind("_id", id)
+                    .bind("_code", resolveCode(desc, body))
+                    .bind("_description", body.getOrDefault("description", ""))
+                    .bind("_deletion_mark", false)
+                    .bind("_is_folder", Boolean.TRUE.equals(body.get("folder")))
+                    .bind("_version", 0);
+            // A null _parent (any top-level record) must bind as a typed uuid null, not varchar. (#163)
+            SqlBind.nullable(update, "_parent", parseUuid(body.get("parent")));
+
+            for (AttributeDescriptor attr : desc.attributes()) {
+                EntityWriteSupport.bindAttribute(update, attr, body.get(attr.fieldName()), secretCipher);
+            }
+            update.execute();
+            TabularSectionWriteSupport.replace(h, desc.tabularSections(), id, body, secretCipher);
+            guard.requirePostImage(h, desc.javaClass(), desc.tableName(), id, subject);
+            history.record(h, desc.javaClass(), id, RecordImage.ABSENT, null);
+        });
+        lifecycle.runAfterWrite(entity);
+
+        Map<String, Object> result = query.get(subject, desc, id);
+        events.publishEvent(new EntityChangedEvent(EntityChangedEvent.CREATED, EntityChangedEvent.CATALOG,
+                desc.logicalName(), id, naturalKey(result)));
+        return result;
+    }
+
+    private Map<String, Object> updateRecord(CatalogDescriptor desc, UUID id, Map<String, Object> requestBody,
+                                             AccessSubject subject) {
+        EntityWriteSupport.requireWritable(properties);
+        access.requireWrite(subject, desc);
+        guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
+        Map<String, Object> body = EntityWriteAliases.catalog(desc, requestBody);
+        guard.preserveRestrictedRefs(desc.tableName(), desc.attributes(), id, body, subject,
+                desc.hierarchical() ? desc.javaClass() : null);
+        guard.requireReadableRefs(desc.attributes(), body, subject);
+        TabularSectionWriteSupport.requireReadableRefs(desc.tabularSections(), body, guard, subject);
+        requireReadableParent(desc, body, subject);
+
+        // Reconstruct the stored item, overlay the submitted changes, and run the write lifecycle
+        // (beforeWrite + rules) on the merged state so derived fields recompute the way they do on
+        // the repository path; only fields a hook actually changed are folded back in, leaving the
+        // partial-update semantics intact. (#158)
+        ValidationErrors errors = new ValidationErrors();
+        attributeValidator.validatePartial(body, desc.attributes(), errors);
+        TabularSectionWriteSupport.validate(desc.tabularSections(), body, errors);
+        CatalogObject entity = loadCatalogObject(desc, id);
+        if (entity != null) {
+            if (body.containsKey("code")) entity.setCode(asString(body.get("code")));
+            if (body.containsKey("description")) entity.setDescription(asString(body.get("description")));
+            if (body.containsKey("folder")) entity.setFolder(Boolean.TRUE.equals(body.get("folder")));
+            if (body.containsKey("parent")) entity.setParent(parseUuid(body.get("parent")));
+            lifecycle.applyBody(entity, desc.attributes(), body, errors);
+            TabularSectionWriteSupport.overlay(entity, desc.tabularSections(), lifecycle, body, errors);
+            Map<String, Object> before = lifecycle.snapshot(entity, desc.attributes());
+            String codeBefore = entity.getCode();
+            String descriptionBefore = entity.getDescription();
+            boolean folderBefore = entity.isFolder();
+            UUID parentBefore = entity.getParent();
+            if (EntityWriteSupport.bake(lifecycle, entity, false, errors)) {
+                lifecycle.writeBackDerived(entity, desc.attributes(), before, body);
+                TabularSectionWriteSupport.writeBack(entity, desc.tabularSections(), lifecycle, body);
+                if (!Objects.equals(entity.getCode(), codeBefore)) body.put("code", entity.getCode());
+                if (!Objects.equals(entity.getDescription(), descriptionBefore)) body.put("description", entity.getDescription());
+                if (entity.isFolder() != folderBefore) body.put("folder", entity.isFolder());
+                if (!Objects.equals(entity.getParent(), parentBefore)) body.put("parent", entity.getParent());
+            }
+        }
+        if (errors.isEmpty()) TabularSectionWriteSupport.validate(desc.tabularSections(), body, errors);
+        TabularSectionWriteSupport.requireReadableRefs(desc.tabularSections(), body, guard, subject);
+        errors.throwIfAny();
+
+        List<String> setClauses = new ArrayList<>();
+        if (body.containsKey("code")) setClauses.add("_code = :_code");
+        if (body.containsKey("description")) setClauses.add("_description = :_description");
+        if (body.containsKey("folder")) setClauses.add("_is_folder = :_is_folder");
+        if (body.containsKey("parent")) setClauses.add("_parent = :_parent");
+
+        for (AttributeDescriptor attr : desc.attributes()) {
+            if (body.containsKey(attr.fieldName())
+                    && !EntityWriteSupport.leaveSecretUnchanged(attr, body.get(attr.fieldName()))) {
+                setClauses.add(attr.columnName() + " = :" + attr.columnName());
+            }
+        }
+
+        boolean hasSections = desc.tabularSections().stream().anyMatch(ts -> body.containsKey(ts.name()));
+        if (setClauses.isEmpty() && !hasSections) {
+            return query.get(subject, desc, id);
+        }
+
+        setClauses.add("_version = _version + 1");
+
+        boolean hasExpectedVersion = body.containsKey("version") || body.containsKey("_version");
+        String sql = "UPDATE " + desc.tableName() +
+                " SET " + String.join(", ", setClauses) +
+                " WHERE _id = :_id" + (hasExpectedVersion ? " AND _version = :_expected_version" : "");
+
+        int updated = jdbi.inTransaction(h -> {
+            RecordImage before = history.capture(h, desc.javaClass(), id);
+            var update = h.createUpdate(sql).bind("_id", id);
+            if (body.containsKey("code")) update.bind("_code", body.get("code"));
+            if (body.containsKey("description")) update.bind("_description", body.get("description"));
+            if (body.containsKey("folder")) update.bind("_is_folder", Boolean.TRUE.equals(body.get("folder")));
+            if (body.containsKey("parent")) SqlBind.nullable(update, "_parent", parseUuid(body.get("parent")));
+            if (hasExpectedVersion) {
+                update.bind("_expected_version", parseInt(body.getOrDefault("version", body.get("_version"))));
+            }
+
+            for (AttributeDescriptor attr : desc.attributes()) {
+                if (body.containsKey(attr.fieldName())
+                        && !EntityWriteSupport.leaveSecretUnchanged(attr, body.get(attr.fieldName()))) {
+                    EntityWriteSupport.bindAttribute(update, attr, body.get(attr.fieldName()), secretCipher);
+                }
+            }
+            int n = update.execute();
+            if (n > 0) {
+                TabularSectionWriteSupport.replace(h, desc.tabularSections(), id, body, secretCipher);
+                guard.requirePostImage(h, desc.javaClass(), desc.tableName(), id, subject);
+                history.record(h, desc.javaClass(), id, before, null);
+            }
+            return n;
+        });
+        if (updated == 0 && hasExpectedVersion) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Catalog item was changed by another transaction: " + id);
+        }
+        lifecycle.runAfterWrite(entity);
+
+        Map<String, Object> result = query.get(subject, desc, id);
+        events.publishEvent(new EntityChangedEvent(EntityChangedEvent.UPDATED, EntityChangedEvent.CATALOG,
+                desc.logicalName(), id, naturalKey(result)));
+        return result;
+    }
+
+    /**
+     * Dry-run the write lifecycle against a form's current values and report every failure without
+     * persisting anything — the backend of the form's live (as-you-type) validation. Runs the same
+     * pipeline as {@link #create}/{@link #update}: declarative attribute constraints, then the typed
+     * entity's {@code onFilling}/{@code beforeWrite} hooks and {@link su.onno.rules.Validated} rules,
+     * so a conflict check written in Java surfaces while the user is still on the field. No code is
+     * consumed from the numbering sequence and no events fire. Always returns 200 — the outcome is
+     * the {@code {valid, fieldErrors, formErrors}} payload.
+     */
+    public Map<String, Object> validate(CatalogDescriptor desc, UUID id, Map<String, Object> requestBody,
+                                        AccessSubject subject) {
+        access.requireWrite(subject, desc);
+        if (id != null) guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
+        Map<String, Object> body = EntityWriteAliases.catalog(desc, requestBody);
+        if (id == null) guard.applyDefaults(desc.javaClass(), body, subject);
+
+        ValidationErrors errors = new ValidationErrors();
+        boolean isNew = id == null;
+        if (isNew) {
+            attributeValidator.validate(body, desc.attributes(), errors);
+        } else {
+            attributeValidator.validatePartial(body, desc.attributes(), errors);
+        }
+        CatalogObject entity = isNew ? instantiate(desc.javaClass()) : loadCatalogObject(desc, id);
+        if (entity != null) {
+            if (isNew) {
+                entity.setId(UUID.randomUUID());
+                entity.setCode(asString(body.getOrDefault("code", "")));
+                entity.setDescription(asString(body.getOrDefault("description", "")));
+                entity.setFolder(Boolean.TRUE.equals(body.get("folder")));
+                entity.setParent(parseUuid(body.get("parent")));
+            } else {
+                if (body.containsKey("code")) entity.setCode(asString(body.get("code")));
+                if (body.containsKey("description")) entity.setDescription(asString(body.get("description")));
+                if (body.containsKey("folder")) entity.setFolder(Boolean.TRUE.equals(body.get("folder")));
+                if (body.containsKey("parent")) entity.setParent(parseUuid(body.get("parent")));
+            }
+            lifecycle.applyBody(entity, desc.attributes(), body, errors);
+            TabularSectionWriteSupport.overlay(entity, desc.tabularSections(), lifecycle, body, errors);
+            EntityWriteSupport.dryRunRules(lifecycle, entity, isNew, errors);
+        }
+        TabularSectionWriteSupport.validate(desc.tabularSections(), body, errors);
+        return EntityWriteSupport.validationReport(errors);
+    }
+
+    /**
+     * Whether {@code subject} may change existing record {@code id} — inside its record-policy
+     * write scope (entity-level write access is checked by the write itself). Import uses this to
+     * turn an upsert onto someone else's record into a row error instead of an overwrite.
+     */
+    public boolean isWritable(CatalogDescriptor desc, UUID id, AccessSubject subject) {
+        return query.inScope(subject, desc, id, AccessMode.WRITE);
+    }
+
+    private void deleteRecord(CatalogDescriptor desc, UUID id, AccessSubject subject) {
+        EntityWriteSupport.requireWritable(properties);
+        access.requireWrite(subject, desc);
+        guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
+        // Honour the domain's BeforeDeleteHandler on the UI path too, not only repository.delete
+        // (OnnoBeforeDeleteCallback): load the stored aggregate and let it veto the soft-delete —
+        // a thrown ValidationException maps to the standard 4xx. This is what lets a catalog
+        // protect system rows (e.g. seeded statuses) from the list's Delete.
+        CatalogObject stored = loadCatalogObject(desc, id);
+        if (stored instanceof su.onno.lifecycle.BeforeDeleteHandler handler) {
+            handler.beforeDelete();
+        }
+        // Capture the natural key before the soft-delete so listeners can target the resource.
+        String code = jdbi.withHandle(h ->
+                h.createQuery("SELECT _code FROM " + desc.tableName() + " WHERE _id = :id")
+                        .bind("id", id)
+                        .mapTo(String.class)
+                        .findOne()).orElse(null);
+        jdbi.useTransaction(h -> {
+            RecordImage before = history.capture(h, desc.javaClass(), id);
+            h.createUpdate("UPDATE " + desc.tableName() + " SET _deletion_mark = true WHERE _id = :id")
+                    .bind("id", id)
+                    .execute();
+            history.record(h, desc.javaClass(), id, before, null);
+        });
+        events.publishEvent(new EntityChangedEvent(EntityChangedEvent.DELETED, EntityChangedEvent.CATALOG,
+                desc.logicalName(), id, code));
+    }
+
+    /** A record-scoped subject may only file a record under a parent it can read. */
+    private void requireReadableParent(CatalogDescriptor desc, Map<String, Object> body, AccessSubject subject) {
+        if (!desc.hierarchical() || !body.containsKey("parent")) return;
+        UUID parent = parseUuid(body.get("parent"));
+        if (parent != null && query.scopes().isScoped(desc.javaClass(), subject, AccessMode.READ)
+                && !query.inScope(subject, desc, parent, AccessMode.READ)) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Unknown or inaccessible reference for parent");
+        }
+    }
+
+    /** Natural key for a catalog row is its code (the slug used to address the resource). */
+    private static String naturalKey(Map<String, Object> row) {
+        Object code = row.get("_code");
+        return code == null ? null : code.toString();
+    }
+
+    /** Reconstruct the stored catalog item so the write lifecycle runs on its real state. */
+    private CatalogObject loadCatalogObject(CatalogDescriptor desc, UUID id) {
+        Map<String, Object> raw = jdbi.withHandle(h ->
+                h.createQuery("SELECT * FROM " + desc.tableName() + " WHERE _id = :id")
+                        .bind("id", id)
+                        .mapToMap()
+                        .findOne()).orElse(null);
+        if (raw == null) {
+            return null;
+        }
+        CatalogObject entity = instantiate(desc.javaClass());
+        if (entity == null) {
+            return null;
+        }
+        entity.setId(id);
+        entity.setCode(asString(raw.get("_code")));
+        entity.setDescription(asString(raw.get("_description")));
+        entity.setDeletionMark(Boolean.TRUE.equals(raw.get("_deletion_mark")));
+        entity.setFolder(Boolean.TRUE.equals(raw.get("_is_folder")));
+        entity.setParent(parseUuid(raw.get("_parent")));
+        if (raw.get("_version") instanceof Number n) {
+            entity.setVersion(n.intValue());
+        }
+        entity.setNew(false);
+        for (AttributeDescriptor attr : desc.attributes()) {
+            lifecycle.setFromStored(entity, attr, raw.get(attr.columnName()));
+        }
+        jdbi.useHandle(h -> TabularSectionWriteSupport.load(entity, desc.tabularSections(), h, id, lifecycle));
+        return entity;
+    }
+
+    private static CatalogObject instantiate(Class<?> javaClass) {
+        try {
+            var ctor = javaClass.getDeclaredConstructor();
+            ctor.setAccessible(true);
+            return (CatalogObject) ctor.newInstance();
+        } catch (ReflectiveOperationException cannotBuild) {
+            return null; // no usable no-arg constructor: fall back to the body-only write path
+        }
+    }
+
+    private static String asString(Object value) {
+        return value == null ? null : value.toString();
+    }
+
+    private UUID parseUuid(Object value) {
+        if (value == null || "".equals(value)) return null;
+        return value instanceof UUID uuid ? uuid : UUID.fromString(value.toString());
+    }
+
+    private int parseInt(Object value) {
+        return value instanceof Number n ? n.intValue() : Integer.parseInt(value.toString());
+    }
+
+    private String resolveCode(CatalogDescriptor desc, Map<String, Object> body) {
+        Object explicit = body.get("code");
+        if (explicit != null && !explicit.toString().isBlank()) {
+            return explicit.toString();
+        }
+        if (!desc.autoNumber()) {
+            return "";
+        }
+        return numberGenerator.nextCode(desc.tableName(), desc.codePrefix(), desc.codeLength());
+    }
+}

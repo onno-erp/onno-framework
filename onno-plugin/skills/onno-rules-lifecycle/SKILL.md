@@ -27,6 +27,8 @@ Lifecycle hooks run on domain objects, not Spring beans. Do not `@Autowired` ins
 | call Spring services after post | `@EventListener DocumentPostedEvent` |
 | react immediately after a successful entity persist | `AfterWriteHandler` |
 | prevent deletion | `BeforeDeleteHandler` |
+| advisory as-you-type feedback (conflicts, warnings) | a `Checks<E>` bean (`onno-commands`) |
+| an action beyond create/update/delete | a `Commands<E>` bean (`onno-commands`) |
 
 There is no framework `BusinessRuleSet` type. Share rules with an ordinary Java factory returning
 `List<BusinessRule>`.

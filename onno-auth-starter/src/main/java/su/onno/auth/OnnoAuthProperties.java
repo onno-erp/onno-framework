@@ -56,7 +56,7 @@ public class OnnoAuthProperties {
      * Legacy configuration: custom values are combined with the mandatory framework paths.
      * Prefer {@code onno.auth.additional-public-paths} for new configurations.
      * The defaults are: {@code /error}, {@code /api/theme}, {@code /api/config}, {@code /api/branding},
-     * {@code /api/auth/login}, {@code /api/auth/me}, {@code /api/auth/csrf}, {@code /api/divkit/login},
+     * {@code /api/auth/login}, {@code /api/auth/me}, {@code /api/auth/csrf}, {@code /api/ui/login},
      * {@code /api/desktop/ready}, {@code /api/desktop/manifest}.
      */
     private List<String> publicPaths = new ArrayList<>(FRAMEWORK_PUBLIC_PATHS);
@@ -80,8 +80,8 @@ public class OnnoAuthProperties {
             // mobile: iOS hides Set-Cookie, no document.cookie). Public like /me so the token can be
             // bootstrapped before sign-in; it's only ever this caller's own session token.
             "/api/auth/csrf",
-            // The server-driven (DivKit) login screen. Public so it can render before sign-in.
-            "/api/divkit/login",
+            // The login screen description. Public so it can render before sign-in.
+            "/api/ui/login",
             // Desktop shell liveness + window manifest. The native shell polls these
             // before any user can log in, so they must be reachable unauthenticated;
             // both are non-sensitive (readiness probe + window geometry/title).

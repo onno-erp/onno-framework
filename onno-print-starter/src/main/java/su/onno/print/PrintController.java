@@ -6,9 +6,9 @@ import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.types.Ref;
 import su.onno.types.RefResolver;
-import su.onno.ui.CatalogQueryService;
-import su.onno.ui.DocumentQueryService;
-import su.onno.ui.UiAccessService;
+import su.onno.web.CatalogQueryService;
+import su.onno.web.DocumentQueryService;
+import su.onno.web.AccessService;
 
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -44,7 +44,7 @@ import java.util.UUID;
  * and the record (a record outside the caller's scope is a 404, like a missing one); a form's
  * {@code roles} gate it further. Template endpoints require one of
  * {@code onno.print.templates.manage-roles}; upload and reset are rejected in
- * {@code onno.ui.read-only} mode.
+ * {@code onno.web.read-only} mode.
  *
  * <pre>
  * GET    /api/print/{kind}/{name}/{id}                 forms available for the record
@@ -63,29 +63,29 @@ public class PrintController {
     private final PrintService print;
     private final CatalogQueryService catalogs;
     private final DocumentQueryService documents;
-    private final UiAccessService access;
+    private final AccessService access;
     private final RefResolver refs;
     private final Set<String> manageRoles;
     private final int maxBatch;
     private final boolean readOnly;
 
     public PrintController(PrintService print, CatalogQueryService catalogs, DocumentQueryService documents,
-                           UiAccessService access, RefResolver refs) {
+                           AccessService access, RefResolver refs) {
         this(print, catalogs, documents, access, refs, List.of("ADMIN"), 200);
     }
 
     public PrintController(PrintService print, CatalogQueryService catalogs, DocumentQueryService documents,
-                           UiAccessService access, RefResolver refs, List<String> manageRoles, int maxBatch) {
+                           AccessService access, RefResolver refs, List<String> manageRoles, int maxBatch) {
         this(print, catalogs, documents, access, refs, manageRoles, maxBatch, false);
     }
 
     /**
      * @param manageRoles roles allowed to manage templates ({@code ADMIN} always passes)
      * @param maxBatch    most records one batch request may include
-     * @param readOnly    {@code onno.ui.read-only}: template upload/reset are rejected, printing still works
+     * @param readOnly    {@code onno.web.read-only}: template upload/reset are rejected, printing still works
      */
     public PrintController(PrintService print, CatalogQueryService catalogs, DocumentQueryService documents,
-                           UiAccessService access, RefResolver refs, List<String> manageRoles, int maxBatch,
+                           AccessService access, RefResolver refs, List<String> manageRoles, int maxBatch,
                            boolean readOnly) {
         this.readOnly = readOnly;
         this.print = print;
@@ -272,7 +272,7 @@ public class PrintController {
 
     private void requireWritable() {
         if (readOnly) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "UI is in read-only mode");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "The application is in read-only mode");
         }
     }
 

@@ -1,0 +1,37 @@
+package su.onno.web;
+
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.security.Principal;
+
+@RestController
+@RequestMapping("/api/events")
+public class EventController {
+
+    private final EventPublisher publisher;
+    private final AccessService access;
+    private final CurrentUserResolver currentUser;
+
+    public EventController(EventPublisher publisher, AccessService access, CurrentUserResolver currentUser) {
+        this.publisher = publisher;
+        this.access = access;
+        this.currentUser = currentUser;
+    }
+
+    @GetMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter events(Principal principal, su.onno.access.AccessSubject subject) {
+        // Capture the subscriber's read-authorities and notification-routing id now, on the request
+        // thread (where the SecurityContext is available). Roles filter every broadcast event (#190);
+        // the routing id (identity record id, or username when unlinked) addresses per-user
+        // notification events to this viewer's streams.
+        CurrentUserResolver.CurrentUser me = currentUser.resolve(principal);
+        String userId = me.recordId() != null ? me.recordId() : me.username();
+        // The full subject (roles + identity record + attributes) is captured too: its record scope
+        // gates every event about one record.
+        return publisher.subscribe(subject, userId, me.username());
+    }
+}

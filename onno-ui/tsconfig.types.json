@@ -1,0 +1,11 @@
+{
+  // Type-level tests of the public API (tests/types) against a small hand-written model. A project
+  // of its own: the model's `OnnoEntities` augmentation is global and must not leak into the
+  // package or the Vitest suite, which check the untyped (no generated model) fallback.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "noUnusedLocals": false
+  },
+  "include": ["tests/types", "src/**/*.d.ts"]
+}

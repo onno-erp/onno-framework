@@ -8,7 +8,9 @@ implementation("su.onno:onno-auth-starter:<onno-version>")
 ```
 
 The starter includes `onno-crm-starter` transitively: contact identities, contact merge tools,
-conversations, delivery status, the inbox widget, and the connection cards. It installs through
+conversations, delivery status, and the `@onno/crm` inbox and connection components. Its own
+`@onno/crm-channels` package (`src/main/ui`) exports `channelSetups`, the bundled providers' setup
+forms: `<CrmConnections setups={[channelSetups]} />`. It installs through
 Spring Boot auto-configuration; **no component scan of `su.onno` is necessary**. All providers are
 disabled by default. Gmail supports multiple shared and personal mailboxes per application. Telegram supports one bot with a shared ordinary-chat inbox and multiple personal/shared business connections. Instagram and
 WhatsApp currently support one shared account each. Run one worker instance per deployment; use
@@ -196,13 +198,13 @@ rejects bodies larger than 1 MiB, and filters events by configured WABA and phon
 message IDs do not create duplicate CRM messages. Configure this URL in Meta and subscribe the app
 to the WABA's `messages` events. A valid API token by itself does not prove webhook delivery works.
 
-With `onno-auth-starter`, add this exact route to both public and CSRF-ignored paths. These properties
-**replace** their defaults; preserve the existing paths:
+With `onno-auth-starter`, add this exact route to the public and CSRF-ignored paths. Public paths are
+added to the framework's own; `csrf-ignored-paths` replaces its default, so keep `/api/auth/login`:
 
 ```yaml
 onno:
   auth:
-    public-paths: [/error, /api/theme, /api/config, /api/branding, /api/auth/login, /api/auth/me, /api/auth/csrf, /api/divkit/login, /api/desktop/ready, /api/desktop/manifest, /api/crm/whatsapp/webhook]
+    additional-public-paths: [/api/crm/whatsapp/webhook]
     csrf-ignored-paths: [/api/auth/login, /api/crm/whatsapp/webhook]
 ```
 
@@ -272,13 +274,13 @@ See [the composition guide](../onno-crm-starter/README.md). No compatibility lay
 customer/agent model is provided.
 
 Gmail authorization accepts `{returnPath:"/your/settings/page"}` and returns to that local page after
-the callback. The settings widget supplies its current path; the host need not define `/crm-settings`.
+the callback. The Gmail setup form supplies its current path; the host need not define `/crm-settings`.
 
 CRM channels use extensible string keys with connector-owned `CrmChannelDefinition` metadata
 (`GET /api/crm/channels/types`); no fixed channel enumeration or Channels page is installed.
-The optional settings widget uses `crm.channel.settings` extension contributions; bundled provider
-setup and branding live in the channels starter. Workspace `.list(...)`/`.view(...)` uses ordinary
-`ListSpec` resolution for both the inbox renderer and table. Status bindings read an existing host
+`<CrmConnections setups={[channelSetups]} />` takes provider setup forms as components; bundled provider
+setup and branding live in the channels starter (`@onno/crm-channels`). The inbox's columns, sort and
+filters are `<CrmInbox list={…} />` props. Status bindings read an existing host
 catalog or enumeration through `CrmStateConfiguration.catalog(...)`/`.enumeration(...)`, with no
 CRM status table or mirrored records. Channel keys and status UUIDs are breaking storage changes.
 
@@ -304,8 +306,8 @@ requires consent again. No real authorization or outbound messages are exercised
 
 The UI advertises disabled providers, but server configuration still enables adapters. For Gmail,
 the OAuth client must be present before Add account becomes available. Other bundled providers
-explicitly advertise shared-only setup. See the CRM starter's scoped account contract for host widget
-configuration and provider extension points.
+explicitly advertise shared-only setup. See the CRM starter's scoped account contract for component props
+and and provider extension points.
 
 ## Telegram business connections
 

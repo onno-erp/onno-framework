@@ -21,7 +21,7 @@ import java.math.BigDecimal;
  * {@link BookCategory} and {@link Supplier} the book belongs to. The human label is the inherited
  * {@code description} (the title).</p>
  */
-@Catalog(name = "Books", title = "Book", codePrefix = "B-", context = "Catalog")
+@Catalog(name = "Books", codePrefix = "B-", context = "Catalog")
 @AccessControl(readRoles = {"MANAGER"}, writeRoles = {"MANAGER"})
 @Getter
 @Setter
@@ -42,8 +42,8 @@ public class Book extends CatalogObject {
     @Attribute(displayName = "Price", precision = 12, scale = 2)
     private BigDecimal price = BigDecimal.ZERO;
 
-    /** Cover image. The {@code image} field widget streams the upload to {@code POST /api/media} and
-     *  stores the returned URL here (see {@link com.example.ui.views.BookView}). */
+    /** Cover image URL (an upload to {@code POST /api/media}); the Shelf list view
+     *  ({@code src/main/ui/widgets/BookTiles.tsx}) draws it as the book's tile. */
     @Attribute(displayName = "Cover", length = 500)
     private String coverUrl;
 }

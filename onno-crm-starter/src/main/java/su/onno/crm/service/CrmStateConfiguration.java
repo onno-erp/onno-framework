@@ -10,7 +10,7 @@ public final class CrmStateConfiguration {
     public List<Status> conversationStatuses() { return List.copyOf(choices.get()); }
     public Transitions transitions() { return transitions; }
     public String source() { return source; }
-    /** Ordinary ListSpec option values for a filter over Conversation.status. */
+    /** The choices as id → label, e.g. for a host-side filter over Conversation.status. */
     public Map<String,String> options() {
         var result=new LinkedHashMap<String,String>();
         conversationStatuses().forEach(s->result.put(s.choice().id().toString(),s.choice().label()));

@@ -6,7 +6,8 @@ description: >-
   catalog/document tools, register_balance/register_movements, create/update/delete tools,
   posting_preview/post_document/unpost_document, configuring onno.mcp.* properties, security,
   write/posting gates, or ensuring LLM tools obey the same RBAC as the UI.
-  Also use when adding application-specific @McpTool methods or McpToolProvider beans.
+  Also use when adding application-specific @McpTool methods or McpToolProvider beans, or when
+  checking how Commands<E> beans appear as <entity>_<key> tools.
 ---
 
 # onno MCP
@@ -30,6 +31,11 @@ startup.
 - Writes: `create_catalog`, `update_catalog`, `delete_catalog`, `create_document`,
   `update_document`, `delete_document`
 - Posting: `posting_preview`, `post_document`, `unpost_document`
+- Commands: one tool `<entity>_<key>` per static `Commands<E>` command (e.g. `Orders_cancel`), its
+  inputs as the schema plus a required `id` for record commands; published only with
+  `onno.mcp.writes-enabled`. `dynamic(...)` commands are not tools. Prefer a command over a custom
+  `@McpTool` when the action belongs to an entity — it then works in the UI and REST too
+  (`onno-commands`).
 
 The two list tools return one keyset window as `{rows,nextCursor,hasMore}`. Replay the opaque
 `nextCursor`; do not assume an unbounded list or offset.

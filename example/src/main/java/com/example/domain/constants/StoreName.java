@@ -7,8 +7,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * A single global setting — the trading name of the shop, edited on the authored Settings page
- * ({@link com.example.ui.pages.SettingsPage}) via a {@code type("setting")} input widget bound to
+ * A single global setting — the trading name of the shop, edited on the React Settings page
+ * ({@code /settings}, {@code src/main/ui/pages/SettingsPage.tsx}) via a {@code "setting"} widget bound to
  * this constant. A {@code @Constant} is a plain class with one value field; the framework stores the
  * single row (read/written through {@code SettingsController}). This is the whole demonstration of
  * the constants surface — one obvious knob.

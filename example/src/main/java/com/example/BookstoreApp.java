@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
  * "Onno Books" — the reference application for onno-framework. It models a small book retailer by
- * declaring typed Java metadata; the framework generates the schema, REST API, DivKit UI, and
+ * declaring typed Java metadata; the framework generates the schema, REST API, React UI, and
  * migration history from it. Nothing here hand-writes tables, DTOs, or CRUD controllers.
  *
  * <p>It is deliberately <b>small and end-to-end</b>: one coherent domain (selling books and keeping
@@ -23,8 +23,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  *       {@code BookStock} (BALANCE, can't go negative) and {@code BookSales} (TURNOVER).</li>
  *   <li>{@code domain.constants} — a single global setting ({@code @Constant}): the store name.</li>
  *   <li>{@code seed} — first-launch demo data ({@link com.example.seed.BookstoreSeeder}).</li>
- *   <li>{@code ui} — the UI authored as beans: {@code Layout} shells (a manager profile and an
- *       admin profile), a {@code Page} dashboard, per-entity {@code EntityView}s.</li>
+ *   <li>{@code ui} — backend UI behaviour: entity actions, live validations, picker decorations
+ *       and the login→Employee identity link. Screens, navigation and pages are React, in
+ *       {@code src/main/ui/} (entry {@code main.tsx}).</li>
  * </ul>
  *
  * <p>Run it, then sign in at <a href="http://localhost:8080">localhost:8080</a> with a demo user from

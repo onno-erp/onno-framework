@@ -2,10 +2,10 @@ package su.onno.print;
 
 import su.onno.metadata.MetadataRegistry;
 import su.onno.types.RefResolver;
-import su.onno.ui.CatalogQueryService;
-import su.onno.ui.DocumentQueryService;
-import su.onno.ui.UiAccessService;
-import su.onno.ui.UiProperties;
+import su.onno.web.CatalogQueryService;
+import su.onno.web.DocumentQueryService;
+import su.onno.web.AccessService;
+import su.onno.web.WebProperties;
 
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.Test;
@@ -25,8 +25,8 @@ class OnnoPrintAutoConfigurationTest {
             .withBean(RefResolver.class, () -> mock(RefResolver.class))
             .withBean(CatalogQueryService.class, () -> mock(CatalogQueryService.class))
             .withBean(DocumentQueryService.class, () -> mock(DocumentQueryService.class))
-            .withBean(UiAccessService.class, () -> mock(UiAccessService.class))
-            .withBean(UiProperties.class, UiProperties::new);
+            .withBean(AccessService.class, () -> mock(AccessService.class))
+            .withBean(WebProperties.class, WebProperties::new);
 
     @Test
     void registersServiceEndpointsAndContributors() {

@@ -3,14 +3,14 @@ plugins {
     id("org.springframework.boot")
     id("io.spring.dependency-management")
     id("su.onno.desktop")
-    // Compiles src/main/widgets/*.tsx into onno UI widget plugins (see DashboardPage's "eventLog").
-    id("su.onno.widgets")
+    // Builds the app UI in src/main/ui (a Vite app on @onno/ui) into the jar.
+    id("su.onno.ui")
 }
 
 dependencies {
     // Core features run by default; the crm Spring profile binds the optional messaging module.
     implementation(project(":onno-framework-starter"))
-    implementation(project(":onno-ui-starter"))
+    implementation(project(":onno-web-starter"))
     implementation(project(":onno-auth-starter"))
     // The crm profile explicitly binds the existing Customer and Employee catalogs.
     implementation(project(":onno-crm-starter"))
@@ -23,8 +23,8 @@ dependencies {
     // Dev live-reload: on a recompile devtools restarts the context (metamodel rescan, schema
     // re-diff, layout/page rebuild — all boot-time work), and the UI starter detects devtools on
     // the classpath and tells the browser to refresh over the /api/events stream. developmentOnly
-    // keeps it out of the production bootJar. Loop: `./gradlew :example:bootRun` in one terminal,
-    // `./gradlew -t :example:classes` in another; save a file → app restarts → browser reloads.
+    // keeps it out of the production bootJar. Use the root npm scripts: dev (Vite), dev:backend
+    // (bootRun), and dev:watch (continuous classes + generated model, skipping frontend builds).
     developmentOnly("org.springframework.boot:spring-boot-devtools")
 
     compileOnly(libs.lombok)
@@ -33,6 +33,16 @@ dependencies {
 
 application {
     mainClass.set("com.example.BookstoreApp")
+}
+
+// The UI is a member of the repository's npm workspace (root package.json), installed once by the
+// UI starter. A standalone app keeps the default: `npm install` in src/main/ui.
+onnoUi {
+    npmProjectDir.set(rootProject.layout.projectDirectory)
+}
+tasks.named("npmInstall") {
+    enabled = false
+    dependsOn(":onno-web-starter:npmInstall")
 }
 
 tasks.withType<JavaCompile> {
@@ -52,9 +62,4 @@ tasks.register("devClasspath") {
     doLast {
         println(classpath.asPath)
     }
-}
-
-// Optional ordinary sales model; the inbox example does not install opportunities or metrics.
-if (providers.gradleProperty("salesExample").isPresent) {
-    sourceSets["main"].java.srcDir("src/sales/java")
 }

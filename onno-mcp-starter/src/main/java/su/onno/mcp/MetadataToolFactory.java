@@ -9,15 +9,14 @@ import su.onno.metadata.EnumerationDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.TabularSectionDescriptor;
 import su.onno.process.ProcessDefinitions;
-import su.onno.ui.CatalogCommandService;
-import su.onno.ui.CatalogQueryService;
-import su.onno.ui.DocumentCommandService;
-import su.onno.ui.DocumentQueryService;
-import su.onno.ui.KeysetPage;
-import su.onno.ui.ListFilter;
-import su.onno.ui.RegisterQueryService;
-import su.onno.ui.UiAccessService;
-import su.onno.ui.UiProperties;
+import su.onno.web.CatalogCommandService;
+import su.onno.web.CatalogQueryService;
+import su.onno.web.DocumentCommandService;
+import su.onno.web.DocumentQueryService;
+import su.onno.web.KeysetPage;
+import su.onno.web.RegisterQueryService;
+import su.onno.web.AccessService;
+import su.onno.web.WebProperties;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpServerFeatures.SyncToolSpecification;
@@ -38,7 +37,7 @@ import java.util.function.BiFunction;
  * Generates the MCP tool set generically from the {@link MetadataRegistry}.
  *
  * <p>Every tool resolves a descriptor by logical name, enforces access through
- * {@link UiAccessService} against the subject captured by {@link McpPrincipalContext},
+ * {@link AccessService} against the subject captured by {@link McpPrincipalContext},
  * and then delegates to the shared query/command services — the same code path the web
  * UI uses, including the caller's record scope ({@code RecordAccessPolicy}). There is no per-entity code: adding an entity to the application surfaces it
  * here automatically, and a {@code describe_metadata} discovery tool lets the model learn
@@ -48,17 +47,17 @@ public class MetadataToolFactory implements McpToolProvider {
 
     private final MetadataRegistry registry;
     private final ProcessDefinitions processDefinitions;
-    private final UiAccessService access;
+    private final AccessService access;
     private final CatalogQueryService catalogQuery;
     private final DocumentQueryService documentQuery;
     private final RegisterQueryService registerQuery;
     private final CatalogCommandService catalogCommands;
     private final DocumentCommandService documentCommands;
     private final OnnoMcpProperties properties;
-    private final UiProperties uiProperties;
+    private final WebProperties webProperties;
     private final McpJsonMapper json;
 
-    public MetadataToolFactory(MetadataRegistry registry, UiAccessService access,
+    public MetadataToolFactory(MetadataRegistry registry, AccessService access,
                                CatalogQueryService catalogQuery, DocumentQueryService documentQuery,
                                RegisterQueryService registerQuery, CatalogCommandService catalogCommands,
                                DocumentCommandService documentCommands, OnnoMcpProperties properties,
@@ -70,7 +69,7 @@ public class MetadataToolFactory implements McpToolProvider {
     public MetadataToolFactory(
             MetadataRegistry registry,
             ProcessDefinitions processDefinitions,
-            UiAccessService access,
+            AccessService access,
             CatalogQueryService catalogQuery,
             DocumentQueryService documentQuery,
             RegisterQueryService registerQuery,
@@ -80,20 +79,20 @@ public class MetadataToolFactory implements McpToolProvider {
             McpJsonMapper json
     ) {
         this(registry, processDefinitions, access, catalogQuery, documentQuery, registerQuery,
-                catalogCommands, documentCommands, properties, new UiProperties(), json);
+                catalogCommands, documentCommands, properties, new WebProperties(), json);
     }
 
     public MetadataToolFactory(
             MetadataRegistry registry,
             ProcessDefinitions processDefinitions,
-            UiAccessService access,
+            AccessService access,
             CatalogQueryService catalogQuery,
             DocumentQueryService documentQuery,
             RegisterQueryService registerQuery,
             CatalogCommandService catalogCommands,
             DocumentCommandService documentCommands,
             OnnoMcpProperties properties,
-            UiProperties uiProperties,
+            WebProperties webProperties,
             McpJsonMapper json
     ) {
         this.registry = registry;
@@ -105,7 +104,7 @@ public class MetadataToolFactory implements McpToolProvider {
         this.catalogCommands = catalogCommands;
         this.documentCommands = documentCommands;
         this.properties = properties;
-        this.uiProperties = uiProperties;
+        this.webProperties = webProperties;
         this.json = json;
     }
 
@@ -187,34 +186,15 @@ public class MetadataToolFactory implements McpToolProvider {
 
         tools.add(readTool("register_balance",
                 "Get accumulation register balances",
-                "Returns a keyset window {rows,nextCursor,hasMore}; default limit 100, maximum 500; optional asOf reads historical balances.",
-                "{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{"
-                        + "\"name\":{\"type\":\"string\"},\"cursor\":{\"type\":\"string\"},"
-                        + "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":500},"
-                        + "\"asOf\":{\"type\":\"string\"},\"filters\":{\"type\":\"object\"}}}",
-                (exchange, args) -> {
-                    AccumulationRegisterDescriptor desc = registerQuery.require(requireString(args, "name"));
-                    access.requireRead(subject(exchange), desc);
-                    Integer limit = optInt(args, "limit");
-                    return ok(su.onno.ui.KeysetWindow.envelope(registerQuery.balancePage(subject(exchange), desc,
-                            registerQuery.dimensionFilters(desc, stringMap(args.get("filters"))), null, false,
-                            optString(args, "cursor"), limit == null ? 100 : limit, optString(args, "asOf"))));
-                }));
-
-        tools.add(readTool("register_movements",
-                "Get accumulation register movements",
-                "Returns one page of active register movements, optionally filtered by an inclusive "
-                        + "period range (ISO-8601) and dimension values. Returns {rows,nextCursor,hasMore}; "
-                        + "default limit 100, maximum 500, newest first. Replay nextCursor to continue.",
+                "Returns one keyset window {rows,nextCursor,hasMore} of current or as-of balances for a "
+                        + "BALANCE accumulation register, optionally narrowed by 'where'; default limit 100, "
+                        + "maximum 500. Replay nextCursor to continue.",
                 "{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{"
                         + "\"name\":{\"type\":\"string\",\"description\":\"Register logical name (see describe_metadata).\"},"
-                        + "\"from\":{\"type\":\"string\",\"description\":\"Optional inclusive start period (ISO-8601).\"},"
-                        + "\"to\":{\"type\":\"string\",\"description\":\"Optional inclusive end period (ISO-8601).\"},"
+                        + "\"asOf\":{\"type\":\"string\",\"description\":\"Optional inclusive cutoff: ISO-8601 local date-time (2024-03-31T18:00) or date (2024-03-31 = the whole day), no offset. Omit for current totals.\"},"
                         + "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":500,\"description\":\"Page size (default 100).\"},"
                         + "\"cursor\":{\"type\":\"string\",\"description\":\"Previous nextCursor.\"},"
-                        + "\"sort\":{\"type\":\"string\",\"description\":\"Movement column to sort by (default _period).\"},"
-                        + "\"descending\":{\"type\":\"boolean\",\"description\":\"Descending order (default true).\"},"
-                        + "\"filters\":{\"type\":\"object\",\"description\":\"Dimension fieldName -> value; references/enums use id strings.\"}}}",
+                        + "\"where\":" + WHERE_SCHEMA.formatted("balance rows: dimension and resource field names (a resource compares its balance)") + "}}",
                 (exchange, args) -> {
                     AccumulationRegisterDescriptor desc = registerQuery.require(requireString(args, "name"));
                     access.requireRead(subject(exchange), desc);
@@ -222,24 +202,39 @@ public class MetadataToolFactory implements McpToolProvider {
                     if (limit != null && (limit < 1 || limit > 500)) {
                         throw new IllegalArgumentException("limit must be between 1 and 500");
                     }
-                    List<String> equality = new ArrayList<>();
-                    stringMap(args.get("filters")).forEach((field, value) -> {
-                        AttributeDescriptor dimension = desc.dimensions().stream()
-                                .filter(d -> d.fieldName().equals(field)).findFirst()
-                                .orElseThrow(() -> new IllegalArgumentException("Unknown dimension: " + field));
-                        equality.add(dimension.columnName() + "," + value);
-                    });
-                    ListFilter.Result filters = ListFilter.parse(equality, List.of(), List.of(),
-                            registerQuery.movementFilterColumns(desc));
-                    int size = limit == null ? 100 : limit;
-                    String token = optString(args, "cursor");
-                    var page = registerQuery.movementsPage(subject(exchange), desc,
-                            optString(args, "from"), optString(args, "to"), filters,
-                            optString(args, "sort"), !Boolean.FALSE.equals(args.get("descending")), token, size);
-                    return ok(su.onno.ui.KeysetWindow.envelope(page));
+                    return ok(logicalPage(desc, registerQuery.balancePage(subject(exchange), desc, null,
+                            whereJson(args.get("where")), null, false, optString(args, "cursor"),
+                            limit == null ? 100 : limit, optString(args, "asOf"))));
                 }));
 
-        if (properties.isWritesEnabled() && !uiProperties.isReadOnly()) {
+        tools.add(readTool("register_movements",
+                "Get accumulation register movements",
+                "Returns one keyset window {rows,nextCursor,hasMore} of active register movements, optionally "
+                        + "filtered by an inclusive period range (ISO-8601) and 'where'; default limit 100, "
+                        + "maximum 500, newest first. Replay nextCursor to continue.",
+                "{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{"
+                        + "\"name\":{\"type\":\"string\",\"description\":\"Register logical name (see describe_metadata).\"},"
+                        + "\"from\":{\"type\":\"string\",\"description\":\"Optional inclusive start period (ISO-8601).\"},"
+                        + "\"to\":{\"type\":\"string\",\"description\":\"Optional inclusive end period (ISO-8601).\"},"
+                        + "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":500,\"description\":\"Page size (default 100).\"},"
+                        + "\"cursor\":{\"type\":\"string\",\"description\":\"Previous nextCursor.\"},"
+                        + "\"sort\":{\"type\":\"string\",\"description\":\"Field to sort by: period (default), a dimension or a resource.\"},"
+                        + "\"descending\":{\"type\":\"boolean\",\"description\":\"Descending order (default true).\"},"
+                        + "\"where\":" + WHERE_SCHEMA.formatted("movement rows: dimension and resource field names, period, recorder (document id), movementType (RECEIPT/EXPENSE)") + "}}",
+                (exchange, args) -> {
+                    AccumulationRegisterDescriptor desc = registerQuery.require(requireString(args, "name"));
+                    access.requireRead(subject(exchange), desc);
+                    Integer limit = optInt(args, "limit");
+                    if (limit != null && (limit < 1 || limit > 500)) {
+                        throw new IllegalArgumentException("limit must be between 1 and 500");
+                    }
+                    return ok(logicalPage(desc, registerQuery.movementsPage(subject(exchange), desc,
+                            optString(args, "from"), optString(args, "to"), null, whereJson(args.get("where")),
+                            optString(args, "sort"), !Boolean.FALSE.equals(args.get("descending")),
+                            optString(args, "cursor"), limit == null ? 100 : limit)));
+                }));
+
+        if (properties.isWritesEnabled() && !webProperties.isReadOnly()) {
             tools.add(writeTool("create_catalog",
                     "Create a catalog record",
                     "Creates a new catalog record. 'values' may include code, description, folder (boolean), "
@@ -320,7 +315,7 @@ public class MetadataToolFactory implements McpToolProvider {
 
         }
 
-        if (properties.isPostingEnabled() && !uiProperties.isReadOnly()) {
+        if (properties.isPostingEnabled() && !webProperties.isReadOnly()) {
             tools.add(writeTool("post_document",
                     "Post a document",
                     "Posts a document, writing its movements to the accumulation/information registers. "
@@ -378,7 +373,7 @@ public class MetadataToolFactory implements McpToolProvider {
                 e.put("name", d.logicalName());
                 e.put("writable", writesAllowed() && access.canWrite(principal, d));
                 e.put("postingEnabled", properties.isPostingEnabled()
-                        && !uiProperties.isReadOnly() && access.canWrite(principal, d));
+                        && !webProperties.isReadOnly() && access.canWrite(principal, d));
                 e.put("fields", fields(d.attributes()));
                 describeSections(e, d.tabularSections());
                 documents.add(e);
@@ -435,7 +430,7 @@ public class MetadataToolFactory implements McpToolProvider {
     }
 
     private boolean writesAllowed() {
-        return properties.isWritesEnabled() && !uiProperties.isReadOnly();
+        return properties.isWritesEnabled() && !webProperties.isReadOnly();
     }
 
     private List<Map<String, Object>> fields(List<AttributeDescriptor> attributes) {
@@ -591,16 +586,29 @@ public class MetadataToolFactory implements McpToolProvider {
         return out;
     }
 
-    private static Map<String, String> stringMap(Object value) {
-        Map<String, String> out = new LinkedHashMap<>();
-        if (value instanceof Map<?, ?> m) {
-            for (Map.Entry<?, ?> e : m.entrySet()) {
-                if (e.getValue() != null) {
-                    out.put(String.valueOf(e.getKey()), e.getValue().toString());
-                }
-            }
-        }
+    /** The JSON schema of a {@code where} argument; {@code %s} names what its keys are. */
+    /** A register keyset window with its rows in the logical vocabulary. */
+    private static Map<String, Object> logicalPage(AccumulationRegisterDescriptor desc,
+                                                   su.onno.query.KeysetWindow.Page<Map<String, Object>> page) {
+        Map<String, Object> out = su.onno.web.KeysetWindow.envelope(page);
+        out.put("rows", RegisterQueryService.logical(desc, page.rows()));
         return out;
+    }
+
+    private static final String WHERE_SCHEMA = "{\"type\":\"object\",\"description\":\"Optional predicate over the %s. "
+            + "A value means equality, null means no value; operators: {eq, not, in, notIn, gt, gte, lt, lte, "
+            + "contains, startsWith}; combine with and/or/not. References and enums take id strings (an enum "
+            + "also its constant name). Example: {\\\"warehouse\\\": \\\"<id>\\\", \\\"quantity\\\": {\\\"gt\\\": 0}}\"}";
+
+    /** A {@code where} argument (an object, or JSON text) as the JSON text the query services compile. */
+    private String whereJson(Object where) {
+        if (where == null) return null;
+        if (where instanceof String text) return text.isBlank() ? null : text;
+        try {
+            return json.writeValueAsString(where);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Argument 'where' must be a JSON object");
+        }
     }
 
     private static String idSchema(String nameDescription) {

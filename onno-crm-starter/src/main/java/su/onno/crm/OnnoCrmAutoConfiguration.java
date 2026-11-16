@@ -11,14 +11,14 @@ import su.onno.crm.repository.*;
 import su.onno.crm.web.*;
 import su.onno.spring.OnnoAutoConfiguration;
 import su.onno.spring.OnnoRepositoriesAutoConfiguration;
-import su.onno.ui.UiEntityAccessPolicy;
+import su.onno.web.EntityAccessPolicy;
 
 /** Installs messaging only when the host explicitly binds its customer catalog. */
 @AutoConfiguration(before = {OnnoAutoConfiguration.class, OnnoRepositoriesAutoConfiguration.class})
 @ConditionalOnBean(CrmCustomerBinding.class)
 @AutoConfigurationPackage(basePackages = "su.onno.crm")
 @Import({ConversationService.class, CrmConversationStatuses.class, CrmWorkspaceEvents.class,
-        CrmInboxWorkspaceService.class, CrmInboxWorkspaceController.class, CrmFeedQuery.class, CrmConversationViewController.class,
+        CrmInboxWorkspaceService.class, CrmInboxWorkspaceController.class, CrmFeedQuery.class,
         CrmWorkspaceService.class, CrmChatGroupService.class, CrmChatGroupController.class,
         CrmContactService.class, CrmContactController.class, CrmInboxController.class,
         CrmActivityController.class, CrmChannelController.class, CrmActionController.class,
@@ -26,7 +26,7 @@ import su.onno.ui.UiEntityAccessPolicy;
 public class OnnoCrmAutoConfiguration {
     @Bean @ConditionalOnMissingBean
     public CrmConnectionAccounts crmConnectionAccounts(org.springframework.jdbc.core.JdbcTemplate jdbc, CrmChannelAccess access,
-            CrmFeatures features, ObjectProvider<su.onno.ui.UiEventPublisher> events) {
+            CrmFeatures features, ObjectProvider<su.onno.web.EventPublisher> events) {
         return new CrmConnectionAccounts(jdbc, access, features, events);
     }
 
@@ -37,18 +37,11 @@ public class OnnoCrmAutoConfiguration {
     public CrmStateConfiguration crmStateConfiguration() { return CrmStateConfiguration.empty(); }
 
     @Bean @ConditionalOnMissingBean
-    public CrmChannelAccess crmChannelAccess(su.onno.ui.UiAccessService access) {
+    public CrmChannelAccess crmChannelAccess(su.onno.web.AccessService access) {
         return principal -> access.roles(principal).contains("ADMIN");
     }
     @Bean @ConditionalOnMissingBean
     public CrmFeatures crmFeatures() { return CrmFeatures.defaults(); }
-
-    /** Fails startup when a CrmInboxView bean names an unknown workspace; warns on undeclared filter keys. */
-    @Bean @ConditionalOnMissingBean
-    public su.onno.crm.ui.CrmInboxViewValidator crmInboxViewValidator(ObjectProvider<su.onno.crm.ui.CrmInboxView> views,
-                                                                     ObjectProvider<CrmInboxWorkspace> workspaces) {
-        return new su.onno.crm.ui.CrmInboxViewValidator(views, workspaces);
-    }
 
     /**
      * Scoped inbox endpoints own record access; generic surfaces (REST, UI, MCP, events) must not
@@ -59,12 +52,12 @@ public class OnnoCrmAutoConfiguration {
      * to every role. The decision is configuration, never data, so it cannot flip at runtime when
      * someone connects an account.</p>
      */
-    @Bean public UiEntityAccessPolicy crmWorkspaceGenericAccess(CrmFeatures features) {
+    @Bean public EntityAccessPolicy crmWorkspaceGenericAccess(CrmFeatures features) {
         return new CrmGenericAccessPolicy(features.personalAccounts());
     }
 
     /** See {@link #crmWorkspaceGenericAccess}. */
-    static final class CrmGenericAccessPolicy implements UiEntityAccessPolicy {
+    static final class CrmGenericAccessPolicy implements EntityAccessPolicy {
         private static final Set<String> PROTECTED = Set.of(
                 "crmconversations", "crmconversationmessages", "crmcontactidentities", "crminboxes");
         private final boolean personalAccounts;

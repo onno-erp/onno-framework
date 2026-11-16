@@ -1,0 +1,223 @@
+package su.onno.web.presence;
+
+import su.onno.cluster.ClusterEvent;
+import su.onno.cluster.ClusterEventBus;
+import su.onno.web.EventPublisher;
+
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
+
+import java.time.Clock;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * In-memory registry of who is currently viewing each record, for record-level collaboration markers
+ * ("3 people are here", like the avatars in a shared document).
+ *
+ * <p>State is per-node and ephemeral: a {@code (entityType, entityName, id)} record maps to its set of
+ * viewers, each carrying a {@code lastSeen} stamped from <em>this</em> node's clock. A viewer is kept
+ * alive by heartbeats and expires by TTL when they stop arriving — so a closed tab or a crashed peer
+ * self-heals without an explicit leave, and no cross-node clock agreement is needed.
+ *
+ * <p>Two inputs feed the same map:
+ * <ul>
+ *   <li><b>Local</b> — a browser on this node calls the presence endpoint ({@link #onLocal}); the change is
+ *       applied, broadcast to peer nodes over the {@link ClusterEventBus}, and pushed to this node's SSE
+ *       clients.</li>
+ *   <li><b>Remote</b> — a peer relayed a {@link ClusterEvent.Presence} over the bus ({@link #onRemote}); it
+ *       is applied and pushed to this node's SSE clients, but never re-broadcast (no relay loop).</li>
+ * </ul>
+ *
+ * <p>An SSE snapshot is pushed only when a record's <em>viewer set</em> changes (a join or a leave), not on
+ * every heartbeat, so liveness traffic stays off the browser stream. Like everything on the cluster bus
+ * this is best-effort: a dropped ping costs at most one TTL of staleness.
+ *
+ * <p>All per-record mutations run inside the outer {@link ConcurrentHashMap#compute} callback, so the inner
+ * plain maps are only ever touched while the bin lock is held — no separate synchronization is required,
+ * and an emptied record is dropped atomically without the classic remove-empty-inner-map race.
+ */
+public class PresenceRegistry {
+
+    /** Default viewer time-to-live: a viewer with no heartbeat for this long is dropped. ~3 missed beats. */
+    public static final long DEFAULT_TTL_MILLIS = 45_000;
+    /** Default interval between expiry sweeps. */
+    public static final long DEFAULT_SWEEP_INTERVAL_MILLIS = 15_000;
+
+    // kind is the route form ("catalogs"/"documents") so the client can map a viewed record straight to
+    // its nav item and list-row urls; entityName is the route name; id (a UUID) is globally unique.
+    private record RecordKey(String kind, String entityName, String id) {}
+    private record Entry(String displayName, String avatarUrl, long lastSeen) {}
+
+    private final Map<RecordKey, Map<String, Entry>> byRecord = new ConcurrentHashMap<>();
+
+    private final ClusterEventBus bus;
+    private final EventPublisher publisher;
+    private final Clock clock;
+    private final long ttlMillis;
+    private final long sweepIntervalMillis;
+
+    private ScheduledExecutorService sweeper;
+
+    public PresenceRegistry(ClusterEventBus bus, EventPublisher publisher) {
+        this(bus, publisher, Clock.systemUTC(), DEFAULT_TTL_MILLIS, DEFAULT_SWEEP_INTERVAL_MILLIS);
+    }
+
+    PresenceRegistry(ClusterEventBus bus, EventPublisher publisher, Clock clock,
+                     long ttlMillis, long sweepIntervalMillis) {
+        this.bus = bus;
+        this.publisher = publisher;
+        this.clock = clock;
+        this.ttlMillis = ttlMillis;
+        this.sweepIntervalMillis = sweepIntervalMillis;
+    }
+
+    @PostConstruct
+    public void start() {
+        bus.subscribe(event -> {
+            if (event instanceof ClusterEvent.Presence presence) {
+                onRemote(presence);
+            }
+        });
+        sweeper = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "onno-ui-presence-sweeper");
+            t.setDaemon(true);
+            return t;
+        });
+        sweeper.scheduleWithFixedDelay(this::sweepExpired,
+                sweepIntervalMillis, sweepIntervalMillis, TimeUnit.MILLISECONDS);
+    }
+
+    @PreDestroy
+    public void stop() {
+        if (sweeper != null) {
+            sweeper.shutdownNow();
+        }
+    }
+
+    /** A browser on this node entered/refreshed/left a record. Apply, relay to peers, fan out locally. */
+    public void onLocal(String action, String kind, String entityName, String id,
+                        String userId, String displayName, String avatarUrl) {
+        if (userId == null || id == null) {
+            return; // can't track an anonymous viewer or a record without an id
+        }
+        RecordKey key = new RecordKey(kind, entityName, id);
+        boolean membershipChanged = apply(action, key, userId, displayName, avatarUrl);
+        bus.publish(ClusterEvent.presence(action, kind, entityName, id, userId, displayName, avatarUrl));
+        if (membershipChanged) {
+            publishSnapshot(key);
+        }
+    }
+
+    /** A peer node relayed a presence change. Apply and fan out locally; never re-broadcast. */
+    public void onRemote(ClusterEvent.Presence presence) {
+        if (presence.userId() == null || presence.id() == null) {
+            return;
+        }
+        RecordKey key = new RecordKey(presence.entityType(), presence.entityName(), presence.id());
+        boolean membershipChanged = apply(presence.action(), key, presence.userId(), presence.displayName(), presence.avatarUrl());
+        if (membershipChanged) {
+            publishSnapshot(key);
+        }
+    }
+
+    /** Apply one change atomically per record. Returns whether the viewer set changed (a join or a leave). */
+    private boolean apply(String action, RecordKey key, String userId, String displayName, String avatarUrl) {
+        boolean[] changed = {false};
+        if (ClusterEvent.Presence.LEAVE.equals(action)) {
+            byRecord.compute(key, (k, users) -> {
+                if (users == null) {
+                    return null;
+                }
+                changed[0] = users.remove(userId) != null;
+                return users.isEmpty() ? null : users;
+            });
+        } else {
+            // ENTER or HEARTBEAT — upsert the viewer and refresh lastSeen.
+            long now = clock.millis();
+            byRecord.compute(key, (k, users) -> {
+                Map<String, Entry> viewers = users == null ? new HashMap<>() : users;
+                changed[0] = viewers.put(userId, new Entry(displayName, avatarUrl, now)) == null;
+                return viewers;
+            });
+        }
+        return changed[0];
+    }
+
+    /** Remove viewers whose last heartbeat predates the TTL, pushing a fresh snapshot for each affected record. */
+    public void sweepExpired() {
+        long cutoff = clock.millis() - ttlMillis;
+        List<RecordKey> changed = new ArrayList<>();
+        for (RecordKey key : byRecord.keySet()) {
+            byRecord.compute(key, (k, users) -> {
+                if (users == null) {
+                    return null;
+                }
+                if (users.values().removeIf(entry -> entry.lastSeen() < cutoff)) {
+                    changed.add(k);
+                }
+                return users.isEmpty() ? null : users;
+            });
+        }
+        for (RecordKey key : changed) {
+            publishSnapshot(key);
+        }
+    }
+
+    /** The current viewers of a record as {@code {userId, displayName}} maps — what the enter response returns. */
+    public List<Map<String, String>> viewers(String kind, String entityName, String id) {
+        return viewers(new RecordKey(kind, entityName, id));
+    }
+
+    /**
+     * A snapshot of every record with viewers, as {@code {kind, name, id, viewers}} maps — the initial
+     * picture the ambient-presence store loads before live SSE deltas keep it current. Built under each
+     * record's bin lock, so it is internally consistent per record.
+     */
+    public List<Map<String, Object>> allViewers() {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (RecordKey key : byRecord.keySet()) {
+            List<Map<String, String>> viewers = viewers(key);
+            if (viewers.isEmpty()) {
+                continue; // raced with an expiry/leave that emptied it
+            }
+            Map<String, Object> rec = new LinkedHashMap<>();
+            rec.put("kind", key.kind());
+            rec.put("name", key.entityName());
+            rec.put("id", key.id());
+            rec.put("viewers", viewers);
+            out.add(rec);
+        }
+        return out;
+    }
+
+    private void publishSnapshot(RecordKey key) {
+        // The event's entityType is the "presence" sentinel (set in publishPresence) so no list/detail
+        // surface refetches; kind + name + id let the ambient store place the viewers on the right surfaces.
+        publisher.publishPresence(key.kind(), key.entityName(), key.id(), viewers(key));
+    }
+
+    private List<Map<String, String>> viewers(RecordKey key) {
+        List<Map<String, String>> result = new ArrayList<>();
+        byRecord.computeIfPresent(key, (k, users) -> {
+            users.forEach((userId, entry) -> {
+                Map<String, String> viewer = new LinkedHashMap<>();
+                viewer.put("userId", userId);
+                viewer.put("displayName", entry.displayName());
+                if (entry.avatarUrl() != null) {
+                    viewer.put("avatarUrl", entry.avatarUrl());
+                }
+                result.add(viewer);
+            });
+            return users;
+        });
+        return result;
+    }
+}

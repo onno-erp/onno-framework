@@ -10,8 +10,8 @@ import su.onno.crm.domain.*;
 import su.onno.crm.repository.ConversationRepository;
 import su.onno.crm.service.*;
 import su.onno.crm.web.*;
-import su.onno.ui.*;
-import su.onno.ui.comments.*;
+import su.onno.web.*;
+import su.onno.web.comments.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -19,7 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class CrmInboxWorkspaceSecurityTest {
     Principal alice=()->"alice";
-    UiAccessService access=mock(UiAccessService.class);
+    AccessService access=mock(AccessService.class);
     ConversationRepository repository=mock(ConversationRepository.class);
     ConversationService commands=mock(ConversationService.class);
     CommentService comments=mock(CommentService.class);
@@ -41,7 +41,7 @@ class CrmInboxWorkspaceSecurityTest {
         workspaces=new CrmInboxWorkspaceService(definitions,repository,access,mock(CrmWorkspaceService.class),su.onno.crm.TestBindings.readableContacts(),org.mockito.Mockito.mock(su.onno.crm.service.CrmConnectionAccounts.class));
         var controller=new CrmInboxController(commands,users,mock(CrmAgentIdentityResolver.class),access,workspaces,
             mock(CommentAuthorAvatars.class),
-            new su.onno.crm.service.CrmAttachments(mock(su.onno.ui.media.MediaStorage.class),new su.onno.ui.media.MediaProperties()),
+            new su.onno.crm.service.CrmAttachments(mock(su.onno.web.media.MediaStorage.class),new su.onno.web.media.MediaProperties()),
             mock(su.onno.crm.repository.ContactIdentityRepository.class),su.onno.crm.TestBindings.readableContacts());
         var scoped=new CrmInboxWorkspaceController(workspaces,mock(CatalogQueryService.class),users,comments,
                 mock(CommentAuthorAvatars.class),subjects,su.onno.crm.TestBindings.readableContacts(),su.onno.crm.TestBindings.noAgents(),access);

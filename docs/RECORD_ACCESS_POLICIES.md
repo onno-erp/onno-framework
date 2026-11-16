@@ -26,9 +26,9 @@ RecordAccessPolicy buildJobsByTenant() {
 }
 ```
 
-`Subject.recordId()` is the signed-in user's identity record — the `Layout.identity(...)` catalog
-row matched by login (here an `Owner` catalog). No switch turns policies on: they are active as
-soon as `RecordAccessPolicy` beans exist.
+`Subject.recordId()` is the signed-in user's identity record — the row of the `IdentityLink` bean's
+catalog matched by login (here `IdentityLink.of(Owner.class, "email")`). No switch turns policies
+on: they are active as soon as `RecordAccessPolicy` beans exist.
 
 ## Concepts
 
@@ -53,8 +53,8 @@ AccessSubjectContributor regions(RegionDirectory directory) {
 ```
 
 A controller method receives the subject by declaring a parameter of type `AccessSubject`; an
-`@McpTool` method may declare one too (or read `McpToolContext.subject()`); an action handler reads
-`ActionContext.subject()`, which is never `null`. Code that builds an `ActionContext` itself (a test,
+`@McpTool` method may declare one too (or read `McpToolContext.subject()`); a command handler reads
+`CommandContext.subject()`, which is never `null`. Code that builds a `CommandContext` itself (a test,
 a custom dispatcher) passes the caller's subject, or `AccessSubject.system()` for trusted code.
 
 ### The scope — a predicate the database evaluates
@@ -111,16 +111,15 @@ too, and an explicit body value cannot override them.
 | create / update post-image | must satisfy the write scope (403, rolled back) |
 | ref values written (header and lines) | must point at readable records (422) |
 | a restricted ref echoed back as `null` on update | ignored — a link you can't see can't be cleared by accident |
-| batch delete / batch actions | per id, same rules |
-| actions | the record is loaded with the write scope (404); `enabledWhen` is evaluated server-side (409) |
+| batch delete / batch commands | per id, same rules |
+| commands | the record is loaded with the write scope (404); `availableWhen`/`enabledWhen` are evaluated server-side (409) |
 | CSV import upserts | an existing code/number outside the write scope is a row error, not an overwrite |
-| related lists | the parent record must be readable; junction rows are scoped |
 | ref pickers, mentions, comments, tags, presence | target/record scope applied; unreadable records are 404 or not readable |
 | notifications | a notification about a record the recipient can't read is withheld from its feed and stream (one rule for both), and the unread badge counts only what the feed shows |
 | task inbox | task visibility stays assignment-based; a subject label of an unreadable record is masked |
 | links to a renamed or removed entity | a former `previousNames` entry still resolves; a name that resolves to nothing is withheld/masked for a subject some policy narrows, never for ADMIN or unnarrowed subjects |
 | SSE `/api/events` | a record event reaches a scoped subscriber only if the record is in its scope (one query per event and distinct scope) |
-| MCP built-in tools | run as the caller's subject through the same services |
+| MCP built-in and command tools | run as the caller's subject through the same services |
 | CRM inbox | the bound customer catalog's policy narrows readable contacts (on top of `readableWhen`) |
 
 ## What is *not* scoped — trusted code
@@ -200,11 +199,11 @@ ends. On a large table, let the build finish (the log shows `Built record-scope 
 deploying a schema change to it.
 
 On other databases the plain `CREATE INDEX IF NOT EXISTS` statements run during startup.
-`onno.access.records.log-denials=true` logs every scope-based 404 at DEBUG on `su.onno.ui.RecordAccess`.
+`onno.access.records.log-denials=true` logs every scope-based 404 at DEBUG on `su.onno.web.RecordAccess`.
 
 ## Verifying a policy
 
-The framework ships a conformance suite (`RecordPolicyConformanceTest` in `onno-ui-starter`): it
+The framework ships a conformance suite (`RecordPolicyConformanceTest` in `onno-web-starter`): it
 seeds two owners, marks every record of owner B with a `LEAK-B` sentinel, drives every endpoint as
 owner A, and fails if any response contains a sentinel or one of B's ids. Its coverage guard fails the
 build when a new endpoint is added without a record-policy classification. Copy the pattern for your
@@ -218,7 +217,7 @@ own app's custom endpoints.
   three-valued semantics.
 - **A required subject, not a thread-local.** Every query/command service method takes the subject
   as a parameter, so forgetting it is a compile error rather than a silent unscoped read, and it
-  survives thread hops (dashboard widget pools, batch fan-out, SSE fan-out, MCP).
+  survives thread hops (aggregate pools, batch fan-out, SSE fan-out, MCP).
 - **404, not 403.** A record outside the scope is indistinguishable from a missing one, so ids can't
   be probed.
 - **Write defaults to read.** The common case (owners change what they own) stays one line; read-only

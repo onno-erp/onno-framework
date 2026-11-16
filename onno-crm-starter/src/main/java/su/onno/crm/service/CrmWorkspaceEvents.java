@@ -4,14 +4,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.transaction.event.TransactionPhase;
 import su.onno.events.EntityChangedEvent;
-import su.onno.ui.UiEventPublisher;
+import su.onno.web.EventPublisher;
 
 /** Content-free invalidation; scoped endpoints recheck the subscriber's permissions. */
 @Component
 public class CrmWorkspaceEvents {
-    private final UiEventPublisher events;
+    private final EventPublisher events;
     private final CrmCustomerBinding<?> customers;
-    public CrmWorkspaceEvents(UiEventPublisher events,CrmCustomerBinding<?> customers){this.events=events;this.customers=customers;}
+    public CrmWorkspaceEvents(EventPublisher events,CrmCustomerBinding<?> customers){this.events=events;this.customers=customers;}
     @TransactionalEventListener(phase=TransactionPhase.AFTER_COMMIT,fallbackExecution=true)
     public void changed(EntityChangedEvent event) {
         // A history import stores thousands of old messages; the inbox reloads once per batch instead.

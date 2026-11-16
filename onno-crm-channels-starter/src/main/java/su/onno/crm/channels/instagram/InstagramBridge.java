@@ -58,12 +58,12 @@ public class InstagramBridge implements CrmChannelConnection,CrmMessageTransport
     private volatile boolean ready;private volatile String failure="";private volatile Instant retryAt=Instant.EPOCH;private int failures;
     private Clock clock=Clock.systemUTC();
     private final su.onno.crm.service.CrmConversationStatuses statuses;
-    private final su.onno.ui.UiMessages uiMessages;
+    private final su.onno.web.UiMessages uiMessages;
     public su.onno.crm.service.CrmChannelDefinition definition() { return new su.onno.crm.service.CrmChannelDefinition("INSTAGRAM","Instagram","/crm/channels/instagram.png"); }
     public InstagramBridge(InstagramClient client,JdbcTemplate jdbc,PlatformTransactionManager transactions,InboxRepository inboxes,
         ConversationRepository conversations,ConversationMessageRepository messages,
         ContactIdentityRepository identities,CrmContactService contacts,CrmWorkspaceService workspace, su.onno.crm.service.CrmConversationStatuses statuses,
-        su.onno.ui.UiMessages uiMessages,CrmChannelsProperties properties) {
+        su.onno.web.UiMessages uiMessages,CrmChannelsProperties properties) {
         this.statuses=statuses;this.uiMessages=uiMessages;this.settings=properties.getInstagram();
         this.client=client;this.jdbc=jdbc;this.tx=new TransactionTemplate(transactions);this.inboxes=inboxes;
         this.conversations=conversations;this.messages=messages;this.identities=identities;this.contacts=contacts;this.workspace=workspace;

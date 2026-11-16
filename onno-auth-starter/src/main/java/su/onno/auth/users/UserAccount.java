@@ -10,7 +10,7 @@ import java.util.UUID;
  * {@link UserStore#findCredentials(String)}.
  *
  * <p>The account is a login, not a business record. Link it to an employee/customer catalog record
- * the usual way, with {@code Layout.identity(Employee.class, "email")}: the identity catalog
+ * the usual way, with {@code @Bean IdentityLink.of(Employee.class, "email")}: the identity catalog
  * attribute is matched against {@link #username()}.
  *
  * @param id                     stable account id

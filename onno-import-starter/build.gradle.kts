@@ -4,7 +4,7 @@ plugins {
 
 dependencies {
     api(project(":onno-framework"))
-    implementation(project(":onno-ui-starter"))
+    implementation(project(":onno-web-starter"))
 
     implementation(libs.spring.boot.autoconfigure)
     implementation(libs.spring.boot.starter.web)

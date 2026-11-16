@@ -1,7 +1,7 @@
 package su.onno.desktop;
 
 /**
- * An authored desktop shell — the structural peer of {@link su.onno.ui.Layout}.
+ * An authored desktop shell — an app-level desktop configuration.
  * One {@code DesktopApp} bean describes how this onno application presents itself
  * as a native window: its title, window geometry, system-tray behaviour and the
  * splash shown while the embedded server boots.

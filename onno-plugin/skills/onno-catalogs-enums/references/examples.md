@@ -51,7 +51,7 @@ Notes:
 
 - `code`, `description`, `id`, `deletionMark`, and `isNew` come from `CatalogObject`.
 - If users search by a human name, decide whether to use inherited `description`, a custom `name`,
-  or both. Keep list/form labels explicit in the `EntityView`.
+  or both. Keep list/form labels explicit in the UI customization (`fields: { description: { label: "Name" } }`).
 - `Ref<ProductGroup>` stores only the target UUID. Resolve it with `RefResolver` only when you need
   the full target object in Java logic.
 

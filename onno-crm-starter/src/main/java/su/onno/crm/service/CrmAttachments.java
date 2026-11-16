@@ -11,10 +11,10 @@ import java.util.Objects;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import su.onno.crm.domain.ConversationMessage;
-import su.onno.ui.UiMessages;
-import su.onno.ui.media.LoadedMedia;
-import su.onno.ui.media.MediaProperties;
-import su.onno.ui.media.MediaStorage;
+import su.onno.web.UiMessages;
+import su.onno.web.media.LoadedMedia;
+import su.onno.web.media.MediaProperties;
+import su.onno.web.media.MediaStorage;
 
 /**
  * The files on a message.

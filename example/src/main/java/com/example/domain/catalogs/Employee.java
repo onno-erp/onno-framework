@@ -11,14 +11,14 @@ import lombok.Setter;
 
 /**
  * A member of staff. Doubles as the identity directory: a signed-in login is linked to its
- * {@code Employee} row by {@code email} (see {@link com.example.ui.layouts.MainLayout}), so the
+ * {@code Employee} row by {@code email} (see {@link com.example.IdentityConfiguration}), so the
  * person can be greeted and shown as a comment author, and an order can be assigned to them.
  *
  * <p>Writing employees is ADMIN-only — {@code @AccessControl} grants MANAGER read (so the order
  * "Assigned to" picker works) but reserves writes for ADMIN. The human label is the inherited
  * {@code description} (the person's name).</p>
  */
-@Catalog(name = "Employees", title = "Employee", codePrefix = "E-", context = "People")
+@Catalog(name = "Employees", codePrefix = "E-", context = "People")
 @AccessControl(readRoles = {"MANAGER", "ADMIN"}, writeRoles = {"ADMIN"})
 @Getter
 @Setter
@@ -30,9 +30,8 @@ public class Employee extends CatalogObject {
     @Attribute(displayName = "Position")
     private Position position = Position.BOOKSELLER;
 
-    /** Staff photo. Rendered as an avatar in the People list and, for the signed-in person, in the
-     *  shell's account block (see {@link com.example.ui.views.EmployeeView} — the {@code avatar}
-     *  widget marks this as the identity photo the framework reads). Stores an image URL. */
+    /** Staff photo (an image URL). Used as the avatar in the "Assign" row menu
+     *  ({@link com.example.commands.OrderCommands}) and the Employees list. */
     @Attribute(displayName = "Photo", length = 500)
     private String avatarUrl;
 }

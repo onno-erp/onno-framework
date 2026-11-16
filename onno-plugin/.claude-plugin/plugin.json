@@ -1,7 +1,7 @@
 {
   "name": "onno",
-  "description": "Skills for the onno-framework — the Java/Spring \"model-the-business\" ERP toolkit. Modeling catalogs/documents/registers, posting and validation rules, schema migration, generic UI, runtime API verification, and extension/connectors for apps on su.onno:onno-*.",
-  "version": "0.0.3",
+  "description": "Skills for the onno-framework — the Java/Spring \"model-the-business\" ERP toolkit. Modeling catalogs/documents/registers, posting and validation rules, commands, schema migration, the React UI (@onno/ui: entity customizations, pages, widgets), runtime API verification, and extension/connectors for apps on su.onno:onno-*.",
+  "version": "0.0.4",
   "author": {
     "name": "onno-erp",
     "url": "https://github.com/onno-erp"

@@ -13,7 +13,7 @@ import lombok.Setter;
  * {@link com.example.domain.documents.StockReceipt}. The human label is the inherited
  * {@code description} (the supplier's name).
  */
-@Catalog(name = "Suppliers", title = "Supplier", codePrefix = "SUP-", context = "Catalog")
+@Catalog(name = "Suppliers", codePrefix = "SUP-", context = "Catalog")
 @AccessControl(readRoles = {"MANAGER"}, writeRoles = {"MANAGER"})
 @Getter
 @Setter

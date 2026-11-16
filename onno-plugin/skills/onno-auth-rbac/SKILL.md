@@ -17,13 +17,13 @@ change.
 ## Rules
 
 - `/api/**` requires auth except configured public bootstrap endpoints.
-- **`onno.auth.public-paths` REPLACES the defaults — re-list all of them when overriding**, and add
-  custom anonymous `/api/**` SSO callback paths to both `public-paths` and `csrf-ignored-paths` in
-  cookie modes. Spring's normal `/login/oauth2/code/{registrationId}` callback is outside `/api/**`.
+- The framework's bootstrap paths are always public; add your own anonymous paths with
+  `onno.auth.additional-public-paths`, and custom anonymous `/api/**` SSO callback POSTs also to
+  `csrf-ignored-paths` in cookie modes. Spring's normal `/login/oauth2/code/{registrationId}` callback is outside `/api/**`.
   The full default list is in [references/gotchas.md](references/gotchas.md).
 - Prefer `onno.auth.mode: database` for any real app: accounts live in `onno_auth_user` and are
-  managed at runtime (`UserAccounts`, `/api/auth/users`, `type("users")` and `type("changePassword")`
-  widgets). `onno.auth.users` then only seeds an empty store once, and seeded accounts must change
+  managed at runtime (`/api/auth/users` and the `<UserAccounts />` / `<ChangePassword />`
+  components from `@onno/ui`). `onno.auth.users` then only seeds an empty store once, and seeded accounts must change
   their password at first sign-in. Never ship `admin`/`admin` in an `in-memory` config — it stays
   valid forever. Disabling, resetting, role changes and "sign out everywhere" end live sessions.
 - In the password modes (`in-memory`, `database`), when remember-me is enabled, a blank
@@ -43,12 +43,12 @@ change.
   bean: `RecordAccessPolicy.forCatalog(Tenant.class).appliesTo("CUSTOMER")
   .read(RecordScope.eq("owner", Subject.recordId()))`; `via("tenant")` scopes through a ref;
   `write(...)` defaults to read; `defaults(d -> d.set("owner", Subject.recordId()))` fills creates.
-  `Subject.recordId()` needs `Layout.identity(...)`. Out-of-scope records are 404, refs to them
+  `Subject.recordId()` needs an `IdentityLink` bean. Out-of-scope records are 404, refs to them
   render restricted. Startup rejects invalid/dead policies.
 - Typed repositories are NOT record-scoped (trusted code). Custom endpoints/actions/`@McpTool`s
   serving users take an `AccessSubject` (controller parameter, `ctx.subject()`) and check with
   `RecordAccess`; never pass `AccessSubject.system()` on a user's behalf.
-- Layout/page roles curate UI; entity access still gates data and API calls.
+- Page/nav `roles` in `defineApp` curate UI; entity access still gates data and API calls.
 - With password + ≥1 SSO provider configured, the login screen renders a method chooser first —
   extra providers come from `AuthMethodsContributor` beans (Telegram lives in
   onno-enterprise/onno-telegram-starter; broker mode via cloud.onno.su needs no client secret).

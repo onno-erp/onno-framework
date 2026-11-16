@@ -12,7 +12,7 @@ import su.onno.model.CatalogObject;
 import su.onno.crm.TestBindings;
 import su.onno.crm.domain.*;
 import su.onno.crm.repository.*;
-import su.onno.ui.UiAccessService;
+import su.onno.web.AccessService;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -27,7 +27,7 @@ class CrmHostBindingTest {
     Map<UUID,ContactIdentity> identityRows=new HashMap<>();
     ConversationRepository conversations=mock(ConversationRepository.class);
     ContactIdentityRepository identities=mock(ContactIdentityRepository.class);
-    UiAccessService access=mock(UiAccessService.class);
+    AccessService access=mock(AccessService.class);
     JdbcTemplate jdbc;
     CrmCatalogBinding<Guest> catalog;
     CrmWorkspaceService workspace;
@@ -40,7 +40,7 @@ class CrmHostBindingTest {
         jdbc=new JdbcTemplate(new DriverManagerDataSource("jdbc:h2:mem:"+UUID.randomUUID()+";DB_CLOSE_DELAY=-1","sa",""));
         guest=new Guest();guest.setId(UUID.randomUUID());guest.setDescription("Existing guest");guest.address="Lisbon";guests.put(guest.getId(),guest);
         catalog=new CrmCatalogBinding<>(Guest.class,id->Optional.ofNullable(guests.get(id)))
-                .field("postalAddress","Postal address","text",Guest::getMailingAddress).readableWhen((row,p)->recordsReadable);
+                .field("postalAddress",Guest::getMailingAddress).readableWhen((row,p)->recordsReadable);
         var binding=new CrmCustomerBinding<>(catalog,seed->{incomingCalls.incrementAndGet();return catalog.ref(guest.getId());});
         workspace=new CrmWorkspaceService(jdbc,new com.fasterxml.jackson.databind.ObjectMapper(),List.of(),binding,
                 TestBindings.noAgents(),CrmStateConfiguration.empty());workspace.initialize();
@@ -56,10 +56,10 @@ class CrmHostBindingTest {
         assertThat(contact.catalogName()).isEqualTo("HotelGuests");
         assertThat(contact.fields()).containsEntry("postalAddress","Lisbon").doesNotContainKeys("passport","stage","owner","email");
         assertThat(contact.canWrite()).isFalse();
-        assertThat(workspace.get().availableFields()).extracting(CrmWorkspaceService.DisplayField::key).contains("customer.postalAddress").doesNotContain("customer.stage");
+        assertThat(workspace.get().fields()).contains("customer.postalAddress").doesNotContain("customer.stage");
         assertThat(jdbc.queryForList("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='PUBLIC'",String.class))
                 .containsExactlyInAnyOrder("ONNO_CRM_CATALOG_BINDING","ONNO_CRM_CONTACT_GUARD","ONNO_CRM_CUSTOMER_REDIRECT");
-        assertThat(workspace.get().config().actions()).filteredOn(a->Set.of("assign","close","reopen").contains(a.key())).allMatch(a->!a.visible());
+        assertThat(workspace.get().config().actions()).doesNotContain("assign","close","reopen");
     }
     @Test void catalogAndRecordPermissionsCannotBeBypassedByInboxAccess() {
         when(access.canRead(viewer,"catalog","HotelGuests")).thenReturn(false);

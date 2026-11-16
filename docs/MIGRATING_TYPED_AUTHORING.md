@@ -2,76 +2,8 @@
 
 Use this checklist when upgrading an application or instructing a coding agent. The intended end
 state is that Java model fields are referenced by getters; strings remain only for semantic
-identifiers, derived wire columns, and expression text.
-
-## Entity views
-
-Give every view its entity type:
-
-```java
-final class OrderView implements EntityView<Order> {
-    public Class<Order> entity() { return Order.class; }
-
-    public void list(ListSpec<Order> list) {
-        list.columns(Order::getNumber, Order::getDate, Order::getStatus)
-                .sortBy(Order::getDate, true)
-                .groupable(Order::getStatus)
-                .filter(Order::getStatus).multiOptions();
-    }
-
-    public void fields(EntityConfigBuilder<Order> fields) {
-        fields.field(Order::getStatus).label("Status");
-        fields.rowField(Order::getItems, OrderLine::getQuantity).label("Qty");
-        fields.refField(Order::getCustomer)
-                .refSecondary(Customer::getPhone);
-    }
-}
-```
-
-Use `refField`/`rowRefField` when configuring a `Ref<T>` and then naming a field on `T`; this is what
-lets the compiler reject `Supplier::getEmail` on a `Ref<Customer>`. Related lists are typed through
-the owner and junction:
-
-```java
-fields.relatedList("orders", Order.class)
-        .via(Order::getCustomer)
-        .display(Order::getSalesperson)
-        .columns(Order::getStatus, Order::getTotal);
-```
-
-State-aware UI functions accept the same getters:
-
-```java
-list.rowStyle(row ->
-        row.enumValue(Order::getStatus, OrderStatus.class) == OrderStatus.CANCELLED
-                ? ListSpec.RowStyle.MUTED : null);
-```
-
-For live form validation, use header getters and typed tabular paths:
-
-```java
-fields.validation("schedule", ScheduleValidator.class)
-        .dependsOn(Event::getStartsAt, Event::getEndsAt)
-        .andDependsOn(Event::getParticipants, Participant::getEmployee);
-```
-
-## Pages and widgets
-
-Select actual model fields with dedicated typed methods:
-
-```java
-b.widget("Revenue").type("chart").document(Order.class)
-        .dateField(Order::getDate)
-        .groupBy(Order::getStatus)
-        .metricField(Order::getTotal);
-```
-
-The resolver converts Java names to the preferred logical REST keys at the boundary (`date` →
-`date`, `startsAt` → `startsAt`); legacy storage-column strings such as `_date` and `starts_at`
-remain accepted and normalize to the same logical keys for catalog/document widgets. Registers
-retain their storage-shaped projection. Keep `config(...)` for widget behavior (`kind`, `currency`,
-`groupByDate`) and custom-widget contracts. A derived response key such as `statusDisplay` has no
-Java getter and therefore remains an explicit string.
+identifiers and derived wire columns. (Presentation is not Java: it is the React app in
+`src/main/ui`, typed from the generated `model.gen.ts` — see [onno-ui](../onno-ui/README.md).)
 
 ## Queries and registers
 
@@ -140,8 +72,8 @@ The employee record UUID—not its mutable login/email—is persisted as the own
 Instances, transition history, candidates, claims, delegation reasons, task audit events, and
 completions are durable. A claimed task's assignee can call
 `engine.delegate(workItemId, targetIdentity, reason, actor)`. HTTP callers select the
-`targetActorId` returned by `/api/task-assignees`. Put
-`b.widget("My tasks").type("tasks")` on a page for the human inbox. Headless clients use
+`targetActorId` returned by `/api/task-assignees`. Render
+`@onno/ui`'s `<TaskInbox />` on a page for the human inbox. Headless clients use
 `/api/processes/**` and `/api/tasks/**`; only the JSON completion boundary uses an enum constant
 name string.
 
@@ -184,10 +116,10 @@ tokens, and subprocess descendants with an audit trail.
 
 ## Strings that intentionally remain
 
-- route, action, role, stable process, and widget type keys;
+- command, role and stable process keys;
 - external authentication subjects when no identity catalog is configured;
 - human labels, hints, and formatting patterns;
-- parsed filter expressions and their runtime values;
+- dot paths into tabular sections (`"participants.employee"`);
 - derived/synthetic wire keys such as `statusDisplay`;
 - dynamic metadata loaded at runtime, using the documented unsafe string overloads.
 

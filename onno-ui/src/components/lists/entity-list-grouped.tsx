@@ -1,0 +1,576 @@
+import { useEntityChanges } from "../../lib/query";
+import { openRoute } from "../../lib/navigation";
+import { ListSelectionCheckbox, selectLoaded } from "./list-selection-checkbox";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type Ref, type SetStateAction } from "react";
+import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { cn, enumPillStyle, rowStyleClass } from "../../lib/utils";
+import { formatValue } from "../../lib/cell-format";
+import type { EntityRecord } from "../../lib/types";
+import type { RowTone } from "../../lib/entity-customizations";
+import { useMessages } from "../../providers/messages-provider";
+import {
+  ListCell,
+  PickRowBadge,
+  ROW_H,
+  entityRowId,
+  entityRowTone,
+  type ListAggregate,
+  type ListColumn,
+  type ListSelectMode,
+} from "./entity-list";
+
+/** One expand filter param a group header carries; the flat feed replays it to load the group's rows. */
+type ExpandParam = { op: string; column: string; value: string };
+/** One group header from `/groups`: its label (+ optional enum colour), row count, subtotals, expand. */
+type GroupHeader = {
+  label: string;
+  color?: string;
+  count: number;
+  values: (number | string | null)[];
+  expand: ExpandParam[];
+};
+/** Per-group lazy row state: the loaded rows, the cursor for the next window, and load flags. */
+type GroupRows = { rows: EntityRecord[]; cursor: string | null; hasMore: boolean; loading: boolean };
+
+/**
+ * The grouped rendering of a list: one collapsible header per {@code GROUP BY} value (or date
+ * bucket) fetched from {@code /api/list/{kind}/{name}/groups}, each showing the group's row count and
+ * any declared subtotals. Expanding a header lazily loads that group's rows through the normal feed —
+ * the server hands each group the exact filter (an {@code eq}, or a {@code ge}/{@code le} range for a
+ * date bucket) to replay — and a "Show more" appends the next window. The same search/filters/sort as
+ * the flat list are carried in {@code paramsBase}, so grouping narrows the same result set.
+ */
+export function GroupedList({
+  feedBase,
+  kind,
+  name,
+  columns,
+  template,
+  minTableWidth,
+  leftPad,
+  aggregates,
+  groupsExpanded,
+  groupBy,
+  granularity,
+  paramsBase,
+  pageSize,
+  openable,
+  canWrite,
+  surfaceMode,
+  fill,
+  scrollCap,
+  scrollRef,
+  selected,
+  setSelected,
+  clearSelection,
+  selectionCheckboxes = false,
+  allSelectionState,
+  selectingAll,
+  toggleAllSelection,
+  openRowMenu,
+  selectMode,
+  rowStyle,
+}: {
+  /** The app's conditional row tint. */
+  rowStyle?: (row: EntityRecord) => RowTone;
+  feedBase: string;
+  kind: string;
+  name: string;
+  columns: ListColumn[];
+  template: string;
+  minTableWidth: number;
+  leftPad: string;
+  aggregates: ListAggregate[];
+  groupsExpanded?: boolean;
+  groupBy: string;
+  granularity: string;
+  paramsBase: string;
+  pageSize: number;
+  openable: boolean;
+  /** Viewer's RBAC write access — stamped onto rows so the shell's fallback row menu hides write actions. */
+  canWrite: boolean;
+  surfaceMode: boolean;
+  fill: boolean;
+  scrollCap: number;
+  scrollRef: Ref<HTMLDivElement>;
+  /** Batch selection, shared with the list so the toolbar chip / batch menu / ⌘-shortcuts see it. */
+  selectionCheckboxes?: boolean;
+  allSelectionState: boolean | "indeterminate";
+  selectingAll: boolean;
+  toggleAllSelection: (checked: boolean) => void;
+  selected: Set<string>;
+  setSelected: Dispatch<SetStateAction<Set<string>>>;
+  clearSelection: () => void;
+  /** Opens the list-level row context menu (built-ins + record commands + batch ops). */
+  openRowMenu: (menu: { x: number; y: number; id: string; url: string; row: EntityRecord; only?: string }) => void;
+  /** Reference-picker mode (#411): rows highlight and activate instead of opening. */
+  selectMode?: ListSelectMode;
+}) {
+  const t = useMessages();
+  const [groups, setGroups] = useState<GroupHeader[] | null>(null);
+  const [capped, setCapped] = useState(false);
+  // Set when a fresh set of headers lands and groupsExpanded is on; cleared once opened.
+  const autoExpand = useRef(false);
+  // Loaded rows per expanded group, keyed by group index; absent = collapsed.
+  const [expanded, setExpanded] = useState<Record<number, GroupRows>>({});
+  const selectModeRef = useRef(selectMode);
+  selectModeRef.current = selectMode;
+  const aggSig = JSON.stringify(aggregates);
+
+  // (Re)fetch the group headers whenever the grouping, granularity, or the shared query changes.
+  useEffect(() => {
+    let alive = true;
+    setGroups(null);
+    setExpanded({});
+    const p = new URLSearchParams(paramsBase);
+    p.set("groupBy", groupBy);
+    if (granularity) p.set("granularity", granularity);
+    for (const a of aggregates) p.append("agg", `${a.fn},${a.columnName}`);
+    fetch(`${feedBase}/groups?${p.toString()}`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data: { groups: GroupHeader[]; capped: boolean }) => {
+        if (!alive) return;
+        setGroups(data.groups ?? []);
+        setCapped(data.capped);
+        // groupsExpanded: these headers are a fresh set, so the bands are due to be
+        // opened once. The effect below owns that (it needs loadGroupRows, declared later), and
+        // the flag keeps a live refresh from re-opening a band the viewer has since collapsed.
+        autoExpand.current = !!groupsExpanded;
+      })
+      .catch(() => {
+        if (alive) {
+          setGroups([]);
+          setCapped(false);
+        }
+      });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedBase, groupBy, granularity, paramsBase, aggSig, groupsExpanded]);
+
+  // Live updates: the flat table patches/reloads itself off the entity's change signal, but this
+  // grouped view owns its own data, so it must listen too — otherwise a grouped-by-default list
+  // (e.g. defaultGroupBy) never reflects row changes. A change soft-refreshes: group headers
+  // (counts/subtotals shift) are refetched, and every expanded group reloads its first window while
+  // keeping its old rows on screen (no skeleton flash). Expansion is carried across by group label,
+  // since an insert/delete can shift group indexes.
+  const groupsRef = useRef(groups);
+  groupsRef.current = groups;
+  const expandedRef = useRef(expanded);
+  expandedRef.current = expanded;
+  const [liveTick, setLiveTick] = useState(0);
+  useEntityChanges(`${kind}/${name}`, () => setLiveTick((tick) => tick + 1));
+
+  // Fetch a window of a group's rows (first window or, with a cursor, the next) and splice it in.
+  const loadGroupRows = useCallback(
+    (index: number, group: GroupHeader, cursor: string | null) => {
+      const p = new URLSearchParams(paramsBase);
+      for (const e of group.expand) p.append(e.op, `${e.column},${e.value}`);
+      p.set("limit", String(pageSize));
+      if (cursor) p.set("cursor", cursor);
+      fetch(`${feedBase}?${p.toString()}`, { credentials: "include" })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+        .then((data: { rows: EntityRecord[]; nextCursor: string | null; hasMore: boolean }) => {
+          if (data.rows?.length) selectModeRef.current?.onRowsLoaded?.(data.rows);
+          setExpanded((prev) => {
+            const cur = prev[index];
+            if (!cur) return prev; // collapsed while the fetch was in flight
+            return {
+              ...prev,
+              [index]: {
+                rows: cursor ? [...cur.rows, ...(data.rows ?? [])] : data.rows ?? [],
+                cursor: data.nextCursor ?? null,
+                hasMore: data.hasMore,
+                loading: false,
+              },
+            };
+          });
+        })
+        .catch(() =>
+          setExpanded((prev) => {
+            const cur = prev[index];
+            return cur ? { ...prev, [index]: { ...cur, loading: false, hasMore: false } } : prev;
+          })
+        );
+    },
+    [feedBase, paramsBase, pageSize]
+  );
+
+  // Open every band of a freshly loaded header set when groupsExpanded is on. Runs after
+  // loadGroupRows is defined, and only while the flag the header fetch set is still standing — so
+  // a live refresh, or a band the viewer collapsed, is never re-opened behind their back.
+  useEffect(() => {
+    if (!autoExpand.current || !groups) return;
+    autoExpand.current = false;
+    const initial: Record<number, GroupRows> = {};
+    groups.forEach((group, index) => {
+      if (group.expand.length === 0) return; // a null group isn't expandable, as when clicked
+      initial[index] = { rows: [], cursor: null, hasMore: true, loading: true };
+    });
+    if (Object.keys(initial).length === 0) return;
+    setExpanded(initial);
+    groups.forEach((group, index) => {
+      if (initial[index]) loadGroupRows(index, group, null);
+    });
+  }, [groups, loadGroupRows]);
+
+  // The soft refresh a live event triggers (see the listener above). Distinct from the hard-reset
+  // header effect: it never blanks `groups`, so the visible bands stay put until fresh data lands.
+  useEffect(() => {
+    if (liveTick === 0) return;
+    let alive = true;
+    const p = new URLSearchParams(paramsBase);
+    p.set("groupBy", groupBy);
+    if (granularity) p.set("granularity", granularity);
+    for (const a of aggregates) p.append("agg", `${a.fn},${a.columnName}`);
+    fetch(`${feedBase}/groups?${p.toString()}`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data: { groups: GroupHeader[]; capped: boolean }) => {
+        if (!alive) return;
+        const fresh = data.groups ?? [];
+        // Carry each expanded group across by label; its stale rows stay visible while reloading.
+        const oldGroups = groupsRef.current ?? [];
+        const oldRowsByLabel = new Map<string, EntityRecord[]>();
+        for (const [idx, state] of Object.entries(expandedRef.current)) {
+          const label = oldGroups[Number(idx)]?.label;
+          if (label != null) oldRowsByLabel.set(label, state.rows);
+        }
+        const next: Record<number, GroupRows> = {};
+        setGroups(fresh);
+        setCapped(data.capped);
+        fresh.forEach((g, i) => {
+          if (!oldRowsByLabel.has(g.label) || g.expand.length === 0) return;
+          next[i] = { rows: oldRowsByLabel.get(g.label)!, cursor: null, hasMore: true, loading: true };
+        });
+        setExpanded(next);
+        fresh.forEach((g, i) => {
+          if (next[i]) loadGroupRows(i, g, null);
+        });
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveTick]);
+
+  // Flattened render-order view of every expanded group's rows: the id list drives Shift-range
+  // selection (a range can span group boundaries, exactly the visual order), and the per-group
+  // offsets give each row its absolute index. Expanding/collapsing shifts indexes, so the anchor
+  // resets whenever the headers reload (below).
+  const flat = useMemo(() => {
+    const ids: string[] = [];
+    const offsets: Record<number, number> = {};
+    (groups ?? []).forEach((_, i) => {
+      const st = expanded[i];
+      if (!st) return;
+      offsets[i] = ids.length;
+      for (const r of st.rows) ids.push(entityRowId(r) ?? "");
+    });
+    return { ids, offsets };
+  }, [groups, expanded]);
+  const selAnchorRef = useRef<number | null>(null);
+  useEffect(() => {
+    selAnchorRef.current = null;
+  }, [groups]);
+
+  const toggle = useCallback(
+    (index: number, group: GroupHeader) => {
+      if (group.expand.length === 0) return; // a null group isn't expandable
+      setExpanded((prev) => {
+        if (prev[index]) {
+          const next = { ...prev };
+          delete next[index];
+          return next;
+        }
+        loadGroupRows(index, group, null);
+        return { ...prev, [index]: { rows: [], cursor: null, hasMore: true, loading: true } };
+      });
+    },
+    [loadGroupRows]
+  );
+
+  return (
+    <div
+      className={cn(
+        // On a route surface the card sizes to its groups and only shrinks (min-h-0, no grow)
+        // when they overflow — a short list ends at its last row, not the window bottom.
+        // Explicit fill lists instead grow to consume the remaining surface height.
+        // The card chrome sits here, not on the scroller below: a classic, space-occupying
+        // scrollbar is painted in the scroller's own gutter and `border-radius` on that same
+        // element does not clip it, so the bar squares off the corners it runs past. Clipping
+        // takes an ancestor, hence rounded + overflow-hidden here and a plain scroller inside.
+        "flex flex-col overflow-hidden rounded-card border border-border bg-card",
+        surfaceMode && "min-h-0",
+        fill && "flex-1"
+      )}
+    >
+      <div
+        ref={scrollRef}
+        className={cn(
+          "overflow-auto overscroll-contain",
+          surfaceMode && "min-h-0 flex-1"
+        )}
+        style={surfaceMode ? undefined : { maxHeight: scrollCap }}
+      >
+        <div className="w-full" style={{ minWidth: minTableWidth }}>
+          {/* column labels (non-interactive in grouped view — sort still comes from the toolbar) */}
+          <div
+            className={cn("sticky top-0 z-10 grid items-center gap-3 rounded-t-card border-b border-border bg-card py-2.5", leftPad)}
+            style={{ gridTemplateColumns: template }}
+          >
+            {selectionCheckboxes ? <ListSelectionCheckbox label={t("list.selectAll")}
+              disabled={selectingAll || groups == null || groups.length === 0}
+              checked={allSelectionState}
+              onChange={toggleAllSelection}
+            /> : null}
+            {columns.map((c) => (
+              <span key={c.columnName} className="truncate text-xs font-medium text-muted-foreground">
+                {c.label}
+              </span>
+            ))}
+          </div>
+
+          {groups == null ? (
+            Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className={cn("border-b border-border/50 py-3", leftPad)}>
+                <span className="block h-3.5 w-40 rounded bg-muted/60" />
+              </div>
+            ))
+          ) : groups.length === 0 ? (
+            <div className="px-4 py-10 text-center text-sm text-muted-foreground">{t("empty.noRecords")}</div>
+          ) : (
+            groups.map((g, i) => {
+              const state = expanded[i];
+              const open = !!state;
+              const expandable = g.expand.length > 0;
+              const pill = enumPillStyle(g.color);
+              return (
+                // Each group is its own block so the sticky band's containing block ends with the
+                // group — the band un-sticks (gets pushed out by the next band) when its rows
+                // scroll past, instead of every band piling up at the sticky offset forever.
+                <div key={i}>
+                  {/* group header band */}
+                  <button
+                    type="button"
+                    onClick={() => toggle(i, g)}
+                    disabled={!expandable}
+                    className={cn(
+                      // The band sticks below the column header, so rows scroll underneath it — its
+                      // background must be opaque or they show through. color-mix bakes the old
+                      // muted/40 (and /70 hover) tints over the card color into solid colors.
+                      "flex w-full items-center gap-2 border-b border-border/60 px-4 py-2 text-left text-sm",
+                      "bg-[color-mix(in_srgb,hsl(var(--muted))_40%,hsl(var(--card)))]",
+                      "hover:bg-[color-mix(in_srgb,hsl(var(--muted))_70%,hsl(var(--card)))]",
+                      "disabled:cursor-default disabled:hover:bg-[color-mix(in_srgb,hsl(var(--muted))_40%,hsl(var(--card)))]",
+                      // 1px under the 37px column header (which sits above at z-10), so no slit of
+                      // scrolling row pixels shows between the two sticky layers.
+                      "sticky top-[36px] z-[9]"
+                    )}
+                    style={{ minHeight: ROW_H }}
+                  >
+                    {expandable ? (
+                      open ? (
+                        <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                      )
+                    ) : (
+                      <span className="size-4 shrink-0" />
+                    )}
+                    {pill && g.label ? (
+                      <span className="truncate rounded-control px-2 py-0.5 text-xs font-medium" style={pill}>
+                        {g.label}
+                      </span>
+                    ) : (
+                      <span className="truncate font-medium text-foreground">{g.label || t("list.all")}</span>
+                    )}
+                    <span className="shrink-0 rounded-control bg-background px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
+                      {g.count}
+                    </span>
+                    {aggregates.length ? (
+                      // Anchored next to the count (not far-right) so it stays visible without
+                      // horizontally scrolling a wide table.
+                      <span className="flex shrink-0 items-center gap-3 pl-2 text-xs text-muted-foreground">
+                        {aggregates.map((a, ai) => {
+                          const raw = g.values[ai];
+                          if (raw == null) return null;
+                          const shown = formatValue(String(raw), a.format) ?? String(raw);
+                          return (
+                            <span key={a.columnName + ai} className="tabular-nums">
+                              <span className="opacity-70">{a.label}:</span> {shown}
+                            </span>
+                          );
+                        })}
+                      </span>
+                    ) : null}
+                  </button>
+
+                  {/* the group's rows, lazily loaded — same selection / context-menu grammar as the
+                      flat table: ⌘/Ctrl toggles, Shift ranges over the flattened render order
+                      (across group boundaries), right-click opens the list's row menu. */}
+                  {open && state.rows.map((row, ri) => {
+                    const absIdx = (flat.offsets[i] ?? 0) + ri;
+                    const rowId = openable ? entityRowId(row) : null;
+                    const url = rowId ? `onno://${kind}/${name}/${rowId}` : undefined;
+                    const isSelected = rowId != null && selected.has(rowId);
+                    if (selectMode) {
+                      // Select mode (#411): the same pick grammar as the flat table.
+                      const pick = selectMode.rowState?.(row);
+                      if (pick?.hidden) return null;
+                      const highlighted = rowId != null && rowId === selectMode.highlightedId;
+                      return (
+                        <div
+                          key={ri}
+                          role="option"
+                          aria-selected={highlighted}
+                          aria-disabled={pick?.disabled || undefined}
+                          data-onno-pick-row={rowId ?? ""}
+                          data-onno-selected={highlighted ? "true" : undefined}
+                          title={pick?.reason || undefined}
+                          onClick={() => selectMode.onHighlight(row)}
+                          onDoubleClick={() => {
+                            if (!pick?.disabled) selectMode.onActivate(row);
+                          }}
+                          onContextMenu={(e) => e.preventDefault()}
+                          className={cn(
+                            "relative grid cursor-pointer select-none items-center gap-3 border-b border-border/50 text-sm",
+                            leftPad,
+                            !highlighted && rowStyleClass(entityRowTone(row, rowStyle)),
+                            pick?.disabled && "cursor-not-allowed opacity-55"
+                          )}
+                          style={{ minHeight: ROW_H, gridTemplateColumns: template }}
+                        >
+                          {columns.map((c) => {
+                            const text = selectMode.cellText?.(row, c);
+                            return text !== undefined
+                              ? <span key={c.columnName} className="min-w-0 truncate text-muted-foreground">{text}</span>
+                              : <ListCell key={c.columnName} row={row} col={c} />;
+                          })}
+                          <PickRowBadge pick={pick} />
+                        </div>
+                      );
+                    }
+                    return (
+                      <div
+                        key={ri}
+                        data-onno-row={url}
+                        data-onno-selected={isSelected ? "true" : undefined}
+                        // "0" hides write actions in the shell's fallback row menu / shortcuts.
+                        data-onno-row-writable={canWrite ? undefined : "0"}
+                        // Shift-click extends the selection — suppress the browser's text-range drag.
+                        onMouseDown={(e) => {
+                          if (e.shiftKey && rowId) e.preventDefault();
+                        }}
+                        onClick={(e) => {
+                          if (rowId && (e.metaKey || e.ctrlKey || e.shiftKey)) {
+                            e.preventDefault();
+                            setSelected((prev) => {
+                              const next = new Set(prev);
+                              if (e.shiftKey && selAnchorRef.current != null) {
+                                const lo = Math.min(selAnchorRef.current, absIdx);
+                                const hi = Math.max(selAnchorRef.current, absIdx);
+                                for (let j = lo; j <= hi; j++) {
+                                  const id = flat.ids[j];
+                                  if (id) next.add(id);
+                                }
+                              } else {
+                                if (next.has(rowId)) next.delete(rowId);
+                                else next.add(rowId);
+                                selAnchorRef.current = absIdx;
+                              }
+                              return next;
+                            });
+                            if (selAnchorRef.current == null) selAnchorRef.current = absIdx;
+                            return;
+                          }
+                          if (selected.size) {
+                            clearSelection();
+                            return;
+                          }
+                          if (url) openRoute(url);
+                        }}
+                        onContextMenu={(e) => {
+                          if (!url || !rowId) return; // keep the browser menu for non-openable rows
+                          // Yield to an active text selection, like the flat table does.
+                          const sel = window.getSelection();
+                          if (sel && !sel.isCollapsed && sel.toString().trim()) return;
+                          // preventDefault keeps the browser's own context menu closed.
+                          e.preventDefault();
+                          openRowMenu({ x: e.clientX, y: e.clientY, id: rowId, url, row });
+                        }}
+                        className={cn(
+                          "grid items-center gap-3 border-b border-border/50 text-sm",
+                          url && "cursor-pointer",
+                          leftPad,
+                          // Conditional formatting (`style`, with `_style` compatibility) replaces
+                          // the zebra stripe when set;
+                          // selection still wins over both.
+                          !isSelected && rowStyleClass(entityRowTone(row, rowStyle)),
+                          ri % 2 === 1 && !isSelected && !rowStyleClass(entityRowTone(row, rowStyle)) && "bg-muted/20",
+                          isSelected && "bg-primary/10"
+                        )}
+                        style={{ minHeight: ROW_H, gridTemplateColumns: template }}
+                      >
+                        {selectionCheckboxes ? <ListSelectionCheckbox
+                          label={t("list.selectRow", { row: String(row.description ?? row._description ?? row[columns[0]?.columnName] ?? absIdx + 1) })}
+                          disabled={!rowId} checked={isSelected}
+                          onChange={checked => {
+                            if (!rowId) return;
+                            selAnchorRef.current = absIdx;
+                            setSelected(prev => selectLoaded(prev, [rowId], checked));
+                          }}
+                        /> : null}
+                        {columns.map((c) =>
+                          c.cellMenu && rowId && url ? (
+                            // A column's `cellMenu`: right-clicking this cell opens just its submenu's
+                            // choices — same shortcut the flat table offers.
+                            <span
+                              key={c.columnName}
+                              className="flex min-w-0 items-center"
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                openRowMenu({ x: e.clientX, y: e.clientY, id: rowId, url, row, only: c.cellMenu });
+                              }}
+                            >
+                              <ListCell row={row} col={c} />
+                            </span>
+                          ) : (
+                            <ListCell key={c.columnName} row={row} col={c} />
+                          )
+                        )}
+                      </div>
+                    );
+                  })}
+                  {open && state.loading ? (
+                    <div className={cn("flex items-center gap-2 border-b border-border/50 py-2.5 text-xs text-muted-foreground", leftPad)}>
+                      <Loader2 className="size-4 animate-spin" /> {t("list.loadingMore")}
+                    </div>
+                  ) : open && state.hasMore ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExpanded((prev) => (prev[i] ? { ...prev, [i]: { ...prev[i], loading: true } } : prev));
+                        loadGroupRows(i, g, state.cursor);
+                      }}
+                      className={cn("w-full border-b border-border/50 py-2.5 text-left text-xs font-medium text-primary hover:underline", leftPad)}
+                    >
+                      {t("list.showMore")}
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+      {capped ? (
+        <div className="border-t border-border bg-card px-4 py-2 text-xs text-muted-foreground">
+          {t("list.groupsCapped")}
+        </div>
+      ) : null}
+    </div>
+  );
+}

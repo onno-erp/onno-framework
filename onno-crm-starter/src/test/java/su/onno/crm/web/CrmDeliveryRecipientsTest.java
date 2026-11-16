@@ -12,9 +12,9 @@ import su.onno.crm.domain.Conversation;
 import su.onno.crm.repository.ContactIdentityRepository;
 import su.onno.crm.repository.ConversationRepository;
 import su.onno.crm.service.*;
-import su.onno.ui.CurrentUserResolver;
-import su.onno.ui.UiAccessService;
-import su.onno.ui.comments.CommentAuthorAvatars;
+import su.onno.web.CurrentUserResolver;
+import su.onno.web.AccessService;
+import su.onno.web.comments.CommentAuthorAvatars;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -30,7 +30,7 @@ class CrmDeliveryRecipientsTest {
         conversation.setId(UUID.randomUUID()); conversation.setCustomer(UUID.randomUUID()); conversation.setChannel(Channel.EMAIL);
         var conversations = mock(ConversationRepository.class);
         when(conversations.findActiveById(conversation.getId())).thenReturn(Optional.of(conversation));
-        var access = mock(UiAccessService.class);
+        var access = mock(AccessService.class);
         when(access.roles(alice)).thenReturn(Set.of("SUPPORT"));
         var accounts = mock(CrmConnectionAccounts.class);
         when(accounts.hiddenInboxes(alice)).thenReturn(Set.of(personal));
@@ -71,7 +71,7 @@ class CrmDeliveryRecipientsTest {
         conversation.setId(UUID.randomUUID()); conversation.setCustomer(UUID.randomUUID()); conversation.setChannel(Channel.EMAIL);
         var conversations = mock(ConversationRepository.class);
         when(conversations.findActiveById(conversation.getId())).thenReturn(Optional.of(conversation));
-        var access = mock(UiAccessService.class);
+        var access = mock(AccessService.class);
         when(access.roles(alice)).thenReturn(Set.of("SUPPORT"));
         var contacts = su.onno.crm.TestBindings.readableContacts();
         when(contacts.canonical(any())).thenAnswer(call -> call.getArgument(0));

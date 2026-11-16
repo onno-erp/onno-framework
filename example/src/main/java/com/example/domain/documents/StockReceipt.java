@@ -24,7 +24,7 @@ import java.util.List;
  * receipt into {@link BookStock}, raising the copies on hand. The counterpart to an
  * {@link Order}, which takes copies back out.
  */
-@Document(name = "Stock Receipts", title = "Stock receipt", numberPrefix = "SR-", context = "Inventory")
+@Document(name = "Stock Receipts", numberPrefix = "SR-", context = "Inventory")
 @AccessControl(readRoles = {"MANAGER"}, writeRoles = {"MANAGER"})
 @Getter
 @Setter

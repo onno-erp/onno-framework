@@ -4,7 +4,7 @@ import java.util.function.Consumer;
 
 /**
  * The builder a {@link DesktopApp} configures. Mirrors the
- * {@link su.onno.ui.LayoutSpec} style: fluent top-level setters plus nested
+ * {@code LayoutSpec} style: fluent top-level setters plus nested
  * builders supplied as lambdas. Produces an immutable {@link DesktopManifest}
  * the shell reads at boot.
  */

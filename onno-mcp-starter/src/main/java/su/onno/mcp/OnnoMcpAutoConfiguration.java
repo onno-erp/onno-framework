@@ -5,14 +5,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.process.ProcessDefinitions;
-import su.onno.ui.CatalogCommandService;
-import su.onno.ui.CatalogQueryService;
-import su.onno.ui.DocumentCommandService;
-import su.onno.ui.DocumentQueryService;
-import su.onno.ui.RegisterQueryService;
-import su.onno.ui.UiAccessService;
-import su.onno.ui.UiProperties;
-import su.onno.ui.UiAutoConfiguration;
+import su.onno.web.CatalogCommandService;
+import su.onno.web.CatalogQueryService;
+import su.onno.web.DocumentCommandService;
+import su.onno.web.DocumentQueryService;
+import su.onno.web.RegisterQueryService;
+import su.onno.web.AccessService;
+import su.onno.web.WebProperties;
+import su.onno.web.UiAutoConfiguration;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper;
@@ -42,8 +42,9 @@ import java.util.Map;
  *
  * <p>Mounts a Model Context Protocol streamable-HTTP endpoint that exposes the
  * application's metadata-driven business model as tools. Tools are generated generically
- * from the {@link MetadataRegistry} and every call is enforced through the same
- * {@link UiAccessService} role model as the web UI, running as the authenticated user
+ * from the {@link MetadataRegistry} (plus one tool per entity command, see
+ * {@link CommandToolProvider}) and every call is enforced through the same
+ * {@link AccessService} role model as the web UI, running as the authenticated user
  * captured by {@link McpPrincipalContext}.
  *
  * <p>Requires Spring Security on the classpath (the identity bridge has no meaning
@@ -74,17 +75,26 @@ public class OnnoMcpAutoConfiguration {
     public MetadataToolFactory metadataToolFactory(
                                                    MetadataRegistry registry,
                                                    ProcessDefinitions processDefinitions,
-                                                   UiAccessService access,
+                                                   AccessService access,
                                                    CatalogQueryService catalogQuery,
                                                    DocumentQueryService documentQuery,
                                                    RegisterQueryService registerQuery,
                                                    CatalogCommandService catalogCommands,
                                                    DocumentCommandService documentCommands,
-                                                   OnnoMcpProperties properties, UiProperties uiProperties,
+                                                   OnnoMcpProperties properties, WebProperties webProperties,
                                                    McpJsonMapper json) {
         return new MetadataToolFactory(registry, processDefinitions, access,
                 catalogQuery, documentQuery, registerQuery,
-                catalogCommands, documentCommands, properties, uiProperties, json);
+                catalogCommands, documentCommands, properties, webProperties, json);
+    }
+
+    /** Every static entity command as a tool, run through the shared {@code CommandService}. */
+    @Bean
+    @ConditionalOnBean(su.onno.web.CommandService.class)
+    public CommandToolProvider commandToolProvider(MetadataRegistry registry,
+                                                   su.onno.web.CommandService commandService,
+                                                   OnnoMcpProperties properties, McpJsonMapper json) {
+        return new CommandToolProvider(registry, commandService, properties, json);
     }
 
     /** Read-only {@code period_close_status} tool, when period close is enabled. */
@@ -97,16 +107,16 @@ public class OnnoMcpAutoConfiguration {
 
     @Bean
     public McpToolProvider annotatedMcpToolProvider(ConfigurableListableBeanFactory beanFactory,
-                                                   OnnoMcpProperties properties, UiProperties uiProperties,
+                                                   OnnoMcpProperties properties, WebProperties webProperties,
                                                    McpJsonMapper json) {
-        return new AnnotatedMcpToolProvider(beanFactory, properties, uiProperties, json);
+        return new AnnotatedMcpToolProvider(beanFactory, properties, webProperties, json);
     }
 
     @Bean
     @ConditionalOnMissingBean
     public HttpServletStreamableServerTransportProvider onnoMcpTransportProvider(
             McpJsonMapper json, OnnoMcpProperties properties,
-            org.springframework.beans.factory.ObjectProvider<su.onno.ui.AccessSubjectResolver> subjects) {
+            org.springframework.beans.factory.ObjectProvider<su.onno.web.AccessSubjectResolver> subjects) {
         return HttpServletStreamableServerTransportProvider.builder()
                 .jsonMapper(json)
                 .mcpEndpoint(properties.getEndpoint())

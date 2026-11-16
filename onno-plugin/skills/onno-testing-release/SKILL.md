@@ -17,9 +17,9 @@ Use the narrowest useful command while iterating, then broaden before handing of
 ```bash
 ./gradlew :onno-framework:test
 ./gradlew :onno-framework-starter:compileJava
-./gradlew :onno-ui-starter:test :onno-ui-starter:testFrontend
-./gradlew :onno-ui-starter:buildFrontend
-./gradlew :onno-ui-starter:compileJava
+./gradlew :onno-web-starter:test :onno-web-starter:testFrontend
+./gradlew :onno-web-starter:buildFrontend
+./gradlew :onno-web-starter:compileJava
 ./gradlew clean check
 ./gradlew publishToMavenLocal aggregateJavadoc
 ```

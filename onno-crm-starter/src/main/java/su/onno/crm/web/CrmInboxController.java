@@ -18,9 +18,9 @@ import su.onno.crm.domain.Conversation;
 import su.onno.crm.domain.ConversationMessage;
 import su.onno.crm.service.ConversationService;
 import su.onno.crm.service.CrmAgentIdentityResolver;
-import su.onno.ui.CurrentUserResolver;
-import su.onno.ui.UiAccessService;
-import su.onno.ui.comments.CommentAuthorAvatars;
+import su.onno.web.CurrentUserResolver;
+import su.onno.web.AccessService;
+import su.onno.web.comments.CommentAuthorAvatars;
 
 import java.util.Map;
 import java.util.Objects;
@@ -33,7 +33,7 @@ public class CrmInboxController {
     private final ConversationService service;
     private final CurrentUserResolver currentUsers;
     private final CrmAgentIdentityResolver agentIdentities;
-    private final UiAccessService access;
+    private final AccessService access;
     private final su.onno.crm.service.CrmInboxWorkspaceService workspaces;
     private final CommentAuthorAvatars authorAvatars;
     private final su.onno.crm.service.CrmAttachments attachments;
@@ -44,7 +44,7 @@ public class CrmInboxController {
             ConversationService service,
             CurrentUserResolver currentUsers,
             CrmAgentIdentityResolver agentIdentities,
-            UiAccessService access, su.onno.crm.service.CrmInboxWorkspaceService workspaces,
+            AccessService access, su.onno.crm.service.CrmInboxWorkspaceService workspaces,
             CommentAuthorAvatars authorAvatars,
             su.onno.crm.service.CrmAttachments attachments,
             su.onno.crm.repository.ContactIdentityRepository identities,

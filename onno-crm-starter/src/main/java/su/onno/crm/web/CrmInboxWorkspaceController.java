@@ -7,8 +7,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import su.onno.crm.domain.Conversation;
 import su.onno.crm.service.*;
-import su.onno.ui.*;
-import su.onno.ui.comments.*;
+import su.onno.web.*;
+import su.onno.web.comments.*;
 
 /** Scoped inbox reads; generic conversation exports remain unavailable to non-admin workspace users. */
 @RestController
@@ -20,22 +20,31 @@ public class CrmInboxWorkspaceController {
     private final CommentService comments;
     private final CommentAuthorAvatars avatars;
     private final AccessSubjectResolver subjects;
+    @org.springframework.beans.factory.annotation.Autowired private CrmFeedQuery feeds;
     private final CrmContactService contacts;
     private final org.springframework.beans.factory.ObjectProvider<CrmAgentBinding<?>> agents;
-    private final UiAccessService access;
-    @org.springframework.beans.factory.annotation.Autowired private CrmFeedQuery feeds;
-    @org.springframework.beans.factory.annotation.Autowired private UiViewResolver listViews;
+    private final AccessService access;
+    @org.springframework.beans.factory.annotation.Autowired private DefaultListViews listViews;
     @org.springframework.beans.factory.annotation.Autowired private CrmStateConfiguration states;
     @org.springframework.beans.factory.annotation.Autowired private CrmPriorityBinding priorities;
     public CrmInboxWorkspaceController(CrmInboxWorkspaceService workspaces,CatalogQueryService catalogs,
             CurrentUserResolver users,CommentService comments,CommentAuthorAvatars avatars,
             AccessSubjectResolver subjects,CrmContactService contacts,
-            org.springframework.beans.factory.ObjectProvider<CrmAgentBinding<?>> agents,UiAccessService access) {
-        this.workspaces=workspaces;this.catalogs=catalogs;this.users=users;this.comments=comments;this.avatars=avatars;this.contacts=contacts;this.agents=agents;this.access=access;
-        this.subjects = subjects;
+            org.springframework.beans.factory.ObjectProvider<CrmAgentBinding<?>> agents,AccessService access) {
+        this.workspaces=workspaces;this.catalogs=catalogs;this.users=users;this.comments=comments;this.avatars=avatars;this.subjects=subjects;this.contacts=contacts;this.agents=agents;this.access=access;
     }
-    @GetMapping public Object list(Principal principal) {
-        return workspaces.available(principal).stream().limit(100).map(w->Map.of("key",w.key(),"label",w.label(),"canWrite",workspaces.permitted(w,principal,true))).toList();
+    /**
+     * The workspaces this principal may use; with {@code conversation}, only those holding that
+     * conversation (a conversation link opens in the first). A conversation outside every workspace
+     * the principal may use is forbidden, never an empty answer.
+     */
+    @GetMapping public Object list(@RequestParam(required=false) UUID conversation,Principal principal) {
+        var available=workspaces.available(principal);
+        if(conversation!=null) {
+            var target=workspaces.requireConversation(conversation,principal,false);
+            available=available.stream().filter(w->w.selection().test(target)).toList();
+        }
+        return available.stream().limit(100).map(w->Map.of("key",w.key(),"label",w.label(),"canWrite",workspaces.permitted(w,principal,true))).toList();
     }
     @GetMapping("/{key}/conversation/{id}") public Object conversation(@PathVariable String key,@PathVariable UUID id,
             @RequestParam org.springframework.util.MultiValueMap<String,String> params,Principal principal) {
@@ -54,23 +63,22 @@ public class CrmInboxWorkspaceController {
         } catch(NumberFormatException e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid limit");}
         final int pageLimit=limit;
         String cursor=params.getFirst("cursor");
-        var spec=workspace.listSpec();
-        if(states.source().isEmpty())spec.hide(Conversation::getStatus);
+        var descriptor=catalogs.forClass(Conversation.class);
         // Facet options are evaluated once per read. A facet with no options right now stays a valid
         // filter key (a stale link matches nothing rather than failing) but is not offered or chipped.
         var facetOptions=new LinkedHashMap<String,List<CrmInboxWorkspace.FacetOption>>();
         workspace.facets().forEach(f->facetOptions.put(f.key(),f.options()));
         var offeredFacets=workspace.facets().stream().filter(f->!facetOptions.get(f.key()).isEmpty()).toList();
-        var declared=java.util.stream.Stream.concat(spec.filters().stream(),workspace.facets().stream().map(f->f.definition(facetOptions.get(f.key())))).filter(f->!f.field().equals("status") || !states.source().isEmpty()).filter(f->!f.field().equals("priority") || !priorities.choices().source().isEmpty()).toList();
-        var filters = CrmInboxFilters.predicate(declared, params);
+        var filters = CrmInboxFilters.predicate(CrmInboxFilters.fields(descriptor,facetOptions.keySet()), params);
         String search=q.strip().toLowerCase(Locale.ROOT);
         Conversation target=params.containsKey("conversation")
                 ? workspaces.requireConversation(key,uuid(params.getFirst("conversation")),principal,false) : null;
+        // The list host uses ids for live row patches, including read acknowledgements.
+        // Intersect with workspace membership; never expand the authorized scope.
         var requested=new HashSet<UUID>();
         for(String value:params.getOrDefault("ids",List.of()))
             for(String id:value.split(",",-1)) requested.add(uuid(id.strip()));
         if(requested.size()>500)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Too many conversation ids");
-        var descriptor=catalogs.forClass(Conversation.class);
         // Filled in below, once the page is known: decoration reads from it rather than querying.
         final Map<UUID,su.onno.crm.service.CrmContactService.Summary> rowContacts=new HashMap<>();
         java.util.function.Function<Conversation,Map<String,Object>> decorate = conversation -> {
@@ -124,18 +132,23 @@ public class CrmInboxWorkspaceController {
             row.put("rowBadges",chips);
             return row;
         };
-        String requestedSort=params.containsKey("sort")?params.getFirst("sort"):spec.sortField();
+        // Without a sort the feed keeps the workspace's order: the latest message first.
+        String requestedSort=params.getFirst("sort");
+        boolean descending=params.containsKey("dir") ? "desc".equals(params.getFirst("dir")) : requestedSort==null;
         boolean pageBeforeDecoration=CrmInboxRows.canPageBeforeDecoration(search,requestedSort,params);
         if(requestedSort==null)requestedSort="lastMessageAt";
         if(!Set.of("customer","customerDisplay","channel","subject","status","priority","assignee","assigneeDisplay","lastMessageAt","unreadCount").contains(requestedSort))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unknown inbox sort");
         final String sortField=requestedSort;
-        boolean descending=params.containsKey("dir") ? "desc".equals(params.getFirst("dir"))
-                : spec.sortField()==null || spec.sortDescending();
         var accountSamples=new LinkedHashMap<UUID,Conversation>();
+        // Contacts are fetched for whatever is about to be decorated, in a few queries for the lot.
+        // Searching and sorting on a decorated field still decorates everything, so it prefetches
+        // everything; the ordinary path prefetches only the page, further down.
         java.util.function.Consumer<java.util.Collection<Conversation>> prefetchContacts = batch -> {
             var customers=batch.stream().map(Conversation::getCustomer).filter(Objects::nonNull)
                 .filter(id->!rowContacts.containsKey(id)).distinct().toList();
+            // Nothing left to decorate means nothing to ask: a page whose contacts are already
+            // resolved — and an empty one — must not touch contacts at all.
             if(!customers.isEmpty()) rowContacts.putAll(contacts.summaries(customers,principal));
         };
         // Context excludes transport position/size/count but includes every effective filter and identity.
@@ -180,46 +193,51 @@ public class CrmInboxWorkspaceController {
         }).toList();
         boolean canWrite=workspaces.permitted(workspace,principal,true);
         var config=workspaces.config(workspace);
-        config=config.withActions(config.actions().stream().map(a->new CrmWorkspaceService.Action(a.key(),a.label(),
-            a.visible()&&!a.key().equals("history")&&(canWrite||Set.of("reply","note","details").contains(a.key())))).toList());
-        var resolved=listViews.catalogList(descriptor,spec);
-        Map<String,String> fieldNames=new HashMap<>();
-        descriptor.attributes().forEach(a->fieldNames.put(a.columnName(),a.fieldName()));
-        var list=new LinkedHashMap<String,Object>();
-        list.put("title",resolved.title());list.put("searchable",resolved.searchable());
-        list.put("selectionCheckboxes",resolved.selectionCheckboxes());list.put("pageSize",resolved.pageSize());
-        list.put("sort",Map.of("column",Objects.toString(spec.sortField(),""),"descending",spec.sortDescending()));
-        list.put("columns",resolved.columns().stream().filter(c->!c.fieldName().equals("status") || !states.source().isEmpty())
-            .filter(c->!c.fieldName().equals("priority") || !priorities.choices().source().isEmpty())
-            .map(c->new ResolvedListView.Column(c.label(),c.fieldName(),c.fieldName(),c.width(),c.widget(),c.format(),c.hint(),c.cellMenu())).toList());
-        var filterMetadata=new ArrayList<Map<String,Object>>();
-        resolved.filters().stream().filter(f->declared.stream().anyMatch(d->d.field().equals(f.key()))).forEach(f->{
-            var options=f.options().stream().map(o->{
-                String color=o.color();
-                if(f.key().equals("status")) color=states.conversationStatuses().stream().filter(state->state.choice().id().toString().equals(o.value())).map(state->state.choice().color()).findFirst().orElse(Objects.toString(color,""));
-                return new ResolvedListView.Option(o.value(),o.label(),color,o.avatarUrl());
-            }).toList();
-            filterMetadata.add(Map.of("key",f.key(),"label",Objects.toString(f.label(),f.key()),"column",fieldNames.getOrDefault(f.columnName(),f.columnName()),"type",f.type(),"options",options));
-        });
-        offeredFacets.forEach(f->filterMetadata.add(Map.of("key",f.key(),"label",f.label(),"column",f.key(),"type","multiOptions","options",facetOptions.get(f.key()))));
-        list.put("filters",filterMetadata);
-        list.put("custom",resolved.customView());
+        if(!canWrite){
+            var readable=new LinkedHashSet<>(config.actions());
+            readable.retainAll(Set.of("reply","note","details"));
+            config=config.withActions(readable);
+        }
         // Scope before publishing account choices; filters and pagination must not hide other accounts.
         // One sample per distinct account keeps the choices complete without decorating every
         // authorized conversation, which would defeat the page-before-decoration fast path.
         prefetchContacts.accept(accountSamples.values());
-        list.put("channelAccounts",accountSamples.values().stream().map(decorate)
+        var channelAccounts=accountSamples.values().stream().map(decorate)
             .filter(row->row.get("inbox")!=null)
             .map(row->Map.of("id",row.get("inbox").toString(),"channel",Objects.toString(row.get("channel"),""),
                 "label",Objects.toString(row.get("inboxDisplay"),row.get("inbox").toString())))
-            .distinct().toList());
-        var offeredFilters=declared.stream().filter(f->!facetOptions.containsKey(f.field()) || !facetOptions.get(f.field()).isEmpty()).toList();
+            .distinct().toList();
         Map<String,Object> response=new LinkedHashMap<>();
-        response.put("list",list);response.put("key",workspace.key());response.put("label",workspace.label());
-        response.put("filters",offeredFilters);response.put("config",config);response.put("canWrite",canWrite);
+        response.put("list",defaultList(descriptor,offeredFacets,facetOptions));response.put("channelAccounts",channelAccounts);
+        response.put("key",workspace.key());response.put("label",workspace.label());
+        response.put("config",config);response.put("canWrite",canWrite);
         response.put("rows",page);response.put("nextCursor",result.page().nextCursor());response.put("hasMore",result.page().hasMore());
         if(result.total()!=null)response.put("total",result.total());
         return response;
+    }
+    /**
+     * The conversation list's default descriptor, as for any catalog: its columns and filters, with
+     * the feed's field names as data columns (the feed sorts and filters by field), the status and
+     * priority columns only where a host binding gives them values, and the bound states', priorities'
+     * and offered facets' choices as multi-select filters. The client decides what it shows.
+     */
+    private Map<String,Object> defaultList(su.onno.metadata.CatalogDescriptor descriptor,List<CrmInboxWorkspace.Facet> facets,
+            Map<String,List<CrmInboxWorkspace.FacetOption>> facetOptions) {
+        boolean statuses=!states.source().isEmpty(), priority=!priorities.choices().source().isEmpty();
+        var resolved=listViews.catalogList(descriptor);
+        var columns=resolved.columns().stream()
+            .filter(c->statuses || !c.fieldName().equals("status")).filter(c->priority || !c.fieldName().equals("priority"))
+            .map(c->new DefaultListView.Column(c.label(),c.fieldName(),c.fieldName(),c.width(),c.widget(),c.format(),c.hint(),c.type())).toList();
+        var filters=new ArrayList<DefaultListView.Filter>();
+        java.util.function.BiFunction<String,CrmStateConfiguration,DefaultListView.Filter> choices=(field,source)->new DefaultListView.Filter(field,
+            descriptor.attributes().stream().filter(a->a.fieldName().equals(field)).map(a->a.displayName()).findFirst().orElse(field),field,"multiOptions",
+            source.conversationStatuses().stream().map(s->new DefaultListView.Option(s.choice().id().toString(),s.choice().label(),s.choice().color(),"")).toList());
+        if(statuses)filters.add(choices.apply("status",states));
+        if(priority)filters.add(choices.apply("priority",priorities.choices()));
+        facets.forEach(f->filters.add(new DefaultListView.Filter(f.key(),f.label(),f.key(),"multiOptions",
+            facetOptions.get(f.key()).stream().map(o->new DefaultListView.Option(o.value(),o.label(),o.color(),"")).toList())));
+        return ViewDescriptors.listDescriptor(new DefaultListView(resolved.title(),columns,filters,resolved.pageSize()),
+            "catalogs","crm_conversations",null,false,List.of());
     }
     private static UUID uuid(String value) {
         try {return UUID.fromString(value);}catch(IllegalArgumentException | NullPointerException e){

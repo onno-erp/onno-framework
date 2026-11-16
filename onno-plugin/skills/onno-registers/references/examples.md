@@ -186,46 +186,58 @@ public class PriceService {
 `getSliceLast` answers the latest record at or before the date. `getSliceFirst` answers the earliest
 record at or after the date.
 
-## Register UI Hints
+## Register UI
 
-Registers can have `EntityView` hints even though they are report/read surfaces:
+Every readable register has a default report screen. To shape it, register a page at its route
+(`/registers/<route>`) in `main.tsx` and build it from measures and hooks — a register measure sums
+movements signed (receipts add, expenses subtract):
 
-```java
-@Component
-public class SalesRegisterView implements EntityView<SalesRegister> {
-    @Override
-    public Class<SalesRegister> entity() {
-        return SalesRegister.class;
-    }
+```tsx
+// pages/SalesReportPage.tsx — { path: "/registers/sales", component: SalesReportPage, view: false }
+import { Chart, Page, Row, Stat, TimeRange, sum, useBalance } from "@onno/ui";
 
-    @Override
-    public void list(ListSpec<SalesRegister> list) {
-        list.columns(SalesRegister::getPeriod, SalesRegister::getProduct,
-                SalesRegister::getSalesperson, SalesRegister::getQuantity,
-                SalesRegister::getRevenue)
-            .label(SalesRegister::getRevenue, "Revenue")
-            .sortBy(SalesRegister::getPeriod, true);
-        list.filter(SalesRegister::getPeriod).label("Period").dateRange();
-    }
+const revenue = sum("Sales", "revenue");
+const units = sum("Sales", "quantity");
 
-    @Override
-    public void fields(EntityConfigBuilder<SalesRegister> f) {
-        f.field(SalesRegister::getPeriod).format("dd-MM-yyyy");
-        f.field(SalesRegister::getRevenue).format("currency:USD");
-    }
+export function SalesReportPage() {
+  return (
+    <Page title="Sales report">
+      <TimeRange title="Time range" presets={["30d", "90d", "1y", "all"]} default="90d" />
+      <Row>
+        <Stat title="Revenue" measure={revenue} currency="USD" trend={false} />
+        <Stat title="Units sold" measure={units} trend={false} />
+      </Row>
+      <Chart title="Revenue by product" measure={revenue} by="product" />
+    </Page>
+  );
+}
+
+export function LowStock() {
+  const { data: rows = [] } = useBalance("Stock", { where: { quantity: { lt: 5 } } });
+  return <p>{rows.length} products below 5</p>;
 }
 ```
+
+Movements are read with `useMovements("Stock", { from, to, where: { movementType: "RECEIPT" } })`,
+turnovers with `useTurnover("Sales", { from, to })`, information registers with
+`useInformationRegister("Prices", { where, at })`.
 
 ## Runtime Verification
 
 After authentication, accumulation REST reads use logical register names:
 
 ```bash
-curl -fsS -b "$jar" "$base/api/registers/Stock/balance?product=$product_id" | jq -e .
+curl -fsS -b "$jar" "$base/api/registers/Stock/balance" --data-urlencode "where={\"product\":\"$product_id\"}" -G | jq -e .
 curl -fsS -b "$jar" \
   "$base/api/registers/Sales/turnover?from=2026-08-01T00:00:00&to=2026-09-01T00:00:00" | jq -e .
-curl -fsS -b "$jar" "$base/api/registers/Stock/movements" | jq -e .
+curl -fsS -b "$jar" "$base/api/registers/Stock/movements?limit=100" | jq -e .
 ```
+
+Each read is a keyset window `{rows, nextCursor, hasMore}` (`limit` default 100, max 500): replay
+`nextCursor` as `?cursor=` until `hasMore` is false. Balance and turnover also take dimension
+equality parameters (`?product=<uuid>`), and balance takes `asOf`. Java callers on a request path use
+`RegisterQueryService.movementsPage`/`balancePage`/`turnoverPage`; the plain `List` variants return
+the complete result.
 
 There is no generic information-register REST CRUD/read endpoint. Verify `PriceRegister` through
 `InformationRegisterRepository`, a focused integration test, or an application-owned API.

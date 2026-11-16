@@ -7,9 +7,9 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import su.onno.ui.media.LoadedMedia;
-import su.onno.ui.media.MediaStorage;
-import su.onno.ui.media.StoredMedia;
+import su.onno.web.media.LoadedMedia;
+import su.onno.web.media.MediaStorage;
+import su.onno.web.media.StoredMedia;
 
 /**
  * Serves the files of Gmail history mail through the ordinary media endpoint without storing them.

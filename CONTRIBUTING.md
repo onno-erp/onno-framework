@@ -14,14 +14,26 @@ By contributing you agree your contributions are licensed under the repository's
 
 ### Develop & verify
 
+Use Vite and a separate backend for the normal edit loop. After `npm install` at the repository
+root, run `npm run dev:backend`, `npm run dev:watch`, and `npm run dev` in separate terminals;
+open **http://localhost:5173**. If a backend already runs on 8091, frontend work needs only
+`npm run dev`. React pages, styles and shared UI sources hot-reload without rebuilding jars.
+The Java watcher recompiles the application and regenerates its typed UI model; DevTools
+restarts the development backend. Keep the existing `example/data/bookstore` database.
+See [the intended development workflow](docs/RUNNING.md#intended-development-workflow) for
+backend switching and framework dependency reload limits.
+
+Run verification checks before handing back a change:
+
 ```bash
 ./gradlew clean check          # compile + test everything, incl. the example app and frontend
 ./gradlew publishToMavenLocal  # verify the artifacts are consumable (sources, javadoc, POM)
 ```
 
 Narrower loops: `./gradlew :onno-framework:test` for core changes,
-`./gradlew :onno-ui-starter:testFrontend :onno-ui-starter:buildFrontend` for frontend-only
-changes. Java 21 is required (the Gradle toolchain pins it).
+`./gradlew :onno-web-starter:testFrontend :onno-web-starter:buildFrontend` for `@onno/ui` changes
+(or `npx vitest run` and `npx tsc --noEmit -p tsconfig.app.json` in `onno-ui/` after one `npm install`
+at the repository root). Java 21 is required (the Gradle toolchain pins it).
 
 ### Keep docs in sync — required
 

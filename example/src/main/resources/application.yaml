@@ -21,6 +21,23 @@ server:
         secure: ${ONNO_DEMO_COOKIE_SECURE:false}
 onno:
   ui:
+    # Branding: app name, logo/mark/favicon served from src/main/resources/static/ui, and the
+    # primary colour retinting the shell accent in light and dark modes. Two logo/mark files keep
+    # them legible in both themes; the compact mark is shown unframed.
+    branding:
+      app-name: Onno Books
+      logo-url: /ui/branding/logo.svg
+      logo-url-dark: /ui/branding/logo-dark.svg
+      mark-url: /ui/branding/mark-light.svg
+      mark-url-dark: /ui/branding/mark-dark.svg
+      mark-framed: false
+      favicon-url: /ui/branding/favicon.svg
+      light:
+        primary: "#4F46E5"
+        primary-soft: "#EEF2FF"
+      dark:
+        primary: "#6366F1"
+        primary-soft: "#1E1B4B"
     # The business model and authored UI labels are English. Keeping the framework chrome on the
     # same locale avoids a mixed English/Russian interface.
     locale: en
@@ -34,7 +51,7 @@ onno:
         - label: Sign in as Store manager
           username: manager@onnobooks.local
           password: manager
-  # Per-document discussion threads, opted into per view via EntityView.comments(). Used on Orders.
+  # Per-record discussion threads, on for every catalog/document when enabled.
   comments:
     enabled: true
   # The top-right notification center. On by default; shown here to make the two built-in producers
@@ -49,7 +66,7 @@ onno:
   auth:
     # In-memory users (the default). Two roles: ADMIN (dashboard + staff management) and MANAGER
     # (runs the shop). Usernames are the staff email addresses so a signed-in user links to their
-    # Employee row (see MainLayout.identity) — that's what lets the shell show their photo bottom-left
+    # Employee row (see com.example.IdentityConfiguration) — that's what lets the shell show their photo bottom-left
     # and greet them by name. Change these passwords before any real use.
     mode: in-memory
     demo:

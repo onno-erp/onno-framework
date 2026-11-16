@@ -28,22 +28,24 @@ The response always sends `X-Content-Type-Options: nosniff`. Known safe raster i
 uses `Content-Disposition: attachment` so an uploaded active document cannot execute in the
 application origin.
 
-## Admin UI widgets
+## Upload fields in the UI
 
-Set a field hint on an `EntityView` field; the admin form then streams the file on drop/select and
-stores the returned URL:
+Give a `String` field an upload `input` in the entity's customization (`src/main/ui/entities/*.ts`);
+the record form then streams the file on drop/select and stores the returned URL, and the list shows
+an image as a thumbnail:
 
-```java
-f.field("avatarUrl").widget("image")  // single image
- .field("avatar").widget("avatar")    // small round image
- .field("gallery").widget("gallery")  // several images, newline-joined URLs
- .field("contract").widget("file");   // any file type
+```ts
+export const books: EntityCustomization<"Books"> = {
+  fields: {
+    coverUrl: { label: "Cover", input: "image" },   // single image
+    avatarUrl: { input: "avatar" },                 // small round image
+    gallery: { input: "images" },                   // several images, newline-joined URLs
+    contract: { input: "file" },                    // any file type
+  },
+};
 ```
 
-2.0 no longer renders base64 `data:` image values or accepts the old `photo`/`photos` widget names.
-Before upgrading, convert stored values with
-`Ui2MigrationTool.migrateDataUrlImages(...)` and rename those widgets to `image`/`images`. See
-[Migrating an application to onno 2.0](MIGRATING_TO_2_0.md).
+Base64 `data:` image values are not rendered; store images through the media upload endpoint.
 
 ## Message attachments
 
@@ -65,7 +67,7 @@ this application issued are accepted. See
 
 ## Pluggable storage (the `MediaStorage` SPI)
 
-`su.onno.ui.media.MediaStorage` is the backend SPI:
+`su.onno.web.media.MediaStorage` is the backend SPI:
 
 ```java
 StoredMedia store(InputStream content, String filename, String contentType, long size);

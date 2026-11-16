@@ -5,12 +5,11 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 
-/** Presentation and access settings of a {@link PrintForm}, set in {@link PrintForm#configure(PrintFormSpec)}. */
+/** Title, template, output and access settings of a {@link PrintForm}, set in {@link PrintForm#configure(PrintFormSpec)}. */
 public final class PrintFormSpec {
 
     private String label;
     private String template;
-    private String icon = "printer";
     private final Set<String> roles = new LinkedHashSet<>();
     private Locale locale = Locale.getDefault();
     private PrintOutput output = PrintOutput.SOURCE;
@@ -30,12 +29,6 @@ public final class PrintFormSpec {
      */
     public PrintFormSpec template(String location) {
         this.template = Objects.requireNonNull(location, "location");
-        return this;
-    }
-
-    /** Lucide icon name of the print action; defaults to {@code printer}. */
-    public PrintFormSpec icon(String icon) {
-        this.icon = Objects.requireNonNull(icon, "icon");
         return this;
     }
 
@@ -69,10 +62,6 @@ public final class PrintFormSpec {
 
     String template() {
         return template;
-    }
-
-    String icon() {
-        return icon;
     }
 
     Set<String> roles() {

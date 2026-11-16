@@ -3,7 +3,6 @@ package su.onno.spring;
 import su.onno.metadata.*;
 import su.onno.posting.PostingEngine;
 import su.onno.posting.PostingService;
-import su.onno.ui.*;
 import su.onno.posting.RegisterPersistence;
 import su.onno.jobs.BackgroundJobs;
 import su.onno.messaging.OutboxWriter;
@@ -484,103 +483,6 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
         return new ProcessPendingWorkRegistrar(processEngine, jobScheduler);
     }
 
-    @Bean
-    public LayoutSet layoutSet(List<Layout> layouts) {
-        Map<Viewport, UiLayout> byViewport = new java.util.EnumMap<>(Viewport.class);
-        java.util.Set<Viewport> dedicated = java.util.EnumSet.noneOf(Viewport.class);
-        for (Viewport v : Viewport.values()) {
-            List<Layout> chosen = selectForViewport(layouts, v);
-            // Whether a default layout specifically targets this viewport — record it so the shell
-            // only treats v as having its own nav (vs. inheriting the universal one) when that's true.
-            boolean curated = chosen.stream()
-                    .anyMatch(l -> profileKey(l).isEmpty() && l.viewport() == v);
-            if (curated) {
-                dedicated.add(v);
-            }
-            byViewport.put(v, buildUiLayout(chosen));
-        }
-        return new LayoutSet(byViewport, dedicated);
-    }
-
-    /**
-     * The default ({@link Viewport#DESKTOP}) layout, kept as a bean for consumers
-     * that aren't viewport-aware (identity resolution, the metadata API).
-     */
-    @Bean
-    public UiLayout uiLayout(LayoutSet layoutSet) {
-        return layoutSet.forViewport(Viewport.DESKTOP);
-    }
-
-    /**
-     * Choose every layout contribution that applies to this viewport. Reusable business modules
-     * contribute universal navigation alongside the host application's shell layout; a
-     * viewport-specific contribution augments those universal sections for that device.
-     */
-    private static List<Layout> selectForViewport(List<Layout> layouts, Viewport viewport) {
-        return layouts.stream()
-                .filter(layout -> layout.viewport() == null || layout.viewport() == viewport)
-                .toList();
-    }
-
-    private static String profileKey(Layout l) {
-        return l.profile() == null ? "" : l.profile();
-    }
-
-    static UiLayout buildUiLayout(List<Layout> layouts) {
-        // Each Layout bean is one persona's shell; the default layout (profile()==null)
-        // is the back-office shell. A Layout IS a profile.
-        //
-        // Nav is opt-in: an entity appears in the sidebar only if a Layout bean explicitly
-        // places it in a (non-HIDDEN) section. There is no auto-listing of un-placed
-        // catalogs/documents/registers — declaring an entity registers it (so it stays
-        // routable and usable as a ref) without dumping it into the nav. Layout beans are
-        // the single source of truth for what the sidebar shows.
-        List<UiLayout.Section> defaultSections = new ArrayList<>();
-        List<UiLayout.Profile> profiles = new ArrayList<>();
-        ShellConfig shell = ShellConfig.defaults();
-        UiIdentityLink identity = null;
-
-        for (Layout layout : layouts) {
-            LayoutSpec spec = new LayoutSpec();
-            layout.configure(spec);
-            if (layout.profile() == null) {
-                defaultSections.addAll(spec.sections());
-                // A module that only contributes navigation must not reset shell branding/theme
-                // authored by the host application. Defaults mean "no shell contribution" here.
-                if (!ShellConfig.defaults().equals(spec.shellConfig())) {
-                    shell = spec.shellConfig();
-                }
-                if (spec.identity() != null) {
-                    identity = spec.identity();
-                }
-            } else {
-                if (spec.identity() != null || !ShellConfig.defaults().equals(spec.shellConfig())) {
-                    throw new IllegalStateException("Named Layout '" + layout.profile()
-                            + "' cannot declare shell branding/navigation or identity; "
-                            + "put shared shell/identity configuration on the default Layout");
-                }
-                profiles.add(new UiLayout.Profile(layout.profile(), spec.title(), spec.theme(),
-                        spec.roles(), spec.priority(), spec.sections(), List.of()));
-            }
-        }
-
-        List<UiLayout.Section> merged = new ArrayList<>(defaultSections);
-        merged.sort(Comparator.comparingInt(UiLayout.Section::order));
-
-        // Dashboard widgets now live in Page beans, not the layout.
-        return new UiLayout(merged, List.of(), profiles, identity, shell);
-    }
-
-    @Bean
-    public UiLayoutResolver uiLayoutResolver(MetadataRegistry registry) {
-        return new UiLayoutResolver(registry);
-    }
-
-    @Bean
-    public su.onno.ui.UiProfileResolver uiProfileResolver() {
-        return new su.onno.ui.UiProfileResolver();
-    }
-
     private MetadataRegistry buildRegistry(List<String> scanPackages) {
         MetadataRegistry registry = new MetadataRegistry();
         MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
@@ -614,6 +516,31 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
             map.put(desc.javaClass(), new RegisterPersistence<>(jdbi, desc));
         }
         return map;
+    }
+
+    /** The commands every {@code Commands} bean declares — what any surface (REST, MCP, …) offers and runs. */
+    @Bean
+    @ConditionalOnMissingBean
+    @SuppressWarnings("rawtypes")
+    public su.onno.command.CommandRegistry commandRegistry(ObjectProvider<su.onno.command.Commands> commands) {
+        return new su.onno.command.CommandRegistry(commands.orderedStream().toList());
+    }
+
+    /** The live checks every {@code Checks} bean declares. */
+    @Bean
+    @ConditionalOnMissingBean
+    @SuppressWarnings("rawtypes")
+    public su.onno.validation.CheckRegistry checkRegistry(ObjectProvider<su.onno.validation.Checks> checks) {
+        return new su.onno.validation.CheckRegistry(checks.orderedStream().toList());
+    }
+
+    /** The picker options every {@code PickerOptions} bean binds to a reference field. */
+    @Bean
+    @ConditionalOnMissingBean
+    @SuppressWarnings("rawtypes")
+    public su.onno.picker.PickerOptionsService pickerOptionsService(MetadataRegistry registry,
+            ObjectProvider<su.onno.picker.PickerOptions> pickerOptions) {
+        return new su.onno.picker.PickerOptionsService(registry, pickerOptions.orderedStream().toList());
     }
 
     static List<String> resolvePackages(OnnoProperties properties, ApplicationContext context) {

@@ -10,7 +10,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 import su.onno.crm.domain.*;
 import su.onno.crm.repository.*;
-import su.onno.ui.UiAccessService;
+import su.onno.web.AccessService;
 
 /** String identities and CRM links around a host-owned customer catalog. Never writes host fields. */
 public class CrmContactService {
@@ -19,9 +19,9 @@ public class CrmContactService {
     private final ContactIdentityRepository identities;
     private final CrmWorkspaceService workspace;
     private final JdbcTemplate jdbc;
-    private final UiAccessService access;
-    private org.springframework.beans.factory.ObjectProvider<su.onno.ui.RecordAccess> recordAccess;
-    private org.springframework.beans.factory.ObjectProvider<su.onno.ui.AccessSubjectResolver> subjects;
+    private final AccessService access;
+    private org.springframework.beans.factory.ObjectProvider<su.onno.web.RecordAccess> recordAccess;
+    private org.springframework.beans.factory.ObjectProvider<su.onno.web.AccessSubjectResolver> subjects;
 
     /**
      * Apply the bound customer catalog's {@code RecordAccessPolicy} on top of {@code readableWhen}:
@@ -29,7 +29,7 @@ public class CrmContactService {
      * panel and merge commands never surface it.
      */
     /** Manual wiring (tests, non-Spring use); Spring injects lazily through {@link #lazyRecordAccess}. */
-    public void setRecordAccess(su.onno.ui.RecordAccess recordAccess, su.onno.ui.AccessSubjectResolver subjects) {
+    public void setRecordAccess(su.onno.web.RecordAccess recordAccess, su.onno.web.AccessSubjectResolver subjects) {
         this.recordAccess = provider(recordAccess);
         this.subjects = provider(subjects);
     }
@@ -39,8 +39,8 @@ public class CrmContactService {
      * and host views commonly depend on CRM services, which would otherwise form a creation cycle.
      */
     @org.springframework.beans.factory.annotation.Autowired
-    void lazyRecordAccess(org.springframework.beans.factory.ObjectProvider<su.onno.ui.RecordAccess> recordAccess,
-                          org.springframework.beans.factory.ObjectProvider<su.onno.ui.AccessSubjectResolver> subjects) {
+    void lazyRecordAccess(org.springframework.beans.factory.ObjectProvider<su.onno.web.RecordAccess> recordAccess,
+                          org.springframework.beans.factory.ObjectProvider<su.onno.web.AccessSubjectResolver> subjects) {
         this.recordAccess = recordAccess;
         this.subjects = subjects;
     }
@@ -68,7 +68,7 @@ public class CrmContactService {
     }
 
     public CrmContactService(CrmCustomerBinding<?> binding, ConversationRepository conversations,
-            ContactIdentityRepository identities, CrmWorkspaceService workspace, JdbcTemplate jdbc, UiAccessService access) {
+            ContactIdentityRepository identities, CrmWorkspaceService workspace, JdbcTemplate jdbc, AccessService access) {
         this.binding=binding;this.conversations=conversations;this.identities=identities;
         this.workspace=workspace;this.jdbc=jdbc;this.access=access;
     }

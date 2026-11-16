@@ -254,9 +254,8 @@ public class MetadataScanner {
                         fieldName, displayName, columnName, javaType,
                         PolyRef.class.isAssignableFrom(javaType) ? 512 : 255, false, isRef,
                         isRef ? extractRefTargetName(field) : null, refTargets, 0, 0,
-                        true, true, true, 0, "", "", "",
                         AttributeDescriptor.Constraints.NONE,
-                        false, List.of()));
+                        false, List.of(), false));
             }
             current = current.getSuperclass();
         }
@@ -281,7 +280,6 @@ public class MetadataScanner {
                 result.add(new AttributeDescriptor(
                         fieldName, displayName, columnName, BigDecimal.class, 0, false, false,
                         null, res.precision(), res.scale(),
-                        true, true, true, 0, "", "", "",
                         AttributeDescriptor.Constraints.NONE,
                         false));
             }
@@ -331,13 +329,6 @@ public class MetadataScanner {
                         refTargets,
                         attr.precision(),
                         attr.scale(),
-                        true,
-                        true,
-                        true,
-                        0,
-                        "",
-                        "",
-                        "",
                         new AttributeDescriptor.Constraints(
                                 attr.min(), attr.max(), attr.minLength(), attr.pattern(), attr.email()),
                         attr.secret(),

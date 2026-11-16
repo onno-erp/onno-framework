@@ -65,7 +65,7 @@ Listen for:
 - workflow verbs -> documents and lifecycle actions
 - pain around balances -> accumulation registers
 - pain around history/effective dates -> information registers
-- management reports -> register dimensions and dashboard widgets
+- management reports -> register dimensions and page widgets (`Stat`, `Chart`)
 
 ## Round 2: Actors And Master Data
 
@@ -87,7 +87,7 @@ Map answers:
 | "Products belong to categories" | `Ref<ProductCategory>` or hierarchical catalog |
 | "Categories can contain subcategories" | `@Catalog(hierarchical = true)` |
 | "Only admins change employees" | Confirm non-admin readers; `ADMIN` is already the superuser bypass |
-| "The picker needs phone/email under the name" | `EntityView.field(...).refSecondary(...)` |
+| "The picker needs phone/email under the name" | UI customization `fields: { customer: { refSecondary: "phone" } }` |
 
 `@AccessControl` is deny-by-default. Ask which non-admin roles may read and write; omit `ADMIN` from
 the arrays because it always bypasses. Empty `writeRoles` inherits `readRoles`, so enumerate
@@ -258,19 +258,20 @@ Ask:
 - What is the first screen each role should land on?
 - What list columns matter for scanning?
 - What filters are used constantly?
-- Which actions should be row buttons, detail buttons, or toolbar actions?
-- Which forms need defaults, grouping, placeholders, hints, or custom widgets?
+- Which actions does a user take on a record or a selection, and which should be row buttons,
+  prominent record buttons, or menu entries?
+- Which forms need defaults, grouping, placeholders, hints, or custom panels?
 - What language should the UI use?
 
 Map answers:
 
 | Answer pattern | onno concept |
 | --- | --- |
-| "Managers see sales, warehouse sees receipts" | role/profile `Layout`s |
-| "Orders board grouped by status" | `ListSpec.groupable`, filters, row styles |
-| "Advance order from the row" | row `ActionSpec` |
-| "Dashboard has revenue and open orders" | `Page` widgets |
-| "Need a special timeline/chart" | custom widget |
+| "Managers see sales, warehouse sees receipts" | `@AccessControl` read roles (nav drops what a role can't read) + `roles` on pages/nav items |
+| "Orders board grouped by status" | entity customization `list.groupBy`/`groupable`, `filters`, `rowStyle`; or a `Kanban` |
+| "Advance order from the row" | a `Commands<Order>` command + `commands: { advance: { placement: "row" } }` |
+| "Dashboard has revenue and open orders" | a `/` page with `Stat`/`Chart` over `count`/`sum` measures |
+| "Need a special timeline/chart" | an app React component in `src/main/ui/components` |
 
 Follow-up questions:
 

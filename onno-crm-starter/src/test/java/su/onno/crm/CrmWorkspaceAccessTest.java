@@ -6,7 +6,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import su.onno.crm.service.*;
 import su.onno.crm.web.CrmChannelController;
-import su.onno.ui.UiAccessService;
+import su.onno.web.AccessService;
 class CrmWorkspaceAccessTest {
     @Test void agentsCannotManageChannelCredentials() {
         var access=mock(CrmChannelAccess.class);var provider=mock(CrmChannelConnection.class);

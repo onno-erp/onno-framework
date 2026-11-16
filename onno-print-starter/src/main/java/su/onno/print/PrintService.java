@@ -161,10 +161,6 @@ public class PrintService {
         return scopes.get(form.type());
     }
 
-    /** Lucide icon name of the form's print action. */
-    public String icon(PrintForm<?> form) {
-        return form.spec().icon();
-    }
 
     /** Fills the form's effective template from {@code record} in its default output. */
     public PrintResult render(PrintForm<?> form, Object record) {
