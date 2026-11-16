@@ -7,14 +7,8 @@ import java.nio.file.*;
 import java.time.*;
 import java.util.*;
 import java.util.regex.Pattern;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
 
 /** Instagram Login client; credentials stay in an owner-readable file, never in CRM records. */
-@org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(InstagramClient.class)
-@Component
-@ConditionalOnProperty(name="onno.crm.channels.instagram.enabled",havingValue="true")
 public class InstagramClient {
     /** Conversations requested per page of the conversation list. */
     static final int CONVERSATION_PAGE_SIZE=25;
@@ -30,7 +24,7 @@ public class InstagramClient {
     private final Path credentials;
     private final ObjectMapper json;
     private final HttpClient http=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-    public InstagramClient(@Value("${onno.crm.channels.instagram.tokens-file:${user.home}/.config/onno/instagram-tokens.json}") String file,ObjectMapper json) {
+    public InstagramClient(String file,ObjectMapper json) {
         this.credentials=Path.of(file);this.json=json;
     }
     public boolean configured(){return Files.isRegularFile(credentials);}

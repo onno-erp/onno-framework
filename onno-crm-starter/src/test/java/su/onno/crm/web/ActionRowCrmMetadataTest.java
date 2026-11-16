@@ -52,7 +52,7 @@ class ActionRowCrmMetadataTest {
                 .thenReturn(Map.of("last_message_preview", "Review me"));
         when(scopes.permitted(isNull(), eq(principal), eq(true))).thenReturn(true);
         var controller = new CrmActionController(scopes, new UiActionResolver(List.of(view)),
-                mock(UiAccessService.class), catalogs, false);
+                mock(UiAccessService.class), catalogs, new UiProperties());
         assertThat((List<?>) controller.list("support", id, principal))
                 .singleElement().isEqualTo(Map.of("id", "review", "label", "Review me", "visible", true, "enabled", true));
         controller.run("support", id, "review", Map.of(), principal, AccessSubject.user("reader", Set.of()));

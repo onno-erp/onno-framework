@@ -2,7 +2,6 @@ package su.onno.crm.web;
 
 import java.security.Principal;
 import java.util.*;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -19,10 +18,10 @@ public class CrmActionController {
     private final UiActionResolver actions;
     private final UiAccessService access;
     private final CatalogQueryService catalogs;
-    private final boolean readOnly;
+    private final UiProperties uiProperties;
     public CrmActionController(CrmInboxWorkspaceService workspaces,@org.springframework.context.annotation.Lazy UiActionResolver actions,UiAccessService access,
-            CatalogQueryService catalogs,@Value("${onno.ui.read-only:false}") boolean readOnly) {
-        this.workspaces=workspaces;this.actions=actions;this.access=access;this.catalogs=catalogs;this.readOnly=readOnly;
+            CatalogQueryService catalogs,UiProperties uiProperties) {
+        this.workspaces=workspaces;this.actions=actions;this.access=access;this.catalogs=catalogs;this.uiProperties=uiProperties;
     }
     private boolean allowed(Action<?> action,Principal principal) {
         return action.isServer() && action.scope()!=ActionScope.TOOLBAR &&
@@ -33,7 +32,7 @@ public class CrmActionController {
     @GetMapping public Object list(@PathVariable String workspace,@PathVariable UUID id,Principal principal) {
         workspaces.requireConversation(workspace,id,principal,false);
         var definition=workspaces.requireWorkspace(workspace,principal,false);
-        boolean writable=!readOnly && workspaces.permitted(definition,principal,true);
+        boolean writable=!uiProperties.isReadOnly() && workspaces.permitted(definition,principal,true);
         var record=row(id);
         return actions.resolvedForEntity(Conversation.class).stream().filter(a->allowed(a,principal)).map(a->{
             var state=UiActionResolver.recordActionState(a,record,catalogs.forClass(Conversation.class).attributes());
@@ -43,7 +42,7 @@ public class CrmActionController {
     @PostMapping("/{key}") public ActionResult run(@PathVariable String workspace,@PathVariable UUID id,@PathVariable String key,
             @RequestBody(required=false) Map<String,Object> body,Principal principal,su.onno.access.AccessSubject subject) {
         workspaces.requireConversation(workspace,id,principal,true);
-        if(readOnly)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Application is read-only");
+        if(uiProperties.isReadOnly())throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Application is read-only");
         var action=actions.find(Conversation.class,key);
         if(action==null)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Unknown action");
         if(!allowed(action,principal))throw new ResponseStatusException(HttpStatus.FORBIDDEN);

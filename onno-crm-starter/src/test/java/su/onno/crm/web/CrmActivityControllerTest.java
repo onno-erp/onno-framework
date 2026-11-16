@@ -29,6 +29,7 @@ class CrmActivityControllerTest {
      return Optional.of(new su.onno.ui.media.LoadedMedia(new org.springframework.core.io.ByteArrayResource("file".getBytes()),
        key.endsWith(".png")?"image/png":"application/pdf",4,key.substring(key.lastIndexOf('/')+1)));}
    },new su.onno.ui.media.MediaProperties());
+ final UiProperties ui=new UiProperties();
  org.jdbi.v3.core.Jdbi jdbc;
  String conversationTable,messageTable;
  final Map<UUID,Conversation> records=new HashMap<>();
@@ -47,7 +48,7 @@ class CrmActivityControllerTest {
    h.execute("CREATE TABLE onno_comments (_id UUID PRIMARY KEY,_entity_id UUID,_created_at TIMESTAMP,_deleted BOOLEAN,_entity_type VARCHAR,_entity_name VARCHAR)");});
   when(conversations.findAllById(any())).thenAnswer(i->{var found=new ArrayList<Conversation>();for(UUID id:i.<Iterable<UUID>>getArgument(0))if(records.containsKey(id))found.add(records.get(id));return found;});
   when(workspaces.requireConversation(any(UUID.class),eq(principal),eq(false))).thenAnswer(i->records.get(i.<UUID>getArgument(0)));
-  var controller=new CrmActivityController(contacts,conversations,messages,inboxes,workspaces,access,users,comments,avatars,attachments);
+  var controller=new CrmActivityController(contacts,conversations,messages,inboxes,workspaces,access,users,comments,avatars,attachments,ui);
   org.springframework.test.util.ReflectionTestUtils.setField(controller,"feeds",new CrmFeedQuery(jdbc,conversations,registry));return controller;}
  Conversation conversation(String channel){var c=new Conversation();c.setId(UUID.randomUUID());c.setCustomer(customer);c.setChannel(channel);records.put(c.getId(),c);jdbc.useHandle(h->h.execute("INSERT INTO "+conversationTable+" VALUES (?,false)",c.getId()));return c;}
  ConversationMessage message(Conversation c,String body){var m=new ConversationMessage();m.setId(UUID.randomUUID());m.setConversation(Ref.of(Conversation.class,c.getId()));m.setKind(MessageKind.CUSTOMER_MESSAGE);m.setDirection(MessageDirection.INBOUND);m.setChannel(c.getChannel());m.setBody(body);m.setSentAt(LocalDateTime.now());jdbc.useHandle(h->h.execute("INSERT INTO "+messageTable+" VALUES (?,false,?,?)",m.getId(),c.getId(),m.getSentAt()));when(messages.findActiveById(m.getId())).thenReturn(Optional.of(m));return m;}
@@ -104,7 +105,7 @@ class CrmActivityControllerTest {
   verify(inboxes,never()).findActiveById(hidden.getInbox().id());
  }
  @Test void readOnlyModeRejectsManualActivities() {
-  var controller=controller();org.springframework.test.util.ReflectionTestUtils.setField(controller,"readOnly",true);
+  var controller=controller();ui.setReadOnly(true);
   assertThatThrownBy(()->controller.log(customer,new CrmActivityController.LogEvent(UUID.randomUUID(),CrmActivityController.EventType.CALL_COMPLETED,"Notes",null),principal))
     .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
   verifyNoInteractions(messages);
