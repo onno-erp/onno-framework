@@ -1588,7 +1588,7 @@ export function EntityListWidget({
   toolbarPlacement?: "header" | "renderer";
   toolbarOptions?: {
     title?: boolean; count?: boolean; viewSwitcher?: boolean; search?: boolean;
-    controls?: string[]; views?: ListViewMode[];
+    controls?: string[]; views?: Array<"table" | "map" | "custom">;
     filterKeys?: string[]; actionKeys?: string[];
     compactPresentation?: "inline" | "sheet";
     /** Show persistent navigation beside a custom workspace when its container has room. */
