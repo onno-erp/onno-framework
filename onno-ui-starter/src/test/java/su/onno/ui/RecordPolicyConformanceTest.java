@@ -123,6 +123,7 @@ class RecordPolicyConformanceTest {
                 // Pickers, mentions, comments, tags, presence, actions, form validation
                 "POST /api/ref-options/search", "POST /api/ref-options/recent", "POST /api/ref-options/decorate", "GET /api/mentions", "GET /api/mentions/resolve",
                 "GET /api/comments/{kind}/{name}/{id}", "POST /api/comments/{kind}/{name}/{id}",
+                "GET /api/history/{kind}/{name}/{id}",
                 "POST /api/comments/{commentId}/reactions", "DELETE /api/comments/{commentId}",
                 "GET /api/tags/{kind}/{name}", "GET /api/tags/{kind}/{name}/{id}",
                 "POST /api/tags/{kind}/{name}/{id}/{tag}", "DELETE /api/tags/{kind}/{name}/{id}/{tag}",
@@ -470,6 +471,14 @@ class RecordPolicyConformanceTest {
         status(post("/api/comments/" + bComment + "/reactions").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"emoji\":\"👍\"}"), 404);
         status(delete("/api/comments/" + bComment), 404);
+
+        // Record history (#422): B's record is 404; A's entries that reference B (a parent filed
+        // under B's instance, a mirror ref to B's tenant) are masked — no B id or display leaks.
+        ok(get("/api/history/catalogs/LkInstances/" + instanceA));
+        Map<String, Object> orphanHistory = jsonMap(ok(get("/api/history/catalogs/LkInstances/" + instanceUnderB)));
+        assertThat((List<?>) orphanHistory.get("entries")).isNotEmpty();
+        ok(get("/api/history/catalogs/LkInstances/" + instanceMirror));
+        status(get("/api/history/catalogs/LkInstances/" + instanceB), 404);
 
         ok(get("/api/tags/catalogs/LkTenants"));
         ok(get("/api/tags/catalogs/LkTenants/" + tenantA));

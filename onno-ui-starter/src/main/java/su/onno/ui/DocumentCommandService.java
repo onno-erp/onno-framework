@@ -3,6 +3,10 @@ package su.onno.ui;
 import su.onno.access.AccessMode;
 import su.onno.access.AccessSubject;
 import su.onno.events.EntityChangedEvent;
+import su.onno.history.HistoryActor;
+import su.onno.history.HistoryActors;
+import su.onno.history.RecordHistory;
+import su.onno.history.RecordImage;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.MetadataRegistry;
@@ -65,6 +69,7 @@ public class DocumentCommandService {
     private final WriteLifecycle lifecycle;
     private final RecordWriteGuard guard;
     private su.onno.period.PeriodCloseService periodClose;
+    private RecordHistory history = RecordHistory.disabled();
 
     public DocumentCommandService(MetadataRegistry registry, Jdbi jdbi, UiProperties properties,
                                   NumberGenerator numberGenerator, PostingService postingService,
@@ -98,7 +103,39 @@ public class DocumentCommandService {
                 writtenDate == null ? null : requireWriteDate(writtenDate), organization, operation);
     }
 
+    /**
+     * The change-history recorder for documents that opted in with {@code @Document(history = true)}.
+     * Defaults to the inert {@link RecordHistory#disabled()}; the auto-configuration wires the real one.
+     */
+    public void setHistory(RecordHistory history) {
+        this.history = history == null ? RecordHistory.disabled() : history;
+    }
+
+    // Each command binds the caller as the history actor for its duration, so the write, the
+    // post/unpost events and anything a lifecycle hook saves on this thread is attributed to them.
+
     public Map<String, Object> create(DocumentDescriptor desc, Map<String, Object> requestBody, AccessSubject subject) {
+        return HistoryActors.callAs(HistoryActor.of(subject), () -> createRecord(desc, requestBody, subject));
+    }
+
+    public Map<String, Object> update(DocumentDescriptor desc, UUID id, Map<String, Object> requestBody,
+                                       AccessSubject subject) {
+        return HistoryActors.callAs(HistoryActor.of(subject), () -> updateRecord(desc, id, requestBody, subject));
+    }
+
+    public Map<String, Object> post(DocumentDescriptor desc, UUID id, AccessSubject subject) {
+        return HistoryActors.callAs(HistoryActor.of(subject), () -> postRecord(desc, id, subject));
+    }
+
+    public Map<String, Object> unpost(DocumentDescriptor desc, UUID id, AccessSubject subject) {
+        return HistoryActors.callAs(HistoryActor.of(subject), () -> unpostRecord(desc, id, subject));
+    }
+
+    public void delete(DocumentDescriptor desc, UUID id, AccessSubject subject) {
+        HistoryActors.runAs(HistoryActor.of(subject), () -> deleteRecord(desc, id, subject));
+    }
+
+    private Map<String, Object> createRecord(DocumentDescriptor desc, Map<String, Object> requestBody, AccessSubject subject) {
         EntityWriteSupport.requireWritable(properties);
         access.requireWrite(subject, desc);
         Map<String, Object> body = EntityWriteAliases.document(desc, requestBody);
@@ -164,9 +201,11 @@ public class DocumentCommandService {
             }
             update.execute();
             guard.requirePostImage(h, desc.javaClass(), desc.tableName(), id, subject);
+            // Lines join this transaction (JDBI reuses the thread's open handle), so the header,
+            // its lines and the history entry commit or roll back together.
+            insertTabularSections(desc, id, body);
+            history.record(h, desc.javaClass(), id, RecordImage.ABSENT, null);
         });
-
-        insertTabularSections(desc, id, body);
         lifecycle.runAfterWrite(doc);
 
         Map<String, Object> result = query.get(subject, desc, id);
@@ -175,8 +214,8 @@ public class DocumentCommandService {
         return result;
     }
 
-    public Map<String, Object> update(DocumentDescriptor desc, UUID id, Map<String, Object> requestBody,
-                                       AccessSubject subject) {
+    private Map<String, Object> updateRecord(DocumentDescriptor desc, UUID id, Map<String, Object> requestBody,
+                                             AccessSubject subject) {
         EntityWriteSupport.requireWritable(properties);
         access.requireWrite(subject, desc);
         guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
@@ -224,49 +263,55 @@ public class DocumentCommandService {
             }
         }
 
-        if (!setClauses.isEmpty()) {
-            setClauses.add("_version = _version + 1");
-            boolean hasExpectedVersion = body.containsKey("version") || body.containsKey("_version");
-            String sql = "UPDATE " + desc.tableName() +
-                    " SET " + String.join(", ", setClauses) +
-                    " WHERE _id = :_id" + (hasExpectedVersion ? " AND _version = :_expected_version" : "");
+        // One transaction for the header, its lines and the history entry: the nested JDBI calls
+        // below reuse this thread's open handle, so they commit or roll back together.
+        jdbi.useTransaction(tx -> {
+            RecordImage historyBefore = history.capture(tx, desc.javaClass(), id);
+            if (!setClauses.isEmpty()) {
+                setClauses.add("_version = _version + 1");
+                boolean hasExpectedVersion = body.containsKey("version") || body.containsKey("_version");
+                String sql = "UPDATE " + desc.tableName() +
+                        " SET " + String.join(", ", setClauses) +
+                        " WHERE _id = :_id" + (hasExpectedVersion ? " AND _version = :_expected_version" : "");
 
-            int updated = jdbi.inTransaction(h -> {
-                var update = h.createUpdate(sql).bind("_id", id);
-                if (body.containsKey("number")) update.bind("_number", body.get("number"));
-                // Same as create: bind the timestamp as a LocalDateTime so Postgres accepts it. (#163)
-                if (body.containsKey("date")) update.bind("_date", requireWriteDate(body.get("date")));
-                if (hasExpectedVersion) {
-                    update.bind("_expected_version", parseInt(body.getOrDefault("version", body.get("_version"))));
-                }
-
-                for (AttributeDescriptor attr : desc.attributes()) {
-                    if (body.containsKey(attr.fieldName())
-                            && !EntityWriteSupport.leaveSecretUnchanged(attr, body.get(attr.fieldName()))) {
-                        EntityWriteSupport.bindAttribute(update, attr, body.get(attr.fieldName()), secretCipher);
+                int updated = jdbi.inTransaction(h -> {
+                    var update = h.createUpdate(sql).bind("_id", id);
+                    if (body.containsKey("number")) update.bind("_number", body.get("number"));
+                    // Same as create: bind the timestamp as a LocalDateTime so Postgres accepts it. (#163)
+                    if (body.containsKey("date")) update.bind("_date", requireWriteDate(body.get("date")));
+                    if (hasExpectedVersion) {
+                        update.bind("_expected_version", parseInt(body.getOrDefault("version", body.get("_version"))));
                     }
-                }
-                int n = update.execute();
-                if (n > 0) guard.requirePostImage(h, desc.javaClass(), desc.tableName(), id, subject);
-                return n;
-            });
-            if (updated == 0 && hasExpectedVersion) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Document was changed by another transaction: " + id);
-            }
-        }
 
-        // Re-insert tabular sections if provided
-        for (TabularSectionDescriptor ts : desc.tabularSections()) {
-            if (body.containsKey(ts.name())) {
-                jdbi.useHandle(h ->
-                        h.createUpdate("DELETE FROM " + ts.tableName() + " WHERE _parent_id = :parentId")
-                                .bind("parentId", id)
-                                .execute()
-                );
+                    for (AttributeDescriptor attr : desc.attributes()) {
+                        if (body.containsKey(attr.fieldName())
+                                && !EntityWriteSupport.leaveSecretUnchanged(attr, body.get(attr.fieldName()))) {
+                            EntityWriteSupport.bindAttribute(update, attr, body.get(attr.fieldName()), secretCipher);
+                        }
+                    }
+                    int n = update.execute();
+                    if (n > 0) guard.requirePostImage(h, desc.javaClass(), desc.tableName(), id, subject);
+                    return n;
+                });
+                if (updated == 0 && hasExpectedVersion) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Document was changed by another transaction: " + id);
+                }
             }
-        }
-        insertTabularSections(desc, id, body);
+
+            // Re-insert tabular sections if provided
+            for (TabularSectionDescriptor ts : desc.tabularSections()) {
+                if (body.containsKey(ts.name())) {
+                    jdbi.useHandle(h ->
+                            h.createUpdate("DELETE FROM " + ts.tableName() + " WHERE _parent_id = :parentId")
+                                    .bind("parentId", id)
+                                    .execute()
+                    );
+                }
+            }
+            insertTabularSections(desc, id, body);
+            history.record(tx, desc.javaClass(), id, historyBefore, null);
+        });
         lifecycle.runAfterWrite(doc);
 
         Map<String, Object> result = query.get(subject, desc, id);
@@ -324,7 +369,7 @@ public class DocumentCommandService {
         return EntityWriteSupport.validationReport(errors);
     }
 
-    public Map<String, Object> post(DocumentDescriptor desc, UUID id, AccessSubject subject) {
+    private Map<String, Object> postRecord(DocumentDescriptor desc, UUID id, AccessSubject subject) {
         EntityWriteSupport.requireWritable(properties);
         access.requirePost(subject, desc);
         guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
@@ -344,7 +389,7 @@ public class DocumentCommandService {
         return postingService.preview(doc);
     }
 
-    public Map<String, Object> unpost(DocumentDescriptor desc, UUID id, AccessSubject subject) {
+    private Map<String, Object> unpostRecord(DocumentDescriptor desc, UUID id, AccessSubject subject) {
         EntityWriteSupport.requireWritable(properties);
         access.requireUnpost(subject, desc);
         guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
@@ -362,7 +407,7 @@ public class DocumentCommandService {
         return query.inScope(subject, desc, id, AccessMode.WRITE);
     }
 
-    public void delete(DocumentDescriptor desc, UUID id, AccessSubject subject) {
+    private void deleteRecord(DocumentDescriptor desc, UUID id, AccessSubject subject) {
         EntityWriteSupport.requireWritable(properties);
         access.requireWrite(subject, desc);
         guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
@@ -399,11 +444,13 @@ public class DocumentCommandService {
                         .bind("id", id)
                         .mapTo(String.class)
                         .findOne()).orElse(null);
-        jdbi.useHandle(h ->
-                h.createUpdate("UPDATE " + desc.tableName() + " SET _deletion_mark = true WHERE _id = :id")
-                        .bind("id", id)
-                        .execute()
-        );
+        jdbi.useTransaction(h -> {
+            RecordImage before = history.capture(h, desc.javaClass(), id);
+            h.createUpdate("UPDATE " + desc.tableName() + " SET _deletion_mark = true WHERE _id = :id")
+                    .bind("id", id)
+                    .execute();
+            history.record(h, desc.javaClass(), id, before, null);
+        });
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.DELETED, EntityChangedEvent.DOCUMENT,
                 desc.logicalName(), id, number));
     }

@@ -10,7 +10,7 @@ import su.onno.types.Ref;
  * Scoped through a ref ({@code via("tenant")}), hierarchical, and carrying a second, unscoped-by
  * policy ref ({@code mirror}) that may point at another owner's tenant — the restricted-ref case.
  */
-@Catalog(name = "LkInstances", hierarchical = true)
+@Catalog(name = "LkInstances", hierarchical = true, history = true)
 @AccessControl(readRoles = {"CUSTOMER", "STAFF"})
 public class LkInstance extends CatalogObject {
 

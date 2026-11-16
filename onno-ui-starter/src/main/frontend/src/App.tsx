@@ -19,6 +19,7 @@ import { HintPortals } from "@/lib/hint-bridge";
 import { ActionsMenuPortals } from "@/lib/actions-menu-bridge";
 import { ActionsBarPortals } from "@/lib/actions-bar-bridge";
 import { CommentsPortals } from "@/lib/comments-bridge";
+import { HistoryPortals } from "@/lib/history-bridge";
 import { NavPresencePortals } from "@/lib/nav-presence-bridge";
 import { NotificationIndicatorPortals } from "@/lib/notification-indicator-bridge";
 import { GeoPortals } from "@/lib/geo-bridge";
@@ -104,6 +105,7 @@ function ProtectedApp() {
       <ActionsMenuPortals />
       <ActionsBarPortals />
       <CommentsPortals />
+      <HistoryPortals />
       <NavPresencePortals />
       <NotificationIndicatorPortals />
       <GeoPortals />

@@ -83,6 +83,7 @@ public class PostingEngine {
     private final PostEventPublisher eventPublisher;
     private final PostedDocumentLoader documentLoader;
     private PeriodCloseService periodClose;
+    private su.onno.history.RecordHistory history = su.onno.history.RecordHistory.disabled();
 
     public PostingEngine(Jdbi jdbi, MetadataRegistry registry,
                          Map<Class<?>, RegisterRepositoryImpl<?>> repositoryMap) {
@@ -121,6 +122,15 @@ public class PostingEngine {
      */
     public void setPeriodCloseService(PeriodCloseService periodClose) {
         this.periodClose = periodClose;
+    }
+
+    /**
+     * The change-history recorder: documents with {@code @Document(history = true)} get a
+     * {@code POSTED}/{@code UNPOSTED} entry written inside the posting transaction, so the entry and
+     * the {@code _posted} flip commit or roll back together.
+     */
+    public void setHistory(su.onno.history.RecordHistory history) {
+        this.history = history == null ? su.onno.history.RecordHistory.disabled() : history;
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -443,6 +453,7 @@ public class PostingEngine {
                     "Document " + documentId +
                             " does not exist, is deleted, or is already posted");
         }
+        history.recordEvent(handle, descriptor.javaClass(), documentId, su.onno.history.RecordHistory.POSTED, null);
     }
 
     private void claimPostedDocument(Handle handle,
@@ -460,6 +471,9 @@ public class PostingEngine {
                     "Document " + documentId +
                             " does not exist, is deleted, or is not posted");
         }
+        // A repost (clearPosted = false) re-applies the posting, so it is recorded as POSTED again.
+        history.recordEvent(handle, descriptor.javaClass(), documentId,
+                clearPosted ? su.onno.history.RecordHistory.UNPOSTED : su.onno.history.RecordHistory.POSTED, null);
     }
 
     private void unpostInTransaction(Handle handle,

@@ -27,6 +27,10 @@ payment, timesheet, work order, adjustment, or check-in.
 8. If the event affects registers, implement `Postable` or use `onno-posting`.
 9. Add typed `EntityView<E>` hints with getter references: `field`, `refField`, `rowField`, and
    `rowRefField`. String/dot-path overloads are only unsafe dynamic escape hatches.
+10. If the record is legally or operationally significant (medical record, contract, price),
+    set `history = true` on `@Document`/`@Catalog`: every write path then records who changed
+    which field (lines included) and post/unpost events in `onno_record_history`, shown in the
+    record's History panel and at `GET /api/history/{kind}/{name}/{id}`.
 
 ## Read The Examples
 

@@ -476,6 +476,27 @@ public final class SurfaceDivBuilder {
     }
 
     /**
+     * Appends the change-history panel ({@code onno-history} custom component) below a record
+     * surface, for entities that opted in with {@code history = true}. It carries only the record's
+     * {@code {kind, name, id}}; the panel loads {@code /api/history/...} itself when expanded.
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> withHistory(Map<String, Object> content, String kind,
+                                                  String name, String id) {
+        Object items = content.get("items");
+        if (!(items instanceof List<?> existing)) {
+            return content;
+        }
+        List<Map<String, Object>> next = new ArrayList<>((List<Map<String, Object>>) existing);
+        Map<String, Object> panel = Div.custom("onno-history",
+                Map.of("target", Map.of("kind", kind, "name", name, "id", id)));
+        Div.matchWidth(panel);
+        next.add(panel);
+        content.put("items", next);
+        return content;
+    }
+
+    /**
      * {@link HeaderAction}s as the plain-JSON items the record surface's action cluster
      * consumes ({@code label / icon / url / tone / placement} + optional {@code form}) —
      * carried in the entity-form descriptor's {@code actions}.

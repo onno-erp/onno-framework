@@ -1499,6 +1499,26 @@ Navigation is declaration metadata, not a handler response: use
 `a.action("docs").navigate("/documentation")` for a static navigation action. Server handlers return
 only refresh intent and structured feedback.
 
+### Record history — `/api/history`
+
+An entity that opts in on its model annotation — `@Catalog(history = true)` /
+`@Document(history = true)` — gets a collapsed **History** panel (the `onno-history` DivKit panel)
+at the bottom of its record surface: who changed which field from what to what, tabular-section
+rows included, plus created / deleted / posted / unposted events, newest first. The panel loads on
+first expand and refreshes when the record changes.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/api/history/{kind}/{name}/{id}` | The record's change entries, newest first. `?limit=` (default 50, max 200) and `?before=` (the previous page's `nextBefore`). `404` if the entity hasn't opted in. |
+
+Reading history needs what reading the record needs: the entity's read grant and, for a
+record-scoped viewer, the record inside its `RecordAccessPolicy` scope. References the viewer may
+not read are masked and `secret` attributes show only that they changed. Recording itself happens
+in the core (`su.onno.history.RecordHistory`) on every write path, so it does not depend on this
+starter; `onno.history.enabled=false` removes the panel and the endpoint. The panel's strings are
+the `history.*` message keys. See [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md#record-change-history)
+and [docs/HEADLESS_READ_API.md](../docs/HEADLESS_READ_API.md#record-history).
+
 ### Comments — `/api/comments`
 
 A catalog or document detail surface can carry a **discussion thread**: a feed of authored,

@@ -364,6 +364,39 @@ export interface CommentReaction {
   mine: boolean;
 }
 
+/** One changed value in a record-history entry (see RecordHistoryController). */
+export interface HistoryChangeView {
+  /** Tabular section name, or null for a header field. */
+  section: string | null;
+  line: number | null;
+  rowChange: "ADDED" | "REMOVED" | "CHANGED" | null;
+  field: string | null;
+  label: string | null;
+  type: "text" | "number" | "boolean" | "date" | "datetime" | "ref" | "enum";
+  /** A secret attribute: changed, values withheld. */
+  secret: boolean;
+  old: string | null;
+  new: string | null;
+  oldDisplay?: string;
+  newDisplay?: string;
+}
+
+/** One recorded event on a record: a write with its field changes, or a post/unpost/delete. */
+export interface HistoryEntryView {
+  id: string;
+  event: string;
+  at: string;
+  actor: string;
+  actorId: string | null;
+  changes: HistoryChangeView[];
+}
+
+export interface HistoryPage {
+  entries: HistoryEntryView[];
+  /** Pass as `before` to load the next (older) page; null when there is none. */
+  nextBefore: string | null;
+}
+
 /** One comment in an entity's discussion thread (see CommentController). */
 export interface CommentView {
   id: string;
@@ -806,6 +839,11 @@ export const api = {
   // Comments — a discussion thread on any catalog/document detail (see CommentController). Reads
   // and posts are gated server-side on read access to the owning entity; the author is stamped
   // from the session, never sent by the client.
+  // Record change history — read-only, gated server-side like a read of the record itself.
+  listHistory: (kind: "catalogs" | "documents", name: string, id: string, before?: string | null) =>
+    fetchJson<HistoryPage>(
+      `${BASE}/history/${kind}/${name}/${id}${before ? `?before=${encodeURIComponent(before)}` : ""}`
+    ),
   listComments: (kind: "catalogs" | "documents", name: string, id: string) =>
     fetchJson<CommentView[]>(`${BASE}/comments/${kind}/${name}/${id}`),
   addComment: (kind: "catalogs" | "documents", name: string, id: string, body: string, parentId?: string | null) =>
