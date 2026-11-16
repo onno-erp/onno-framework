@@ -737,7 +737,8 @@ literal initializer — but it *can* be seeded from the URL: the New form prefil
 query params, keys = write-path `fieldName`s, e.g. `…/new?room=<uuid>&startsAt=2026-07-16T19:00`.
 `Ref`/enum values are UUID strings; `LocalDate` is `yyyy-MM-dd` and `LocalDateTime` is offset-free
 ISO wall time (`yyyy-MM-ddTHH:mm[:ss[.fraction]]`). Offset- or zone-bearing `LocalDateTime` values
-are invalid: New-form prefills skip them, and write APIs return a field-specific `400`. The generated
+are invalid: New-form prefills skip them, and write APIs return a field-specific `400`. `LocalTime`
+is `HH:mm[:ss]`; `Instant` must carry `Z` or an offset (offset-free values are skipped / `400`). The generated
 form and read API normalize JDBC-loaded values to offset-free ISO. `viewport`/`theme`/`profile` are reserved;
 unknown keys and bad values are skipped silently. Prefill applies after `OnFillingHandler` and
 field initializers, before ref/enum label resolution.)
@@ -1917,6 +1918,13 @@ Date/time values are local wall times without timezone conversion. A date-only i
 starts at midnight; seconds are omitted. Both support `isDisabled`, `isReadOnly`,
 `isRequired`, `isInvalid`, and accessible labels. Generated `LocalDateTime` fields use
 `DateTimePicker`; the legacy `DatePicker includeTime` prop remains compatible.
+
+Generated `LocalTime` fields use a 24-hour time-of-day field (emits `HH:mm`). Generated `Instant`
+fields edit wall time in the display zone and send the UTC moment; the zone's short name is shown
+beside the field. The display zone is `onno.ui.time-zone` (an IANA id such as `Europe/Moscow`, so
+every viewer of a single-site deployment sees the same clock) or, when unset, the viewer's browser
+zone. List cells render `Instant` values in the same zone; `LocalDate`/`LocalDateTime`/`LocalTime`
+are zone-less and never shifted.
 The host must include the `DateTimePicker` export to use it from a custom widget.
 
 ### Editing document tabular sections

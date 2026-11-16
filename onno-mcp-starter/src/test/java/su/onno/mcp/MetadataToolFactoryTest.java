@@ -283,4 +283,12 @@ class MetadataToolFactoryTest {
         when(exchange.transportContext()).thenReturn(transport);
         return exchange;
     }
+
+    @Test
+    void temporalFieldsAdvertiseTheirWireFormat() {
+        assertThat(MetadataToolFactory.temporalFormat(java.time.LocalTime.class)).startsWith("HH:mm");
+        assertThat(MetadataToolFactory.temporalFormat(java.time.Instant.class)).contains("Z").contains("UTC");
+        assertThat(MetadataToolFactory.temporalFormat(java.time.LocalDate.class)).isEqualTo("yyyy-MM-dd");
+        assertThat(MetadataToolFactory.temporalFormat(String.class)).isNull();
+    }
 }

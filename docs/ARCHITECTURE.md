@@ -389,7 +389,10 @@ the prior storage-shaped response remains available explicitly with `?representa
 aliases and reject unequal duplicates. Temporal values are normalized at the read/write boundary:
 `LocalDate` is `yyyy-MM-dd`, and `LocalDateTime` is offset-free ISO wall time. Offset- or
 zone-bearing `LocalDateTime` writes are rejected with a field-specific `400` rather than silently
-discarding the offset. JDBC timestamp variants remain normalized on reads. This keeps PostgreSQL,
+discarding the offset. `LocalTime` is `HH:mm[:ss[.fraction]]`. `Instant` is an absolute moment:
+it is stored as `TIMESTAMP WITH TIME ZONE` (UTC), written with an explicit `Z`/offset (offset-free
+writes are a `400`), and read back as ISO UTC (`…Z`); the web client renders and edits it in
+`onno.ui.time-zone`, else the viewer's browser zone. JDBC timestamp variants remain normalized on reads. This keeps PostgreSQL,
 H2, the bundled forms, and headless clients on one round-trip-safe representation.
 
 All endpoints are under `/api/**`, authenticated, and (for mutations) CSRF-protected. `{name}` is

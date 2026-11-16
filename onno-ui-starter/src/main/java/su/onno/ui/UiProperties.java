@@ -63,6 +63,16 @@ public class UiProperties {
     private String locale = "en";
 
     /**
+     * The display time zone for {@code Instant} fields: an IANA zone id such as
+     * {@code Europe/Moscow}. An {@code Instant} is stored and transported as an absolute UTC moment;
+     * the web client renders and edits it as wall time in this zone, so every viewer of a
+     * single-site deployment sees the same clock. Empty (the default) uses each viewer's browser
+     * zone. {@code LocalDate}, {@code LocalDateTime} and {@code LocalTime} fields are zone-less wall
+     * values and are never shifted. An unknown zone id fails startup.
+     */
+    private String timeZone = "";
+
+    /**
      * Overrides for the framework's own chrome strings — action buttons, confirmation dialogs, the
      * login screen, empty/loading states, and client-side validation messages. Keys come from
      * {@link UiMessages#DEFAULTS} (e.g. {@code login.title}, {@code action.new}); each value replaces
@@ -110,6 +120,23 @@ public class UiProperties {
 
     public void setPath(String path) {
         this.path = path;
+    }
+
+    public String getTimeZone() {
+        return timeZone;
+    }
+
+    public void setTimeZone(String timeZone) {
+        String zone = timeZone == null ? "" : timeZone.trim();
+        if (!zone.isEmpty()) {
+            try {
+                java.time.ZoneId.of(zone);
+            } catch (java.time.DateTimeException invalid) {
+                throw new IllegalArgumentException(
+                        "onno.ui.time-zone must be an IANA zone id (e.g. Europe/Moscow): " + zone, invalid);
+            }
+        }
+        this.timeZone = zone;
     }
 
     public boolean isReadOnly() {

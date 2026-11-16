@@ -77,10 +77,13 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
 
 ## Model & lifecycle
 
-- **There is no `LocalTime`** (nor `Instant`/`OffsetDateTime`/`ZonedDateTime`). Schema generation
-  throws at boot with the supported list: `String`, `int/Integer`, `long/Long`, `boolean/Boolean`,
-  `double/Double`, `float/Float`, `BigDecimal`, `UUID`, `LocalDate`, `LocalDateTime`, enums,
-  `Ref<T>`.
+- **There is no `OffsetDateTime`/`ZonedDateTime`** — use `Instant` for an absolute moment.
+  Schema generation throws at boot with the supported list: `String`, `int/Integer`, `long/Long`,
+  `boolean/Boolean`, `double/Double`, `float/Float`, `BigDecimal`, `UUID`, `LocalDate`,
+  `LocalDateTime`, `LocalTime`, `Instant`, enums, `Ref<T>`.
+- **Changing a `LocalDateTime` field to `Instant` is a flagged (unsafe) type change.** PostgreSQL
+  converts the existing wall times using the database session zone; check that zone (or migrate the
+  values yourself) before applying it.
 - **No dependency injection inside `rules()`, `beforeWrite`, `beforePost`, `handlePosting`,
   `afterPost`.** In-transaction hooks run on plain reflectively-built instances — `@Autowired`
   fields are null. Anything needing Spring beans belongs in an `@EventListener` on
@@ -104,6 +107,10 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
   still normalizes PostgreSQL/JDBC timestamp representations and the bundled form normalizes loaded
   values before resubmitting them. Default logical reads can round-trip writable values without
   renaming keys; display/ref/color companions are read-only and ignored by partial writes.
+- **`LocalTime` is `HH:mm[:ss[.fraction]]`; `Instant` is the opposite of `LocalDateTime`.** An
+  `Instant` write must carry `Z` or a numeric offset (an offset-free value is a `400` — the server
+  never guesses a zone); reads always come back as ISO UTC (`…Z`). The UI shows and edits instants
+  in `onno.ui.time-zone` when set, else in each viewer's browser zone.
 
 ## SPA & static assets
 
