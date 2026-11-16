@@ -43,6 +43,11 @@ separate deployments for separate tenants. No provider credentials or example sa
 File defaults are `~/.config/onno/gmail-client.json`, `gmail-tokens.json`,
 `instagram-tokens.json`, and `whatsapp-tokens.json`. Mount writable owner-only files where required.
 Google's client file is its downloaded OAuth JSON. Its token file is created by the OAuth callback.
+
+Default credential file paths are resolved from the JVM's `user.home` system property when the
+properties bind, not from Spring's environment. An app that relied on `--user.home=…` as a Spring
+argument or environment property must now either start the JVM with `-Duser.home=…` or set the
+`onno.crm.channels.<provider>.*-file` paths explicitly; otherwise the channel reports "not configured".
 Instagram's file contains `{"access_token":"..."}`. WhatsApp's file contains:
 
 ```json
