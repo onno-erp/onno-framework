@@ -91,7 +91,9 @@ public record Cursor(String column, boolean descending, Object value, UUID id) {
         if (v instanceof BigDecimal || v instanceof Double || v instanceof Float) return "N";
         if (v instanceof Number) return "L"; // Long/Integer/Short/Byte
         if (v instanceof Timestamp || v instanceof Instant
-                || v instanceof LocalDateTime || v instanceof LocalDate) return "D";
+                || v instanceof LocalDateTime || v instanceof LocalDate
+                || v instanceof java.time.OffsetDateTime) return "D";
+        if (v instanceof java.sql.Time || v instanceof java.time.LocalTime) return "M";
         return "S";
     }
 
@@ -115,6 +117,8 @@ public record Cursor(String column, boolean descending, Object value, UUID id) {
             case "D" -> Timestamp.valueOf(LocalDateTime.parse(raw));
             // Legacy (pre-precision) tokens: epoch millis.
             case "T" -> new Timestamp(Long.parseLong(raw));
+            // A time of day (a LocalTime attribute's TIME column) binds back as java.sql.Time.
+            case "M" -> java.sql.Time.valueOf(java.time.LocalTime.parse(raw));
             default -> raw;
         };
     }
@@ -127,6 +131,8 @@ public record Cursor(String column, boolean descending, Object value, UUID id) {
     private static LocalDateTime localDateTime(Object v) {
         if (v instanceof Timestamp ts) return ts.toLocalDateTime();
         if (v instanceof Instant i) return Timestamp.from(i).toLocalDateTime();
+        // H2 surfaces TIMESTAMP WITH TIME ZONE (an Instant attribute) as an OffsetDateTime.
+        if (v instanceof java.time.OffsetDateTime odt) return Timestamp.from(odt.toInstant()).toLocalDateTime();
         if (v instanceof LocalDateTime ldt) return ldt;
         if (v instanceof LocalDate ld) return ld.atStartOfDay();
         throw new IllegalArgumentException("Unsupported temporal type: " + v.getClass());

@@ -71,6 +71,11 @@ final class EntityQuerySupport {
                     row.put(attr.columnName(), TemporalValues.toLocalDate(value).toString());
                 } else if (attr.javaType() == LocalDateTime.class) {
                     row.put(attr.columnName(), TemporalValues.toLocalDateTime(value).toString());
+                } else if (attr.javaType() == java.time.LocalTime.class) {
+                    row.put(attr.columnName(), TemporalValues.toLocalTime(value).toString());
+                } else if (attr.javaType() == java.time.Instant.class) {
+                    // An absolute moment: always ISO-8601 UTC ("…Z"), never a wall-clock string.
+                    row.put(attr.columnName(), TemporalValues.toInstant(value).toString());
                 }
             }
             // Also normalize framework system timestamps such as _date and _period.
@@ -81,6 +86,12 @@ final class EntityQuerySupport {
     private static Object canonicalTemporal(Object value) {
         if (value instanceof LocalDate || value instanceof java.sql.Date) {
             return TemporalValues.toLocalDate(value).toString();
+        }
+        if (value instanceof java.time.LocalTime || value instanceof java.sql.Time) {
+            return TemporalValues.toLocalTime(value).toString();
+        }
+        if (value instanceof java.time.Instant instant) {
+            return instant.toString();
         }
         if (value instanceof LocalDateTime || value instanceof java.sql.Timestamp
                 || value instanceof OffsetDateTime || value instanceof ZonedDateTime) {

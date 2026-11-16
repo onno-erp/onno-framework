@@ -546,6 +546,10 @@ public class DocumentCommandService {
             field.set(target, toLocalDate(value));
         } else if (fieldType == LocalDateTime.class) {
             field.set(target, toLocalDateTime(value));
+        } else if (fieldType == java.time.LocalTime.class) {
+            field.set(target, TemporalValues.toLocalTime(value));
+        } else if (fieldType == java.time.Instant.class) {
+            field.set(target, TemporalValues.toInstant(value));
         } else if (fieldType == UUID.class) {
             field.set(target, value instanceof UUID u ? u : UUID.fromString(value.toString()));
         } else if (fieldType.isEnum()) {

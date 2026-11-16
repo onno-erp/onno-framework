@@ -1,5 +1,6 @@
 import { format as formatWithPattern, parseISO, isValid } from "date-fns";
 import { widgetLocale } from "@/lib/widget-messages";
+import { configuredTimeZone, instantToWall, isInstantString } from "@/lib/time-zone";
 
 /**
  * Client-side display formatting for table cells, driven by a column's `.format(...)` and
@@ -50,7 +51,10 @@ export function formatTimestampDefault(raw: string): string | null {
   if (!TIMESTAMP.test(raw)) return null;
   const d = parseISO(raw.includes("T") ? raw : raw.replace(" ", "T"));
   if (!isValid(d)) return null;
-  return new Intl.DateTimeFormat(widgetLocale(), { dateStyle: "medium", timeStyle: "short" }).format(d);
+  // An absolute moment (an Instant: explicit Z/offset) renders in the display zone —
+  // onno.ui.time-zone, else the browser's. A wall-clock value has no offset and is never shifted.
+  const timeZone = isInstantString(raw) ? configuredTimeZone() : undefined;
+  return new Intl.DateTimeFormat(widgetLocale(), { dateStyle: "medium", timeStyle: "short", timeZone }).format(d);
 }
 
 function isNumberSpec(fmt: string): boolean {
@@ -96,7 +100,9 @@ function formatDate(raw: string, fmt: string): string | null {
   // Accept an ISO date ("2026-06-05"), an ISO date-time / offset date-time
   // ("2026-06-05T14:30:00+00:00"), or a JDBC timestamp with a space separator
   // ("2026-06-05 14:30:00.0"). parseISO keeps a bare date local (no timezone shift).
-  const norm = raw.includes("T") ? raw : raw.replace(" ", "T");
+  let norm = raw.includes("T") ? raw : raw.replace(" ", "T");
+  // An Instant under a configured display zone: format its wall time there, not in the browser's.
+  if (configuredTimeZone() && isInstantString(norm)) norm = instantToWall(norm) || norm;
   const d = parseISO(norm);
   if (!isValid(d)) return null;
   try {
