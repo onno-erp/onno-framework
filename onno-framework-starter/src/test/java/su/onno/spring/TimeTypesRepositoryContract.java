@@ -115,8 +115,14 @@ abstract class TimeTypesRepositoryContract {
         }
 
         @Bean
-        NamingStrategy onnoNamingStrategy() {
-            return new OnnoNamingStrategy();
+        NamingStrategy onnoNamingStrategy(MetadataRegistry registry) {
+            java.util.Map<Class<?>, String> tabularTables = new java.util.HashMap<>();
+            for (var catalog : registry.allCatalogs()) {
+                for (var section : catalog.tabularSections()) {
+                    tabularTables.put(section.rowClass(), section.tableName());
+                }
+            }
+            return new OnnoNamingStrategy(tabularTables);
         }
 
         @Bean

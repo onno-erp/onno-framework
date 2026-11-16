@@ -64,6 +64,7 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 | `onno.ui.plugins.location` | `String` | `classpath*:/onno-plugins/` | Classpath location holding the compiled plugin modules (`*.js`). The Gradle plugin emits here; change it only if you stage plugin bundles somewhere non-standard. Must be a `classpath:`/`classpath*:` location ending in `/`. |
 | `onno.ui.read-only` | `Boolean` | `false` | When true, every mutating REST call is rejected with `403 UI is in read-only mode`. |
 | `onno.ui.theme` | `Map<String,String>` | — | Free-form theme key/values served verbatim from `GET /api/theme`. |
+| `onno.ui.time-zone` | `String` | `` | The display time zone for `Instant` fields: an IANA zone id such as `Europe/Moscow`. An `Instant` is stored and transported as an absolute UTC moment; the web client renders and edits it as wall time in this zone, so every viewer of a single-site deployment sees the same clock. Empty (the default) uses each viewer's browser zone. `LocalDate`, `LocalDateTime` and `LocalTime` fields are zone-less wall values and are never shifted. An unknown zone id fails startup. |
 | `onno.ui.update-check.enabled` | `Boolean` | `true` | Master switch. When false no outbound call is ever made and the notice never appears. |
 | `onno.ui.update-check.initial-delay` | `Duration` | `1m` | Delay before the first check, so startup is never blocked on a network round-trip. |
 | `onno.ui.update-check.interval` | `Duration` | `24h` | How often to poll after the first check. Floored at 60s. |
