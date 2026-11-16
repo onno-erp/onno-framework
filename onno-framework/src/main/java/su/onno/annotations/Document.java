@@ -39,4 +39,15 @@ public @interface Document {
     String numberPrefix() default "";
 
     String context() default "";
+
+    /**
+     * Keep a field-level change history for this entity (who changed what, when, from which value).
+     * When {@code true} every write — through the generic REST/UI/import/MCP command path and through
+     * typed repository saves — appends rows to the framework-managed {@code onno_record_history}
+     * table: created/updated/deleted events with per-field old and new values (tabular-section rows
+     * included; {@code secret} attributes are recorded as changed without their values), plus post/unpost events. Off by
+     * default, so untracked entities pay nothing. See {@code su.onno.history.RecordHistory}; the
+     * global {@code onno.history.enabled} switch turns recording off everywhere.
+     */
+    boolean history() default false;
 }

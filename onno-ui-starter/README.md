@@ -1404,6 +1404,62 @@ instead of calculating its own viewport cap: make the renderer root
 bounded inner panes. This keeps the tab stationary and uses all remaining space. Content-oriented
 card/gallery renderers such as `BookTiles` should continue to flow and use the framework scroller.
 
+### Calendar and timeline list views
+
+A list of date-ranged records (appointments, bookings, work orders) can also show as a calendar or
+as a day scheduler, toggled from the list toolbar like the map view. Declare them in the entity's
+`list(ListSpec)` with getter references:
+
+```java
+@Override
+public void list(ListSpec<Appointment> list) {
+    list.columns(Appointment::getNumber, Appointment::getPatient, Appointment::getStartsAt);
+    list.filter(Appointment::getStatus).multiOptions();
+
+    // Month / week / day grid. The end is optional: calendar(start) places each record on one day.
+    list.calendar(Appointment::getStartsAt, Appointment::getEndsAt)
+        .title(Appointment::getPatient)          // entry text (else number/description/code)
+        .colorBy(Appointment::getStatus)         // @EnumLabel colour, else a stable hue per value
+        .defaultMode(ListSpec.CalendarMode.WEEK);
+
+    // One day on a time axis, one lane (column) per doctor.
+    list.timeline(Appointment::getStartsAt, Appointment::getEndsAt, Appointment::getDoctor)
+        .title(Appointment::getPatient)
+        .slotMinutes(10)                         // grid step and drag snap: 5/10/15/20/30/60
+        .hours(8, 21)                            // visible working day (end exclusive)
+        .defaultView();                          // open on the timeline, not the table
+}
+```
+
+Both are alternate bodies over the **same list**, not separate widgets:
+
+- **Read path** — they page the list feed (`/api/list/{kind}/{name}`) with the list's current query
+  (search, declared filters, an embedded list's base filter) plus `ge`/`le` range filters for the
+  visible period, so record-level access (`RecordAccessPolicy`) and the `EntityView` allowlist
+  apply unchanged. A period loads at most 2 000 records and says so when it is cut off. Grouping
+  and row selection are table-only and hide while a schedule view is shown.
+- **Live** — a change event for the entity refetches the period in place.
+- **Click** opens the record (`onno://{kind}/{name}/{id}`).
+- **Drag** — only when the viewer has write access on the entity. Moving an entry, stretching it
+  (calendar: needs an end field; timeline: drag the block's lower edge) or dropping a timeline block
+  into another lane sends a partial `PUT /api/{kind}/{name}/{id}` with just the changed fields, so
+  `beforeWrite`, `Validated` rules and record-level write scope run as for a form save. A refused
+  move snaps back and shows the server's message. Dragging is a mouse/pen gesture; touch scrolls and
+  taps to open.
+- **Lanes** are the lane reference's records the viewer may list (up to 200), so an idle doctor or
+  room still has a column; records without a lane value collect under "Unassigned". The lane must be
+  a single-target `Ref<T>` — anything else is ignored and the timeline shows one lane.
+
+Field shapes: a `LocalDate` start draws all-day entries and a `LocalDate` end is the range's **last
+day (inclusive)**; `LocalDateTime` values are wall-clock times and are written back zone-less. A
+`start` (or, for the timeline, `end`) that is not a date/time column drops that view with a startup
+warning instead of failing the list. Toggle labels localize via `list.calendarView` /
+`list.timelineView`; the views' own strings via `schedule.*` and `calendar.*`.
+
+Use the `type("calendar")` **page widget** instead when the calendar spans several entities
+(`CalendarSource`) or belongs on a dashboard rather than on one entity's list. The example app's
+`ScheduleEventView` declares both list views (People → Team events).
+
 ## Maps
 
 Geolocation renders on **MapLibre GL** over a minimal **monochrome basemap that flips light/dark
@@ -1498,6 +1554,26 @@ do not prepend the configured UI mount prefix.
 Navigation is declaration metadata, not a handler response: use
 `a.action("docs").navigate("/documentation")` for a static navigation action. Server handlers return
 only refresh intent and structured feedback.
+
+### Record history — `/api/history`
+
+An entity that opts in on its model annotation — `@Catalog(history = true)` /
+`@Document(history = true)` — gets a collapsed **History** panel (the `onno-history` DivKit panel)
+at the bottom of its record surface: who changed which field from what to what, tabular-section
+rows included, plus created / deleted / posted / unposted events, newest first. The panel loads on
+first expand and refreshes when the record changes.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/api/history/{kind}/{name}/{id}` | The record's change entries, newest first. `?limit=` (default 50, max 200) and `?before=` (the previous page's `nextBefore`). `404` if the entity hasn't opted in. |
+
+Reading history needs what reading the record needs: the entity's read grant and, for a
+record-scoped viewer, the record inside its `RecordAccessPolicy` scope. References the viewer may
+not read are masked and `secret` attributes show only that they changed. Recording itself happens
+in the core (`su.onno.history.RecordHistory`) on every write path, so it does not depend on this
+starter; `onno.history.enabled=false` removes the panel and the endpoint. The panel's strings are
+the `history.*` message keys. See [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md#record-change-history)
+and [docs/HEADLESS_READ_API.md](../docs/HEADLESS_READ_API.md#record-history).
 
 ### Comments — `/api/comments`
 

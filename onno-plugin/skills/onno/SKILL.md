@@ -227,7 +227,8 @@ UI is authored as Spring beans on the *view* side, never as annotations on domai
   .display(ClinicDoctor::getDoctor)` — the catalog
   analogue of a document `@TabularSection`), **Ref-picker secondary lines + avatars**
   (`f.refField(Appointment::getClient).refSecondary(Client::getPhone)`, `.widget("avatar")`), and a
-  **list map view** (`spec.map().lat(Location::getLatitude).lng(Location::getLongitude)`). The full
+  **list map view** (`spec.map().lat(Location::getLatitude).lng(Location::getLongitude)`), and
+  **calendar / timeline list views** (`spec.calendar(start, end)`, `spec.timeline(start, end, laneRef)`). The full
   per-method list is in
   [reference/cheatsheet.md](reference/cheatsheet.md).
 

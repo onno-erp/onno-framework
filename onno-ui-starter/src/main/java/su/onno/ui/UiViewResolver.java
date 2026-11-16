@@ -163,8 +163,12 @@ public class UiViewResolver {
         for (Map<String, Object> sc : (List<Map<String, Object>>) meta.getOrDefault("systemColumns", List.of())) {
             available.put(str(sc.get("fieldName")), ColumnMeta.of(sc));
         }
+        // Raw attribute metadata by field name — the reference facts (target, kind) a timeline's
+        // lane needs, which the list's column model doesn't carry.
+        Map<String, Map<String, Object>> attributes = new LinkedHashMap<>();
         for (Map<String, Object> a : (List<Map<String, Object>>) meta.getOrDefault("attributes", List.of())) {
             available.put(str(a.get("fieldName")), ColumnMeta.of(a));
+            attributes.put(str(a.get("fieldName")), a);
         }
 
         List<ResolvedListView.Column> columns = new ArrayList<>();
@@ -216,6 +220,9 @@ public class UiViewResolver {
         }
 
         ResolvedListView.MapView mapView = resolveMap(spec.mapSpec(), available);
+        ResolvedListView.CalendarView calendarView = resolveCalendar(spec.calendarSpec(), available, title);
+        ResolvedListView.TimelineView timelineView =
+                resolveTimeline(spec.timelineSpec(), available, attributes, title);
 
         // Custom body renderer: pass the registry type through as authored (a blank type is
         // dropped). Unlike the map's geo fields, there is nothing to validate server-side — the
@@ -270,7 +277,88 @@ public class UiViewResolver {
 
         return new ResolvedListView(title, columns, spec.searchable(), sortColumn,
                 spec.sortDescending(), filters, mapView,
-                pageSize, grouping, customView, spec.selectionCheckboxes(), spec.selectionWidget());
+                pageSize, grouping, customView, spec.selectionCheckboxes(), spec.selectionWidget(),
+                calendarView, timelineView);
+    }
+
+    /**
+     * Resolve a declared calendar spec, or null when its start field is not a real date/time column
+     * — a misconfigured calendar degrades to "no calendar view" (with a warning) rather than a
+     * broken toggle, like {@link #resolveMap}. An end/title/colour field that does not resolve is
+     * simply dropped.
+     */
+    private static ResolvedListView.CalendarView resolveCalendar(ListSpec.CalendarSpec<?> spec,
+                                                                 Map<String, ColumnMeta> available,
+                                                                 String title) {
+        if (spec == null) {
+            return null;
+        }
+        ResolvedListView.ViewField start = temporalField(spec.startField(), available);
+        if (!start.isSet()) {
+            log.warn("List '{}': calendar(\"{}\") is not a date/time field — calendar view ignored",
+                    title, spec.startField());
+            return null;
+        }
+        return new ResolvedListView.CalendarView(start, temporalField(spec.endField(), available),
+                viewField(spec.titleField(), available), viewField(spec.colorField(), available),
+                spec.defaultMode().name().toLowerCase(java.util.Locale.ROOT), spec.isDefaultView());
+    }
+
+    /**
+     * Resolve a declared timeline spec, or null when its start or end is not a real date/time
+     * column (a block needs both edges). The lane is kept only when it is a single-target
+     * reference — its lanes are that target's records — otherwise the timeline shows one lane.
+     */
+    private static ResolvedListView.TimelineView resolveTimeline(ListSpec.TimelineSpec<?> spec,
+                                                                 Map<String, ColumnMeta> available,
+                                                                 Map<String, Map<String, Object>> attributes,
+                                                                 String title) {
+        if (spec == null) {
+            return null;
+        }
+        ResolvedListView.ViewField start = temporalField(spec.startField(), available);
+        ResolvedListView.ViewField end = temporalField(spec.endField(), available);
+        if (!start.isSet() || !end.isSet()) {
+            log.warn("List '{}': timeline(\"{}\", \"{}\") needs two date/time fields — timeline view ignored",
+                    title, spec.startField(), spec.endField());
+            return null;
+        }
+        ResolvedListView.ViewField lane = ResolvedListView.ViewField.NONE;
+        String laneKind = "";
+        String laneTarget = "";
+        String laneLabel = "";
+        if (spec.laneField() != null && !spec.laneField().isBlank()) {
+            Map<String, Object> attr = attributes.get(spec.laneField());
+            boolean singleRef = attr != null && Boolean.TRUE.equals(attr.get("isRef"))
+                    && !Boolean.TRUE.equals(attr.get("isPolymorphicRef"))
+                    && !str(attr.get("refTarget")).isBlank();
+            if (singleRef) {
+                lane = viewField(spec.laneField(), available);
+                laneKind = "document".equals(str(attr.get("refKind"))) ? "documents" : "catalogs";
+                laneTarget = str(attr.get("refTarget"));
+                laneLabel = available.get(spec.laneField()).label();
+            } else {
+                log.warn("List '{}': timeline lane \"{}\" is not a single-target Ref field — lanes ignored",
+                        title, spec.laneField());
+            }
+        }
+        return new ResolvedListView.TimelineView(start, end, lane, laneKind, laneTarget, laneLabel,
+                viewField(spec.titleField(), available), viewField(spec.colorField(), available),
+                spec.slotMinutes(), spec.startHour(), spec.endHour(), spec.isDefaultView());
+    }
+
+    /** A field's row key + data column, or {@link ResolvedListView.ViewField#NONE} when blank/unknown. */
+    private static ResolvedListView.ViewField viewField(String field, Map<String, ColumnMeta> available) {
+        ColumnMeta cm = field == null || field.isBlank() ? null : available.get(field);
+        return cm == null ? ResolvedListView.ViewField.NONE
+                : new ResolvedListView.ViewField(cm.fieldName(), cm.columnName());
+    }
+
+    /** {@link #viewField} restricted to date/time columns. */
+    private static ResolvedListView.ViewField temporalField(String field, Map<String, ColumnMeta> available) {
+        ColumnMeta cm = field == null || field.isBlank() ? null : available.get(field);
+        return cm == null || !cm.isTemporal() ? ResolvedListView.ViewField.NONE
+                : new ResolvedListView.ViewField(cm.fieldName(), cm.columnName());
     }
 
     /**

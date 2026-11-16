@@ -3,6 +3,10 @@ package su.onno.ui;
 import su.onno.access.AccessMode;
 import su.onno.access.AccessSubject;
 import su.onno.events.EntityChangedEvent;
+import su.onno.history.HistoryActor;
+import su.onno.history.HistoryActors;
+import su.onno.history.RecordHistory;
+import su.onno.history.RecordImage;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.MetadataRegistry;
@@ -44,6 +48,7 @@ public class CatalogCommandService {
     private final AttributeValidator attributeValidator = new AttributeValidator();
     private final WriteLifecycle lifecycle;
     private final RecordWriteGuard guard;
+    private RecordHistory history = RecordHistory.disabled();
 
     public CatalogCommandService(MetadataRegistry registry, Jdbi jdbi, UiProperties properties,
                                  NumberGenerator numberGenerator, CatalogQueryService query,
@@ -60,7 +65,31 @@ public class CatalogCommandService {
         this.guard = new RecordWriteGuard(registry, query.scopes(), access, jdbi);
     }
 
+    /**
+     * The change-history recorder for catalogs that opted in with {@code @Catalog(history = true)}.
+     * Defaults to the inert {@link RecordHistory#disabled()}; the auto-configuration wires the real one.
+     */
+    public void setHistory(RecordHistory history) {
+        this.history = history == null ? RecordHistory.disabled() : history;
+    }
+
+    // Each command binds the caller as the history actor for its duration, so the write and anything
+    // it triggers on this thread (lifecycle hooks saving other records) is attributed to them.
+
     public Map<String, Object> create(CatalogDescriptor desc, Map<String, Object> requestBody, AccessSubject subject) {
+        return HistoryActors.callAs(HistoryActor.of(subject), () -> createRecord(desc, requestBody, subject));
+    }
+
+    public Map<String, Object> update(CatalogDescriptor desc, UUID id, Map<String, Object> requestBody,
+                                       AccessSubject subject) {
+        return HistoryActors.callAs(HistoryActor.of(subject), () -> updateRecord(desc, id, requestBody, subject));
+    }
+
+    public void delete(CatalogDescriptor desc, UUID id, AccessSubject subject) {
+        HistoryActors.runAs(HistoryActor.of(subject), () -> deleteRecord(desc, id, subject));
+    }
+
+    private Map<String, Object> createRecord(CatalogDescriptor desc, Map<String, Object> requestBody, AccessSubject subject) {
         EntityWriteSupport.requireWritable(properties);
         access.requireWrite(subject, desc);
         Map<String, Object> body = EntityWriteAliases.catalog(desc, requestBody);
@@ -132,6 +161,7 @@ public class CatalogCommandService {
             update.execute();
             TabularSectionWriteSupport.replace(h, desc.tabularSections(), id, body, secretCipher);
             guard.requirePostImage(h, desc.javaClass(), desc.tableName(), id, subject);
+            history.record(h, desc.javaClass(), id, RecordImage.ABSENT, null);
         });
         lifecycle.runAfterWrite(entity);
 
@@ -141,8 +171,8 @@ public class CatalogCommandService {
         return result;
     }
 
-    public Map<String, Object> update(CatalogDescriptor desc, UUID id, Map<String, Object> requestBody,
-                                       AccessSubject subject) {
+    private Map<String, Object> updateRecord(CatalogDescriptor desc, UUID id, Map<String, Object> requestBody,
+                                             AccessSubject subject) {
         EntityWriteSupport.requireWritable(properties);
         access.requireWrite(subject, desc);
         guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
@@ -212,6 +242,7 @@ public class CatalogCommandService {
                 " WHERE _id = :_id" + (hasExpectedVersion ? " AND _version = :_expected_version" : "");
 
         int updated = jdbi.inTransaction(h -> {
+            RecordImage before = history.capture(h, desc.javaClass(), id);
             var update = h.createUpdate(sql).bind("_id", id);
             if (body.containsKey("code")) update.bind("_code", body.get("code"));
             if (body.containsKey("description")) update.bind("_description", body.get("description"));
@@ -231,6 +262,7 @@ public class CatalogCommandService {
             if (n > 0) {
                 TabularSectionWriteSupport.replace(h, desc.tabularSections(), id, body, secretCipher);
                 guard.requirePostImage(h, desc.javaClass(), desc.tableName(), id, subject);
+                history.record(h, desc.javaClass(), id, before, null);
             }
             return n;
         });
@@ -300,7 +332,7 @@ public class CatalogCommandService {
         return query.inScope(subject, desc, id, AccessMode.WRITE);
     }
 
-    public void delete(CatalogDescriptor desc, UUID id, AccessSubject subject) {
+    private void deleteRecord(CatalogDescriptor desc, UUID id, AccessSubject subject) {
         EntityWriteSupport.requireWritable(properties);
         access.requireWrite(subject, desc);
         guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
@@ -318,11 +350,13 @@ public class CatalogCommandService {
                         .bind("id", id)
                         .mapTo(String.class)
                         .findOne()).orElse(null);
-        jdbi.useHandle(h ->
-                h.createUpdate("UPDATE " + desc.tableName() + " SET _deletion_mark = true WHERE _id = :id")
-                        .bind("id", id)
-                        .execute()
-        );
+        jdbi.useTransaction(h -> {
+            RecordImage before = history.capture(h, desc.javaClass(), id);
+            h.createUpdate("UPDATE " + desc.tableName() + " SET _deletion_mark = true WHERE _id = :id")
+                    .bind("id", id)
+                    .execute();
+            history.record(h, desc.javaClass(), id, before, null);
+        });
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.DELETED, EntityChangedEvent.CATALOG,
                 desc.logicalName(), id, code));
     }

@@ -285,6 +285,32 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
         return new OnnoAfterSaveCallback(outboxWriter, registry, secretCipher, entityChangePublisher, metrics);
     }
 
+    /**
+     * The record change history (field-level audit log) behind {@code @Catalog(history = true)} /
+     * {@code @Document(history = true)}. With {@code onno.history.enabled=false} it is the inert
+     * {@link su.onno.history.RecordHistory#disabled()} recorder, so collaborators never branch.
+     */
+    @Bean
+    @ConditionalOnMissingBean(su.onno.history.RecordHistory.class)
+    public su.onno.history.RecordHistory recordHistory(
+            Jdbi jdbi, MetadataRegistry registry, su.onno.security.SecretCipher secretCipher,
+            OnnoProperties properties,
+            org.springframework.beans.factory.ObjectProvider<su.onno.history.HistoryActorResolver> actorResolver) {
+        if (!properties.getHistory().isEnabled()) {
+            return su.onno.history.RecordHistory.disabled();
+        }
+        return new su.onno.history.RecordHistory(jdbi, registry, secretCipher, () -> {
+            su.onno.history.HistoryActorResolver resolver = actorResolver.getIfAvailable();
+            return resolver == null ? null : resolver.resolve();
+        });
+    }
+
+    /** Records history for typed repository saves/deletes of opted-in entities. */
+    @Bean
+    public RecordHistoryCallback recordHistoryCallback(su.onno.history.RecordHistory recordHistory, Jdbi jdbi) {
+        return new RecordHistoryCallback(recordHistory, jdbi);
+    }
+
     @Bean
     public OnnoAfterConvertCallback onnoAfterConvertCallback(MetadataRegistry registry,
                                                              su.onno.security.SecretCipher secretCipher) {
@@ -405,11 +431,13 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
                                          su.onno.posting.PostEventPublisher postEventPublisher,
                                          su.onno.posting.PostedDocumentLoader postedDocumentLoader,
                                          OnnoMetrics metrics,
-                                         org.springframework.beans.factory.ObjectProvider<su.onno.period.PeriodCloseService> periodClose) {
+                                         org.springframework.beans.factory.ObjectProvider<su.onno.period.PeriodCloseService> periodClose,
+                                         su.onno.history.RecordHistory recordHistory) {
         PostingEngine engine = new PostingEngine(
                 jdbi, registry, repositoryImplMap, outboxWriter, postEventPublisher,
                 postedDocumentLoader);
         engine.setPeriodCloseService(periodClose.getIfAvailable());
+        engine.setHistory(recordHistory);
         return new TimedPostingService(engine, metrics);
     }
 

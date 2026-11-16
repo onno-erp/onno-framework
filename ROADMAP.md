@@ -19,6 +19,7 @@ Implemented:
 - Document post/unpost rights separate from write access: `@AccessControl(postRoles, unpostRoles)` narrows who may post, re-post or unpost (and delete a posted document) on REST, MCP and the built-in UI actions; `BeforeUnpostHandler` lets the domain veto an unpost
 - Record-level access policies (`RecordAccessPolicy` + `RecordScope`): declarative, query-pushed-down "which records" rules for external users, enforced on every generic read/write path (lists, aggregates, search, refs, writes, actions, import, comments, tags, presence, notifications, SSE, MCP, CRM inbox) with a shipped leak-test conformance suite
 - Structured reference resolution for API rows via `{column}_display` and `{column}_ref`
+- Record change history: opt-in `@Catalog/@Document(history = true)` field-level audit log (who, when, old and new value; tabular-section rows; post/unpost/delete events) recorded on the generic command path and typed repository saves, with a History panel on the record surface and `GET /api/history/{kind}/{name}/{id}` under the record's own read access
 - Server-sent UI event stream (`GET /api/events`) for live refresh of catalogs, documents, registers, and comment threads
 - Agent-readable business model surface via the MCP server (`onno-mcp-starter`, `describe_metadata` tool) — there is no anonymous HTTP manifest endpoint
 - Application-defined MCP tools via authenticated, role-scoped `@McpTool` Spring bean methods, with an SDK-level `McpToolProvider` extension point

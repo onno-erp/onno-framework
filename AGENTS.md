@@ -694,6 +694,42 @@ and bypass is audited. Mark non-accounting documents `@PeriodCloseExempt`. The a
 at `/period-close` (`PeriodClosePage.ROUTE`); link it from a `Layout` section. See
 [docs/PERIOD_CLOSE.md](docs/PERIOD_CLOSE.md).
 
+### Record Change History (Audit Log)
+
+When the business needs to know who changed what and when (a medical record, a contract, a price),
+opt the entity in on its annotation. Do not model a hand-written audit table or log register.
+
+```java
+@Document(name = "Visits", numberPrefix = "V-", history = true)
+public class Visit extends DocumentObject { … }
+
+@Catalog(name = "Patients", history = true)
+public class Patient extends CatalogObject { … }
+```
+
+Every write of an opted-in record then appends to the framework-managed `onno_record_history`
+table, in the write's own transaction: `CREATED` / `UPDATED` / `DELETED` (deletion mark) /
+`RESTORED` with one row per changed field (old and new value, tabular-section rows compared by
+line), plus `POSTED` / `UNPOSTED` for documents. It is recorded at the storage level, so the
+generic command path (REST, UI, import, MCP, actions) and typed `repository.save(...)` /
+`delete(...)` produce the same entries. `secret` attributes are recorded as changed without values.
+Entities that have not opted in cost nothing; `onno.history.enabled=false` turns recording off
+everywhere.
+
+Attribution: a generic command is attributed to its `AccessSubject`. A typed repository save or
+`PostingService` call is attributed to the request's authenticated user, else `system`; trusted code
+acting for someone else binds the actor explicitly:
+
+```java
+HistoryActors.runAs(HistoryActor.named("lab-import"), () -> visits.save(visit));
+```
+
+The record surface shows a collapsed **History** panel and `GET /api/history/{kind}/{name}/{id}`
+returns the entries. Reading history needs exactly what reading the record needs (`@AccessControl`
+plus `RecordAccessPolicy`); references the viewer may not read are masked. Trusted Java reads the
+raw entries with `RecordHistory.list(recordId, before, limit)`. Writes that bypass both paths
+(hand-written SQL against an entity table) are not recorded.
+
 ### Contexts And Future Services
 
 Use `context` on annotations to mark bounded contexts. At first, contexts live in one monolith.
@@ -1052,6 +1088,8 @@ UI is authored as Java classes registered as Spring beans — never as annotatio
 - **`Layout`** — navigation structure + shell (nav presentation) + persona. The default layout (`profile() == null`) is the back-office shell and is the only place to configure application-wide shell, branding, or `identity(...)`; startup rejects those settings on named profiles. One layout per persona declares its roles and curated sections. `configure(LayoutSpec)`: `spec.shell().nav(NavStyle.SIDEBAR)`, `spec.section("Sales").icon("euro").catalog(Customer.class).document(Invoice.class)`. **Nav is curated:** a catalog/document/register shows in the sidebar only if a section lists it. An entity with an `EntityView` but no section is reachable by its direct route (`/catalogs/{name}`) yet absent from the nav. A section can also link an authored page at a custom route with `.page(route, label, icon)` (e.g. `spec.section("Reports").page("/ops", "Sales Ops", "activity")`). (Earlier versions auto-listed unclaimed catalogs under default groups; that was removed — cf. #69.)
 - **`Page`** — a route whose content you compose: `compose(PageBuilder)` with `b.title(...)`, `b.widget(...)`, `b.text(...)`, `b.list(entity)` (the full interactive list, embedded), `b.actions(...)`, `b.custom(...)`, `b.bare()`/`b.header(false)` to drop the header row, `b.row(r -> r.col(width, c -> …)…)` for arbitrary column layout (nestable; widths are fractions / `"<n>px"` / null=equal; columns stack on mobile), and `b.aside(a -> …)` as the right-rail shortcut — any widget works on any page, in any region. **Everything is a page:** the home dashboard (`/`), settings (`/settings`), a default surface route (`/catalogs/{name}` / `/documents/{name}` / `/registers/{name}` — an authored page there *overrides* the default list/report surface), and arbitrary custom routes (`/ops`, `/reports`) are all just pages. The framework serves a good default; a registered `Page` bean at a route replaces it. `profile()`/`viewport()` scope a page to a persona/device (most-specific match wins, like `EntityView`). A widget's `.type("…")` may name a **custom widget** the framework has no built-in for: author a React component in `src/main/widgets/*.tsx` (using `@onno/widget-sdk`), apply the `su.onno.widgets` Gradle plugin, and it compiles + serves + auto-loads with no frontend project. See `onno-ui-starter/README.md` → "Pages — everything is a page" and "Authoring a custom widget".
 - **`EntityView<E>`** — per-entity list columns (`list(ListSpec)`) and field hints (`fields(EntityConfigBuilder)`). A view with `profile()` set replaces the default view for that profile on both the list and the record surface (fields, `detail(...)` widgets, action placement, validations). Its `actions(ActionSpec<E>)` and `ListSpec<E>.rowStyle` callbacks retain `E`: typed `ActionRow<E>` reads reject getters from unrelated entities at compile time, including in dynamic action providers. Use parameterized types; page actions use `ActionSpec<Void>`. An `EntityView` is what makes a surface *served* — no view → `404` (the view layer is the allowlist). It is **necessary but not sufficient for nav presence**: the entity is reachable by direct route but stays out of the sidebar until a `Layout` section also lists it (see Layout above). Override `comments()` to return `true` to opt that catalog/document into the per-entity discussion thread (`/api/comments`); it is off by default and gated by the global `onno.comments.enabled` switch. Override `opensInMain()` to return `true` when the entity's records are full working surfaces: on the desktop islands layout, opening one (list row, ref link, `onno://{kind}/{name}/{id}` from a widget) replaces the focused pane instead of opening a detail island beside the list; the shell advertises those list routes as `mainRecordRoutes` for every readable opted-in entity, whether or not a `Layout` places it in the nav. `list.rowStyle(row -> …)` adds **conditional row formatting**: the function runs server-side per row (same `ActionRow` as state-aware actions) and returns a semantic `ListSpec.RowStyle` tone (`DANGER`/`WARNING`/`SUCCESS`/`ACCENT`/`MUTED`) or `null` — e.g. urgent rows tinted red, cancelled ones faded; the grid renders it as a theme-aware translucent wash.
+
+`ListSpec` view modes switch a list's body from the toolbar: `list.map()`, `list.custom(type)`, and for date-ranged records `list.calendar(Appointment::getStartsAt, Appointment::getEndsAt)` (month/week/day) and `list.timeline(Appointment::getStartsAt, Appointment::getEndsAt, Appointment::getDoctor)` (a day scheduler with one lane per record of the lane `Ref`; `.slotMinutes(10).hours(8, 21)`). Calendar and timeline read the list feed with the list's search and filters, refresh live, open the record on click and — only with write access — save a drag (move, resize, lane change) as a partial update through the generic command path, so `beforeWrite`, rules and record access apply. Do not build a custom scheduler widget or a bespoke reschedule endpoint for one entity; use the `type("calendar")` page widget with `CalendarSource` beans when a calendar spans several entities.
 
 Field-hint methods on `FieldHintBuilder` (used inside `EntityView.fields`): `order(int)`, `group(String)`, `width(String)`, `widget(String)`, `placeholder(String)`, `format(String)`, `hint(String)`, `label(String)`, `refSecondary(String)`, `openButton(bool)`, `clearButton(bool)`, `hideInList()`, `hideInForm()`, `hideInDetail()`, plus explicit `visibleInList(bool)`/`visibleInForm(bool)`/`visibleInDetail(bool)`. Only set what differs from the default. `width(String)` is a form-layout hint (`half`/`1/2`/`50%` pairs fields); a list column falls back to it only when it is a pixel value. Size list columns with the list-only `ListSpec.width(field, px)` / `width(field, "<n>px")` (getter-reference overloads too), which wins and rejects non-pixel values at configuration time.
 

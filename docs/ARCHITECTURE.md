@@ -465,6 +465,7 @@ cancellation comes from `cancellationAssignment(payload)`; inbox/task authorizat
 | Actions | `POST /api/actions/{kind}/{name}/{key}` — authored toolbar/row/detail actions; an action declaring `.form(...)` first opens the canonical dialog client-side and POSTs `inputs` (read via `ActionContext.input(key)`). `ActionSpec.dynamic(...)` retains a late-bound provider instead of freezing catalog-backed actions at startup; dynamic list descriptors carry `dynamicActions: true`, and `GET /api/actions/{kind}/{name}?id=` resolves current toolbar/row descriptors plus per-row state on each context-menu open. Static-only lists make no extra request; the SPA retains the last successful dynamic snapshot on a transient failure. Execution/form/batch resolve the provider again, so a removed key returns the normal `404`. Form metadata (`title`, description, labels, tone, icon, `SM`/`MD`/`LG`) rides in the action descriptor. `GET …/{key}/form?id=` returns server-computed opening values (`.formDefaults(ctx -> …)` → `{values, rows}`). `ActionRejectedException` maps to HTTP 422 `ActionFeedback` (`severity`, `presentation`, title/message/details, `fieldErrors`, `formErrors`, `dismissLabel`, `keepFormOpen`); forms retain input and render errors, while no-form rejection can use the accessible feedback dialog. Successful results are `{refresh, feedback}` from `ActionResult.toast(...)`, `.dialog(...)`, `.feedback(...)`, `.reload()`, or `.refresh(...)`; action navigation is static declaration metadata. `POST …/{key}/batch` runs `{ids:[…]}` once (≤500, `{ok, failed, total, feedback?}`; the first typed per-row rejection is preserved); `POST /api/divkit/page-action?route=&key=` runs a page button. All POSTs honour `onno.ui.read-only` and declared `.roles(...)` (#227). `POST /api/{catalogs|documents}/{name}/batch-delete` is bulk DELETE (ui-starter) |
 | Media | `POST /api/media`, `GET /api/media/{key}` — authenticated uploads; served with `nosniff`, safe raster images inline and other types as attachments ([MEDIA_UPLOADS.md](MEDIA_UPLOADS.md)) (ui-starter) |
 | Comments | `GET`/`POST /api/comments/{kind}/{name}/{id}`, `POST /api/comments/{commentId}/reactions`, `DELETE /api/comments/{commentId}` — discussion threads with replies (`parentId`) and grouped reactions, opt-in per entity via `EntityView.comments()` (404 otherwise), gated on read access to the entity; `createdAt`/`editedAt` are zone-qualified instants (`…Z`) (ui-starter) |
+| Record history | `GET /api/history/{kind}/{name}/{id}[?limit=&before=]` — field-level change history of one catalog item or document, newest first, for entities that opted in with `@Catalog/@Document(history = true)` (404 otherwise); gated exactly like a read of the record (entity grant + record scope), restricted references masked, secrets never included (ui-starter) |
 | Mentions | `GET /api/mentions?q=[&kind=people\|catalogs\|documents]` — comment typeahead over readable records; the UI uses `@` for people mentions (`kind=people` narrows to the `Layout.identity(...)` catalog, falling back to all catalogs when no identity link is configured) and `#` to reference any record — no `kind` sweeps documents and catalogs alike, searchable by name or code. Suggestions carry a secondary `hint` (a person's `email` attribute, a catalog record's code, a document's `yyyy-MM-dd` date). `GET /api/mentions/resolve?kind&name&id` resolves one triple to its live display plus a `person` flag (same per-viewer read gate) — the compose box uses it to swap a pasted internal `/ui/...` record URL for an `@` (person) or `#` (anything else) mention. Bodies carry `@[Display](kind/name/id)` / `#[Display](kind/name/id)` tokens resolved live; readable `@` mentions publish `EntityMentionedEvent` (consumed by notifications; additive via `@EventListener`) (ui-starter) |
 | Notifications | `GET /api/notifications[?unread&cursor]` — the caller's keyset-paginated timeline `{rows, nextCursor, hasMore, unreadCount}`; `POST /api/notifications/{id}/read` and `POST /api/notifications/read-all` mark read. Every call is scoped to the caller's identity (no cross-user reads). Rows persist in the framework-owned `onno_notifications` table; new ones push over the `notification` SSE event (routed by recipient, relayed across nodes over the `ClusterEventBus`). Built-in producers: comment mentions and record assignment (`@AssigneeField`); apps add more by calling `NotificationService.notify`. Gated by `onno.notifications.*` (ui-starter) |
 
@@ -737,6 +738,50 @@ RecordAccessPolicy tenantsByOwner() {
 
 `RecordPolicyConformanceTest` (leak test + route coverage guard) and `RecordScopeArchitectureTest`
 keep new endpoints and data paths honest. See [Record access policies](RECORD_ACCESS_POLICIES.md).
+
+## Record change history
+
+`@Catalog(history = true)` / `@Document(history = true)` opts an entity into a field-level audit
+log. The flag lives on the model annotation (not on `EntityView`) because it is a domain guarantee
+that must hold on every write path, including ones with no UI. `su.onno.history.RecordHistory`
+(core) owns the framework-managed, append-only `onno_record_history` table (created with
+`CREATE TABLE IF NOT EXISTS`, outside the metadata diff, like `onno_schema_history`).
+
+Recording is storage-level, so both write paths behave the same:
+
+1. Before the mutation the writer captures a `RecordImage` — the stored row plus its tabular-section
+   rows as canonical text (`RecordHistory.capture`).
+2. After it, on the same transaction-bound JDBI handle, `RecordHistory.record` re-reads the row,
+   diffs the images and inserts one row per changed value under a shared change id. A write that
+   changed nothing records nothing.
+
+| Path | Hook |
+| --- | --- |
+| Generic command path (`CatalogCommandService`, `DocumentCommandService`: REST, UI, import, MCP, actions) | capture/record inside the write transaction. Document header, lines and history now share one transaction. |
+| Typed repositories (`save`, soft `delete`) | `RecordHistoryCallback` (`BeforeSaveCallback` + `AfterSaveCallback`), on the handle bound to the repository's Spring transaction, so history rolls back with the save |
+| Post / unpost / repost (any caller of `PostingService`) | `PostingEngine` writes the `POSTED` / `UNPOSTED` entry right after it flips `_posted`, inside the posting transaction (a repost records `POSTED` again) |
+
+Events are `CREATED`, `UPDATED`, `DELETED` (deletion mark set), `RESTORED` (cleared), `POSTED`,
+`UNPOSTED`. Header fields use logical names (`code`, `description`, `parent`, `folder`, `number`,
+`date`, attribute field names); tabular-section rows are compared by line position and reported as
+`ADDED` / `REMOVED` / `CHANGED`. Values are stored as text (reference and enumeration ids, ISO
+dates, plain decimals). `secret` attributes are compared in memory after decryption and stored as
+"changed" with no values, so the table never holds a secret.
+
+The actor is the thread's `HistoryActors` binding (the command services bind the caller's
+`AccessSubject` for the whole command), else the `HistoryActorResolver` bean (the UI starter resolves
+the request's authenticated user and identity record), else `system`.
+
+`GET /api/history/{kind}/{name}/{id}` (ui-starter, `RecordHistoryController`) serves the entries
+under the record's own read rules: entity read grant (403), history opted in (404), record inside
+the caller's `RecordAccessPolicy` read scope (404). Reference and enumeration values are resolved
+through `RefResolver` for the caller, so a reference they may not read is masked. The record surface
+appends an `onno-history` panel for opted-in entities. `onno.history.enabled=false` swaps in an
+inert recorder: no table, no panel, endpoint 404.
+
+Not covered yet: retention/purge, restoring an earlier version, a user-action journal (logins,
+reads), an MCP read tool, and history for registers and constants. Hand-written SQL against an
+entity table bypasses the recorder.
 
 ## Integrations
 

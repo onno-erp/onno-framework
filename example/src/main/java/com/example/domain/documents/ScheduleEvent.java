@@ -1,5 +1,6 @@
 package com.example.domain.documents;
 
+import com.example.domain.catalogs.Employee;
 import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Document;
@@ -9,6 +10,7 @@ import su.onno.model.DocumentObject;
 import su.onno.period.PeriodCloseExempt;
 import su.onno.rules.BusinessRule;
 import su.onno.rules.Validated;
+import su.onno.types.Ref;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -41,6 +43,10 @@ public class ScheduleEvent extends DocumentObject implements OnFillingHandler, V
 
     @Attribute(displayName = "Ends at", required = true)
     private LocalDateTime endsAt = LocalDate.now().plusDays(1).atTime(12, 0);
+
+    /** Who runs the event: the lane of the list's timeline view (one column per employee). */
+    @Attribute(displayName = "Organizer")
+    private Ref<Employee> organizer;
 
     @Attribute(displayName = "Show unavailable employees")
     private boolean showUnavailable = true;

@@ -17,10 +17,13 @@ if something looks off — the code wins, and you should fix this file if it has
 | `autoNumber` | boolean | `true` | Auto-generate codes. |
 | `codePrefix` | String | `""` | Fixed code prefix. |
 | `context` | String | `""` | Bounded-context grouping / future service split point. |
+| `history` | boolean | `false` | Record a field-level change history (who/when/old → new) in `onno_record_history` on every write path; shows the History panel and serves `GET /api/history/catalogs/{name}/{id}`. |
 
 ### `@Document` (on a class extending `DocumentObject`)
 `name` (required), `title=""`, `tableName=""`, `previousNames={}` (covers doc + tabular section
-table renames), `numberLength=11`, `autoNumber=true`, `numberPrefix=""`, `context=""`.
+table renames), `numberLength=11`, `autoNumber=true`, `numberPrefix=""`, `context=""`, `history=false` (field-level
+change history incl. tabular rows and post/unpost events; attribute typed saves from trusted code
+with `HistoryActors.runAs(HistoryActor.named("…"), …)`; global switch `onno.history.enabled`).
 
 ### `@TabularSection` (on a `List<Row>` field of a catalog or document; `Row extends TabularSectionRow`)
 `name=""` (child table name; derived from the field name if empty). Each section must use a
@@ -401,7 +404,14 @@ because they are not Java field references.
     (`"SHIPPED"`) or its `@EnumLabel` text, or author **no options** (`.multiOptions()`) to offer
     every declared value labelled like the pills; `map()` → `MapSpec<E>` adds a Table⇄Map toggle —
     `lat(getter).lng(getter)` or `geoJson(String)`, `label(getter)` (marker popup), `defaultView()`
-    (open on the map); `custom(type)` → `CustomSpec` delegates the list **body** to a
+    (open on the map); `calendar(startGetter[, endGetter])` → `CalendarSpec<E>` adds a month/week/day
+    Calendar view and `timeline(startGetter, endGetter[, laneRefGetter])` → `TimelineSpec<E>` a
+    day scheduler with one lane per record of the lane `Ref` — both read the list feed with the
+    list's search/filters, refresh live, open the record on click and, with write access, save a
+    drag (move / resize / lane change) as a partial update through the generic command path;
+    `title(getter)`, `colorBy(getter)`, `defaultView()`, calendar `defaultMode(CalendarMode.WEEK)`,
+    timeline `slotMinutes(10)` + `hours(8, 21)`; a non-temporal start/end drops the view;
+    `custom(type)` → `CustomSpec` delegates the list **body** to a
     widget-registry component (`registerListRenderer(type, C)` from `@onno/widget-sdk`; props =
     `{rows, list, open, openUrl}`) behind a Table⇄custom toggle — `label(s)` (toggle label, else the
     `list.customView` message), `defaultView()`; the framework keeps search/filters/sort/feed/live
