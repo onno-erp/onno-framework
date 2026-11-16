@@ -410,6 +410,15 @@ public final class UiMessages {
         d.put("calendar.minutes", "{count} min");
         d.put("calendar.hours", "{count} h");
 
+        // Calendar / timeline list views (ListSpec.calendar / ListSpec.timeline).
+        d.put("list.calendarView", "Calendar");
+        d.put("list.timelineView", "Timeline");
+        d.put("schedule.day", "Day");
+        d.put("schedule.unassigned", "Unassigned");
+        d.put("schedule.empty", "Nothing scheduled in this period.");
+        d.put("schedule.showingFirst", "Showing the first {shown} records of this period.");
+        d.put("schedule.resize", "Change the end time");
+
         // Time-range picker chrome (dashboard shared date-range control).
         d.put("timeRange.dateRange", "Date range");
         d.put("timeRange.custom", "Custom");

@@ -385,6 +385,15 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "calendar.minutes": "{count} min",
   "calendar.hours": "{count} h",
 
+  // Calendar / timeline list views (ListSpec.calendar / ListSpec.timeline).
+  "list.calendarView": "Calendar",
+  "list.timelineView": "Timeline",
+  "schedule.day": "Day",
+  "schedule.unassigned": "Unassigned",
+  "schedule.empty": "Nothing scheduled in this period.",
+  "schedule.showingFirst": "Showing the first {shown} records of this period.",
+  "schedule.resize": "Change the end time",
+
   // Time-range picker chrome.
   "timeRange.dateRange": "Date range",
   "timeRange.custom": "Custom",
