@@ -346,6 +346,34 @@ public final class UiMessages {
         d.put("action.delete", "Delete");
         d.put("action.open", "Open");
         d.put("action.copyLink", "Copy link");
+
+        // Record change history panel (@Catalog/@Document(history = true)).
+        d.put("history.title", "History");
+        d.put("history.loading", "Loading…");
+        d.put("history.empty", "No changes recorded yet.");
+        d.put("history.loadError", "Could not load the history.");
+        d.put("history.more", "Show older changes");
+        d.put("history.event.CREATED", "Created");
+        d.put("history.event.UPDATED", "Changed");
+        d.put("history.event.DELETED", "Marked for deletion");
+        d.put("history.event.RESTORED", "Restored");
+        d.put("history.event.POSTED", "Posted");
+        d.put("history.event.UNPOSTED", "Unposted");
+        d.put("history.actor.system", "System");
+        d.put("history.secret", "changed (value hidden)");
+        d.put("history.row.ADDED", "{section}, line {line} added");
+        d.put("history.row.REMOVED", "{section}, line {line} removed");
+        d.put("history.row.CHANGED", "{section}, line {line}");
+        d.put("history.field.code", "Code");
+        d.put("history.field.description", "Description");
+        d.put("history.field.parent", "Parent");
+        d.put("history.field.folder", "Folder");
+        d.put("history.field.number", "Number");
+        d.put("history.field.date", "Date");
+        d.put("history.value.yes", "Yes");
+        d.put("history.value.no", "No");
+        d.put("history.value.empty", "empty");
+
         d.put("action.close", "Close");
         d.put("action.ok", "OK");
         d.put("action.feedback.blocked", "Action blocked");
@@ -381,6 +409,15 @@ public final class UiMessages {
         d.put("calendar.openItem", "Open");
         d.put("calendar.minutes", "{count} min");
         d.put("calendar.hours", "{count} h");
+
+        // Calendar / timeline list views (ListSpec.calendar / ListSpec.timeline).
+        d.put("list.calendarView", "Calendar");
+        d.put("list.timelineView", "Timeline");
+        d.put("schedule.day", "Day");
+        d.put("schedule.unassigned", "Unassigned");
+        d.put("schedule.empty", "Nothing scheduled in this period.");
+        d.put("schedule.showingFirst", "Showing the first {shown} records of this period.");
+        d.put("schedule.resize", "Change the end time");
 
         // Time-range picker chrome (dashboard shared date-range control).
         d.put("timeRange.dateRange", "Date range");

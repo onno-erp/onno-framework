@@ -210,6 +210,9 @@ export interface AppConfig {
   // BCP-47 locale configured by onno.ui.locale. The client uses it for date inputs, calendars, and
   // locale-sensitive widgets; absent on older servers means browser/default English behavior.
   locale?: string;
+  // IANA zone from onno.ui.time-zone: the zone Instant fields are shown and edited in. Absent means
+  // each viewer's browser zone.
+  timeZone?: string;
   // The framework's chrome strings (English defaults + onno.ui.messages overrides), keyed by the
   // ids in lib/messages.ts. MessagesProvider overlays this on the bundled defaults.
   messages?: Record<string, string>;

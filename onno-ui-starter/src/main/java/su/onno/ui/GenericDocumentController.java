@@ -54,14 +54,16 @@ public class GenericDocumentController {
      * the junction (join catalog or information register) and enforces read access on it.
      */
     @GetMapping("/{name}/{id}/related/{relatedName}")
-    public List<Map<String, Object>> related(@PathVariable String name, @PathVariable UUID id,
+    public Map<String, Object> related(@PathVariable String name, @PathVariable UUID id,
                                              @PathVariable String relatedName,
                                              @RequestParam(defaultValue = "logical") String representation,
+                                             @RequestParam(required = false) String cursor,
+                                             @RequestParam(defaultValue = "100") int limit,
                                              AccessSubject subject) {
         DocumentDescriptor parent = query.require(name);
         access.requireRead(subject, parent);
-        return relatedLists.rows(parent.javaClass(), parent.logicalName(), relatedName, id, subject,
-                EntityJsonRepresentation.parse(representation));
+        return KeysetWindow.envelope(relatedLists.page(parent.javaClass(), parent.logicalName(), relatedName, id, subject,
+                EntityJsonRepresentation.parse(representation), cursor, limit));
     }
 
     @PostMapping("/{name}")

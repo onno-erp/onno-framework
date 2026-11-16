@@ -49,8 +49,12 @@ function server(opts: { hierarchical?: boolean; decorate?: (ids: string[]) => un
     }
     if (url.pathname === "/api/catalogs/Items/children" && url.searchParams.get("folders") === "true") {
       const parent = url.searchParams.get("parent");
-      return json(ALL.filter((r) => r.folder && (r.parent ?? null) === parent)
-        .map((r) => ({ ...r, hasChildFolders: ALL.some((c) => c.folder && c.parent === r.id) })));
+      return json({
+        rows: ALL.filter((r) => r.folder && (r.parent ?? null) === parent)
+          .map((r) => ({ ...r, hasChildFolders: ALL.some((c) => c.folder && c.parent === r.id) })),
+        nextCursor: null,
+        hasMore: false,
+      });
     }
     if (url.pathname === "/api/catalogs/Items/tree") {
       return json(pathTree((url.searchParams.get("ids") ?? "").split(",").filter(Boolean)));

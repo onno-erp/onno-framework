@@ -197,8 +197,8 @@ duplicates with `400`. See [the headless contract](../docs/HEADLESS_READ_API.md)
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/{name}/children?parent={uuid}` | Direct children (hierarchical catalogs only; else `400`). Omit `parent` for roots. `folders=true` returns just the folders, each with `hasChildFolders` (whether it holds a sub-folder the caller may read). |
-| GET | `/{name}/tree` | Full nested tree (hierarchical only). `ids=a,b` returns only the paths from the roots to those records; a path starts at the first ancestor the caller may read, and unreadable or deleted ids are left out. |
+| GET | `/{name}/children?parent={uuid}` | Direct children (hierarchical catalogs only; else `400`), one keyset window `{ rows, nextCursor, hasMore }` (`?cursor=&limit=`, default 100, max 500), folders first then by description. Omit `parent` for roots. `folders=true` returns just the folders, each with `hasChildFolders` (whether it holds a sub-folder the caller may read). |
+| GET | `/{name}/tree` | Every live node the caller may read as a flat keyset window `{ rows, nextCursor, hasMore }` (`?cursor=&limit=`, default 100, max 500); each node carries its `parent`, so a client assembles the hierarchy across windows (hierarchical only). `ids=a,b` instead returns a plain array of just the paths from the roots to those records; a path starts at the first ancestor the caller may read, and unreadable or deleted ids are left out. |
 | GET | `/{name}/{id}` | Single item. |
 | POST | `/{name}` | Create. Body is a JSON map of `code`/`description`/`folder`/`parent` + attribute fields. Code auto-generated when omitted and the catalog auto-numbers. |
 | PUT | `/{name}/{id}` | Partial update. Send `version` (or `_version`) for optimistic locking — a stale version returns `409`. |
@@ -220,13 +220,35 @@ duplicates with `400`. See [the headless contract](../docs/HEADLESS_READ_API.md)
 | POST | `/{name}/batch-delete` | Soft-delete `{ids: […]}` in one request (≤500, auto-unposting posted ones). Per-id failures don't abort; returns `{ok, failed, total}`. Backs the list's batch Delete N. |
 | DELETE | `/{name}/{id}` | Soft delete (auto-unposts first if posted — which requires the unpost right, see `/unpost`). A domain `BeforeDeleteHandler.beforeDelete()` runs first and may veto by throwing (a `ValidationException` maps to the standard `4xx`). |
 
+Writes, post/unpost and `posting-preview` on a document inside a closed period return `409`
+`{error: "period-closed", message, scope, closedThrough, operation}`.
+
+### Period close — `/api/period-close`
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/` | `{locks: [{scope, label, closedThrough, state, updatedAt, updatedBy}], canManage}` — any signed-in user; `state` is `soft` or `hard`. |
+| GET | `/audit?limit=100` | Close / reopen / override / adjustment audit trail. Manage roles. |
+| POST | `/close` | `{scope, closedThrough, hard?, reason?}`. Manage roles. |
+| POST | `/reopen` | `{scope, closedThrough?, reason}` — no `closedThrough` fully reopens; `reason` required. Manage roles. |
+
+`scope` is `global`, `context:<name>`, `register:<name>` or `organization:<id>`. Manage roles are `ADMIN` plus
+`onno.period-close.manage-roles`. The built-in admin page is served at `/period-close`
+(`PeriodClosePage.ROUTE`); link it from a `Layout` section. See
+[docs/PERIOD_CLOSE.md](../docs/PERIOD_CLOSE.md).
+
 ### Registers — `/api/registers`
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/{name}/movements?from=&to=` | Raw movements. |
-| GET | `/{name}/balance?{dim}={value}...` | Current balances (query params are dimension filters). |
-| GET | `/{name}/turnover?from=&to=&{dim}=...` | Period turnover; `from` and `to` are required. |
+| GET | `/{name}/movements?from=&to=` | Raw movements, newest first, one keyset window `{ rows, nextCursor, hasMore }` (`?cursor=&limit=`, default 100, max 500). |
+| GET | `/{name}/balance?{dim}={value}...&asOf=` | Current (or `asOf`) balances, one keyset window `{ rows, nextCursor, hasMore }` (`?cursor=&limit=`, default 100, max 500). Other query params are dimension equality filters, bound as the dimension's declared type (a malformed value is `400`). |
+| GET | `/{name}/turnover?from=&to=&{dim}=...` | Period turnover per dimension tuple, one keyset window `{ rows, nextCursor, hasMore }` (`?cursor=&limit=`, default 100, max 500); `from` and `to` are required. Only dimension names act as filters. |
+
+These are the same shared envelope as every other collection read: follow `nextCursor` until
+`hasMore` is false; a cursor minted for another feed, filter set or user is `400`. From Java,
+`RegisterQueryService.movements/balance/turnover(...)` return the complete result by following the
+cursor (`KeysetWindow.drain`); use the `*Page` variants on request paths.
 
 The catalog/document **list grid** is fed window-by-window from a dedicated feed so a 100k-row entity
 never ships whole to the client. The default is **keyset (seek) pagination**: indexed, constant-time
@@ -328,8 +350,8 @@ as a colored status pill:
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/list/registers/{name}/movements?cursor=&limit=&sort=&dir=&from=&to=&eq=&ge=&le=` | One window of movements + the live total, for the virtualized register surface. |
-| GET | `/api/list/registers/{name}/balance?cursor=&limit=&sort=&dir=&eq=&in=&ge=&le=` | One window of current balances + the live total (BALANCE registers). |
+| GET | `/api/list/registers/{name}/movements?cursor=&limit=&sort=&dir=&from=&to=&eq=&ge=&le=` | One window of movements for the virtualized register surface; `count=exact` adds `total`. |
+| GET | `/api/list/registers/{name}/balance?cursor=&limit=&sort=&dir=&eq=&in=&ge=&le=` | One window of current balances (BALANCE registers); `count=exact` adds `total`. |
 
 ### DivKit server-driven UI — `/api/divkit`
 
@@ -737,7 +759,8 @@ literal initializer — but it *can* be seeded from the URL: the New form prefil
 query params, keys = write-path `fieldName`s, e.g. `…/new?room=<uuid>&startsAt=2026-07-16T19:00`.
 `Ref`/enum values are UUID strings; `LocalDate` is `yyyy-MM-dd` and `LocalDateTime` is offset-free
 ISO wall time (`yyyy-MM-ddTHH:mm[:ss[.fraction]]`). Offset- or zone-bearing `LocalDateTime` values
-are invalid: New-form prefills skip them, and write APIs return a field-specific `400`. The generated
+are invalid: New-form prefills skip them, and write APIs return a field-specific `400`. `LocalTime`
+is `HH:mm[:ss]`; `Instant` must carry `Z` or an offset (offset-free values are skipped / `400`). The generated
 form and read API normalize JDBC-loaded values to offset-free ISO. `viewport`/`theme`/`profile` are reserved;
 unknown keys and bad values are skipped silently. Prefill applies after `OnFillingHandler` and
 field initializers, before ref/enum label resolution.)
@@ -985,16 +1008,16 @@ Headless clients use the same boundary:
 
 ```text
 GET  /api/process-definitions
-GET  /api/processes
+GET  /api/processes                       ?cursor=&limit= → {rows, nextCursor, hasMore}
 POST /api/processes/{definitionKey}
 GET  /api/processes/{instanceId}
-GET  /api/processes/{instanceId}/history
-GET  /api/processes/{instanceId}/executions
+GET  /api/processes/{instanceId}/history   ?cursor=&limit= → {rows, nextCursor, hasMore}
+GET  /api/processes/{instanceId}/executions ?cursor=&limit= → {rows, nextCursor, hasMore}
 POST /api/processes/{instanceId}/cancel    {"reason":"…"}
 POST /api/processes/{instanceId}/migrate
-GET  /api/tasks
+GET  /api/tasks                           ?cursor=&limit= → {rows, nextCursor, hasMore}
 POST /api/tasks/{workItemId}/claim
-GET  /api/tasks/{workItemId}/history
+GET  /api/tasks/{workItemId}/history       ?cursor=&limit= → {rows, nextCursor, hasMore}
 POST /api/tasks/{workItemId}/delegate   {"targetActorId":"identity-record-uuid","reason":"…"}
 POST /api/tasks/{workItemId}/complete   {"outcome":"ENUM_CONSTANT"}
 ```
@@ -1386,6 +1409,62 @@ instead of calculating its own viewport cap: make the renderer root
 bounded inner panes. This keeps the tab stationary and uses all remaining space. Content-oriented
 card/gallery renderers such as `BookTiles` should continue to flow and use the framework scroller.
 
+### Calendar and timeline list views
+
+A list of date-ranged records (appointments, bookings, work orders) can also show as a calendar or
+as a day scheduler, toggled from the list toolbar like the map view. Declare them in the entity's
+`list(ListSpec)` with getter references:
+
+```java
+@Override
+public void list(ListSpec<Appointment> list) {
+    list.columns(Appointment::getNumber, Appointment::getPatient, Appointment::getStartsAt);
+    list.filter(Appointment::getStatus).multiOptions();
+
+    // Month / week / day grid. The end is optional: calendar(start) places each record on one day.
+    list.calendar(Appointment::getStartsAt, Appointment::getEndsAt)
+        .title(Appointment::getPatient)          // entry text (else number/description/code)
+        .colorBy(Appointment::getStatus)         // @EnumLabel colour, else a stable hue per value
+        .defaultMode(ListSpec.CalendarMode.WEEK);
+
+    // One day on a time axis, one lane (column) per doctor.
+    list.timeline(Appointment::getStartsAt, Appointment::getEndsAt, Appointment::getDoctor)
+        .title(Appointment::getPatient)
+        .slotMinutes(10)                         // grid step and drag snap: 5/10/15/20/30/60
+        .hours(8, 21)                            // visible working day (end exclusive)
+        .defaultView();                          // open on the timeline, not the table
+}
+```
+
+Both are alternate bodies over the **same list**, not separate widgets:
+
+- **Read path** — they page the list feed (`/api/list/{kind}/{name}`) with the list's current query
+  (search, declared filters, an embedded list's base filter) plus `ge`/`le` range filters for the
+  visible period, so record-level access (`RecordAccessPolicy`) and the `EntityView` allowlist
+  apply unchanged. A period loads at most 2 000 records and says so when it is cut off. Grouping
+  and row selection are table-only and hide while a schedule view is shown.
+- **Live** — a change event for the entity refetches the period in place.
+- **Click** opens the record (`onno://{kind}/{name}/{id}`).
+- **Drag** — only when the viewer has write access on the entity. Moving an entry, stretching it
+  (calendar: needs an end field; timeline: drag the block's lower edge) or dropping a timeline block
+  into another lane sends a partial `PUT /api/{kind}/{name}/{id}` with just the changed fields, so
+  `beforeWrite`, `Validated` rules and record-level write scope run as for a form save. A refused
+  move snaps back and shows the server's message. Dragging is a mouse/pen gesture; touch scrolls and
+  taps to open.
+- **Lanes** are the lane reference's records the viewer may list (up to 200), so an idle doctor or
+  room still has a column; records without a lane value collect under "Unassigned". The lane must be
+  a single-target `Ref<T>` — anything else is ignored and the timeline shows one lane.
+
+Field shapes: a `LocalDate` start draws all-day entries and a `LocalDate` end is the range's **last
+day (inclusive)**; `LocalDateTime` values are wall-clock times and are written back zone-less. A
+`start` (or, for the timeline, `end`) that is not a date/time column drops that view with a startup
+warning instead of failing the list. Toggle labels localize via `list.calendarView` /
+`list.timelineView`; the views' own strings via `schedule.*` and `calendar.*`.
+
+Use the `type("calendar")` **page widget** instead when the calendar spans several entities
+(`CalendarSource`) or belongs on a dashboard rather than on one entity's list. The example app's
+`ScheduleEventView` declares both list views (People → Team events).
+
 ## Maps
 
 Geolocation renders on **MapLibre GL** over a minimal **monochrome basemap that flips light/dark
@@ -1500,6 +1579,26 @@ The client presents feedback, calls the source surface's refresh callback, then 
 feedback, refresh and navigation. Batch endpoints keep their count/feedback summary and do not
 propagate individual records' navigation destinations.
 
+### Record history — `/api/history`
+
+An entity that opts in on its model annotation — `@Catalog(history = true)` /
+`@Document(history = true)` — gets a collapsed **History** panel (the `onno-history` DivKit panel)
+at the bottom of its record surface: who changed which field from what to what, tabular-section
+rows included, plus created / deleted / posted / unposted events, newest first. The panel loads on
+first expand and refreshes when the record changes.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/api/history/{kind}/{name}/{id}` | The record's change entries, newest first, one keyset window `{ rows, nextCursor, hasMore }` (`?cursor=&limit=`, default 100, max 500). The cursor is bound to the record and the caller (a foreign one is `400`). `404` if the entity hasn't opted in. |
+
+Reading history needs what reading the record needs: the entity's read grant and, for a
+record-scoped viewer, the record inside its `RecordAccessPolicy` scope. References the viewer may
+not read are masked and `secret` attributes show only that they changed. Recording itself happens
+in the core (`su.onno.history.RecordHistory`) on every write path, so it does not depend on this
+starter; `onno.history.enabled=false` removes the panel and the endpoint. The panel's strings are
+the `history.*` message keys. See [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md#record-change-history)
+and [docs/HEADLESS_READ_API.md](../docs/HEADLESS_READ_API.md#record-history).
+
 ### Comments — `/api/comments`
 
 A catalog or document detail surface can carry a **discussion thread**: a feed of authored,
@@ -1527,7 +1626,7 @@ endpoints return **404** — the comment surface doesn't exist there.
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/comments/{kind}/{name}/{id}` | The thread for one record, oldest first. `{kind}` is `catalogs`/`documents`. `404` if the entity hasn't opted into comments. Each comment carries `parentId` (null for top-level), `mentions` (live mention/reference resolution), and grouped `reactions` (`{ emoji, count, mine }`). |
+| GET | `/api/comments/{kind}/{name}/{id}` | The thread for one record, oldest first, one keyset window `{ rows, nextCursor, hasMore }` (`?cursor=&limit=`, default 100, max 500). `{kind}` is `catalogs`/`documents`. `404` if the entity hasn't opted into comments. Each comment carries `parentId` (null for top-level), `mentions` (live mention/reference resolution), and grouped `reactions` (`{ emoji, count, mine }`). |
 | POST | `/api/comments/{kind}/{name}/{id}` | Add a comment or reply — body `{ "body": "…", "parentId": "…" }` (`parentId` optional/null). The author is stamped from the session ([CurrentUserResolver](src/main/java/su/onno/ui/CurrentUserResolver.java)); the client never asserts identity. |
 | POST | `/api/comments/{commentId}/reactions` | Toggle the caller's reaction — body `{ "emoji": "👍" }`; returns the updated grouped reactions for that comment and live-syncs the thread. Supported quick reactions: `👍`, `❤️`, `🎉`, `👀`, `✅`. |
 | DELETE | `/api/comments/{commentId}` | Soft-delete (kept for audit). Author or `ADMIN` only. |
@@ -1575,7 +1674,7 @@ feature is disabled.
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/notifications[?unread&cursor]` | The caller's timeline, newest first, keyset-paginated: `{ items, nextCursor, hasMore, unreadCount }`. `?unread=true` restricts to unread; `?cursor=` resumes. Scoped to the caller — never another user's feed. A record-scoped viewer gets no item about a record it can't read, and `unreadCount` leaves those out. |
+| GET | `/api/notifications[?unread&cursor]` | The caller's timeline, newest first, keyset-paginated: `{ rows, nextCursor, hasMore, unreadCount }`. `?unread=true` restricts to unread; `?cursor=` resumes. Scoped to the caller — never another user's feed. A record-scoped viewer gets no item about a record it can't read, and `unreadCount` leaves those out. |
 | POST | `/api/notifications/{id}/read` | Mark one read; returns the fresh `{ unreadCount }`. |
 | POST | `/api/notifications/read-all` | Mark every unread one read; returns `{ marked, unreadCount }`. |
 
@@ -1936,6 +2035,13 @@ Date/time values are local wall times without timezone conversion. A date-only i
 starts at midnight; seconds are omitted. Both support `isDisabled`, `isReadOnly`,
 `isRequired`, `isInvalid`, and accessible labels. Generated `LocalDateTime` fields use
 `DateTimePicker`; the legacy `DatePicker includeTime` prop remains compatible.
+
+Generated `LocalTime` fields use a 24-hour time-of-day field (emits `HH:mm`). Generated `Instant`
+fields edit wall time in the display zone and send the UTC moment; the zone's short name is shown
+beside the field. The display zone is `onno.ui.time-zone` (an IANA id such as `Europe/Moscow`, so
+every viewer of a single-site deployment sees the same clock) or, when unset, the viewer's browser
+zone. List cells render `Instant` values in the same zone; `LocalDate`/`LocalDateTime`/`LocalTime`
+are zone-less and never shifted.
 The host must include the `DateTimePicker` export to use it from a custom widget.
 
 ### Editing document tabular sections

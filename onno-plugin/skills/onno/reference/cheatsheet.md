@@ -17,10 +17,13 @@ if something looks off — the code wins, and you should fix this file if it has
 | `autoNumber` | boolean | `true` | Auto-generate codes. |
 | `codePrefix` | String | `""` | Fixed code prefix. |
 | `context` | String | `""` | Bounded-context grouping / future service split point. |
+| `history` | boolean | `false` | Record a field-level change history (who/when/old → new) in `onno_record_history` on every write path; shows the History panel and serves `GET /api/history/catalogs/{name}/{id}`. |
 
 ### `@Document` (on a class extending `DocumentObject`)
 `name` (required), `title=""`, `tableName=""`, `previousNames={}` (covers doc + tabular section
-table renames), `numberLength=11`, `autoNumber=true`, `numberPrefix=""`, `context=""`.
+table renames), `numberLength=11`, `autoNumber=true`, `numberPrefix=""`, `context=""`, `history=false` (field-level
+change history incl. tabular rows and post/unpost events; attribute typed saves from trusted code
+with `HistoryActors.runAs(HistoryActor.named("…"), …)`; global switch `onno.history.enabled`).
 
 ### `@TabularSection` (on a `List<Row>` field of a catalog or document; `Row extends TabularSectionRow`)
 `name=""` (child table name; derived from the field name if empty). Each section must use a
@@ -44,10 +47,15 @@ reuse across documents/sections. Share implementation through a base row class.
 | `searchIndex` | boolean | `false` | PostgreSQL trigram index for substring search on this String attribute. Opt in only for fields users search by on large tables. |
 
 **Supported attribute field types:** `String`, `int`/`Integer`, `long`/`Long`, `boolean`/`Boolean`,
-`double`/`Double`, `float`/`Float`, `BigDecimal`, `UUID`, `LocalDate`, `LocalDateTime`, Java `enum`s
-(`@Enumeration`), and `Ref<T>`. **There is no `LocalTime`** (nor `Instant` / `OffsetDateTime` /
-`ZonedDateTime`) — schema generation throws `IllegalArgumentException` at startup for any other type.
-Model a time-of-day as a `LocalDateTime`, or a `String`/`int` if you only need the clock value.
+`double`/`Double`, `float`/`Float`, `BigDecimal`, `UUID`, `LocalDate`, `LocalDateTime`, `LocalTime`,
+`Instant`, Java `enum`s (`@Enumeration`), and `Ref<T>`. There is no `OffsetDateTime` / `ZonedDateTime`
+— schema generation throws `IllegalArgumentException` at startup for any other type.
+
+**Picking a temporal type:** `LocalDate` = a calendar day; `LocalDateTime` = a zone-less wall time
+(document dates, "the 10:00 slot" in one site); `LocalTime` = a time of day (opening hours, shift
+start/end) → `TIME`; `Instant` = an absolute moment (appointment start, "sent at") → stored in UTC
+(`TIMESTAMP WITH TIME ZONE`), sent as ISO with `Z`/offset, shown in `onno.ui.time-zone` or the
+viewer's browser zone.
 
 **Naming rule — entity/attribute `name` must be ASCII / URL-safe.** It becomes the REST route segment
 (`/api/catalogs/{name}`), the derived table name, and the access-check key. Derived table/column
@@ -215,6 +223,27 @@ validation exception/payload.
   simulating chronological restoration, so it is not a guarantee that post succeeds. Save and
   commit before posting.
 
+## Period close (package `su.onno.period`)
+
+- `PeriodCloseService` bean (off with `onno.period-close.enabled=false`):
+  `close(scope, closedThrough, actor, reason)` (soft), `close(scope, closedThrough, hard, actor, reason)`,
+  `reopen(scope, closedThroughOrNull, actor, reason)`
+  (reason required), `locks()`, `closedThrough(scope)`, `audit(limit)`,
+  `override(new PeriodOverride(actor, reason), action)`.
+- `PeriodScope.global()` / `.context("Finance")` / `.register("Cash")` / `.organization(orgRef)`;
+  text form `global`, `context:<name>`, `register:<name>`, `organization:<id>`. Close date is
+  inclusive. Organization scope needs `@PeriodCloseOrganization` on the document's org field.
+- Soft close (default) admits `@PeriodAdjustment` document types (audited `ADJUSTMENT`) and
+  overrides; hard close admits nothing. Turning hard into soft is a `reopen` at the same date.
+- Rejects create/update/delete/post/repost/unpost of documents dated on or before the close date
+  with `PeriodClosedException` (HTTP 409 `period-closed`) — in `PostingEngine` (incl. later
+  documents of a `CHRONOLOGICAL` restoration), repository saves, and the generic command path.
+- `@PeriodCloseExempt` on a `@Document` class opts a non-accounting document out.
+- Roles: `onno.period-close.manage-roles` (+`ADMIN`) close/reopen; `onno.period-close.override-roles`
+  bypass (empty by default; `ADMIN` only when listed). All audited in `onno_period_close_audit`.
+- UI: `GET /api/period-close`, `GET /audit`, `POST /close`, `POST /reopen`; built-in page
+  `PeriodClosePage.ROUTE` (`/period-close`) — link it via `section(...).page(...)`.
+
 ## Runtime query paths
 
 There is no universal query DSL. Use `CatalogRepository` / `DocumentRepository` for typed business
@@ -375,7 +404,14 @@ because they are not Java field references.
     (`"SHIPPED"`) or its `@EnumLabel` text, or author **no options** (`.multiOptions()`) to offer
     every declared value labelled like the pills; `map()` → `MapSpec<E>` adds a Table⇄Map toggle —
     `lat(getter).lng(getter)` or `geoJson(String)`, `label(getter)` (marker popup), `defaultView()`
-    (open on the map); `custom(type)` → `CustomSpec` delegates the list **body** to a
+    (open on the map); `calendar(startGetter[, endGetter])` → `CalendarSpec<E>` adds a month/week/day
+    Calendar view and `timeline(startGetter, endGetter[, laneRefGetter])` → `TimelineSpec<E>` a
+    day scheduler with one lane per record of the lane `Ref` — both read the list feed with the
+    list's search/filters, refresh live, open the record on click and, with write access, save a
+    drag (move / resize / lane change) as a partial update through the generic command path;
+    `title(getter)`, `colorBy(getter)`, `defaultView()`, calendar `defaultMode(CalendarMode.WEEK)`,
+    timeline `slotMinutes(10)` + `hours(8, 21)`; a non-temporal start/end drops the view;
+    `custom(type)` → `CustomSpec` delegates the list **body** to a
     widget-registry component (`registerListRenderer(type, C)` from `@onno/widget-sdk`; props =
     `{rows, list, open, openUrl}`) behind a Table⇄custom toggle — `label(s)` (toggle label, else the
     `list.customView` message), `defaultView()`; the framework keeps search/filters/sort/feed/live
@@ -614,3 +650,11 @@ empty; an item may sit in one region only). Workspace beans still own the author
 declared filters; `CrmInboxViewValidator` fails startup if a `CrmInboxView` bean names an unknown
 workspace and fails on filter keys the workspace bean does not declare (facets with runtime options use `CrmInboxWorkspace.FacetOptions`). `CrmConnectionsView` types the `crmConnections` connections widget (`crmSettings` remains an alias).
 Existing `page.list(...)` and widget config remain valid.
+
+
+Collection reads: use limit/cursor and `{rows,nextCursor,hasMore}` (100 default, 500 max).
+Only su.onno.query.Cursor issues context-bound typed positions; use KeysetWindow for SQL seek.
+SQL DATE values must remain typed. Count only by explicit request; never compute a report from
+a silently capped preview. A plain-`List` Java method drains the cursor
+(`KeysetWindow.drain`) instead of returning the first window. Register SDK reads return pages. See docs/HEADLESS_READ_API.md,
+Collection pagination, for the cursor-only contract, bounded selectors and CRM callback limits.

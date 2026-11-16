@@ -50,6 +50,7 @@ lifecycle transitions, posting movements, or background jobs.
 | Singleton setting | `@Constant` |
 | Time-triggered/repeated work | `@ScheduledJob` or Spring `@Scheduled` |
 | Durable multi-person/multi-object coordination | `ProcessDefinition` + `HumanTask` |
+| Who changed which field, when (audit trail of a record) | `history = true` on `@Catalog`/`@Document` — never a hand-written audit table |
 | Future service/team boundary | `context = "..."` |
 
 Use `Ref<T>` for references between concepts. Do not embed whole objects.

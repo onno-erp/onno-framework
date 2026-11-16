@@ -197,10 +197,9 @@ public class CatalogQueryService {
      * {@code cursorToken} (null/blank for the first window) instead of counting past an offset, so
      * page 1 and page 10 000 cost the same. Applies server-side sort/search/filters, fetches one
      * extra row to report {@code hasMore} without a COUNT, and mints the next cursor from
-     * the last row. A cursor minted for a different sort is ignored (paging restarts), and a sort by
-     * a column the framework doesn't keep populated uses the NULL-safe seek shape. A cursor is bound
-     * to the subject that minted it (a record-scoped subject's cursor carries its fingerprint, and
-     * replaying it as another subject is a 400).
+     * the last row. A malformed position restarts the feed; a cursor from another entity, sort,
+     * filter or subject is rejected with 400. Nullable sort columns use a NULL-safe seek predicate.
+     * Every cursor includes the caller identity and effective record-access scope.
      */
     public KeysetPage keysetPage(AccessSubject subject, CatalogDescriptor desc, String cursorToken, int limit,
                                  String sortColumn, boolean descending, String search,
@@ -228,7 +227,8 @@ public class CatalogQueryService {
                                  List<String> prefix, List<String> ge, List<String> le,
                                  String widgetFilter) {
         EntitySurfaceDescriptor surface = surface(desc);
-        String fingerprint = scopes.policies().fingerprint(subject);
+        String fingerprint = su.onno.query.Cursor.context(EntityQuerySupport.cursorSubject(subject),
+                scopes.policies().fingerprint(subject), search, eq, in, like, prefix, ge, le, widgetFilter);
         String col = surface.safeSort(sortColumn);
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le,
@@ -365,7 +365,7 @@ public class CatalogQueryService {
         });
         boolean capped = rows.size() > ListGroups.MAX_GROUPS;
         if (capped) {
-            rows = new ArrayList<>(rows.subList(0, ListGroups.MAX_GROUPS));
+            rows.removeLast();
         }
         // Resolve the group column if it's a ref/enum so the header reads as a label (+ pill colour),
         // not a raw UUID/code; a no-op for a date bucket (not a ref). The raw value stays: it is the
@@ -457,6 +457,11 @@ public class CatalogQueryService {
      */
     public List<Map<String, Object>> children(AccessSubject subject, CatalogDescriptor desc, UUID parent,
                                               boolean foldersOnly) {
+        return su.onno.query.KeysetWindow.drain(c -> childrenPage(subject, desc, parent, foldersOnly, c, su.onno.query.KeysetWindow.MAX_LIMIT));
+    }
+
+    public su.onno.query.KeysetWindow.Page<Map<String, Object>> childrenPage(AccessSubject subject,
+            CatalogDescriptor desc, UUID parent, boolean foldersOnly, String cursor, int limit) {
         if (!desc.hierarchical()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Catalog is not hierarchical: " + desc.logicalName());
@@ -476,40 +481,41 @@ public class CatalogQueryService {
                         + " AND _tc._is_folder = true AND _tc._deletion_mark = false" + childScope.and()
                         + ") AS _has_child_folders"
                 : "";
-        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
-            String sql = "SELECT " + table + ".*" + childFlag + " FROM " + table +
-                    " WHERE _deletion_mark = false AND " +
-                    (foldersOnly ? table + "._is_folder = true AND " : "") +
-                    (parent == null ? roots : table + "._parent = :parent") + scope.and() +
-                    " ORDER BY _is_folder DESC, _description";
-            var query = h.createQuery(sql);
-            if (parent != null) query.bind("parent", parent);
-            scope.bind(query);
-            if (parent == null) parentScope.bind(query);
-            childScope.bind(query);
-            return query.mapToMap().list();
-        });
+        var page = KeysetWindow.collection(jdbi, table, table + ".*" + childFlag,
+                "_deletion_mark = false AND " + (foldersOnly ? table + "._is_folder = true AND " : "")
+                        + (parent == null ? roots : table + "._parent = :parent") + scope.and(), q -> {
+                    if (parent != null) q.bind("parent", parent);
+                    scope.bind(q);
+                    if (parent == null) parentScope.bind(q);
+                    childScope.bind(q);
+                }, List.of(new su.onno.query.KeysetWindow.Order("_is_folder", true),
+                        new su.onno.query.KeysetWindow.Order("_description", false),
+                        new su.onno.query.KeysetWindow.Order("_id", false)), cursor, limit,
+                "children:" + table + ":" + parent + ":" + foldersOnly + ":" + scopes.policies().fingerprint(subject) + ":" + EntityQuerySupport.cursorSubject(subject));
+        List<Map<String, Object>> rows = page.rows();
         EntityQuerySupport.maskParents(jdbi, table, rows, scope);
         EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows, subject);
-        return rows;
+        return page;
     }
 
     /** The whole live tree the subject may read; in-scope nodes under an out-of-scope parent become roots. */
     public List<Map<String, Object>> tree(AccessSubject subject, CatalogDescriptor desc) {
-        if (!desc.hierarchical()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Catalog is not hierarchical: " + desc.logicalName());
-        }
+        return buildTree(su.onno.query.KeysetWindow.drain(c -> treePage(subject, desc, c, su.onno.query.KeysetWindow.MAX_LIMIT)), null);
+    }
+
+    /** Flat paged nodes: parent links allow a client to assemble the hierarchy across windows. */
+    public su.onno.query.KeysetWindow.Page<Map<String, Object>> treePage(AccessSubject subject,
+            CatalogDescriptor desc, String cursor, int limit) {
+        if (!desc.hierarchical()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Catalog is not hierarchical");
         ScopeClause scope = scope(subject, surface(desc));
-        List<Map<String, Object>> rows = jdbi.withHandle(h ->
-                scope.bind(h.createQuery("SELECT * FROM " + desc.tableName() +
-                                " WHERE _deletion_mark = false" + scope.and() + " ORDER BY _is_folder DESC, _description"))
-                        .mapToMap()
-                        .list()
-        );
-        EntityQuerySupport.maskParents(jdbi, desc.tableName(), rows, scope);
-        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows, subject);
-        return buildTree(rows, null);
+        var page = KeysetWindow.collection(jdbi, desc.tableName(), "*", "_deletion_mark = false" + scope.and(),
+                scope::bind, List.of(new su.onno.query.KeysetWindow.Order("_is_folder", true),
+                        new su.onno.query.KeysetWindow.Order("_description", false),
+                        new su.onno.query.KeysetWindow.Order("_id", false)), cursor, limit,
+                "tree:" + desc.tableName() + ":" + scopes.policies().fingerprint(subject) + ":" + EntityQuerySupport.cursorSubject(subject));
+        EntityQuerySupport.maskParents(jdbi, desc.tableName(), page.rows(), scope);
+        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), page.rows(), subject);
+        return page;
     }
 
     /** Upper bound of records one {@link #paths} call resolves, and of the ancestor levels it walks. */
@@ -576,18 +582,21 @@ public class CatalogQueryService {
      */
     public List<Map<String, Object>> relatedRows(AccessSubject subject, CatalogDescriptor desc, String viaColumn,
                                                  UUID parentId) {
+        return su.onno.query.KeysetWindow.drain(c -> relatedPage(subject, desc, viaColumn, parentId, c, su.onno.query.KeysetWindow.MAX_LIMIT));
+    }
+
+    public su.onno.query.KeysetWindow.Page<Map<String, Object>> relatedPage(AccessSubject subject,
+            CatalogDescriptor desc, String viaColumn, UUID parentId, String cursor, int limit) {
         ScopeClause scope = scope(subject, surface(desc));
-        List<Map<String, Object>> rows = jdbi.withHandle(h ->
-                scope.bind(h.createQuery("SELECT * FROM " + desc.tableName() +
-                                " WHERE _deletion_mark = false AND " + viaColumn + " = :parent" + scope.and() +
-                                " ORDER BY _code"))
-                        .bind("parent", parentId)
-                        .mapToMap()
-                        .list()
-        );
-        if (desc.hierarchical()) EntityQuerySupport.maskParents(jdbi, desc.tableName(), rows, scope);
-        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows, subject);
-        return rows;
+        var page = KeysetWindow.collection(jdbi, desc.tableName(), "*",
+                "_deletion_mark = false AND " + viaColumn + " = :parent" + scope.and(),
+                q -> { scope.bind(q); q.bind("parent", parentId); },
+                List.of(new su.onno.query.KeysetWindow.Order("_code", false),
+                        new su.onno.query.KeysetWindow.Order("_id", false)), cursor, limit,
+                "related:" + desc.tableName() + ":" + viaColumn + ":" + parentId + ":" + scopes.policies().fingerprint(subject) + ":" + EntityQuerySupport.cursorSubject(subject));
+        if (desc.hierarchical()) EntityQuerySupport.maskParents(jdbi, desc.tableName(), page.rows(), scope);
+        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), page.rows(), subject);
+        return page;
     }
 
     /** One record; a record outside the subject's scope is a 404, exactly like a missing one. */

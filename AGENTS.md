@@ -668,6 +668,68 @@ repositories are unscoped** — custom code serving a user from a repository mus
 `RecordAccess.require(subject, Type.class, id, AccessMode.READ)`. See
 [docs/RECORD_ACCESS_POLICIES.md](docs/RECORD_ACCESS_POLICIES.md).
 
+### Period Close
+
+A period close is a change-prohibition date: documents dated on or before it cannot be created,
+changed, delete-marked, posted, reposted or unposted. Use `PeriodCloseService` — do not hand-roll
+date checks in `beforeWrite`.
+
+```java
+periods.close(PeriodScope.global(), LocalDate.of(2026, 10, 31), "admin", "October closed");
+periods.close(PeriodScope.context("Finance"), LocalDate.of(2026, 11, 30), "admin", null);
+periods.reopen(PeriodScope.global(), LocalDate.of(2026, 9, 30), "admin", "late invoice"); // reason required
+```
+
+Scopes are global, per `context`, per accumulation register, or per organization (the
+`@PeriodCloseOrganization` field of a document); the date is inclusive. Closes are soft by default —
+`@PeriodAdjustment` documents may still be written and posted into the period (audited) while every
+other document stays locked; `close(scope, date, true, actor, reason)` is a hard close that admits
+nothing until reopened. Enforcement is in core posting (including every later document a
+`CHRONOLOGICAL` restoration would repost), repository saves and the generic UI/REST/import/MCP
+command path; a rejection is a `PeriodClosedException` (HTTP 409, also from `posting-preview`).
+`ADMIN` and `onno.period-close.manage-roles` close and reopen; `onno.period-close.override-roles`
+(empty by default — `ADMIN` is not exempt unless listed) or an explicit
+`periods.override(new PeriodOverride(actor, reason), ...)` bypass a close, and every close, reopen
+and bypass is audited. Mark non-accounting documents `@PeriodCloseExempt`. The admin page is served
+at `/period-close` (`PeriodClosePage.ROUTE`); link it from a `Layout` section. See
+[docs/PERIOD_CLOSE.md](docs/PERIOD_CLOSE.md).
+
+### Record Change History (Audit Log)
+
+When the business needs to know who changed what and when (a medical record, a contract, a price),
+opt the entity in on its annotation. Do not model a hand-written audit table or log register.
+
+```java
+@Document(name = "Visits", numberPrefix = "V-", history = true)
+public class Visit extends DocumentObject { … }
+
+@Catalog(name = "Patients", history = true)
+public class Patient extends CatalogObject { … }
+```
+
+Every write of an opted-in record then appends to the framework-managed `onno_record_history`
+table, in the write's own transaction: `CREATED` / `UPDATED` / `DELETED` (deletion mark) /
+`RESTORED` with one row per changed field (old and new value, tabular-section rows compared by
+line), plus `POSTED` / `UNPOSTED` for documents. It is recorded at the storage level, so the
+generic command path (REST, UI, import, MCP, actions) and typed `repository.save(...)` /
+`delete(...)` produce the same entries. `secret` attributes are recorded as changed without values.
+Entities that have not opted in cost nothing; `onno.history.enabled=false` turns recording off
+everywhere.
+
+Attribution: a generic command is attributed to its `AccessSubject`. A typed repository save or
+`PostingService` call is attributed to the request's authenticated user, else `system`; trusted code
+acting for someone else binds the actor explicitly:
+
+```java
+HistoryActors.runAs(HistoryActor.named("lab-import"), () -> visits.save(visit));
+```
+
+The record surface shows a collapsed **History** panel and `GET /api/history/{kind}/{name}/{id}`
+returns the entries. Reading history needs exactly what reading the record needs (`@AccessControl`
+plus `RecordAccessPolicy`); references the viewer may not read are masked. Trusted Java reads the
+raw entries with `RecordHistory.list(recordId, before, limit)`. Writes that bypass both paths
+(hand-written SQL against an entity table) are not recorded.
+
 ### Contexts And Future Services
 
 Use `context` on annotations to mark bounded contexts. At first, contexts live in one monolith.
@@ -1027,6 +1089,8 @@ UI is authored as Java classes registered as Spring beans — never as annotatio
 - **`Page`** — a route whose content you compose: `compose(PageBuilder)` with `b.title(...)`, `b.widget(...)`, `b.text(...)`, `b.list(entity)` (the full interactive list, embedded), `b.actions(...)`, `b.custom(...)`, `b.bare()`/`b.header(false)` to drop the header row, `b.row(r -> r.col(width, c -> …)…)` for arbitrary column layout (nestable; widths are fractions / `"<n>px"` / null=equal; columns stack on mobile), and `b.aside(a -> …)` as the right-rail shortcut — any widget works on any page, in any region. **Everything is a page:** the home dashboard (`/`), settings (`/settings`), a default surface route (`/catalogs/{name}` / `/documents/{name}` / `/registers/{name}` — an authored page there *overrides* the default list/report surface), and arbitrary custom routes (`/ops`, `/reports`) are all just pages. The framework serves a good default; a registered `Page` bean at a route replaces it. `profile()`/`viewport()` scope a page to a persona/device (most-specific match wins, like `EntityView`). A widget's `.type("…")` may name a **custom widget** the framework has no built-in for: author a React component in `src/main/widgets/*.tsx` (using `@onno/widget-sdk`), apply the `su.onno.widgets` Gradle plugin, and it compiles + serves + auto-loads with no frontend project. See `onno-ui-starter/README.md` → "Pages — everything is a page" and "Authoring a custom widget".
 - **`EntityView<E>`** — per-entity list columns (`list(ListSpec)`) and field hints (`fields(EntityConfigBuilder)`). A view with `profile()` set replaces the default view for that profile on both the list and the record surface (fields, `detail(...)` widgets, action placement, validations). Its `actions(ActionSpec<E>)` and `ListSpec<E>.rowStyle` callbacks retain `E`: typed `ActionRow<E>` reads reject getters from unrelated entities at compile time, including in dynamic action providers. Use parameterized types; page actions use `ActionSpec<Void>`. An `EntityView` is what makes a surface *served* — no view → `404` (the view layer is the allowlist). It is **necessary but not sufficient for nav presence**: the entity is reachable by direct route but stays out of the sidebar until a `Layout` section also lists it (see Layout above). Override `comments()` to return `true` to opt that catalog/document into the per-entity discussion thread (`/api/comments`); it is off by default and gated by the global `onno.comments.enabled` switch. Override `opensInMain()` to return `true` when the entity's records are full working surfaces: on the desktop islands layout, opening one (list row, ref link, `onno://{kind}/{name}/{id}` from a widget) replaces the focused pane instead of opening a detail island beside the list; the shell advertises those list routes as `mainRecordRoutes` for every readable opted-in entity, whether or not a `Layout` places it in the nav. `list.rowStyle(row -> …)` adds **conditional row formatting**: the function runs server-side per row (same `ActionRow` as state-aware actions) and returns a semantic `ListSpec.RowStyle` tone (`DANGER`/`WARNING`/`SUCCESS`/`ACCENT`/`MUTED`) or `null` — e.g. urgent rows tinted red, cancelled ones faded; the grid renders it as a theme-aware translucent wash.
 
+`ListSpec` view modes switch a list's body from the toolbar: `list.map()`, `list.custom(type)`, and for date-ranged records `list.calendar(Appointment::getStartsAt, Appointment::getEndsAt)` (month/week/day) and `list.timeline(Appointment::getStartsAt, Appointment::getEndsAt, Appointment::getDoctor)` (a day scheduler with one lane per record of the lane `Ref`; `.slotMinutes(10).hours(8, 21)`). Calendar and timeline read the list feed with the list's search and filters, refresh live, open the record on click and — only with write access — save a drag (move, resize, lane change) as a partial update through the generic command path, so `beforeWrite`, rules and record access apply. Do not build a custom scheduler widget or a bespoke reschedule endpoint for one entity; use the `type("calendar")` page widget with `CalendarSource` beans when a calendar spans several entities.
+
 Field-hint methods on `FieldHintBuilder` (used inside `EntityView.fields`): `order(int)`, `group(String)`, `width(String)`, `widget(String)`, `placeholder(String)`, `format(String)`, `hint(String)`, `label(String)`, `refSecondary(String)`, `openButton(bool)`, `clearButton(bool)`, `hideInList()`, `hideInForm()`, `hideInDetail()`, plus explicit `visibleInList(bool)`/`visibleInForm(bool)`/`visibleInDetail(bool)`. Only set what differs from the default. `width(String)` is a form-layout hint (`half`/`1/2`/`50%` pairs fields); a list column falls back to it only when it is a pixel value. Size list columns with the list-only `ListSpec.width(field, px)` / `width(field, "<n>px")` (getter-reference overloads too), which wins and rejects non-pixel values at configuration time.
 
 `refField(Order::getCustomer).refSecondary(Customer::getPhone)` shows a secondary attribute of the picked record under its name in the ref picker, to disambiguate same-named records. `refField` retains the `Ref<T>` target type, so the secondary getter must belong to `T`. Independent of search: the ref-picker typeahead already matches every text column of the target (code/description/number + each String attribute), so a record is findable by a secondary attribute whether or not it is shown. The picker also offers the user's recent picks for that target first on an empty query, and shows an "open" button (opens the selected record) and a clear button; `refField(...).openButton(false)` / `.clearButton(false)` hide them per field, in the header and, addressed as `"section.field"`, in tabular-section rows. A required ref is never clearable, whatever `clearButton` says (#409). The options end with "Show all...", a dialog over the target's full list (its `EntityView` columns, filters and grouping; a folder tree and breadcrumbs for a hierarchical catalog) that obeys the same `refFilter`, record scope, `refOptions` decorator and `uniqueWithinSection` rules as the dropdown (#411). A **New** form seeds its inputs from a fresh instance, so a domain field initializer (`private OrderStatus status = OrderStatus.NEW;`) pre-fills the form, not just records written through code (an entity with no no-arg constructor opens blank; a `Ref` default can't be a literal initializer — seed it via a query-param prefill instead: append write-path field names to the New route, e.g. `/ui/documents/Reservations/new?room=<uuid>&startsAt=2026-07-16T19:00`; `Ref`/enum values are UUID strings, temporals ISO, unknown keys are skipped, and prefill applies after `OnFillingHandler`/initializers).
@@ -1334,3 +1398,30 @@ recheck rights, and never fall back to sending as the ordinary bot.
 CRM file-only messages rely on conditional text-or-attachments validation: keep the Body attribute
 optional. Gmail/Telegram ingest provider file bytes through CrmAttachments; never persist token-bearing
 provider download URLs. Filesystem media metadata lives under an unservable .metadata directory.
+
+
+## Collection pagination implementation
+
+Forward collection windows use `su.onno.query.KeysetWindow` with typed tuples issued by
+`su.onno.query.Cursor`. Keep access predicates in SQL before LIMIT. Register balances seek by
+the dimension primary key; do not invent an `_id` for totals. Numeric offset pagination and legacy response aliases are removed. Process assignment JSON has a transactional `onno_process_work_candidates`
+projection and resumable backfill; keep it in sync when creating assignments. Notification target
+columns are a normalized projection of internal record links, backfilled at startup, and allow
+record-policy filtering before pagination. Wire contracts live in docs/HEADLESS_READ_API.md.
+
+
+All collection transports now use the context-bound v2 Cursor codec (100 default, 500 maximum).
+Validate cursor JDBC value types before executing seek comparisons; malformed positions restart,
+foreign contexts are 400. Preserve SQL DATE values, not String approximations. CRM projections
+must share the Spring transaction/connection with repository callbacks. SDK register reads expose
+continuations; accounting widgets consume all pages. Every new collection endpoint returns
+`{rows, nextCursor, hasMore}` (wrap with `su.onno.ui.KeysetWindow.envelope`); never add a
+bespoke `entries`/`items`/`before` shape. A Java method returning a plain `List` must stay
+complete: implement it as `KeysetWindow.drain(c -> page(..., c, KeysetWindow.MAX_LIMIT))`, never
+as the first window's `.rows()`. Declare ordering columns the schema makes `NOT NULL` with `KeysetWindow.Order.notNull(...)`
+and give them one direction: the window then emits a bare ORDER BY and a row-value seek that a
+matching composite index serves (nullable columns need a `CASE` NULLS-LAST key no index can use).
+Every tuple cursor needs a unique trailing tiebreaker (id), and
+its feed context must include only filter values, never transport params (`cursor`, `limit`).
+The cursor-only collection contract
+and bounded-selector exceptions are specified only in docs/HEADLESS_READ_API.md.

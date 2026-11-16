@@ -198,6 +198,71 @@ public class RecordAccess {
         }
     }
 
+    /** Normalize notification targets with the same parser used by route authorization. */
+    public static RecordRoute routeTarget(String link) {
+        return RecordRoute.parse(link)
+                .map(r -> new RecordRoute(r.kind(), normalizedRouteName(r.name()), r.id())).orElse(null);
+    }
+
+    private static String normalizedRouteName(String name) {
+        return name.replace(" ", "").replace("_", "").toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /** SQL equivalent of readable(), applied before the notification page limit and badge count. */
+    public ScopeClause notificationScope(AccessSubject subject) {
+        requireSubject(subject);
+        if (!narrowsReads(subject)) return ScopeClause.ALL;
+        var registry = compiler.policies().registry();
+        Map<Class<?>, List<String>> names = new java.util.LinkedHashMap<>();
+        registry.allCatalogs().forEach(d -> {
+            var aliases = new ArrayList<String>(); aliases.add(d.logicalName());
+            if (d.previousNames() != null) aliases.addAll(d.previousNames());
+            names.put(d.javaClass(), aliases);
+        });
+        registry.allDocuments().forEach(d -> {
+            var aliases = new ArrayList<String>(); aliases.add(d.logicalName());
+            if (d.previousNames() != null) aliases.addAll(d.previousNames());
+            names.put(d.javaClass(), aliases);
+        });
+        List<String> visible = new ArrayList<>();
+        visible.add("_target_kind IS NULL"); // External links and non-record routes carry no target.
+        Map<String, Object> bindings = new java.util.LinkedHashMap<>();
+        int index = 0;
+        for (var entry : names.entrySet()) {
+            Class<?> type = entry.getKey();
+            ScopedEntity entity = compiler.policies().entity(type);
+            String kind = entity.kind() == ScopedEntity.Kind.CATALOG ? "catalogs" : "documents";
+            String prefix = "nt" + index++;
+            String alias = "_" + prefix;
+            List<String> matchingNames = new ArrayList<>();
+            for (String name : entry.getValue()) {
+                // Current names win over previousNames belonging to another entity.
+                if (EntityNames.recordClass(registry, kind, name) != type) continue;
+                String parameter = prefix + "name" + matchingNames.size();
+                matchingNames.add("_target_name = :" + parameter);
+                bindings.put(parameter, normalizedRouteName(name));
+            }
+            bindings.put(prefix + "kind", kind);
+            String target = "_target_kind = :" + prefix + "kind AND (" + String.join(" OR ", matchingNames) + ")";
+            if (compiler.isScoped(type, subject, AccessMode.READ)) {
+                ScopeClause scope = compiler.clause(type, subject, AccessMode.READ, alias);
+                String predicate = scope.sql();
+                for (var bound : scope.bindings().entrySet()) {
+                    predicate = predicate.replaceAll(":" + java.util.regex.Pattern.quote(bound.getKey()) + "(?![A-Za-z0-9_])",
+                            java.util.regex.Matcher.quoteReplacement(":" + prefix + bound.getKey()));
+                    bindings.put(prefix + bound.getKey(), bound.getValue());
+                }
+                target += " AND EXISTS (SELECT 1 FROM " + entity.tableName() + " " + alias
+                        + " WHERE " + alias + "._id = _target_id"
+                        + (predicate.isEmpty() ? "" : " AND (" + predicate + ")")
+                        + (entityGrant(subject, entity, AccessMode.READ) ? "" : " AND 1 = 0") + ")";
+            }
+            visible.add("(" + target + ")");
+        }
+        // Unknown record entities remain hidden for narrowed subjects, matching readable().
+        return new ScopeClause("(" + String.join(" OR ", visible) + ")", bindings);
+    }
+
     /** Entity-level grant (role + {@link UiEntityAccessPolicy}) for {@code mode}. */
     boolean entityGrant(AccessSubject subject, ScopedEntity entity, AccessMode mode) {
         String kind = kind(entity);

@@ -175,18 +175,27 @@ class MetadataToolFactoryTest {
     }
 
     @Test
-    void registerMovementsReadsBeyondOneThousandRowsWithoutChangingTheResponseShape() {
+    void registerMovementsReadsBeyondOneThousandRowsWithCursor() {
         SyncToolSpecification movements = movementTool();
         CallToolResult first = callMovements(movements, Map.of("name", "Cash"));
         assertThat(first.isError()).isNotEqualTo(true);
-        assertThat(movementRows(first)).hasSize(1000);
+        assertThat(movementRows(first)).hasSize(100);
+        Map<?, ?> page = (Map<?, ?>) ((Map<?, ?>) first.structuredContent()).get("result");
+        assertThat(page.get("hasMore")).isEqualTo(true);
+        var continued = callMovements(movements, Map.of("name", "Cash", "cursor", page.get("nextCursor")));
+        assertThat(movementRows(continued).getFirst()).containsEntry("sequence", 902);
         assertThat(movementRows(first).getFirst()).containsEntry("sequence", 1002);
 
-        CallToolResult next = callMovements(movements, Map.of("name", "Cash", "offset", 1000));
-        assertThat(movementRows(next)).hasSize(2);
-        assertThat(movementRows(next).getFirst()).containsEntry("sequence", 2);
-        assertThat(movementRows(callMovements(movements, Map.of("name", "Cash", "offset", 1002))))
-                .isEmpty();
+        int total = movementRows(first).size();
+        var current = first;
+        while (Boolean.TRUE.equals(((Map<?, ?>) ((Map<?, ?>) current.structuredContent()).get("result")).get("hasMore"))) {
+            var payload = (Map<?, ?>) ((Map<?, ?>) current.structuredContent()).get("result");
+            current = callMovements(movements, Map.of("name", "Cash", "cursor", payload.get("nextCursor")));
+            total += movementRows(current).size();
+        }
+        assertThat(total).isEqualTo(1002);
+        assertThat(((Map<?, ?>) ((Map<?, ?>) current.structuredContent()).get("result")).get("nextCursor")).isNull();
+
     }
 
     @Test
@@ -194,11 +203,11 @@ class MetadataToolFactoryTest {
         var movements = movementTool();
         var result = callMovements(movements, Map.of("name", "Cash", "filters", Map.of("name", "Alpha"),
                 "from", "2026-01-01T00:00:10", "to", "2026-01-01T00:00:20",
-                "limit", 2, "offset", 1, "sort", "_period", "descending", false));
+                "limit", 2, "sort", "_period", "descending", false));
         assertThat(result.isError()).isNotEqualTo(true);
         assertThat(movementRows(result)).hasSize(2);
-        assertThat(movementRows(result).getFirst()).containsEntry("sequence", 11).containsEntry("name", "Alpha");
-        assertThat(movementRows(result).getLast()).containsEntry("sequence", 12);
+        assertThat(movementRows(result).getFirst()).containsEntry("sequence", 10).containsEntry("name", "Alpha");
+        assertThat(movementRows(result).getLast()).containsEntry("sequence", 11);
 
         var beta = callMovements(movements, Map.of("name", "Cash", "filters", Map.of("name", "Beta")));
         assertThat(movementRows(beta)).hasSize(1);
@@ -208,7 +217,7 @@ class MetadataToolFactoryTest {
     @Test
     void registerMovementsRejectsInvalidPagingAndUnknownDimensions() {
         var movements = movementTool();
-        for (var arguments : List.of(Map.of("limit", 0), Map.of("limit", 1001), Map.of("offset", -1),
+        for (var arguments : List.of(Map.of("limit", 0), Map.of("limit", 1001),
                 Map.of("filters", Map.of("unknown", "value")))) {
             Map<String, Object> args = new java.util.LinkedHashMap<>(arguments);
             args.put("name", "Cash");
@@ -224,10 +233,10 @@ class MetadataToolFactoryTest {
         dataSource.setURL("jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
         var jdbi = Jdbi.create(dataSource);
         jdbi.useHandle(h -> {
-            h.execute("CREATE TABLE reg_cash (_period TIMESTAMP, _active BOOLEAN, name VARCHAR, sequence INT)");
-            h.execute("INSERT INTO reg_cash SELECT DATEADD('SECOND', X, TIMESTAMP '2026-01-01 00:00:00'), "
+            h.execute("CREATE TABLE reg_cash (_id UUID DEFAULT RANDOM_UUID() PRIMARY KEY, _period TIMESTAMP, _active BOOLEAN, name VARCHAR, sequence INT)");
+            h.execute("INSERT INTO reg_cash (_period, _active, name, sequence) SELECT DATEADD('SECOND', X, TIMESTAMP '2026-01-01 00:00:00'), "
                     + "true, CASE WHEN X = 1002 THEN 'Beta' ELSE 'Alpha' END, X FROM SYSTEM_RANGE(1, 1002)");
-            h.execute("INSERT INTO reg_cash VALUES (TIMESTAMP '2027-01-01 00:00:00', false, 'Alpha', 1003)");
+            h.execute("INSERT INTO reg_cash (_period, _active, name, sequence) VALUES (TIMESTAMP '2027-01-01 00:00:00', false, 'Alpha', 1003)");
         });
         var factory = new MetadataToolFactory(registry, new UiAccessService(registry), catalogQuery,
                 documentQuery, new RegisterQueryService(registry, jdbi), catalogCommands, documentCommands,
@@ -242,36 +251,37 @@ class MetadataToolFactoryTest {
     @SuppressWarnings("unchecked")
     private static List<Map<String, Object>> movementRows(CallToolResult result) {
         assertThat(result.isError()).as(result.content().toString()).isNotEqualTo(true);
-        return (List<Map<String, Object>>) ((Map<?, ?>) result.structuredContent()).get("result");
+        return (List<Map<String, Object>>) ((Map<?, ?>) ((Map<?, ?>) result.structuredContent()).get("result")).get("rows");
     }
 
     @Test
-    void registerBalanceForwardsInclusiveCutoffAndFilters() {
+    void registerBalanceReturnsTheSamePageEnvelope() {
         when(registerQuery.require("Cash")).thenReturn(cash);
-        when(registerQuery.balanceBounded(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(cash),
-                org.mockito.ArgumentMatchers.eq(Map.of("name", "Main")),
-                org.mockito.ArgumentMatchers.eq("2024-03-31T23:59:59")))
-                .thenReturn(new RegisterQueryService.BoundedRows(List.of(Map.of("amount", 42)), false));
-        var balance = byName(factory(new OnnoMcpProperties()).build(), "register_balance");
-        var result = balance.callHandler().apply(exchange(), new CallToolRequest("register_balance",
-                Map.of("name", "Cash", "asOf", "2024-03-31T23:59:59", "filters", Map.of("name", "Main"))));
-        assertThat(result.isError()).isNotEqualTo(true);
-        assertThat(result.content().toString()).contains("42");
-        assertThat(balance.tool().inputSchema().properties()).containsKey("asOf");
-    }
-
-    @Test
-    void registerBalanceFailsLoudlyWhenTheBoundedQueryTruncates() {
-        when(registerQuery.require("Cash")).thenReturn(cash);
-        when(registerQuery.balanceBounded(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(cash), org.mockito.ArgumentMatchers.eq(Map.of()), org.mockito.ArgumentMatchers.isNull()))
-                .thenReturn(new RegisterQueryService.BoundedRows(List.of(Map.of("amount", 10)), true));
+        when(registerQuery.balancePage(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(cash),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.eq(false), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq(100), org.mockito.ArgumentMatchers.isNull()))
+                .thenReturn(new su.onno.query.KeysetWindow.Page<>(List.of(Map.of("amount", 10)), "next", true));
         SyncToolSpecification balance = byName(factory(new OnnoMcpProperties()).build(), "register_balance");
-
         CallToolResult result = balance.callHandler().apply(exchange(),
                 new CallToolRequest("register_balance", Map.of("name", "Cash")));
+        assertThat(result.isError()).isNotEqualTo(true);
+        assertThat(movementRows(result)).containsExactly(Map.of("amount", 10));
+        assertThat(balance.tool().inputSchema().properties()).doesNotContainKey("offset");
+    }
 
-        assertThat(result.isError()).isTrue();
-        assertThat(result.content().toString()).contains("5000", "filters");
+    @Test
+    void registerBalanceRetainsAsOfInThePagedContract() {
+        when(registerQuery.require("Cash")).thenReturn(cash);
+        when(registerQuery.balancePage(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(cash),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.eq(false), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.eq(100), org.mockito.ArgumentMatchers.eq("2024-03-31")))
+                .thenReturn(new su.onno.query.KeysetWindow.Page<>(List.of(Map.of("amount", 42)), null, false));
+        var balance = byName(factory(new OnnoMcpProperties()).build(), "register_balance");
+        var result = balance.callHandler().apply(exchange(), new CallToolRequest("register_balance",
+                Map.of("name", "Cash", "asOf", "2024-03-31")));
+        assertThat(movementRows(result)).containsExactly(Map.of("amount", 42));
+        assertThat(balance.tool().inputSchema().properties()).containsKey("asOf");
     }
 
     private static McpSyncServerExchange exchange() {
@@ -282,5 +292,13 @@ class MetadataToolFactoryTest {
         McpSyncServerExchange exchange = mock(McpSyncServerExchange.class);
         when(exchange.transportContext()).thenReturn(transport);
         return exchange;
+    }
+
+    @Test
+    void temporalFieldsAdvertiseTheirWireFormat() {
+        assertThat(MetadataToolFactory.temporalFormat(java.time.LocalTime.class)).startsWith("HH:mm");
+        assertThat(MetadataToolFactory.temporalFormat(java.time.Instant.class)).contains("Z").contains("UTC");
+        assertThat(MetadataToolFactory.temporalFormat(java.time.LocalDate.class)).isEqualTo("yyyy-MM-dd");
+        assertThat(MetadataToolFactory.temporalFormat(String.class)).isNull();
     }
 }

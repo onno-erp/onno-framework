@@ -18,7 +18,7 @@ import su.onno.ui.UiEntityAccessPolicy;
 @ConditionalOnBean(CrmCustomerBinding.class)
 @AutoConfigurationPackage(basePackages = "su.onno.crm")
 @Import({ConversationService.class, CrmConversationStatuses.class, CrmWorkspaceEvents.class,
-        CrmInboxWorkspaceService.class, CrmInboxWorkspaceController.class, CrmConversationViewController.class,
+        CrmInboxWorkspaceService.class, CrmInboxWorkspaceController.class, CrmFeedQuery.class, CrmConversationViewController.class,
         CrmWorkspaceService.class, CrmChatGroupService.class, CrmChatGroupController.class,
         CrmContactService.class, CrmContactController.class, CrmInboxController.class,
         CrmActivityController.class, CrmChannelController.class, CrmActionController.class,

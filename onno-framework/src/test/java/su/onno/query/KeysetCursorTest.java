@@ -20,6 +20,32 @@ class KeysetCursorTest {
     }
 
     @Test
+    void malformedScopedCursorRestartsEvenWhenTheSuffixWasLost() {
+        assertThat(Cursor.decodeFor("damaged", "_code", false, "alice")).isNull();
+    }
+
+    @Test
+    void scopedTokensPreserveTheWireFormatAndRejectAnotherScope() {
+        Cursor cursor = Cursor.from("_code", false, row("_code", "C-1", UUID.randomUUID()));
+        assertThat(cursor.encode(null)).isEqualTo(cursor.encode());
+        assertThat(cursor.encode("")).isEqualTo(cursor.encode());
+        assertThat(cursor.encode("alice")).isEqualTo(cursor.encode() + "~alice");
+        assertThat(Cursor.decodeFor(cursor.encode("alice"), "_code", false, "alice"))
+                .isEqualTo(cursor);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                Cursor.decodeFor(cursor.encode("alice"), "_code", false, "bob"))
+                .isInstanceOf(Cursor.ScopeMismatchException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                Cursor.decodeFor(cursor.encode("alice"), "_code", false, null))
+                .isInstanceOf(Cursor.ScopeMismatchException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                Cursor.decodeFor(cursor.encode(), "_code", false, "alice"))
+                .isInstanceOf(Cursor.ScopeMismatchException.class);
+        assertThat(Cursor.decodeFor("broken~alice", "_code", false, "alice")).isNull();
+        assertThat(Cursor.decodeFor(cursor.encode("alice"), "_date", false, "alice")).isNull();
+    }
+
+    @Test
     void roundTripsAStringValue() {
         UUID id = UUID.randomUUID();
         Cursor c = Cursor.from("_code", true, row("_code", "C-0042", id));
