@@ -11,7 +11,8 @@ on:
         required: true
         type: string
 
-# Artifacts publish to Maven Central (Central Portal), not GitHub Packages — so no `packages: write`.
+# Full releases publish to Maven Central (Central Portal) and the onno Maven repository; pre-releases
+# only to the onno Maven repository. Not GitHub Packages — so no `packages: write`.
 # `contents: write` is still needed to create the GitHub release.
 permissions:
   contents: write
@@ -84,6 +85,9 @@ jobs:
         run: ./gradlew publishToMavenLocal aggregateJavadoc -PreleaseVersion="${{ steps.version.outputs.release_version }}"
 
       - name: Publish to Maven Central
+        # Full releases only: a pre-release (any version with a "-", e.g. 5.0.0-alpha.2 or 2.1.0-rc1)
+        # goes to the onno Maven repository alone, below, so Central only ever carries releases.
+        if: steps.version.outputs.prerelease != 'true'
         # Uploads a signed deployment to the Central Portal. SONATYPE_AUTOMATIC_RELEASE=true
         # (gradle.properties) makes it release automatically once the Portal validates it — no
         # manual "Publish" click. Set that property to false to instead leave deployments staged.
@@ -104,28 +108,25 @@ jobs:
           prerelease: ${{ steps.version.outputs.prerelease }}
           generate_release_notes: true
 
-      - name: Mirror to the onno-cloud module registry
-        # Push the same open-source artifacts to onno-cloud's /modules registry so onno's own builds
-        # (onno-enterprise, tenant builds) resolve this release instantly instead of waiting for Maven
-        # Central to sync. Central (above) is the canonical channel and already succeeded; this is a
-        # best-effort mirror — if it fails (registry down, missing token) re-run just this task with
-        # `./gradlew publishAllPublicationsToOnnoCloudRepository -PreleaseVersion=<v>`, without
-        # re-touching Central. The publication is signed, so the signing key is needed here too.
+      - name: Publish to the onno Maven repository
+        # Every version goes to the onno Maven repository (Reposilite at maven.onno.su, artifacts in S3):
+        # for a pre-release it is the only channel, for a full release a copy that resolves instantly
+        # instead of waiting for Central to sync. It is not best-effort: a failure fails the run. To
+        # retry only this step, `./gradlew publishAllPublicationsToOnnoCloudRepository -PreleaseVersion=<v>`
+        # (CI only). The publication is signed, so the signing key is needed here too.
         env:
-          ONNO_REGISTRY_URL: ${{ vars.ONNO_REGISTRY_URL || 'https://cloud.onno.su/modules' }}
+          ONNO_REGISTRY_URL: ${{ vars.ONNO_REGISTRY_URL || 'https://maven.onno.su/releases' }}
           ONNO_REGISTRY_USER: ${{ secrets.ONNO_REGISTRY_USER || 'publisher' }}
           ONNO_REGISTRY_TOKEN: ${{ secrets.ONNO_REGISTRY_TOKEN }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
         run: ./gradlew publishAllPublicationsToOnnoCloudRepository -PreleaseVersion="${{ steps.version.outputs.release_version }}" --no-configuration-cache
 
-      - name: Mirror the widgets Gradle plugin to the onno-cloud module registry
-        # The su.onno.ui plugin lives in a pluginManagement includeBuild, so the root mirror
-        # step above never reaches it — publish its project explicitly. Consumers with custom widgets
-        # (e.g. tenant apps built by onno-cloud in a container with no local checkout) resolve
-        # `id("su.onno.ui") version <v>` from here. Its publications aren't signed, so no key.
+      - name: Publish the su.onno.ui Gradle plugin to the onno Maven repository
+        # The su.onno.ui plugin lives in a pluginManagement includeBuild, so the root step above never
+        # reaches it — publish its project explicitly. Its publications aren't signed, so no key.
         env:
-          ONNO_REGISTRY_URL: ${{ vars.ONNO_REGISTRY_URL || 'https://cloud.onno.su/modules' }}
+          ONNO_REGISTRY_URL: ${{ vars.ONNO_REGISTRY_URL || 'https://maven.onno.su/releases' }}
           ONNO_REGISTRY_USER: ${{ secrets.ONNO_REGISTRY_USER || 'publisher' }}
           ONNO_REGISTRY_TOKEN: ${{ secrets.ONNO_REGISTRY_TOKEN }}
         run: ./gradlew :onno-ui-gradle-plugin:publishAllPublicationsToOnnoCloudRepository -PreleaseVersion="${{ steps.version.outputs.release_version }}" --no-configuration-cache
