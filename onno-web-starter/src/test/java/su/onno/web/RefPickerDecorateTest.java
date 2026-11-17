@@ -95,7 +95,7 @@ class RefPickerDecorateTest {
         UUID gold = insert("Gold", "gold", false);
         UUID silver = insert("Silver", "silver", false);
 
-        Map<String, Object> out = decorate(CLERK, "tier = gold", null, gold, silver);
+        Map<String, Object> out = decorate(CLERK, "{\"tier\":\"gold\"}", null, gold, silver);
 
         assertThat(out.get("offered")).isEqualTo(List.of(gold.toString()));
         assertThat(out.get("decorations")).isEqualTo(Map.of());
@@ -146,10 +146,15 @@ class RefPickerDecorateTest {
     }
 
     /** {@code owner}: the catalog whose form holds {@code lines.client} ({@code null} = undecorated). */
-    private Map<String, Object> decorate(AccessSubject subject, String filter, String owner, UUID... ids) {
-        return controller.decorate(new RefOptionController.DecorateRequest(
-                "catalog", "PickerClients", owner == null ? null : "catalog", owner, filter, "lines.client",
-                Map.of("status", "OPEN"), "lines", 2, Map.of(), null, List.of(ids)), subject);
+    private Map<String, Object> decorate(AccessSubject subject, String where, String owner, UUID... ids) {
+        try {
+            return controller.decorate(new RefOptionController.DecorateRequest(
+                    "catalog", "PickerClients", owner == null ? null : "catalog", owner, "lines.client",
+                    Map.of("status", "OPEN"), "lines", 2, Map.of(), null, List.of(ids),
+                    where == null ? null : new com.fasterxml.jackson.databind.ObjectMapper().readTree(where)), subject);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalArgumentException(e);
+        }
     }
 
     private UUID insert(String description, String tier, boolean deleted) {

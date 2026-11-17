@@ -67,14 +67,14 @@ class CatalogParentFilterTest {
 
     @Test
     void aFolderListsOnlyItsChildrenAndTheRootsListOnlyTopLevelRecords() {
-        assertThat(names(page("_parent = " + tools))).containsExactly("Hammer", "Saw");
-        assertThat(names(page("_parent = null"))).containsExactly("Paint", "Tools");
+        assertThat(names(page("{\"parent\":\"" + tools + "\"}"))).containsExactly("Hammer", "Saw");
+        assertThat(names(page("{\"parent\":null}"))).containsExactly("Paint", "Tools");
     }
 
     @Test
     void theParentClauseComposesWithTheFieldsRefFilterAndTheSearch() {
-        assertThat(names(page("_is_folder = true AND _parent = null"))).containsExactly("Paint", "Tools");
-        assertThat(names(query.search(AccessSubject.system(), groups, "a", 50, "_parent = " + tools)))
+        assertThat(names(page("{\"folder\":true,\"parent\":null}"))).containsExactly("Paint", "Tools");
+        assertThat(names(query.search(AccessSubject.system(), groups, "a", 50, "{\"parent\":\"" + tools + "\"}", null)))
                 .containsExactly("Hammer", "Saw");
     }
 
@@ -89,16 +89,16 @@ class CatalogParentFilterTest {
                         "_description",
                         false,
                         null, null, null, null, null, null, null,
-                        "_parent = null"
+                        "{\"parent\":null}"
                 )
         )
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("_parent");
+                .isInstanceOf(ServiceException.class)
+                .hasMessageContaining("parent");
     }
 
-    private List<Map<String, Object>> page(String filter) {
+    private List<Map<String, Object>> page(String where) {
         return query.keysetPage(AccessSubject.system(), groups, null, null, null, 50, "_description", false,
-                null, null, null, null, null, null, null, filter).rows();
+                null, null, null, null, null, null, null, where).rows();
     }
 
     private static List<Object> names(List<Map<String, Object>> rows) {

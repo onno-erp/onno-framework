@@ -34,10 +34,10 @@ import java.util.UUID;
  * (#409): up to {@link #RECENT_LIMIT} options flagged {@code _recent: true}, followed by the
  * ordinary options without duplicates. Picks are remembered through {@code POST /recent}; the
  * remembered ids are re-read through the same target search, so they obey the same deletion mark,
- * record scope and {@code refFilter} as every other option.</p>
+ * record scope and cascading filter as every other option.</p>
  *
- * <p>Both bodies take the field's resolved {@code refFilter} as the string {@code filter} and/or a
- * structured {@code where} (a JSON object, see {@link Where}); given together they are ANDed.</p>
+ * <p>Both bodies take the field's resolved cascading filter as a structured {@code where} (a JSON
+ * object, see {@link Where}).</p>
  */
 @RestController
 @RequestMapping("/api/ref-options")
@@ -85,24 +85,24 @@ public final class RefOptionController {
         if ("document".equals(kind)) {
             DocumentDescriptor target = documents.require(request.targetName());
             access.requireRead(subject, target);
-            List<Map<String, Object>> rows = documents.search(subject, target, request.query(), cap, request.filter(),
+            List<Map<String, Object>> rows = documents.search(subject, target, request.query(), cap,
                     Where.text(request.where()), null);
             List<UUID> recentIds = recentIds(request, subject, kind, target.logicalName());
             if (!recentIds.isEmpty()) {
                 rows = withRecent(recentIds, documents.search(subject, target, null, recentIds.size(),
-                        request.filter(), Where.text(request.where()), recentIds), rows, cap);
+                        Where.text(request.where()), recentIds), rows, cap);
             }
             return EntityJsonRepresentation.documents(target,
                     options.decorate(request.ownerKind(), request.ownerName(), context(request, kind), rows), mode);
         } else {
             CatalogDescriptor target = catalogs.require(request.targetName());
             access.requireRead(subject, target);
-            List<Map<String, Object>> rows = catalogs.search(subject, target, request.query(), cap, request.filter(),
+            List<Map<String, Object>> rows = catalogs.search(subject, target, request.query(), cap,
                     Where.text(request.where()), null);
             List<UUID> recentIds = recentIds(request, subject, kind, target.logicalName());
             if (!recentIds.isEmpty()) {
                 rows = withRecent(recentIds, catalogs.search(subject, target, null, recentIds.size(),
-                        request.filter(), Where.text(request.where()), recentIds), rows, cap);
+                        Where.text(request.where()), recentIds), rows, cap);
             }
             return EntityJsonRepresentation.catalogs(target,
                     options.decorate(request.ownerKind(), request.ownerName(), context(request, kind), rows), mode);
@@ -147,7 +147,7 @@ public final class RefOptionController {
     /**
      * How the picker dialog (#411) must present a list window's rows so it offers exactly what
      * the dropdown would. Every requested id is re-read through the same search as the dropdown
-     * (the field's resolved {@code refFilter}, record scope, deletion mark) and then through the
+     * (the field's resolved {@code where}, record scope, deletion mark) and then through the
      * field's {@link su.onno.picker.PickerOptions}. The answer lists the {@code offered} ids (request order)
      * and {@code decorations} for those that carry a badge, colour, reason or disabled flag. An id
      * missing from {@code offered} must not be shown; the answer never names it, so an
@@ -165,12 +165,12 @@ public final class RefOptionController {
         if ("document".equals(kind)) {
             DocumentDescriptor target = documents.require(request.targetName());
             access.requireRead(subject, target);
-            rows = documents.search(subject, target, null, ids.size(), request.filter(),
+            rows = documents.search(subject, target, null, ids.size(),
                     Where.text(request.where()), ids);
         } else {
             CatalogDescriptor target = catalogs.require(request.targetName());
             access.requireRead(subject, target);
-            rows = catalogs.search(subject, target, null, ids.size(), request.filter(),
+            rows = catalogs.search(subject, target, null, ids.size(),
                     Where.text(request.where()), ids);
         }
         Map<UUID, su.onno.picker.PickerOption> resolved = options.decorations(request.ownerKind(), request.ownerName(),
@@ -301,7 +301,6 @@ public final class RefOptionController {
             String ownerName,
             String query,
             Integer limit,
-            String filter,
             String fieldPath,
             Map<String, Object> formValues,
             String section,
@@ -311,27 +310,10 @@ public final class RefOptionController {
             Boolean recent,
             com.fasterxml.jackson.databind.JsonNode where
     ) {
-        /** The pre-#409 shape: recent picks are offered (an absent {@code recent} means on). */
-        public SearchRequest(String targetKind, String targetName, String ownerKind, String ownerName, String query,
-                             Integer limit, String filter, String fieldPath, Map<String, Object> formValues,
-                             String section, Integer rowIndex, Map<String, Object> rowValues,
-                             UUID documentId) {
-            this(targetKind, targetName, ownerKind, ownerName, query, limit, filter, fieldPath, formValues,
-                    section, rowIndex, rowValues, documentId, null);
-        }
-
-        /** Without a structured {@code where} (only the string {@code filter}). */
-        public SearchRequest(String targetKind, String targetName, String ownerKind, String ownerName, String query,
-                             Integer limit, String filter, String fieldPath, Map<String, Object> formValues,
-                             String section, Integer rowIndex, Map<String, Object> rowValues,
-                             UUID documentId, Boolean recent) {
-            this(targetKind, targetName, ownerKind, ownerName, query, limit, filter, fieldPath, formValues,
-                    section, rowIndex, rowValues, documentId, recent, null);
-        }
     }
 
     /**
-     * A picker-dialog window to decorate: the field's target, resolved {@code refFilter} and live
+     * A picker-dialog window to decorate: the field's target, resolved {@code where} and live
      * form context (as in {@link SearchRequest}) plus the ids of the rows on screen.
      */
     public record DecorateRequest(
@@ -339,7 +321,6 @@ public final class RefOptionController {
             String targetName,
             String ownerKind,
             String ownerName,
-            String filter,
             String fieldPath,
             Map<String, Object> formValues,
             String section,
@@ -349,14 +330,6 @@ public final class RefOptionController {
             List<UUID> ids,
             com.fasterxml.jackson.databind.JsonNode where
     ) {
-        /** Without a structured {@code where} (only the string {@code filter}). */
-        public DecorateRequest(String targetKind, String targetName, String ownerKind, String ownerName, String filter,
-                               String fieldPath, Map<String, Object> formValues, String section,
-                               Integer rowIndex, Map<String, Object> rowValues, UUID documentId,
-                               List<UUID> ids) {
-            this(targetKind, targetName, ownerKind, ownerName, filter, fieldPath, formValues, section, rowIndex,
-                    rowValues, documentId, ids, null);
-        }
     }
 
     /** One pick to remember: the reference field's target and the chosen record. */

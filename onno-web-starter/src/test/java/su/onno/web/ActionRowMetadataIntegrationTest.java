@@ -97,10 +97,10 @@ class ActionRowMetadataIntegrationTest {
         when(documents.rowsByIds(null, doc, List.of(ID))).thenReturn(rows);
         when(catalogs.keysetPage(isNull(), eq(catalog), isNull(), isNull(), isNull(), eq(100),
                 isNull(), eq(true), isNull(), anyList(), anyList(), anyList(), anyList(), anyList(),
-                anyList(), isNull(), isNull())).thenReturn(new KeysetPage(rows, null, false));
+                anyList(), isNull())).thenReturn(new KeysetPage(rows, null, false));
         when(documents.keysetPage(isNull(), eq(doc), isNull(), isNull(), isNull(), eq(100),
                 isNull(), eq(true), isNull(), isNull(), isNull(), anyList(), anyList(), anyList(),
-                anyList(), anyList(), anyList(), isNull(), isNull())).thenReturn(new KeysetPage(rows, null, false));
+                anyList(), anyList(), anyList(), isNull())).thenReturn(new KeysetPage(rows, null, false));
         @SuppressWarnings("rawtypes")
         List<Commands> views = List.of(view(entity));
         ListDataController controller = new ListDataController(catalogs, documents, access,
@@ -109,8 +109,8 @@ class ActionRowMetadataIntegrationTest {
         request.addParameter("representation", representation);
         if (ids) request.addParameter("ids", ID.toString());
         Map<String, Object> response = document
-                ? controller.documentPage("orders", 100, null, null, null, null, null, null, request, null)
-                : controller.catalogPage("orders", 100, null, null, null, null, request, null);
+                ? controller.documentPage("orders", 100, null, null, null, null, null, request, null)
+                : controller.catalogPage("orders", 100, null, null, null, request, null);
         var result = ((List<Map<String, Object>>) response.get("rows")).getFirst();
         String prefix = representation.equals("storage") ? "_" : "";
         assertThat((Map<String, Object>) ((Map<?, ?>) result.get(prefix + "actions")).get("approve"))

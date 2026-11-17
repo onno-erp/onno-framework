@@ -13,6 +13,8 @@ import su.onno.model.DocumentObject;
 import su.onno.schema.SchemaGenerator;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -56,15 +58,19 @@ class DocumentAggregatesTest {
 
         var query = new DocumentQueryService(registry, jdbi);
 
-        BigDecimal allRevenue = query.aggregate(
-                AccessSubject.system(), descriptor,
-                "sum", "total", null);
-
-        BigDecimal postedRevenue = query.aggregate(
-                AccessSubject.system(), descriptor,
-                "sum", "total", "posted = true");
+        BigDecimal allRevenue = total(query, descriptor, null);
+        BigDecimal postedRevenue = total(query, descriptor, "{\"posted\":true}");
 
         assertThat(allRevenue).isEqualByComparingTo("350");
         assertThat(postedRevenue).isEqualByComparingTo("100");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static BigDecimal total(DocumentQueryService query, su.onno.metadata.DocumentDescriptor descriptor,
+                                    String where) {
+        Map<String, Object> result = query.aggregateBuckets(AccessSubject.system(), descriptor,
+                new AggregateBuckets.Request("sum", "total", null, null, null, null, null, where, null, null, null));
+        List<Map<String, Object>> buckets = (List<Map<String, Object>>) result.get("buckets");
+        return buckets.isEmpty() ? BigDecimal.ZERO : new BigDecimal(buckets.getFirst().get("value").toString());
     }
 }

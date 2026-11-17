@@ -30,19 +30,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Verifies the dashboard widget {@code config("filter", …)} predicate ({@link FilterExpression}) is
- * applied server-side by {@link DocumentQueryService#page} / {@link DocumentQueryService#count} and
- * the un-paged {@link DocumentQueryService#list} — the path the chart/list widgets actually fetch
- * from (a stat tile already filters via {@link DocumentQueryService#aggregate}). The un-paged list
- * previously dropped the predicate, so a filtered chart silently summed every row.
- *
- * <p>Runs on a real PostgreSQL because the case it guards is Postgres-specific: a {@code VARCHAR}
- * column ({@code season}) compared to a quoted literal ({@code season = '2026'}). An unquoted
- * {@code season = 2026} would bind an int and Postgres would reject the comparison — so this also
- * pins the "quote the season" contract the dashboard relies on. Skipped without Docker.
+ * Verifies a structured {@link Where} predicate is applied server-side by
+ * {@link DocumentQueryService} keyset windows and counts on a real PostgreSQL, where a
+ * {@code VARCHAR} attribute compared to a string value must bind as text (H2 would coerce silently).
+ * Skipped without Docker.
  */
 @Testcontainers(disabledWithoutDocker = true)
-class DocumentFilterExpressionPostgresIT {
+class DocumentWherePostgresIT {
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
@@ -92,10 +86,10 @@ class DocumentFilterExpressionPostgresIT {
 
     @Test
     void keysetWindow_excludesDraftAndCancelled_andScopesToSeason() {
-        String filter = "status != 'DRAFT' AND status != 'CANCELED' AND season = '2026'";
+        String where = "{\"status\":{\"notIn\":[\"DRAFT\",\"CANCELED\"]},\"season\":\"2026\"}";
         List<Map<String, Object>> rows =
                 documentQuery.keysetPage(AccessSubject.system(), stayDesc, null, 100, null, false, null, null, null,
-                        NONE, NONE, NONE, NONE, NONE, NONE, filter).rows();
+                        NONE, NONE, NONE, NONE, NONE, NONE, where).rows();
 
         assertThat(rows).hasSize(2);
         assertThat(rows).allSatisfy(r -> {
@@ -106,9 +100,9 @@ class DocumentFilterExpressionPostgresIT {
 
     @Test
     void count_matchesTheFilteredWindow() {
-        String filter = "status != 'DRAFT' AND status != 'CANCELED' AND season = '2026'";
+        String where = "{\"status\":{\"notIn\":[\"DRAFT\",\"CANCELED\"]},\"season\":\"2026\"}";
         long n = documentQuery.count(AccessSubject.system(), stayDesc, null, null, null,
-                NONE, NONE, NONE, NONE, NONE, NONE, filter);
+                NONE, NONE, NONE, NONE, NONE, NONE, where);
         assertThat(n).isEqualTo(2);
     }
 
@@ -120,11 +114,11 @@ class DocumentFilterExpressionPostgresIT {
     }
 
     @Test
-    void keysetWindow_appliesWidgetFilter() {
-        String filter = "status != 'DRAFT' AND status != 'CANCELED' AND season = '2026'";
+    void keysetWindow_appliesWhere() {
+        String where = "{\"status\":{\"notIn\":[\"DRAFT\",\"CANCELED\"]},\"season\":\"2026\"}";
         List<Map<String, Object>> rows =
                 documentQuery.keysetPage(AccessSubject.system(), stayDesc, null, 100, null, false, null, null, null,
-                        NONE, NONE, NONE, NONE, NONE, NONE, filter).rows();
+                        NONE, NONE, NONE, NONE, NONE, NONE, where).rows();
 
         assertThat(rows).hasSize(2);
         assertThat(rows).allSatisfy(r -> {

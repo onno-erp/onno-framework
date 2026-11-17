@@ -20,11 +20,10 @@ import java.util.regex.Pattern;
  * values per bucket, so a chart ships O(buckets) rows instead of the whole table. Date bucketing
  * maps to {@code DATE_TRUNC} (supported by both H2 and PostgreSQL).
  *
- * <p>Injection safety follows {@link FilterExpression}/{@link Aggregates}: every referenced
- * column must be one of the entity's known columns (or the small system allowlist) and match a
- * strict identifier pattern; values are always bound parameters. Unlike a filter typo (which
- * degrades to "no filter"), an unknown group/series/date column is an error — silently grouping
- * by nothing would draw a <em>wrong</em> chart, not an unfiltered one.</p>
+ * <p>Injection safety follows {@link Aggregates}: every referenced column must be one of the
+ * entity's known columns (or the small system allowlist) and match a strict identifier pattern;
+ * values are always bound parameters. An unknown group/series/date column is an error — silently
+ * grouping by nothing would draw a <em>wrong</em> chart.</p>
  */
 public final class AggregateBuckets {
 
@@ -52,13 +51,12 @@ public final class AggregateBuckets {
      * add the optional secondary measure of a combo chart. {@code groupBy} is the x-axis column
      * (blank → one grand-total bucket, the gauge/metric case); {@code groupByDate} buckets a
      * timestamp column by unit. {@code dateField}+{@code from}/{@code to} window the rows to the
-     * dashboard's shared time range before aggregating. {@code filter} is the legacy
-     * {@link FilterExpression} string; {@code where} the structured {@link Where} JSON the typed client
-     * sends — both may be given and are ANDed.
+     * dashboard's shared time range before aggregating. {@code where} is the structured
+     * {@link Where} JSON the typed client sends.
      */
     public record Request(String metric, String field, String metric2, String field2,
                           String groupBy, String groupByDate, String seriesBy,
-                          String filter, String where, String dateField, String from, String to) {
+                          String where, String dateField, String from, String to) {
 
         public boolean grouped() {
             return groupBy != null && !groupBy.isBlank();
@@ -93,7 +91,7 @@ public final class AggregateBuckets {
      *
      * @throws IllegalArgumentException on an unknown metric/column or date unit
      */
-    public static Query build(Request r, String table, Set<String> columns, FilterExpression.Result filter) {
+    public static Query build(Request r, String table, Set<String> columns, SqlPredicate filter) {
         return build(r, Source.entity(table), columns, filter);
     }
 
@@ -109,8 +107,8 @@ public final class AggregateBuckets {
         }
     }
 
-    /** As {@link #build(Request, String, Set, FilterExpression.Result)} over any {@link Source}. */
-    public static Query build(Request r, Source source, Set<String> columns, FilterExpression.Result filter) {
+    /** As {@link #build(Request, String, Set, SqlPredicate)} over any {@link Source}. */
+    public static Query build(Request r, Source source, Set<String> columns, SqlPredicate filter) {
         String table = source.table();
         Map<String, Object> bindings = new LinkedHashMap<>(filter.bindings());
 
@@ -151,12 +149,12 @@ public final class AggregateBuckets {
      * filtered, windowed row set — so the client can auto-size the date granularity without ever
      * fetching rows. Result columns: {@code _min}, {@code _max}.
      */
-    public static Query span(Request r, String table, Set<String> columns, FilterExpression.Result filter) {
+    public static Query span(Request r, String table, Set<String> columns, SqlPredicate filter) {
         return span(r, Source.entity(table), columns, filter);
     }
 
-    /** As {@link #span(Request, String, Set, FilterExpression.Result)} over any {@link Source}. */
-    public static Query span(Request r, Source source, Set<String> columns, FilterExpression.Result filter) {
+    /** As {@link #span(Request, String, Set, SqlPredicate)} over any {@link Source}. */
+    public static Query span(Request r, Source source, Set<String> columns, SqlPredicate filter) {
         String table = source.table();
         String col = requireColumn(r.dateField(), columns, "dateField");
         Map<String, Object> bindings = new LinkedHashMap<>(filter.bindings());
@@ -182,12 +180,10 @@ public final class AggregateBuckets {
     static Map<String, Object> run(Jdbi jdbi, RefResolver refResolver, List<AttributeDescriptor> attributes,
                                    String table, Set<String> columns, Set<String> uuidColumns, Request r,
                                    ScopeClause scope, su.onno.access.AccessSubject subject, Function<String, String> columnResolver,
-                                   FilterExpression.Result where) {
+                                   SqlPredicate where) {
         // The viewer's record scope is ANDed in before GROUP BY / aggregation, so buckets, totals and
-        // the span only ever reflect rows the viewer may read. The compiled `where` joins the
-        // legacy string filter the same way.
-        FilterExpression.Result wf = scope.andInto(Where.and(
-                FilterExpression.parse(r.filter(), columns, uuidColumns, columnResolver), where));
+        // the span only ever reflect rows the viewer may read.
+        SqlPredicate wf = scope.andInto(where == null ? SqlPredicate.NONE : where);
         return run(jdbi, refResolver, attributes, Source.entity(table), columns, r, wf, subject);
     }
 
@@ -198,9 +194,9 @@ public final class AggregateBuckets {
      */
     static Map<String, Object> run(Jdbi jdbi, RefResolver refResolver, List<AttributeDescriptor> attributes,
                                    Source source, Set<String> columns, Request r,
-                                   FilterExpression.Result predicate, su.onno.access.AccessSubject subject) {
+                                   SqlPredicate predicate, su.onno.access.AccessSubject subject) {
         String table = source.table();
-        FilterExpression.Result wf = predicate;
+        SqlPredicate wf = predicate;
         Query q = build(r, source, columns, wf);
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var query = h.createQuery(q.sql());

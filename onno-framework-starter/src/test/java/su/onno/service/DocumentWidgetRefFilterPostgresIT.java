@@ -97,22 +97,19 @@ class DocumentWidgetRefFilterPostgresIT {
     @Test
     @SuppressWarnings("unchecked")
     void refFilterBindsUuidAcrossEntityWidgetQueries() {
-        String filter = "database = " + databaseId;
-
-        assertThat(documentQuery.aggregate(AccessSubject.system(), sampleDesc, "sum", "events", filter))
-                .isEqualByComparingTo("12");
+        String where = "{\"database\":\"" + databaseId + "\"}";
 
         Map<String, Object> aggregate = documentQuery.aggregateBuckets(AccessSubject.system(), sampleDesc,
                 new AggregateBuckets.Request("sum", "events", null, null,
-                        null, null, null, filter, null, null, null, null));
+                        null, null, null, where, null, null, null));
         List<Map<String, Object>> buckets = (List<Map<String, Object>>) aggregate.get("buckets");
         assertThat(buckets).singleElement().satisfies(bucket ->
                 assertThat(new BigDecimal(bucket.get("value").toString())).isEqualByComparingTo("12"));
 
         assertThat(documentQuery.count(AccessSubject.system(), sampleDesc, null, null, null,
-                NONE, NONE, NONE, NONE, NONE, NONE, filter)).isEqualTo(2);
+                NONE, NONE, NONE, NONE, NONE, NONE, where)).isEqualTo(2);
         assertThat(documentQuery.keysetPage(AccessSubject.system(), sampleDesc, null, 20, null, false,
-                null, null, null, NONE, NONE, NONE, NONE, NONE, NONE, filter).rows()).hasSize(2);
+                null, null, null, NONE, NONE, NONE, NONE, NONE, NONE, where).rows()).hasSize(2);
     }
 
     private UUID database(String description) {

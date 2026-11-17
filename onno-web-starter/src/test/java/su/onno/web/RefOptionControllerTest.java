@@ -86,8 +86,8 @@ class RefOptionControllerTest {
         Map<String, Object> row = Map.of("role", "HOST");
         var request = new RefOptionController.SearchRequest(
                 "catalog", "DecoratedEmployees", "catalog", "DecoratedEvents",
-                "", 30, null, "participants.employee", form,
-                "participants", 1, row, documentId);
+                "", 30, "participants.employee", form,
+                "participants", 1, row, documentId, null, null);
 
         var principal = AccessSubject.user("admin", java.util.Set.of("ADMIN"));
         List<Map<String, Object>> result = controller.search(request, principal);
@@ -125,7 +125,7 @@ class RefOptionControllerTest {
         // Another owner (or none) names a field no PickerOptions binds: options stay undecorated.
         var otherOwner = new RefOptionController.SearchRequest(
                 "catalog", "DecoratedEmployees", "catalog", "DecoratedEmployees",
-                "", 30, null, "participants.employee", form, "participants", 1, row, documentId);
+                "", 30, "participants.employee", form, "participants", 1, row, documentId, null, null);
         assertThat(controller.search(otherOwner, principal))
                 .allSatisfy(item -> assertThat(item).doesNotContainKey("_optionBadge"));
     }

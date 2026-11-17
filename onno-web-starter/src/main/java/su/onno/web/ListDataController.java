@@ -5,7 +5,6 @@ import su.onno.service.AggregateBuckets;
 import su.onno.service.CatalogQueryService;
 import su.onno.service.DocumentQueryService;
 import su.onno.service.EntityJsonRepresentation;
-import su.onno.service.FilterExpression;
 import su.onno.service.KeysetPage;
 import su.onno.service.ListGroups;
 import su.onno.service.Where;
@@ -44,9 +43,8 @@ import java.util.UUID;
  * (columns, labels, sort, actions) comes from the list view descriptor ({@code /api/ui/view/…}).
  *
  * <p>Row predicates: {@code where} is the client format — URL-encoded JSON compiled by
- * {@link Where} ({@code where={"posted":true,"total":{"gte":100}}}); the legacy string
- * {@code filter} ({@link FilterExpression}) still works, and when both are given they are ANDed. Both
- * apply to the window, focus window, count, groups and aggregates alike.</p>
+ * {@link Where} ({@code where={"posted":true,"total":{"gte":100}}}). It applies to the window,
+ * focus window, count, groups and aggregates alike.</p>
  */
 @RestController
 @RequestMapping("/api/list")
@@ -71,7 +69,6 @@ public class ListDataController {
                                            @RequestParam(required = false) String sort,
                                            @RequestParam(required = false) String dir,
                                            @RequestParam(required = false) String q,
-                                           @RequestParam(required = false) String filter,
                                            HttpServletRequest request,
                                            AccessSubject subject) {
         CatalogDescriptor desc = catalogQuery.require(name);
@@ -100,12 +97,12 @@ public class ListDataController {
         String where = where(request);
         KeysetPage kp = catalogQuery.keysetPage(subject, desc, request.getParameter("cursor"),
                 request.getParameter("before"), parseId(request.getParameter("focus")), limit, sort,
-                descending(dir), q, eq, in, like, prefix, ge, le, filter, where);
+                descending(dir), q, eq, in, like, prefix, ge, le, where);
         decorateRowActions(desc.javaClass(), kp.rows(), desc.attributes());
         kp = kp.withRows(EntityJsonRepresentation.catalogs(desc, kp.rows(), representation));
-        boolean filtered = isFiltered(q, eq, in, like, prefix, ge, le, filter) || where != null;
+        boolean filtered = isFiltered(q, eq, in, like, prefix, ge, le) || where != null;
         Long total = total(request.getParameter("count"),
-                () -> catalogQuery.count(subject, desc, q, eq, in, like, prefix, ge, le, filter, where),
+                () -> catalogQuery.count(subject, desc, q, eq, in, like, prefix, ge, le, where),
                 () -> catalogQuery.estimateCount(subject, desc, filtered));
         return keysetEnvelope(kp, total);
     }
@@ -118,7 +115,6 @@ public class ListDataController {
                                             @RequestParam(required = false) String q,
                                             @RequestParam(required = false) String from,
                                             @RequestParam(required = false) String to,
-                                            @RequestParam(required = false) String filter,
                                             HttpServletRequest request,
                                             AccessSubject subject) {
         DocumentDescriptor desc = documentQuery.require(name);
@@ -143,13 +139,13 @@ public class ListDataController {
         String where = where(request);
         KeysetPage kp = documentQuery.keysetPage(subject, desc, request.getParameter("cursor"),
                 request.getParameter("before"), parseId(request.getParameter("focus")), limit, sort,
-                descending(dir), q, from, to, eq, in, like, prefix, ge, le, filter, where);
+                descending(dir), q, from, to, eq, in, like, prefix, ge, le, where);
         decorateRowActions(desc.javaClass(), kp.rows(), desc.attributes());
         kp = kp.withRows(EntityJsonRepresentation.documents(desc, kp.rows(), representation));
-        boolean filtered = from != null || to != null || isFiltered(q, eq, in, like, prefix, ge, le, filter)
+        boolean filtered = from != null || to != null || isFiltered(q, eq, in, like, prefix, ge, le)
                 || where != null;
         Long total = total(request.getParameter("count"),
-                () -> documentQuery.count(subject, desc, q, from, to, eq, in, like, prefix, ge, le, filter, where),
+                () -> documentQuery.count(subject, desc, q, from, to, eq, in, like, prefix, ge, le, where),
                 () -> documentQuery.estimateCount(subject, desc, filtered));
         return keysetEnvelope(kp, total);
     }
@@ -166,7 +162,6 @@ public class ListDataController {
                                              @RequestParam String groupBy,
                                              @RequestParam(required = false) String granularity,
                                              @RequestParam(required = false) String q,
-                                             @RequestParam(required = false) String filter,
                                              HttpServletRequest request,
                                              AccessSubject subject) {
         CatalogDescriptor desc = catalogQuery.require(name);
@@ -174,7 +169,7 @@ public class ListDataController {
         ListGroups.GroupResult result = catalogQuery.groups(subject, desc, groupBy, granularity, q,
                 multi(request, "eq"), multi(request, "in"), multi(request, "like"),
                 multi(request, "prefix"), multi(request, "ge"), multi(request, "le"),
-                filter, where(request), aggregates(request));
+                where(request), aggregates(request));
         return groupsEnvelope(result);
     }
 
@@ -186,7 +181,6 @@ public class ListDataController {
                                               @RequestParam(required = false) String q,
                                               @RequestParam(required = false) String from,
                                               @RequestParam(required = false) String to,
-                                              @RequestParam(required = false) String filter,
                                               HttpServletRequest request,
                                               AccessSubject subject) {
         DocumentDescriptor desc = documentQuery.require(name);
@@ -194,7 +188,7 @@ public class ListDataController {
         ListGroups.GroupResult result = documentQuery.groups(subject, desc, groupBy, granularity, q, from, to,
                 multi(request, "eq"), multi(request, "in"), multi(request, "like"),
                 multi(request, "prefix"), multi(request, "ge"), multi(request, "le"),
-                filter, where(request), aggregates(request));
+                where(request), aggregates(request));
         return groupsEnvelope(result);
     }
 
@@ -372,13 +366,12 @@ public class ListDataController {
         return null;
     }
 
-    /** Whether any search or column/widget filter is active — gates whether an estimate is meaningful. */
+    /** Whether any search or column filter is active — gates whether an estimate is meaningful. */
     private static boolean isFiltered(String q, List<String> eq, List<String> in, List<String> like,
-                                      List<String> prefix, List<String> ge, List<String> le, String filter) {
+                                      List<String> prefix, List<String> ge, List<String> le) {
         return (q != null && !q.isBlank())
                 || !eq.isEmpty() || !in.isEmpty() || !like.isEmpty()
-                || !prefix.isEmpty() || !ge.isEmpty() || !le.isEmpty()
-                || (filter != null && !filter.isBlank());
+                || !prefix.isEmpty() || !ge.isEmpty() || !le.isEmpty();
     }
 
     private static boolean descending(String dir) {

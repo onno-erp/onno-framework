@@ -82,44 +82,33 @@ public class CatalogQueryService {
      * Capped at {@code limit}, so a 2000-row catalog never ships whole to the client.
      */
     public List<Map<String, Object>> search(AccessSubject subject, CatalogDescriptor desc, String query, int limit) {
-        return search(subject, desc, query, limit, null);
+        return search(subject, desc, query, limit, (java.util.Collection<UUID>) null);
     }
 
-    /**
-     * As {@link #search(AccessSubject, CatalogDescriptor, String, int)}, additionally narrowed by a
-     * {@link FilterExpression} predicate — the cascading ref picker sends its resolved
-     * {@code refFilter} here (e.g. {@code "supplier = <uuid>"}), so only compatible records are
-     * offered. Ref/enum columns bind as typed uuids (PG-strict); a null/blank/invalid predicate is
-     * simply no filter.
-     */
-    public List<Map<String, Object>> search(AccessSubject subject, CatalogDescriptor desc, String query,
-                                            int limit, String filter) {
-        return search(subject, desc, query, limit, filter, null);
-    }
 
     /**
-     * As {@link #search(AccessSubject, CatalogDescriptor, String, int, String)}, additionally restricted to
+     * As {@link #search}, additionally restricted to
      * the given ids when {@code ids} is non-null: the ref picker's "recent" section re-reads its
      * remembered picks through here, so they pass the same deletion mark, record scope and
      * {@code refFilter} as ordinary options. An empty id list yields no rows.
      */
     public List<Map<String, Object>> search(AccessSubject subject, CatalogDescriptor desc, String query,
-                                            int limit, String filter, java.util.Collection<UUID> ids) {
-        return search(subject, desc, query, limit, filter, null, ids);
+                                            int limit, java.util.Collection<UUID> ids) {
+        return search(subject, desc, query, limit, null, ids);
     }
 
     /**
-     * As {@link #search(AccessSubject, CatalogDescriptor, String, int, String, java.util.Collection)},
+     * As {@link #search},
      * additionally narrowed by a structured {@link Where} predicate (JSON), ANDed with {@code filter}.
      */
     public List<Map<String, Object>> search(AccessSubject subject, CatalogDescriptor desc, String query,
-                                            int limit, String filter, String whereJson,
+                                            int limit, String whereJson,
                                             java.util.Collection<UUID> ids) {
         if (ids != null && ids.isEmpty()) {
             return new ArrayList<>();
         }
         EntitySurfaceDescriptor surface = surface(desc);
-        FilterExpression.Result wf = predicate(desc, surface, filter, whereJson);
+        SqlPredicate wf = predicate(desc, surface, whereJson);
         ScopeClause scope = scope(subject, surface);
         ScopeClause search = searchClause(subject, surface, query);
         String where = "_deletion_mark = false"
@@ -156,7 +145,7 @@ public class CatalogQueryService {
     }
 
     /**
-     * As {@link #newDraft(AccessSubject, CatalogDescriptor)}, but overlays caller-supplied initial values (from the
+     * As {@link #newDraft}, but overlays caller-supplied initial values (from the
      * New-form navigation query, keyed by attribute field name) onto the seed row before ref/enum
      * resolution — so a deep link like {@code …/new?field=value} pre-fills those fields. The
      * subject's record-policy {@code defaults(...)} are applied last, as the create will.
@@ -178,16 +167,6 @@ public class CatalogQueryService {
                         .one());
     }
 
-    /**
-     * A single aggregate value for a count/metric card — {@code count} of rows, or
-     * {@code sum|avg|min|max} of one numeric column — restricted to live records and
-     * narrowed by an optional safe {@code filter} predicate (see {@link FilterExpression}).
-     */
-    public BigDecimal aggregate(AccessSubject subject, CatalogDescriptor desc, String metric, String field,
-                                String filter) {
-        EntitySurfaceDescriptor surface = surface(desc);
-        return EntityQuerySupport.aggregate(jdbi, surface, metric, field, filter, scope(subject, surface));
-    }
 
     /**
      * Grouped aggregate buckets for a chart/stat widget — a server-side {@code GROUP BY} returning
@@ -200,64 +179,37 @@ public class CatalogQueryService {
                 scope(subject, surface), subject, whereSchema(desc, surface));
     }
 
-    /**
-     * One keyset-paginated window — the constant-time default for the list grid. Seeks past
-     * {@code cursorToken} (null/blank for the first window) instead of counting past an offset, so
-     * page 1 and page 10 000 cost the same. Applies server-side sort/search/filters, fetches one
-     * extra row to report {@code hasMore} without a COUNT, and mints the next cursor from
-     * the last row. A malformed position restarts the feed; a cursor from another entity, sort,
-     * filter or subject is rejected with 400. Nullable sort columns use a NULL-safe seek predicate.
-     * Every cursor includes the caller identity and effective record-access scope.
-     */
+
+
+    /** The window after {@code cursorToken} (the first window when it is null); see the full overload. */
     public KeysetPage keysetPage(AccessSubject subject, CatalogDescriptor desc, String cursorToken, int limit,
                                  String sortColumn, boolean descending, String search,
                                  List<String> eq, List<String> in, List<String> like,
                                  List<String> prefix, List<String> ge, List<String> le,
-                                 String widgetFilter) {
+                                 String whereJson) {
         return keysetPage(subject, desc, cursorToken, null, null, limit, sortColumn, descending, search,
-                eq, in, like, prefix, ge, le, widgetFilter);
+                eq, in, like, prefix, ge, le, whereJson);
     }
 
     /**
-     * As {@link #keysetPage(AccessSubject, CatalogDescriptor, String, int, String, boolean, String,
-     * List, List, List, List, List, List, String)}, at a chosen position: {@code beforeToken} (a
-     * window's {@code prevCursor}) returns the rows just above that window, and {@code focus} returns
-     * the window containing that record — up to half the limit of rows before it, the record, and
-     * the rows after it, with {@code prevCursor}/{@code nextCursor} to page further either way. A
-     * focused record the subject's query cannot see (filtered out, out of scope, deleted, unknown)
-     * yields the ordinary first window with no focus. {@code cursorToken} wins over
-     * {@code beforeToken}, which wins over {@code focus}.
+     * As {@link #keysetPage}, additionally narrowed by a structured
+     * {@link Where} predicate (JSON) — so it shapes the window, the
+     * focus window and the cursors.
      */
     public KeysetPage keysetPage(AccessSubject subject, CatalogDescriptor desc, String cursorToken,
                                  String beforeToken, UUID focus, int limit,
                                  String sortColumn, boolean descending, String search,
                                  List<String> eq, List<String> in, List<String> like,
                                  List<String> prefix, List<String> ge, List<String> le,
-                                 String widgetFilter) {
-        return keysetPage(subject, desc, cursorToken, beforeToken, focus, limit, sortColumn, descending, search,
-                eq, in, like, prefix, ge, le, widgetFilter, null);
-    }
-
-    /**
-     * As {@link #keysetPage(AccessSubject, CatalogDescriptor, String, String, UUID, int, String, boolean,
-     * String, List, List, List, List, List, List, String)}, additionally narrowed by a structured
-     * {@link Where} predicate (JSON) — ANDed with the string filter, so it shapes the window, the
-     * focus window and the cursors exactly like {@code widgetFilter}.
-     */
-    public KeysetPage keysetPage(AccessSubject subject, CatalogDescriptor desc, String cursorToken,
-                                 String beforeToken, UUID focus, int limit,
-                                 String sortColumn, boolean descending, String search,
-                                 List<String> eq, List<String> in, List<String> like,
-                                 List<String> prefix, List<String> ge, List<String> le,
-                                 String widgetFilter, String whereJson) {
+                                 String whereJson) {
         EntitySurfaceDescriptor surface = surface(desc);
         String fingerprint = su.onno.query.Cursor.context(EntityQuerySupport.cursorSubject(subject),
-                scopes.policies().fingerprint(subject), search, eq, in, like, prefix, ge, le, widgetFilter);
+                scopes.policies().fingerprint(subject), search, eq, in, like, prefix, ge, le, whereJson);
         String col = surface.safeSort(sortColumn);
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le,
                 surface.filterableColumns(), surface.numericColumns());
-        FilterExpression.Result wf = predicate(desc, surface, widgetFilter, whereJson);
+        SqlPredicate wf = predicate(desc, surface, whereJson);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
         String where = "_deletion_mark = false" + searchClause.and()
@@ -307,23 +259,16 @@ public class CatalogQueryService {
         return rows;
     }
 
-    /** Total live rows matching the search (+ declarative filters + widget filter) — for the virtual scroller. */
-    public long count(AccessSubject subject, CatalogDescriptor desc, String search,
-                      List<String> eq, List<String> in, List<String> like,
-                      List<String> prefix, List<String> ge, List<String> le,
-                      String widgetFilter) {
-        return count(subject, desc, search, eq, in, like, prefix, ge, le, widgetFilter, null);
-    }
 
-    /** As {@link #count(AccessSubject, CatalogDescriptor, String, List, List, List, List, List, List, String)}, plus a structured {@link Where}. */
+    /** As {@link #count}, plus a structured {@link Where}. */
     public long count(AccessSubject subject, CatalogDescriptor desc, String search,
                       List<String> eq, List<String> in, List<String> like,
                       List<String> prefix, List<String> ge, List<String> le,
-                      String widgetFilter, String whereJson) {
+                      String whereJson) {
         EntitySurfaceDescriptor surface = surface(desc);
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le,
                 surface.filterableColumns(), surface.numericColumns());
-        FilterExpression.Result wf = predicate(desc, surface, widgetFilter, whereJson);
+        SqlPredicate wf = predicate(desc, surface, whereJson);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
         String where = "_deletion_mark = false" + searchClause.and() + filterClause(filter) + filterClause(wf)
@@ -339,28 +284,13 @@ public class CatalogQueryService {
         });
     }
 
-    /**
-     * Group a catalog list by {@code groupColumn} (a validated sortable column): one header per
-     * distinct value, or — for a date/time column — per {@code granularity} bucket, over the same
-     * WHERE (search + declarative + widget filters) as the flat list. Each header carries its row
-     * count, the requested {@code aggregates}, and the {@code expand} filter the client replays on the
-     * normal feed to load that group's rows. Headers are capped at {@link ListGroups#MAX_GROUPS}.
-     */
-    public ListGroups.GroupResult groups(AccessSubject subject, CatalogDescriptor desc, String groupColumn,
-                                         String granularity,
-                                         String search, List<String> eq, List<String> in, List<String> like,
-                                         List<String> prefix, List<String> ge, List<String> le,
-                                         String widgetFilter, List<ListGroups.Agg> aggregates) {
-        return groups(subject, desc, groupColumn, granularity, search, eq, in, like, prefix, ge, le,
-                widgetFilter, null, aggregates);
-    }
 
-    /** As {@link #groups(AccessSubject, CatalogDescriptor, String, String, String, List, List, List, List, List, List, String, List)}, plus a structured {@link Where}. */
+    /** As {@link #groups}, plus a structured {@link Where}. */
     public ListGroups.GroupResult groups(AccessSubject subject, CatalogDescriptor desc, String groupColumn,
                                          String granularity,
                                          String search, List<String> eq, List<String> in, List<String> like,
                                          List<String> prefix, List<String> ge, List<String> le,
-                                         String widgetFilter, String whereJson,
+                                         String whereJson,
                                          List<ListGroups.Agg> aggregates) {
         EntitySurfaceDescriptor surface = surface(desc);
         if (groupColumn == null || !surface.sortableColumns().contains(groupColumn)) {
@@ -372,7 +302,7 @@ public class CatalogQueryService {
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le,
                 surface.filterableColumns(), surface.numericColumns());
-        FilterExpression.Result wf = predicate(desc, surface, widgetFilter, whereJson);
+        SqlPredicate wf = predicate(desc, surface, whereJson);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
         String where = "_deletion_mark = false" + searchClause.and() + filterClause(filter) + filterClause(wf)
@@ -431,7 +361,7 @@ public class CatalogQueryService {
         return EntityQuerySupport.filterClause(filter);
     }
 
-    private static String filterClause(FilterExpression.Result filter) {
+    private static String filterClause(SqlPredicate filter) {
         return EntityQuerySupport.filterClause(filter);
     }
 
@@ -461,38 +391,15 @@ public class CatalogQueryService {
         return EntitySurfaceDescriptor.catalog(desc);
     }
 
-    /**
-     * A catalog's {@link FilterExpression} over its attribute columns and, for a hierarchical catalog,
-     * {@code _parent} (bound as a uuid), so a picker dialog can list one folder's children with
-     * {@code _parent = <uuid>} or the roots with {@code _parent = null} (#411).
-     */
-    private static FilterExpression.Result widgetFilter(CatalogDescriptor desc, EntitySurfaceDescriptor surface,
-                                                    String filter) {
-        if (!desc.hierarchical()) {
-            return FilterExpression.parse(filter, surface.columnNames(), surface.uuidColumns(), surface::storageColumn);
-        }
-        Set<String> columns = new java.util.HashSet<>(surface.columnNames());
-        columns.add("_parent");
-        Set<String> uuids = new java.util.HashSet<>(surface.uuidColumns());
-        uuids.add("_parent");
-        return FilterExpression.parse(filter, columns, uuids, surface::storageColumn);
-    }
-
-    /** The string filter and the structured {@link Where} over a catalog, ANDed. */
-    private static FilterExpression.Result predicate(CatalogDescriptor desc, EntitySurfaceDescriptor surface,
-                                                 String filter, String whereJson) {
-        return Where.and(widgetFilter(desc, surface, filter),
-                Where.compile(whereJson, whereSchema(desc, surface)));
+    /** The structured {@link Where} over a catalog. */
+    private static SqlPredicate predicate(CatalogDescriptor desc, EntitySurfaceDescriptor surface, String whereJson) {
+        return Where.compile(whereJson, whereSchema(desc, surface));
     }
 
     /** The catalog's {@link Where} schema; a hierarchical catalog also exposes {@code parent}. */
     private static Where.Schema whereSchema(CatalogDescriptor desc, EntitySurfaceDescriptor surface) {
         Where.Schema schema = surface.whereSchema();
         return desc.hierarchical() ? schema.with("_parent", Where.Type.UUID) : schema;
-    }
-
-    void validateWidgetFilter(CatalogDescriptor desc, String filter) {
-        widgetFilter(desc, surface(desc), filter);
     }
 
     /**
@@ -505,7 +412,7 @@ public class CatalogQueryService {
     }
 
     /**
-     * As {@link #children(AccessSubject, CatalogDescriptor, UUID)}; with {@code foldersOnly} just the
+     * As {@link #children}; with {@code foldersOnly} just the
      * folders, each flagged {@code _has_child_folders} when it holds a live sub-folder the subject
      * may read, so a folder tree draws an expand arrow only where there is something to expand
      * (#411). The flag applies the same record scope as the rows, so it never reveals a hidden

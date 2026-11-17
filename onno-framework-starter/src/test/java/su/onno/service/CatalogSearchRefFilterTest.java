@@ -72,29 +72,33 @@ class CatalogSearchRefFilterTest {
 
     @Test
     void searchNarrowsByRefFilter() {
-        List<Map<String, Object>> rows = query.search(AccessSubject.system(), bookDesc, null, 50, "supplier = " + north);
+        List<Map<String, Object>> rows = query.search(AccessSubject.system(), bookDesc, null, 50, supplierIs(north), null);
         assertThat(rows).extracting(r -> r.get("_description"))
                 .containsExactlyInAnyOrder("Alpha Atlas", "Beta Guide");
     }
 
     @Test
     void refFilterComposesWithTextSearch() {
-        List<Map<String, Object>> rows = query.search(AccessSubject.system(), bookDesc, "alpha", 50, "supplier = " + north);
+        List<Map<String, Object>> rows = query.search(AccessSubject.system(), bookDesc, "alpha", 50, supplierIs(north), null);
         assertThat(rows).extracting(r -> r.get("_description"))
                 .containsExactly("Alpha Atlas");
     }
 
     @Test
     void blankFilterLeavesSearchUnfiltered() {
-        assertThat(query.search(AccessSubject.system(), bookDesc, null, 50, null)).hasSize(3);
-        assertThat(query.search(AccessSubject.system(), bookDesc, null, 50, "")).hasSize(3);
+        assertThat(query.search(AccessSubject.system(), bookDesc, null, 50, (String) null, null)).hasSize(3);
+        assertThat(query.search(AccessSubject.system(), bookDesc, null, 50, "", null)).hasSize(3);
     }
 
     @Test
-    void validationRejectsUnknownFilterField() {
-        assertThatThrownBy(() -> query.validateWidgetFilter(bookDesc, "unknownField = true"))
-                .isInstanceOf(IllegalArgumentException.class)
+    void unknownWhereFieldIsRejected() {
+        assertThatThrownBy(() -> query.search(AccessSubject.system(), bookDesc, null, 50, "{\"unknownField\":true}", null))
+                .isInstanceOf(ServiceException.class)
                 .hasMessageContaining("unknownField");
+    }
+
+    private static String supplierIs(UUID supplier) {
+        return "{\"supplier\":\"" + supplier + "\"}";
     }
 
     private void supplier(UUID id, String name) {

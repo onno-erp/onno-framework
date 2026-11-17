@@ -40,7 +40,7 @@ class WhereTest {
             "due_on", new Where.Column("due_on", Where.Type.DATE),
             "note", new Where.Column("note", Where.Type.TEXT)), RESOLVER);
 
-    private static FilterExpression.Result compile(String json) {
+    private static SqlPredicate compile(String json) {
         return Where.compile(json, SCHEMA);
     }
 
@@ -55,14 +55,14 @@ class WhereTest {
 
     @Test
     void literalIsEqualityOnTheResolvedStorageColumn() {
-        FilterExpression.Result r = compile("{\"posted\":true}");
+        SqlPredicate r = compile("{\"posted\":true}");
         assertThat(r.sql()).isEqualTo("_posted = :wh0");
         assertThat(r.bindings()).containsExactly(Map.entry("wh0", true));
     }
 
     @Test
     void severalKeysAndOperatorsAreAnded() {
-        FilterExpression.Result r = compile("{\"posted\":true,\"total\":{\"gte\":100,\"lt\":1000.5}}");
+        SqlPredicate r = compile("{\"posted\":true,\"total\":{\"gte\":100,\"lt\":1000.5}}");
         assertThat(r.sql()).isEqualTo("(_posted = :wh0) AND ((total >= :wh1) AND (total < :wh2))");
         assertThat(r.bindings().get("wh1")).isEqualTo(new BigDecimal("100"));
         assertThat(r.bindings().get("wh2")).isEqualTo(new BigDecimal("1000.5"));
@@ -83,7 +83,7 @@ class WhereTest {
     void nullMeansIsNullAndNotNullIsNotNull() {
         assertThat(compile("{\"assignedTo\":null}").sql()).isEqualTo("assigned_to IS NULL");
         assertThat(compile("{\"assignedTo\":{\"eq\":null}}").sql()).isEqualTo("assigned_to IS NULL");
-        FilterExpression.Result notNull = compile("{\"assignedTo\":{\"not\":null}}");
+        SqlPredicate notNull = compile("{\"assignedTo\":{\"not\":null}}");
         assertThat(notNull.sql()).isEqualTo("assigned_to IS NOT NULL");
         assertThat(notNull.bindings()).isEmpty();
     }
@@ -92,7 +92,7 @@ class WhereTest {
     void refAndEnumValuesBindAsTypedUuids() {
         UUID a = UUID.randomUUID();
         UUID b = UUID.randomUUID();
-        FilterExpression.Result r = compile("{\"status\":{\"in\":[\"" + a + "\",\"" + b + "\"]},\"assignedTo\":\"" + a + "\"}");
+        SqlPredicate r = compile("{\"status\":{\"in\":[\"" + a + "\",\"" + b + "\"]},\"assignedTo\":\"" + a + "\"}");
         assertThat(r.sql()).isEqualTo("(status IN (:wh0, :wh1)) AND (assigned_to = :wh2)");
         assertThat(r.bindings().values()).containsExactly(a, b, a);
         assertThat(r.bindings().values()).allMatch(UUID.class::isInstance);
@@ -100,7 +100,7 @@ class WhereTest {
 
     @Test
     void enumAlsoAcceptsItsConstantName() {
-        FilterExpression.Result r = compile("{\"status\":\"CLOSED\"}");
+        SqlPredicate r = compile("{\"status\":\"CLOSED\"}");
         assertThat(r.bindings().get("wh0")).isEqualTo(EnumerationPersistence.resolveId(Status.class, Status.CLOSED));
     }
 
@@ -117,10 +117,10 @@ class WhereTest {
 
     @Test
     void containsAndStartsWithAreCaseInsensitiveAndEscapeWildcards() {
-        FilterExpression.Result contains = compile("{\"note\":{\"contains\":\"Rush_50%\"}}");
+        SqlPredicate contains = compile("{\"note\":{\"contains\":\"Rush_50%\"}}");
         assertThat(contains.sql()).isEqualTo("LOWER(CAST(note AS VARCHAR)) LIKE :wh0 ESCAPE '\\'");
         assertThat(contains.bindings().get("wh0")).isEqualTo("%rush\\_50\\%%");
-        FilterExpression.Result prefix = compile("{\"number\":{\"startsWith\":\"SO-\"}}");
+        SqlPredicate prefix = compile("{\"number\":{\"startsWith\":\"SO-\"}}");
         assertThat(prefix.sql()).isEqualTo("LOWER(CAST(_number AS VARCHAR)) LIKE :wh0 ESCAPE '\\'");
         assertThat(prefix.bindings().get("wh0")).isEqualTo("so-%");
     }
@@ -128,7 +128,7 @@ class WhereTest {
     @Test
     void orNotAndCombinators() {
         UUID a = UUID.randomUUID();
-        FilterExpression.Result r = compile("{\"or\":[{\"status\":\"" + a + "\"},{\"posted\":true}],"
+        SqlPredicate r = compile("{\"or\":[{\"status\":\"" + a + "\"},{\"posted\":true}],"
                 + "\"not\":{\"note\":\"x\"},\"and\":[{\"total\":{\"gt\":0}}]}");
         assertThat(r.sql()).isEqualTo("((status = :wh0) OR (_posted = :wh1)) AND (NOT (note = :wh2)) AND (total > :wh3)");
         assertThat(compile("{\"or\":[]}").sql()).isEqualTo("1=0");
@@ -192,9 +192,9 @@ class WhereTest {
 
     @Test
     void andCombinesTwoCompiledPredicates() {
-        FilterExpression.Result legacy = FilterExpression.parse("total > 5", java.util.Set.of("total"));
-        FilterExpression.Result where = compile("{\"posted\":true}");
-        FilterExpression.Result both = Where.and(legacy, where);
+        SqlPredicate legacy = new SqlPredicate("total > :wf0", java.util.Map.of("wf0", 5));
+        SqlPredicate where = compile("{\"posted\":true}");
+        SqlPredicate both = Where.and(legacy, where);
         assertThat(both.sql()).isEqualTo("(total > :wf0) AND (_posted = :wh0)");
         assertThat(both.bindings()).containsOnlyKeys("wf0", "wh0");
         assertThat(Where.and(legacy, compile(null))).isSameAs(legacy);

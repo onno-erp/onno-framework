@@ -6,7 +6,7 @@ import java.util.Map;
 
 /**
  * A compiled record scope: a SQL boolean fragment plus its named bindings — the same shape as
- * {@link ListFilter.Result}/{@link FilterExpression.Result}, ANDed into a query's {@code WHERE}.
+ * {@link ListFilter.Result}/{@link SqlPredicate}, ANDed into a query's {@code WHERE}.
  * {@link #ALL} (an unscoped subject) contributes nothing.
  */
 public record ScopeClause(String sql, Map<String, Object> bindings) {
@@ -41,12 +41,12 @@ public record ScopeClause(String sql, Map<String, Object> bindings) {
     }
 
     /** Fold this clause into a widget filter, so widget/aggregate builders apply it unchanged. */
-    public FilterExpression.Result andInto(FilterExpression.Result filter) {
+    public SqlPredicate andInto(SqlPredicate filter) {
         if (isAll()) return filter;
         Map<String, Object> merged = new java.util.LinkedHashMap<>(filter.bindings());
         merged.putAll(bindings);
         String sql = filter.isEmpty() ? this.sql : "(" + filter.sql() + ") AND (" + this.sql + ")";
-        return new FilterExpression.Result(sql, merged);
+        return new SqlPredicate(sql, merged);
     }
 
     /** Fold this clause into a declarative list filter. */

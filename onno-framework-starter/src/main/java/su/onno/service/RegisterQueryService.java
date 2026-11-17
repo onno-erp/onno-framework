@@ -100,7 +100,7 @@ public class RegisterQueryService {
     /** As {@link #movementsBounded(AccessSubject, AccumulationRegisterDescriptor, String, String)}, narrowed by {@code where}. */
     public BoundedRows movementsBounded(AccessSubject subject, AccumulationRegisterDescriptor desc,
                                         String from, String to, String whereJson) {
-        FilterExpression.Result predicate = scope(subject, desc, desc.tableName())
+        SqlPredicate predicate = scope(subject, desc, desc.tableName())
                 .andInto(Where.compile(whereJson, movementWhereSchema(desc)));
         StringBuilder sql = new StringBuilder(
                 "SELECT * FROM " + desc.tableName() + " WHERE _active = true");
@@ -218,7 +218,7 @@ public class RegisterQueryService {
     }
 
     /** A list filter with a compiled {@link Where} ANDed in (binding names never collide: {@code wh*}). */
-    private static ListFilter.Result withWhere(ListFilter.Result filters, FilterExpression.Result where) {
+    private static ListFilter.Result withWhere(ListFilter.Result filters, SqlPredicate where) {
         if (where == null || where.isEmpty()) return filters;
         if (filters == null || filters.isEmpty()) return new ListFilter.Result(where.sql(), where.bindings());
         Map<String, Object> merged = new java.util.LinkedHashMap<>(filters.bindings());
@@ -432,7 +432,7 @@ public class RegisterQueryService {
                     "Balance is only available for BALANCE registers");
         }
         AsOf cutoff = AsOf.parse(asOf);
-        FilterExpression.Result where = Where.compile(whereJson, balanceWhereSchema(desc));
+        SqlPredicate where = Where.compile(whereJson, balanceWhereSchema(desc));
 
         String table = cutoff == null ? desc.totalsTableName() : desc.tableName();
         ScopeClause scope = scope(subject, desc, table);
@@ -531,7 +531,7 @@ public class RegisterQueryService {
         // never leak into the SQL or the cursor context (page 2 would otherwise mismatch page 1).
         Map<String, String> filters = dimensionValues(desc, requestFilters);
         ListFilter.Result dims = dimensionFilters(desc, filters);
-        FilterExpression.Result predicate = scope(subject, desc, desc.tableName())
+        SqlPredicate predicate = scope(subject, desc, desc.tableName())
                 .andInto(Where.compile(whereJson, movementWhereSchema(desc)));
         String dimColumns = desc.dimensions().stream()
                 .map(AttributeDescriptor::columnName)
@@ -579,7 +579,7 @@ public class RegisterQueryService {
     public Map<String, Object> aggregate(AccessSubject subject, AccumulationRegisterDescriptor desc,
                                          AggregateBuckets.Request request) {
         Where.Schema schema = movementWhereSchema(desc);
-        FilterExpression.Result predicate = scope(subject, desc, desc.tableName())
+        SqlPredicate predicate = scope(subject, desc, desc.tableName())
                 .andInto(Where.compile(request.where(), schema));
         String dateField = request.dateField() == null || request.dateField().isBlank()
                 ? "_period" : storageColumn(desc, request.dateField());
@@ -587,7 +587,7 @@ public class RegisterQueryService {
                 request.metric(), storageColumn(desc, request.field()),
                 request.metric2(), storageColumn(desc, request.field2()),
                 storageColumn(desc, request.groupBy()), request.groupByDate(),
-                storageColumn(desc, request.seriesBy()), null, request.where(),
+                storageColumn(desc, request.seriesBy()), request.where(),
                 dateField, request.from(), request.to());
         Set<String> resources = desc.resources().stream()
                 .map(r -> r.columnName().toLowerCase())

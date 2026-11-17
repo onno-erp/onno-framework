@@ -14,13 +14,12 @@ import java.util.regex.Pattern;
 /**
  * Compiles the {@code onno-list} grid's declarative filter values (sent by the React island as
  * {@code eq}/{@code in}/{@code like}/{@code prefix}/{@code ge}/{@code le} query params) into a safe
- * SQL fragment with bound parameters. It is the list-query counterpart of {@link FilterExpression}: a
+ * SQL fragment with bound parameters: a
  * SELECT-options filter sends one {@code eq}, a multi-select sends one {@code in} per picked value,
  * a contains/starts-with typeahead sends a {@code like}/{@code prefix}, and a date-range or
  * number-range sends a {@code ge} and/or {@code le}.
  *
- * <p>Each param is a {@code "column,value"} pair. Injection safety rests on the same two rules as
- * {@link FilterExpression}: the column (left of the first comma) must be a known column — validated
+ * <p>Each param is a {@code "column,value"} pair. Injection safety rests on two rules: the column (left of the first comma) must be a known column — validated
  * against the entity's columns plus a small system allowlist and a strict identifier pattern — and
  * the value (everything after it) is <em>always</em> a bound parameter, never interpolated. An
  * unrecognised column is skipped with a warning rather than failing the whole list, so a stale

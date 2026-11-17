@@ -29,7 +29,7 @@ import java.util.regex.Pattern;
 
 /**
  * Compiles a structured, Prisma-like {@code where} predicate (JSON) into a safe SQL fragment with
- * bound parameters — the client-facing successor of {@link FilterExpression}'s string grammar. The
+ * bound parameters. The
  * typed UI client sends {@code where={"posted":true,"total":{"gte":100}}} and the server never sees
  * a predicate as text.
  *
@@ -188,17 +188,17 @@ public final class Where {
     // ---------------------------------------------------------------- entry points
 
     /** Parse and compile {@code json} (blank → no predicate); the fragment has no leading {@code AND}. */
-    public static FilterExpression.Result compile(String json, Schema schema) {
+    public static SqlPredicate compile(String json, Schema schema) {
         if (json == null || json.isBlank()) {
-            return new FilterExpression.Result("", Map.of());
+            return new SqlPredicate("", Map.of());
         }
         return render(parse(json, schema));
     }
 
     /** As {@link #compile(String, Schema)} for an already-parsed JSON value (a POST body field). */
-    public static FilterExpression.Result compile(JsonNode json, Schema schema) {
+    public static SqlPredicate compile(JsonNode json, Schema schema) {
         if (json == null || json.isNull() || json.isMissingNode()) {
-            return new FilterExpression.Result("", Map.of());
+            return new SqlPredicate("", Map.of());
         }
         if (json.isTextual()) {
             return compile(json.asText(), schema);
@@ -238,22 +238,22 @@ public final class Where {
     }
 
     /** Render a predicate tree to SQL with named bindings. */
-    public static FilterExpression.Result render(Node node) {
+    public static SqlPredicate render(Node node) {
         if (node instanceof All) {
-            return new FilterExpression.Result("", Map.of());
+            return new SqlPredicate("", Map.of());
         }
         Map<String, Object> bindings = new LinkedHashMap<>();
         String sql = new Renderer(bindings).sql(node);
-        return new FilterExpression.Result(sql, bindings);
+        return new SqlPredicate(sql, bindings);
     }
 
     /** AND two compiled predicates (either may be empty). */
-    public static FilterExpression.Result and(FilterExpression.Result a, FilterExpression.Result b) {
-        if (a == null || a.isEmpty()) return b == null ? new FilterExpression.Result("", Map.of()) : b;
+    public static SqlPredicate and(SqlPredicate a, SqlPredicate b) {
+        if (a == null || a.isEmpty()) return b == null ? new SqlPredicate("", Map.of()) : b;
         if (b == null || b.isEmpty()) return a;
         Map<String, Object> merged = new LinkedHashMap<>(a.bindings());
         merged.putAll(b.bindings());
-        return new FilterExpression.Result("(" + a.sql() + ") AND (" + b.sql() + ")", merged);
+        return new SqlPredicate("(" + a.sql() + ") AND (" + b.sql() + ")", merged);
     }
 
     private static ServiceException invalid(String message) {

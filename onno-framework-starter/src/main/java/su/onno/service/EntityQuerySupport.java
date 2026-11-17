@@ -31,7 +31,7 @@ final class EntityQuerySupport {
         return filter.isEmpty() ? "" : " AND (" + filter.sql() + ")";
     }
 
-    static String filterClause(FilterExpression.Result filter) {
+    static String filterClause(SqlPredicate filter) {
         return filter.isEmpty() ? "" : " AND (" + filter.sql() + ")";
     }
 
@@ -145,25 +145,6 @@ final class EntityQuerySupport {
         return rows;
     }
 
-    static BigDecimal aggregate(Jdbi jdbi, EntitySurfaceDescriptor surface,
-                                String metric, String field, String filter, ScopeClause scope) {
-        String agg = Aggregates.expression(metric, surface.storageColumn(field), surface.columnNames());
-        FilterExpression.Result f = scope.andInto(
-                FilterExpression.parse(filter, surface.columnNames(), surface.uuidColumns(), surface::storageColumn));
-
-        StringBuilder sql = new StringBuilder("SELECT ").append(agg)
-                .append(" FROM ").append(surface.tableName())
-                .append(" WHERE _deletion_mark = false");
-        if (!f.isEmpty()) {
-            sql.append(" AND ").append(f.sql());
-        }
-        return jdbi.withHandle(h -> {
-            var query = h.createQuery(sql.toString());
-            f.bindings().forEach(query::bind);
-            return query.mapTo(BigDecimal.class).findOne().orElse(BigDecimal.ZERO);
-        });
-    }
-
     static Map<String, Object> aggregateBuckets(Jdbi jdbi, RefResolver refResolver,
                                                 EntitySurfaceDescriptor surface,
                                                 AggregateBuckets.Request request,
@@ -182,21 +163,16 @@ final class EntityQuerySupport {
                 request.metric(), surface.storageColumn(request.field()),
                 request.metric2(), surface.storageColumn(request.field2()),
                 surface.storageColumn(request.groupBy()), request.groupByDate(),
-                surface.storageColumn(request.seriesBy()), request.filter(), request.where(),
+                surface.storageColumn(request.seriesBy()), request.where(),
                 surface.storageColumn(request.dateField()), request.from(), request.to());
         return AggregateBuckets.run(jdbi, refResolver, surface.attributes(), surface.tableName(), allowed,
                 surface.uuidColumns(), storageRequest, scope, subject, surface::storageColumn,
                 Where.compile(request.where(), schema));
     }
 
-    /**
-     * The legacy {@link FilterExpression} string and the structured {@link Where} JSON over a surface,
-     * compiled and ANDed into one predicate (either may be absent).
-     */
-    static FilterExpression.Result predicate(EntitySurfaceDescriptor surface, String filter, String where) {
-        return Where.and(
-                FilterExpression.parse(filter, surface.columnNames(), surface.uuidColumns(), surface::storageColumn),
-                Where.compile(where, surface.whereSchema()));
+    /** The structured {@link Where} JSON over a surface, compiled (absent: no predicate). */
+    static SqlPredicate predicate(EntitySurfaceDescriptor surface, String where) {
+        return Where.compile(where, surface.whereSchema());
     }
 
     /**

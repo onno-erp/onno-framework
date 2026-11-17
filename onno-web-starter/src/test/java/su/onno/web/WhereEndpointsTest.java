@@ -129,49 +129,47 @@ class WhereEndpointsTest {
         MockHttpServletRequest request = request(Map.of(
                 "where", "{\"posted\":true,\"total\":{\"gte\":100,\"lt\":1000}}", "count", "exact"));
         Map<String, Object> page = list.documentPage(orders.logicalName(), 100, "number", "asc", null, null, null,
-                null, request, CLERK);
+                request, CLERK);
         assertThat(notes(page)).containsExactly("rush delivery", "standard");
         assertThat(page.get("total")).isEqualTo(2L);
     }
 
     @Test
-    void whereAndsWithTheLegacyFilterAndCombinators() {
+    void whereSupportsCombinatorsNullsAndEnumNames() {
         MockHttpServletRequest request = request(Map.of(
                 "where", "{\"or\":[{\"note\":{\"contains\":\"RUSH\"}},{\"client\":\"" + bronze + "\"}],"
                         + "\"status\":{\"in\":[\"" + EnumerationPersistence.resolveId(Status.class, Status.OPEN) + "\"]}}"));
         assertThat(notes(list.documentPage(orders.logicalName(), 100, "number", "asc", null, null, null,
-                null, request, CLERK))).containsExactly("rush delivery", "Rush, unassigned", "plain");
-        assertThat(notes(list.documentPage(orders.logicalName(), 100, "number", "asc", null, null, null,
-                "posted = true", request, CLERK))).containsExactly("rush delivery", "plain");
+                request, CLERK))).containsExactly("rush delivery", "Rush, unassigned", "plain");
         // null → IS NULL; { not: null } → IS NOT NULL; enum by constant name
         assertThat(notes(list.documentPage(orders.logicalName(), 100, "number", "asc", null, null, null,
-                null, request(Map.of("where", "{\"client\":null}")), CLERK))).containsExactly("Rush, unassigned");
+                request(Map.of("where", "{\"client\":null}")), CLERK))).containsExactly("Rush, unassigned");
         assertThat(notes(list.documentPage(orders.logicalName(), 100, "number", "asc", null, null, null,
-                null, request(Map.of("where", "{\"client\":{\"not\":null},\"status\":{\"not\":\"OPEN\"}}")), CLERK)))
+                request(Map.of("where", "{\"client\":{\"not\":null},\"status\":{\"not\":\"OPEN\"}}")), CLERK)))
                 .containsExactly("standard");
     }
 
     @Test
     void aFocusedRecordTheWhereExcludesYieldsTheFirstWindow() {
         Map<String, Object> page = list.documentPage(orders.logicalName(), 100, "number", "asc", null, null, null,
-                null, request(Map.of("where", "{\"total\":{\"lt\":1000}}", "focus", rushOrder.toString())), CLERK);
+                request(Map.of("where", "{\"total\":{\"lt\":1000}}", "focus", rushOrder.toString())), CLERK);
         assertThat(page).doesNotContainKey("focus");
         assertThat(notes(page)).doesNotContain("plain");
     }
 
     @Test
     void catalogFeedAndsWhereWithTheRecordScope() {
-        Map<String, Object> page = list.catalogPage(clients.logicalName(), 100, "code", "asc", null, null,
+        Map<String, Object> page = list.catalogPage(clients.logicalName(), 100, "code", "asc", null,
                 request(Map.of("where", "{\"tier\":{\"in\":[\"silver\",\"bronze\"]}}")), CUSTOMER);
         assertThat(descriptions(page)).containsExactly("Silver Co");
-        Map<String, Object> clerk = list.catalogPage(clients.logicalName(), 100, "code", "asc", null, null,
+        Map<String, Object> clerk = list.catalogPage(clients.logicalName(), 100, "code", "asc", null,
                 request(Map.of("where", "{\"tier\":{\"in\":[\"silver\",\"bronze\"]}}")), CLERK);
         assertThat(descriptions(clerk)).containsExactly("Silver Co", "Bronze Co");
     }
 
     @Test
     void unknownFieldIsA400() {
-        assertThatThrownBy(() -> list.documentPage(orders.logicalName(), 100, null, null, null, null, null, null,
+        assertThatThrownBy(() -> list.documentPage(orders.logicalName(), 100, null, null, null, null, null,
                 request(Map.of("where", "{\"discount\":1}")), CLERK))
                 .isInstanceOfSatisfying(ServiceException.class, e -> {
                     assertThat(e.status()).isEqualTo(ServiceException.Status.BAD_REQUEST);
@@ -182,7 +180,7 @@ class WhereEndpointsTest {
     @Test
     void groupsFollowWhere() {
         Map<String, Object> result = list.documentGroups(orders.logicalName(), "status", null, null, null, null,
-                null, request(Map.of("where", "{\"posted\":true}")), CLERK);
+                request(Map.of("where", "{\"posted\":true}")), CLERK);
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> groups = (List<Map<String, Object>>) result.get("groups");
         assertThat(groups).extracting(g -> g.get("count")).containsExactlyInAnyOrder(2L, 1L);
@@ -191,7 +189,7 @@ class WhereEndpointsTest {
     @Test
     void aggregateBucketsFollowWhere() {
         Map<String, Object> result = list.documentAggregate(orders.logicalName(), new AggregateBuckets.Request(
-                "sum", "total", null, null, null, null, null, null,
+                "sum", "total", null, null, null, null, null,
                 "{\"posted\":true,\"note\":{\"startsWith\":\"r\"}}", null, null, null), CLERK);
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> buckets = (List<Map<String, Object>>) result.get("buckets");
@@ -199,7 +197,7 @@ class WhereEndpointsTest {
                 assertThat(new BigDecimal(b.get("value").toString())).isEqualByComparingTo("100"));
 
         assertThatThrownBy(() -> list.documentAggregate(orders.logicalName(), new AggregateBuckets.Request(
-                "count", null, null, null, null, null, null, null, "{\"nope\":1}", null, null, null), CLERK))
+                "count", null, null, null, null, null, null, "{\"nope\":1}", null, null, null), CLERK))
                 .isInstanceOfSatisfying(ServiceException.class,
                         e -> assertThat(e.status()).isEqualTo(ServiceException.Status.BAD_REQUEST));
     }
@@ -207,18 +205,18 @@ class WhereEndpointsTest {
     @Test
     void refOptionsFollowWhere() throws Exception {
         List<Map<String, Object>> options = refOptions.search(new RefOptionController.SearchRequest(
-                "catalog", clients.logicalName(), null, null, "", 30, null, null, null, null, null, null, null,
+                "catalog", clients.logicalName(), null, null, "", 30, null, null, null, null, null, null,
                 false, JSON.readTree("{\"tier\":{\"not\":\"gold\"}}")), CLERK);
         assertThat(options).extracting(o -> o.get("description")).containsExactlyInAnyOrder("Silver Co", "Bronze Co");
 
-        // A string body value is accepted as already-encoded JSON, and ANDs with filter.
+        // A string body value is accepted as already-encoded JSON.
         List<Map<String, Object>> both = refOptions.search(new RefOptionController.SearchRequest(
-                "catalog", clients.logicalName(), null, null, "", 30, "tier != bronze", null, null, null, null, null,
-                null, false, JSON.readTree("\"{\\\"tier\\\":{\\\"not\\\":\\\"gold\\\"}}\"")), CLERK);
+                "catalog", clients.logicalName(), null, null, "", 30, null, null, null, null, null,
+                null, false, JSON.readTree("\"{\\\"tier\\\":{\\\"notIn\\\":[\\\"gold\\\",\\\"bronze\\\"]}}\"")), CLERK);
         assertThat(both).extracting(o -> o.get("description")).containsExactly("Silver Co");
 
         Map<String, Object> decorated = refOptions.decorate(new RefOptionController.DecorateRequest(
-                "catalog", clients.logicalName(), null, null, null, null, null, null, null, null, null,
+                "catalog", clients.logicalName(), null, null, null, null, null, null, null, null,
                 List.of(gold, silver, bronze), JSON.readTree("{\"tier\":\"gold\"}")), CLERK);
         assertThat(decorated.get("offered")).isEqualTo(List.of(gold.toString()));
     }

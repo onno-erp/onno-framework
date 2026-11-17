@@ -74,10 +74,10 @@ class AggregateBucketsTest {
     }
 
     private static AggregateBuckets.Request request(String metric, String field, String groupBy,
-                                                 String groupByDate, String seriesBy, String filter,
+                                                 String groupByDate, String seriesBy, String where,
                                                  String dateField, String from, String to) {
         return new AggregateBuckets.Request(metric, field, null, null,
-                groupBy, groupByDate, seriesBy, filter, null, dateField, from, to);
+                groupBy, groupByDate, seriesBy, where, dateField, from, to);
     }
 
     @Test
@@ -208,14 +208,14 @@ class AggregateBucketsTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void seriesBySplitsBuckets_andWidgetFilterApplies() {
+    void seriesBySplitsBuckets_andWhereApplies() {
         insert("new", null, LocalDateTime.of(2026, 1, 5, 9, 0), "10");
         insert("done", null, LocalDateTime.of(2026, 1, 5, 15, 0), "20");
         insert("canceled", null, LocalDateTime.of(2026, 1, 5, 16, 0), "99");
 
         Map<String, Object> out = service.aggregateBuckets(AccessSubject.system(), orders,
                 request("sum", col("amount"), col("placedAt"), "day", col("status"),
-                        col("status") + " != canceled", null, null, null));
+                        "{\"status\":{\"not\":\"canceled\"}}", null, null, null));
 
         List<Map<String, Object>> buckets = (List<Map<String, Object>>) out.get("buckets");
         assertThat(buckets).hasSize(2); // one day × two surviving statuses
@@ -275,17 +275,17 @@ class AggregateBucketsTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void chartFilterAcceptsLogicalAndStorageNames() {
+    void chartWhereNarrowsBuckets() {
         insert("new", null, LocalDateTime.of(2026, 1, 5, 9, 0), "10");
         insert("done", null, null, "20");
 
-        for (String field : List.of("placedAt", col("placedAt"))) {
+        for (String field : List.of("placedAt")) {
             Map<String, Object> out = service.aggregateBuckets(
                     AccessSubject.system(),
                     orders,
                     request(
                             "count", null, col("status"), null, null,
-                            field + " != null",
+                            "{\"" + field + "\":{\"not\":null}}",
                             null, null, null
                     )
             );

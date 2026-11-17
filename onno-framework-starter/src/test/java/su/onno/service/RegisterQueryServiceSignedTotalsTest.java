@@ -66,8 +66,7 @@ class RegisterQueryServiceSignedTotalsTest {
 
     @Test
     void aggregateSumsResourcesSignedByMovementType() {
-        var request = new AggregateBuckets.Request("sum", "amount", null, null, null, null, null,
-                null, null, null, null, null);
+        var request = new AggregateBuckets.Request("sum", "amount", null, null, null, null, null, null, null, null, null);
         Map<String, Object> out = service.aggregate(AccessSubject.system(), descriptor, request);
         @SuppressWarnings("unchecked")
         var buckets = (List<Map<String, Object>>) out.get("buckets");
@@ -81,8 +80,7 @@ class RegisterQueryServiceSignedTotalsTest {
         insertAt(other, LocalDateTime.of(2024, 7, 3, 9, 0), "RECEIPT", "40.00");
         insertAt(other, LocalDateTime.of(2024, 7, 9, 9, 0), "RECEIPT", "2.00");
 
-        var byMonth = new AggregateBuckets.Request("sum", "amount", "count", null, "period", "month", null,
-                null, "{\"property\":\"" + other + "\"}", "period", "2024-06-01T00:00:00", "2024-08-01T00:00:00");
+        var byMonth = new AggregateBuckets.Request("sum", "amount", "count", null, "period", "month", null, "{\"property\":\"" + other + "\"}", "period", "2024-06-01T00:00:00", "2024-08-01T00:00:00");
         @SuppressWarnings("unchecked")
         var months = (List<Map<String, Object>>) service.aggregate(AccessSubject.system(), descriptor, byMonth).get("buckets");
         // June zero-filled (the window starts there), July has both of `other`'s movements.
@@ -91,8 +89,7 @@ class RegisterQueryServiceSignedTotalsTest {
         assertThat((BigDecimal) months.get(1).get("value")).isEqualByComparingTo("42.00");
         assertThat(((Number) months.get(1).get("value2")).longValue()).isEqualTo(2L);
 
-        var byProperty = new AggregateBuckets.Request("sum", "amount", null, null, "property", null, null,
-                null, "{\"movementType\":\"RECEIPT\"}", null, null, null);
+        var byProperty = new AggregateBuckets.Request("sum", "amount", null, null, "property", null, null, "{\"movementType\":\"RECEIPT\"}", null, null, null);
         @SuppressWarnings("unchecked")
         var properties = (List<Map<String, Object>>) service.aggregate(AccessSubject.system(), descriptor, byProperty).get("buckets");
         assertThat(properties).hasSize(2);
@@ -104,8 +101,7 @@ class RegisterQueryServiceSignedTotalsTest {
 
     @Test
     void aggregateRejectsAnUnknownWhereField() {
-        var request = new AggregateBuckets.Request("count", null, null, null, null, null, null,
-                null, "{\"nope\":1}", null, null, null);
+        var request = new AggregateBuckets.Request("count", null, null, null, null, null, null, "{\"nope\":1}", null, null, null);
         assertThatThrownBy(() -> service.aggregate(AccessSubject.system(), descriptor, request))
                 .isInstanceOf(ServiceException.class);
     }

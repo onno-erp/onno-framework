@@ -60,7 +60,7 @@ public class InformationRegisterQueryService {
         if ((!periodic && (from != null || to != null)) || (from != null && to != null && from.isAfter(to))) {
             throw new ServiceException(ServiceException.Status.BAD_REQUEST, "Invalid period range for this register");
         }
-        FilterExpression.Result scoped = scopes.clause(desc.javaClass(), subject, AccessMode.READ, desc.tableName())
+        SqlPredicate scoped = scopes.clause(desc.javaClass(), subject, AccessMode.READ, desc.tableName())
                 .andInto(Where.compile(whereJson, whereSchema(desc)));
         StringBuilder where = new StringBuilder("1=1");
         if (from != null) where.append(" AND _period >= :from");
@@ -92,7 +92,7 @@ public class InformationRegisterQueryService {
             throw new ServiceException(ServiceException.Status.BAD_REQUEST, "This register is not periodic; omit 'at'");
         }
         String table = desc.tableName();
-        FilterExpression.Result predicate = scopes.clause(desc.javaClass(), subject, AccessMode.READ, "t")
+        SqlPredicate predicate = scopes.clause(desc.javaClass(), subject, AccessMode.READ, "t")
                 .andInto(Where.compile(whereJson, whereSchema(desc, "t.")));
         StringBuilder sql = new StringBuilder("SELECT t.* FROM ").append(table).append(" t WHERE 1=1");
         if (periodic) {

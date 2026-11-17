@@ -155,7 +155,7 @@ class RefRecentOptionsTest {
         pick(CLERK, silver);
         pick(CLERK, gold);
 
-        List<Map<String, Object>> options = search(CLERK, "", tierColumn() + " = gold", 30);
+        List<Map<String, Object>> options = search(CLERK, "", "{\"tier\":\"gold\"}", 30);
 
         assertThat(ids(options)).containsExactly(gold);
         assertThat(options.get(0)).containsEntry("_recent", true);
@@ -247,7 +247,7 @@ class RefRecentOptionsTest {
         controller.recent(new RefOptionController.RecentRequest("document", document.logicalName(), first), CLERK);
 
         List<Map<String, Object>> options = controller.search(new RefOptionController.SearchRequest(
-                "document", document.logicalName(), null, null, "", 30, null, null, null, null, null, null, null), CLERK);
+                "document", document.logicalName(), null, null, "", 30, null, null, null, null, null, null, null, null), CLERK);
 
         assertThat(ids(options)).containsExactly(first, second);
         assertThat(options.get(0)).containsEntry("_recent", true);
@@ -271,13 +271,18 @@ class RefRecentOptionsTest {
         controller.recent(new RefOptionController.RecentRequest("catalog", catalog.logicalName(), id), subject);
     }
 
-    private List<Map<String, Object>> search(AccessSubject subject, String query, String filter, int limit) {
-        return controller.search(request(query, filter, limit, null), subject);
+    private List<Map<String, Object>> search(AccessSubject subject, String query, String where, int limit) {
+        return controller.search(request(query, where, limit, null), subject);
     }
 
-    private RefOptionController.SearchRequest request(String query, String filter, int limit, Boolean recent) {
-        return new RefOptionController.SearchRequest("catalog", catalog.logicalName(), null, null, query, limit,
-                filter, null, null, null, null, null, null, recent);
+    private RefOptionController.SearchRequest request(String query, String where, int limit, Boolean recent) {
+        try {
+            return new RefOptionController.SearchRequest("catalog", catalog.logicalName(), null, null, query, limit,
+                    null, null, null, null, null, null, recent,
+                    where == null ? null : new com.fasterxml.jackson.databind.ObjectMapper().readTree(where));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalArgumentException(e);
+        }
     }
 
     private static List<String> descriptions(List<Map<String, Object>> options) {

@@ -80,43 +80,33 @@ public class DocumentQueryService {
      * only, newest first.
      */
     public List<Map<String, Object>> search(AccessSubject subject, DocumentDescriptor desc, String query, int limit) {
-        return search(subject, desc, query, limit, null);
+        return search(subject, desc, query, limit, (java.util.Collection<UUID>) null);
     }
 
-    /**
-     * As {@link #search(AccessSubject, DocumentDescriptor, String, int)}, additionally narrowed by a
-     * {@link FilterExpression} predicate — the cascading ref picker sends its resolved
-     * {@code refFilter} here, so only compatible documents are offered. Ref/enum columns bind as
-     * typed uuids (PG-strict); a null/blank/invalid predicate is simply no filter.
-     */
-    public List<Map<String, Object>> search(AccessSubject subject, DocumentDescriptor desc, String query,
-                                            int limit, String filter) {
-        return search(subject, desc, query, limit, filter, null);
-    }
 
     /**
-     * As {@link #search(AccessSubject, DocumentDescriptor, String, int, String)}, additionally restricted to
+     * As {@link #search}, additionally restricted to
      * the given ids when {@code ids} is non-null: the ref picker's "recent" section re-reads its
      * remembered picks through here, so they pass the same deletion mark, record scope and
      * {@code refFilter} as ordinary options. An empty id list yields no rows.
      */
     public List<Map<String, Object>> search(AccessSubject subject, DocumentDescriptor desc, String query,
-                                            int limit, String filter, java.util.Collection<UUID> ids) {
-        return search(subject, desc, query, limit, filter, null, ids);
+                                            int limit, java.util.Collection<UUID> ids) {
+        return search(subject, desc, query, limit, null, ids);
     }
 
     /**
-     * As {@link #search(AccessSubject, DocumentDescriptor, String, int, String, java.util.Collection)},
+     * As {@link #search},
      * additionally narrowed by a structured {@link Where} predicate (JSON), ANDed with {@code filter}.
      */
     public List<Map<String, Object>> search(AccessSubject subject, DocumentDescriptor desc, String query,
-                                            int limit, String filter, String whereJson,
+                                            int limit, String whereJson,
                                             java.util.Collection<UUID> ids) {
         if (ids != null && ids.isEmpty()) {
             return new ArrayList<>();
         }
         EntitySurfaceDescriptor surface = surface(desc);
-        FilterExpression.Result wf = EntityQuerySupport.predicate(surface, filter, whereJson);
+        SqlPredicate wf = EntityQuerySupport.predicate(surface, whereJson);
         ScopeClause scope = scope(subject, surface);
         ScopeClause search = searchClause(subject, surface, query);
         String where = "_deletion_mark = false"
@@ -152,7 +142,7 @@ public class DocumentQueryService {
     }
 
     /**
-     * As {@link #newDraft(AccessSubject, DocumentDescriptor)}, but overlays caller-supplied initial values (from the
+     * As {@link #newDraft}, but overlays caller-supplied initial values (from the
      * New-form navigation query, keyed by attribute field name) onto the seed row before ref/enum
      * resolution — so a deep link like {@code …/new?startsAt=…&room=<id>} pre-fills those fields.
      */
@@ -173,49 +163,24 @@ public class DocumentQueryService {
                         .one());
     }
 
-    /**
-     * One keyset-paginated window of a document list — the constant-time default for the list grid.
-     * Seeks past {@code cursorToken} (null/blank for the first window) instead of counting past an
-     * offset, so deep paging stays O(window). Honors sort/search/date-range/filters, fetches one
-     * extra row for {@code hasMore} (no COUNT), and mints the next cursor
-     * from the last row. The default newest-first order seeks on {@code (_date, _id)}.
-     */
+
+
+    /** The window after {@code cursorToken} (the first window when it is null); see the full overload. */
     public KeysetPage keysetPage(AccessSubject subject, DocumentDescriptor desc, String cursorToken, int limit,
                                  String sortColumn, boolean descending, String search,
                                  String from, String to,
                                  List<String> eq, List<String> in, List<String> like,
                                  List<String> prefix, List<String> ge, List<String> le,
-                                 String widgetFilter) {
+                                 String whereJson) {
         return keysetPage(subject, desc, cursorToken, null, null, limit, sortColumn, descending, search,
-                from, to, eq, in, like, prefix, ge, le, widgetFilter);
+                from, to,
+                eq, in, like, prefix, ge, le, whereJson);
     }
 
     /**
-     * As {@link #keysetPage(AccessSubject, DocumentDescriptor, String, int, String, boolean, String,
-     * String, String, List, List, List, List, List, List, String)}, at a chosen position:
-     * {@code beforeToken} (a window's {@code prevCursor}) returns the rows just above that window,
-     * and {@code focus} returns the window containing that document — up to half the limit of rows
-     * before it, the document, and the rows after it. A focused document the subject's query cannot
-     * see (outside the date range/filters, out of scope, deleted, unknown) yields the ordinary first
-     * window with no focus. {@code cursorToken} wins over {@code beforeToken}, which wins over
-     * {@code focus}.
-     */
-    public KeysetPage keysetPage(AccessSubject subject, DocumentDescriptor desc, String cursorToken,
-                                 String beforeToken, UUID focus, int limit,
-                                 String sortColumn, boolean descending, String search,
-                                 String from, String to,
-                                 List<String> eq, List<String> in, List<String> like,
-                                 List<String> prefix, List<String> ge, List<String> le,
-                                 String widgetFilter) {
-        return keysetPage(subject, desc, cursorToken, beforeToken, focus, limit, sortColumn, descending, search,
-                from, to, eq, in, like, prefix, ge, le, widgetFilter, null);
-    }
-
-    /**
-     * As {@link #keysetPage(AccessSubject, DocumentDescriptor, String, String, UUID, int, String, boolean,
-     * String, String, String, List, List, List, List, List, List, String)}, additionally narrowed by a
+     * As {@link #keysetPage}, additionally narrowed by a
      * structured {@link Where} predicate (JSON) — ANDed with the string filter, so it shapes the
-     * window, the focus window and the cursors exactly like {@code widgetFilter}.
+     * window, the focus window and the cursors.
      */
     public KeysetPage keysetPage(AccessSubject subject, DocumentDescriptor desc, String cursorToken,
                                  String beforeToken, UUID focus, int limit,
@@ -223,17 +188,17 @@ public class DocumentQueryService {
                                  String from, String to,
                                  List<String> eq, List<String> in, List<String> like,
                                  List<String> prefix, List<String> ge, List<String> le,
-                                 String widgetFilter, String whereJson) {
+                                 String whereJson) {
         EntitySurfaceDescriptor surface = surface(desc);
         String fingerprint = su.onno.query.Cursor.context(EntityQuerySupport.cursorSubject(subject),
-                scopes.policies().fingerprint(subject), search, eq, in, like, prefix, ge, le, widgetFilter, from, to);
+                scopes.policies().fingerprint(subject), search, eq, in, like, prefix, ge, le, whereJson, from, to);
         boolean defaultSort = surface.isDefaultSort(sortColumn);
         String col = surface.safeSort(sortColumn);
         boolean dirDesc = defaultSort ? surface.defaultDescending() : descending;
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le,
                 surface.filterableColumns(), surface.numericColumns());
-        FilterExpression.Result wf = EntityQuerySupport.predicate(surface, widgetFilter, whereJson);
+        SqlPredicate wf = EntityQuerySupport.predicate(surface, whereJson);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
         StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause.and());
@@ -279,23 +244,16 @@ public class DocumentQueryService {
         return EntityQuerySupport.rowsByIds(jdbi, refResolver, surface, ids, scope(subject, surface), subject);
     }
 
-    /** Total live rows matching the search (+ optional date range, declarative filters, widget filter). */
-    public long count(AccessSubject subject, DocumentDescriptor desc, String search, String from, String to,
-                      List<String> eq, List<String> in, List<String> like,
-                      List<String> prefix, List<String> ge, List<String> le,
-                      String widgetFilter) {
-        return count(subject, desc, search, from, to, eq, in, like, prefix, ge, le, widgetFilter, null);
-    }
 
-    /** As {@link #count(AccessSubject, DocumentDescriptor, String, String, String, List, List, List, List, List, List, String)}, plus a structured {@link Where}. */
+    /** As {@link #count}, plus a structured {@link Where}. */
     public long count(AccessSubject subject, DocumentDescriptor desc, String search, String from, String to,
                       List<String> eq, List<String> in, List<String> like,
                       List<String> prefix, List<String> ge, List<String> le,
-                      String widgetFilter, String whereJson) {
+                      String whereJson) {
         EntitySurfaceDescriptor surface = surface(desc);
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le,
                 surface.filterableColumns(), surface.numericColumns());
-        FilterExpression.Result wf = EntityQuerySupport.predicate(surface, widgetFilter, whereJson);
+        SqlPredicate wf = EntityQuerySupport.predicate(surface, whereJson);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
         StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause.and());
@@ -317,31 +275,14 @@ public class DocumentQueryService {
         });
     }
 
-    /**
-     * Group a document list by {@code groupColumn} (a validated sortable column): one header per
-     * distinct value, or — for a date/time column (e.g. {@code _date}) — per {@code granularity}
-     * bucket, over the same WHERE (search + date range + declarative + widget filters) as the flat
-     * list. Each header carries its row count, the requested {@code aggregates}, and the
-     * {@code expand} filter the client replays on the normal feed. Headers capped at
-     * {@link ListGroups#MAX_GROUPS}.
-     */
-    public ListGroups.GroupResult groups(AccessSubject subject, DocumentDescriptor desc, String groupColumn,
-                                         String granularity,
-                                         String search, String from, String to,
-                                         List<String> eq, List<String> in, List<String> like,
-                                         List<String> prefix, List<String> ge, List<String> le,
-                                         String widgetFilter, List<ListGroups.Agg> aggregates) {
-        return groups(subject, desc, groupColumn, granularity, search, from, to, eq, in, like, prefix, ge, le,
-                widgetFilter, null, aggregates);
-    }
 
-    /** As {@link #groups(AccessSubject, DocumentDescriptor, String, String, String, String, String, List, List, List, List, List, List, String, List)}, plus a structured {@link Where}. */
+    /** As {@link #groups}, plus a structured {@link Where}. */
     public ListGroups.GroupResult groups(AccessSubject subject, DocumentDescriptor desc, String groupColumn,
                                          String granularity,
                                          String search, String from, String to,
                                          List<String> eq, List<String> in, List<String> like,
                                          List<String> prefix, List<String> ge, List<String> le,
-                                         String widgetFilter, String whereJson,
+                                         String whereJson,
                                          List<ListGroups.Agg> aggregates) {
         EntitySurfaceDescriptor surface = surface(desc);
         if (groupColumn == null || !surface.sortableColumns().contains(groupColumn)) {
@@ -353,7 +294,7 @@ public class DocumentQueryService {
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le,
                 surface.filterableColumns(), surface.numericColumns());
-        FilterExpression.Result wf = EntityQuerySupport.predicate(surface, widgetFilter, whereJson);
+        SqlPredicate wf = EntityQuerySupport.predicate(surface, whereJson);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
         StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause.and());
@@ -432,16 +373,6 @@ public class DocumentQueryService {
         return EntityQuerySupport.readScope(scopes, surface, subject);
     }
 
-    /**
-     * A single aggregate value for a count/metric card — {@code count} of rows, or
-     * {@code sum|avg|min|max} of one numeric column — restricted to live records and
-     * narrowed by an optional safe {@code filter} predicate (see {@link FilterExpression}).
-     */
-    public BigDecimal aggregate(AccessSubject subject, DocumentDescriptor desc, String metric, String field,
-                                String filter) {
-        EntitySurfaceDescriptor surface = surface(desc);
-        return EntityQuerySupport.aggregate(jdbi, surface, metric, field, filter, scope(subject, surface));
-    }
 
     /**
      * Grouped aggregate buckets for a chart/stat widget — a server-side {@code GROUP BY} returning

@@ -739,9 +739,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(pick),
     }, { silent: true }),
-  listCatalogPage: (name: string, filter?: string, page?: { cursor?: string | null; limit?: number }) => {
+  listCatalogPage: (name: string, where?: WhereClause, page?: { cursor?: string | null; limit?: number }) => {
     const params = new URLSearchParams({ limit: String(page?.limit ?? 100) });
-    if (filter) params.set("filter", filter);
+    const w = whereParam(where);
+    if (w) params.set("where", w);
     if (page?.cursor) params.set("cursor", page.cursor);
     return fetchJson<CollectionPage<EntityRecord>>(`${BASE}/list/catalogs/${toSnakeCase(name)}?${params}`);
   },
@@ -774,12 +775,13 @@ export const api = {
       `${BASE}/list/documents/${name}?${params.toString()}`
     ).then((page) => page.rows ?? []);
   },
-  listDocumentsPage: (name: string, from?: string, to?: string, filter?: string,
+  listDocumentsPage: (name: string, from?: string, to?: string, where?: WhereClause,
       page?: { cursor?: string | null; limit?: number }) => {
     const params = new URLSearchParams({ limit: String(page?.limit ?? 100) });
     if (from) params.set("from", from);
     if (to) params.set("to", to);
-    if (filter) params.set("filter", filter);
+    const w = whereParam(where);
+    if (w) params.set("where", w);
     if (page?.cursor) params.set("cursor", page.cursor);
     return fetchJson<CollectionPage<EntityRecord>>(`${BASE}/list/documents/${toSnakeCase(name)}?${params}`);
   },
@@ -830,7 +832,7 @@ export const api = {
     ),
   // Pre-aggregated buckets for a data component (chart/stat/sparkline/gauge): a server-side GROUP BY
   // returning O(buckets) rows instead of the entity's whole table (#199, see ListDataController).
-  // `params` is the ready-to-send query — metric/field, groupBy/groupByDate, seriesBy, filter,
+  // `params` is the ready-to-send query — metric/field, groupBy/groupByDate, seriesBy, where,
   // dateField/from/to — exactly as built by the component (see useAggregateBuckets).
   aggregate: (kind: "catalogs" | "documents" | "registers", name: string, params: Record<string, string>) => {
     // See listCatalog: normalize so every caller shares one fetch.
