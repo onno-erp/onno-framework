@@ -16,6 +16,15 @@ Maintainer-side release mechanics are in the root [README](../README.md#publishi
   never on Maven Central.
 - **Commercial modules (`su.onno.enterprise:*`)** — **only** the cloud registry
   `https://cloud.onno.su/modules`. They are not on Maven Central and never on GitHub Packages.
+- **Frontend packages (`@onno/ui`, `@onno/crm`, `@onno/crm-channels`, `@onno/print`)** — the onno
+  npm registry `https://npm.onno.su/` at the same version as the Java artifacts (`5.0.0-alpha.2`
+  goes with `su.onno:*:5.0.0-alpha.2`). Pre-releases carry the dist-tag `next`, releases `latest`;
+  full releases also go to npmjs.org once that is enabled. An app's UI points the `@onno` scope at
+  the registry in its `src/main/ui/.npmrc`:
+
+  ```ini
+  @onno:registry=https://npm.onno.su/
+  ```
 - Publishing is CI-only in both repos: push a `vX.Y.Z` tag. Never `./gradlew publish` from a
   workstation.
 

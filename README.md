@@ -378,8 +378,12 @@ git push origin v2.0.0
 
 Pre-releases use tags such as `v2.1.0-rc1` or `v5.0.0-alpha.2` (any version with a `-`). They are
 published only to the onno Maven repository, `https://repo.onno.su/releases`; full releases go to
-Maven Central and are copied there too. Published versions are immutable in both, so publishing is
-intentionally CI-only. See
+Maven Central and are copied there too. The npm packages (`@onno/ui`, `@onno/crm`,
+`@onno/crm-channels`, `@onno/print`) are published in the same run at the same version, to the onno
+npm registry `https://npm.onno.su/` (and npmjs.org for full releases, when `NPM_TOKEN` is set).
+At most `CENTRAL_MONTHLY_RELEASES` (default 4) full releases a month go to Central — its free tier
+counts files per month — so test a release as `-rc1` first. Published versions are immutable, so
+publishing is intentionally CI-only. See
 [`.github/workflows/publish-packages.yml`](.github/workflows/publish-packages.yml) for the required
 Central Portal, registry and signing secrets, and [Consuming releases](docs/CONSUMING.md) for the
 consumer side.

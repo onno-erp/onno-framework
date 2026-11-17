@@ -84,6 +84,30 @@ jobs:
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
         run: ./gradlew publishToMavenLocal aggregateJavadoc -PreleaseVersion="${{ steps.version.outputs.release_version }}"
 
+      - name: Check the Maven Central monthly budget
+        # Central's free tier counts files and releases per organisation per calendar month
+        # (https://central.sonatype.org/publish/maven-central-publishing-limits/). One onno release
+        # is ~290 files against a ~1,167-file monthly limit, so allow at most
+        # vars.CENTRAL_MONTHLY_RELEASES (default 4) full releases a month. Pre-releases never reach
+        # Central and are not counted. To publish over budget deliberately, set
+        # vars.CENTRAL_ALLOW_OVER_BUDGET=true for that run.
+        if: steps.version.outputs.prerelease != 'true'
+        shell: bash
+        env:
+          BUDGET: ${{ vars.CENTRAL_MONTHLY_RELEASES || '4' }}
+          OVERRIDE: ${{ vars.CENTRAL_ALLOW_OVER_BUDGET || 'false' }}
+          VERSION: ${{ steps.version.outputs.release_version }}
+        run: |
+          git fetch --quiet --tags --force origin
+          month="$(date -u +%Y-%m)"
+          released="$(TZ=UTC git for-each-ref refs/tags --format='%(refname:short) %(creatordate:format-local:%Y-%m)' \
+            | awk -v m="$month" -v self="v$VERSION" '$2 == m && $1 ~ /^v[0-9]+\.[0-9]+\.[0-9]+$/ && $1 != self' | wc -l)"
+          echo "Full releases already tagged in $month: $released (budget $BUDGET)"
+          if [[ "$released" -ge "$BUDGET" && "$OVERRIDE" != "true" ]]; then
+            echo "::error::Maven Central budget for $month is used up ($released of $BUDGET full releases). Publish a pre-release (vX.Y.Z-rc1, onno repositories only) or set CENTRAL_ALLOW_OVER_BUDGET=true."
+            exit 1
+          fi
+
       - name: Publish to Maven Central
         # Full releases only: a pre-release (any version with a "-", e.g. 5.0.0-alpha.2 or 2.1.0-rc1)
         # goes to the onno Maven repository alone, below, so Central only ever carries releases.
@@ -130,3 +154,15 @@ jobs:
           ONNO_REGISTRY_USER: ${{ secrets.ONNO_REGISTRY_USER || 'publisher' }}
           ONNO_REGISTRY_TOKEN: ${{ secrets.ONNO_REGISTRY_TOKEN }}
         run: ./gradlew :onno-ui-gradle-plugin:publishAllPublicationsToOnnoCloudRepository -PreleaseVersion="${{ steps.version.outputs.release_version }}" --no-configuration-cache
+
+      - name: Publish the npm packages
+        # @onno/ui, @onno/crm, @onno/crm-channels and @onno/print at the release version, with their
+        # @onno/* dependencies pinned to it. Always to the onno npm registry (Verdaccio at npm.onno.su);
+        # a full release also goes to npmjs.org when the NPM_TOKEN secret is set. Pre-releases get the
+        # dist-tag "next", releases "latest". See .github/scripts/publish-npm.mjs.
+        env:
+          NPM_REGISTRY_URL: ${{ vars.NPM_REGISTRY_URL || 'https://npm.onno.su/' }}
+          NPM_REGISTRY_USER: ${{ secrets.NPM_REGISTRY_USER || 'publisher' }}
+          NPM_REGISTRY_PASSWORD: ${{ secrets.NPM_REGISTRY_PASSWORD }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: node .github/scripts/publish-npm.mjs "${{ steps.version.outputs.release_version }}"
