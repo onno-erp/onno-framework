@@ -45,7 +45,10 @@ public class CrmActionController {
         var record=row(id);
         return commands.commands(Conversation.class).stream().filter(c->allowed(c,principal)).map(c->{
             var state=CommandRegistry.recordState(c,record,catalogs.forClass(Conversation.class).attributes());
-            return Map.of("id",c.key(),"title",state.title(),"visible",state.available(),"enabled",writable&&state.enabled());
+            // group: the submenu it belongs to ("Change status"); inputs: it asks for values first,
+            // so a one-click surface such as a row menu leaves it to the conversation's own actions.
+            return Map.<String,Object>of("id",c.key(),"title",state.title(),"visible",state.available(),"enabled",writable&&state.enabled(),
+                "group",c.group(),"inputs",!c.inputs().isEmpty() || !c.inputGroups().isEmpty());
         }).filter(c->Boolean.TRUE.equals(c.get("visible"))).toList();
     }
     @PostMapping("/{key}") public CommandResult run(@PathVariable String workspace,@PathVariable UUID id,@PathVariable String key,

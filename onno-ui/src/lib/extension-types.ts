@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 
 /** Stable outlets supplied by the shell and the CRM. Applications may render additional namespaced outlets. */
-export type ExtensionSlotName = "shell.navigation.actions" | "entity.list.context-menu" | "entity.list.actions" | "entity.list.selection" | "entity.form.actions" | "entity.form.aside" | "crm.chat.header" | "crm.chat.composer" | "crm.chat.aside" | "crm.chat.context-menu" | "crm.contact.actions" | "crm.contact.profile" | "crm.inbox.toolbar" | (string & {});
+export type ExtensionSlotName = "shell.navigation.actions" | "entity.list.context-menu" | "entity.list.actions" | "entity.list.selection" | "entity.form.actions" | "entity.form.aside" | "crm.chat.header" | "crm.chat.composer" | "crm.chat.aside" | "crm.chat.context-menu" | "crm.chat.message.actions" | "crm.chat.timeline.start" | "crm.contact.actions" | "crm.contact.profile" | "crm.contact.page.aside" | "crm.inbox.toolbar" | (string & {});
 export interface ExtensionContext {
   readonly surface: "entity-list" | "entity-form" | "crm-chat" | (string & {});
   readonly kind?: string;

@@ -264,11 +264,73 @@ CRM infrastructure stores the binding identity, contact serialization guard and 
 personal group storage exists only when enabled. No customer-field or sales tables are installed.
 There is no backward-compatibility layer for the former CRM-owned business model.
 
+### Building your own screens
+
+`@onno/crm` is built in three layers, and an app can stop at any of them:
+
+1. **Screens**: `CrmInbox`; `CrmConversation` (one chat anywhere: a record page, a column, a
+   panel); `openCrmConversation({ workspace, conversation, title })`, which opens one in a docked
+   window that stays open across pages, like a mail compose box; `CrmContactPage` (profile, the
+   contact's conversations, and the chat); and `CrmConnections`.
+2. **Parts**:
+   - the list: `ConversationRow`, `ConversationMenu`, `ConversationList` / `ConversationRowContent`;
+   - the timeline: `ChatTimeline`, `TimelineMessage`, `TimelineComment`, `TimelineSystemEvent`,
+     `MessageAttachments`, `CrmAvatar`;
+   - the composer: `CrmComposer`, `CrmComposerFields`, `SenderControls`, `AttachButton`,
+     `FileDropOverlay`;
+   - the contact: `CrmContactPanel`;
+   - `CrmConversationBody` (header + timeline + composer, for state the app already holds).
+3. **Hooks**:
+   - `useCrmConversation({ conversation, workspace })`: the contact's timeline across channels,
+     delivery, the conversation's commands, `execute`, `reload` and `loadEarlier`, all live;
+   - `useCrmComposer(conversation, config)`: the per-conversation draft, files, sender, `submit`,
+     `retry` and `insertDraft`;
+   - `useCrmWorkspaceConversation(workspace, id)`: one conversation, its siblings and its config;
+   - `useCrmContact(id)`.
+
+Each part takes the hook state as props, so an app replaces one piece and keeps the rest.
+`CrmInbox`'s `components` swaps a part in place. Every replacement gets the same props the built-in
+part does: `ConversationRowProps`, `CrmComposerProps`, `InboxContactPanelProps`.
+
+```tsx
+// The customer's orders inside the chat, at the date they were placed.
+const orderCards: CrmTimelineSource[] = [{ id: "orders", useEntries: ({ customerId }) => {
+  const { data = [] } = useRecords("Orders", { where: { customer: customerId }, limit: 5 });
+  return data.map(order => ({ id: String(order.id), at: String(order.date), type: "custom",
+    render: () => <OrderCard order={order} /> }));
+} }];
+
+<CrmInbox workspace="support" timelineSources={orderCards}
+  components={{ ContactPanel: CustomerSidebar, ConversationRow: props => <ConversationRow {...props} appearance={{ previewLines: 2 }} /> }}
+  renderEntry={(entry, render) => entry.type === "message" && isUrgent(entry.message) ? <Highlight>{render()}</Highlight> : render()} />
+
+<CrmContactPage contact={customerId} workspace="support" timelineSources={orderCards} />
+openCrmConversation({ workspace: "support", conversation: id, title: "Anna Petrova" });
+```
+
+A timeline source's `useEntries` is a hook: it may use the app's data hooks. Keep the sources array
+stable (module-level), so the hooks run in the same order on every render. Custom message bodies
+remain `messageRenderers` (`{ id, priority?, matches, component }`). A renderer that throws falls
+back to the default drawing.
+
+The row menu (right-click or ⋯) lists the conversation's `Commands<Conversation>` that need no
+input. Commands with a `.group("Change status")` appear under that submenu. A command that asks for
+input stays with the conversation's own actions, through `crm.chat.header` contributions and
+`context.execute`. The actions endpoint returns `group` and `inputs: boolean` for this.
+`rowMenu={{ open: false }}` drops "Open conversation"; `rowMenu={{ groups: false }}` drops the
+chat-group items.
+
 ## UI extensions and verification
 
-The inbox exposes the outlets `crm.chat.header`, `crm.chat.composer`, `crm.chat.aside`,
-`crm.chat.context-menu`, `crm.contact.profile` (directly under the profile card),
-`crm.contact.actions` and `crm.inbox.toolbar`. Contribute to them in the app's
+The inbox exposes these outlets:
+- `crm.chat.header`, `crm.chat.composer` and `crm.chat.aside`;
+- `crm.chat.context-menu`, which gets the conversation's `actions` and `execute`;
+- `crm.chat.message.actions`: beside each message, with the message as `record`, for example to
+  quote, forward or create a task from it;
+- `crm.chat.timeline.start`: pinned above the history, for example an order summary;
+- `crm.contact.profile` (directly under the profile card) and `crm.contact.actions`;
+- `crm.contact.page.aside`, on `CrmContactPage`;
+- `crm.inbox.toolbar`. Contribute to them in the app's
 `defineApp({ extensions: [{ id, slot, component }] })`; contact contributions receive the bound
 catalog name and host permissions. Server authorization is independent of what is shown. Message
 renderers are the inbox's `messageRenderers` prop (`{ id, priority?, matches, component }`).
@@ -324,7 +386,7 @@ Assignment, close/reopen, status-change and manual identity-linking HTTP actions
 Host `Commands<Conversation>` beans declare ordinary record commands (`c.command(key)…run(...)`);
 extension buttons receive their descriptors and call `context.execute(key, inputs)`. The scoped API is
 `/api/crm/inbox-workspaces/{workspace}/conversations/{id}/actions` (GET `[{id, title, visible,
-enabled}]`, POST `/{key}` with `{inputs:{...}}`). It checks workspace write access, application
+enabled, group, inputs}]`, POST `/{key}` with `{inputs:{...}}`). It checks workspace write access, application
 read-only mode, command roles and the commands' `availableWhen`/`enabledWhen` rules. CRM adds no business-field mutations or automatic history
 messages for these actions. Hosts own the handler and any desired history records. Connector code
 can still use the low-level identity-link service for provider routing.
@@ -484,6 +546,10 @@ restored mail archived in Gmail. All mailbox paths live in `src/main/ui/mailboxA
 | `actionLabels`, `folders` | Labels of the workspace's actions; glyph, hue and label per folder key |
 | `showAvatars`, `showIdentities`, `showEmptyFields`, `showSystemEvents`, `showTimestamps`, `showDeliveryStatus` | Visibility |
 | `grouping`, `connectionsRoute`, `channelLabels`, `messageRenderers` | See above |
+| `components` | Parts the app draws itself: `ConversationRow`, `Composer`, `ContactPanel`, `EmptyChat` (see [Building your own screens](#building-your-own-screens)) |
+| `timelineSources` | The app's own entries in the chat's timeline (orders, bookings, …) |
+| `renderEntry` | Draws, wraps or drops any single timeline entry |
+| `rowMenu` | `{ open?, groups? }`: the row menu's built-in items |
 
 Chat header item ids: `back` (compact only), `avatar` (desktop only), `title`, `contact`,
 `openContact`, `scheduleCall`, `logActivity`, `extensions`, `actions`; composer item ids: `mode`,

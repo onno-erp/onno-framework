@@ -142,6 +142,7 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "crm.chat.channel": "Channel",
   "crm.chat.checkAgain": "Check again",
   "crm.chat.chooseConversation": "Choose a conversation to start.",
+  "crm.chat.conversation": "Conversation",
   "crm.chat.internal": "Internal",
   "crm.chat.loadEarlier": "Load earlier activity",
   "crm.chat.noMessages": "No messages yet",

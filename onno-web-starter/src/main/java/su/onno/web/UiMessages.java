@@ -191,6 +191,7 @@ public final class UiMessages {
         d.put("crm.chat.channel", "Channel");
         d.put("crm.chat.checkAgain", "Check again");
         d.put("crm.chat.chooseConversation", "Choose a conversation to start.");
+        d.put("crm.chat.conversation", "Conversation");
         d.put("crm.chat.internal", "Internal");
         d.put("crm.chat.loadEarlier", "Load earlier activity");
         d.put("crm.chat.noMessages", "No messages yet");
