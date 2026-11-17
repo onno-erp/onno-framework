@@ -1,165 +1,234 @@
 ---
 name: onno-ui
 description: >-
-  Author onno-framework UI metadata and custom widgets. Use when creating or fixing Layout, Page,
-  EntityView, ListSpec, EntityConfigBuilder, ActionSpec, dashboard widgets, custom React widgets
-  compiled by the su.onno.widgets Gradle plugin, localization/messages, nav/sidebar placement,
-  form/list field hints, row actions, detail actions, map views, related lists, or UI polish for
-  a generated ERP app.
+  Overview of the onno-framework UI: the npm package @onno/ui and an app's own Vite app in
+  src/main/ui. Use when starting or restructuring an app's UI, applying the su.onno.ui Gradle
+  plugin (onnoUiInit, generateUiModel, buildUi), writing main.tsx / defineApp, working with the
+  generated model.gen.ts types (EntityName, RecordOf, FieldOf, enum constants, OnnoRoles), the
+  typed UI vocabulary (formats, inputs, widths, icons, where), the npm-run-dev loop, localization
+  and branding (onno.ui.*), the shell's design system, or deciding which file or skill a UI
+  change belongs in. Routes to onno-ui-entities (list/form customizations), onno-ui-pages (pages,
+  navigation, widgets, data hooks, onno:// links) and onno-commands (server behaviour in Java).
 ---
 
 # onno UI
 
-UI is authored as Spring beans, never as annotations on domain classes.
+The Java model is the source of truth. With no UI code at all an app already has navigation
+(entities grouped by their annotation `context`), a home page, and a list + record form for every
+entity the signed-in user may read — `@AccessControl` and record policies decide what exists for
+whom. The server describes **data and permissions**, never screens; the browser decides
+presentation.
 
-## Pick the Right Surface
+The UI is the npm package **`@onno/ui`** (a React shell). An app's UI is an ordinary Vite app in
+`src/main/ui` that imports it and declares only what differs from the defaults. There is no Java
+UI DSL, no name → component registry and no import side effects: you import a component and
+render it, or pass it as a prop.
 
-| Need | Use |
+## Where things live
+
+| Concern | Where | Skill |
+| --- | --- | --- |
+| The app declaration (pages, navigation, entity customizations, extensions) | `src/main/ui/main.tsx` — one `defineApp({...})` call | this one |
+| How an entity's default list and form present | `src/main/ui/entities/<entity>.ts` — one `EntityCustomization<"Orders">` | `onno-ui-entities` |
+| The app's own pages and nav | `src/main/ui/pages/*.tsx` + `pages`/`navigation` in `main.tsx` | `onno-ui-pages` |
+| The app's own components (widgets, custom list views, record panels) | `src/main/ui/components/*.tsx` | `onno-ui-pages` |
+| What can be *done* with a record (buttons, MCP tools), live form checks, picker badges, login → record link | Java beans: `Commands<E>`, `Checks<E>`, `PickerOptions<E>`, `IdentityLink` | `onno-commands` |
+| Rules that must hold on save, posting | Java domain (`Validated`, `BeforeWriteHandler`, `Postable`) | `onno-rules-lifecycle`, `onno-posting` |
+| Branding, chrome language, chrome strings | `onno.ui.*` config | this one |
+| Read-only mode, list page size, dev reload | `onno.web.*` config | `onno-runtime` |
+
+The reference app is `example/src/main/ui` (the bookstore). Copy shapes from it.
+
+## Set up an app's UI
+
+```kotlin
+// build.gradle.kts
+plugins {
+    id("org.springframework.boot")
+    id("su.onno.ui")          // builds src/main/ui into the jar
+}
+dependencies {
+    implementation("su.onno:onno-framework-starter:<version>")
+    implementation("su.onno:onno-web-starter:<version>")
+    implementation("su.onno:onno-auth-starter:<version>")
+}
+```
+
+`./gradlew onnoUiInit` seeds `src/main/ui` (never overwrites): `package.json` (`@onno/ui`, React,
+Vite, TypeScript), `vite.config.ts`, `tsconfig.json`, `index.html`, `.gitignore`, `main.tsx`
+(`defineApp({ login: LoginPage, pages: [{ path: "/", component: HomePage }] })`),
+`pages/LoginPage.tsx` (`<DefaultLogin>`), `pages/HomePage.tsx` (`<DefaultHome>`), `pages/README.md`,
+`components/README.md`. Extend a default screen by editing its page file. The template lives as real
+files in `onno-ui-gradle-plugin/src/main/resources/su/onno/ui/template` (edit there, not in Kotlin). Without a `src/main/ui/package.json` the plugin does
+nothing and the server serves the starter's default shell.
+
+The plugin's tasks:
+
+| Task | Does |
 | --- | --- |
-| Sidebar/nav/shell/persona | `Layout` |
-| Dashboard, settings, route override, custom route | `Page` |
-| Entity list columns, form fields, actions, related lists | `EntityView` |
-| Host SPA extension | `src/main/widgets/*.tsx` + `su.onno.widgets` |
+| `generateUiModel` | Writes `src/main/ui/model.gen.ts` from the compiled Java entities (git-ignored; runs before every UI build). |
+| `buildUi` | `npm run build` (Vite) into the jar's `onno-app/`, which the server serves instead of the default shell. Wired before `processResources`. |
+| `onnoUiInit` | Seeds a new app. |
 
-An entity surface is served only when an `EntityView` exists for the active profile. A view does not
-put the entity in the sidebar; a `Layout` section must list it. Nav is curated. A profile's own view
-replaces the default view for that profile — list, record form fields, detail widgets, action
-placement and validations alike.
+`onnoUi { sourceDir; npmProjectDir; nodeVersion; modelPackages }` is optional; `modelPackages`
+adds entities from packages outside the app's own (e.g. a starter's) to the generated model.
 
-## Layout
+`vite.config.ts` is one line — the preset adds React, Tailwind with the shell's theme, the dev
+proxy to the backend and the Gradle output directory:
 
-The `/` home entry is automatic when a root Page or dashboard widgets exist. Set its label through
-the root Page title; do not link `/` again with `.page(...)` or `spec.link(...)`. For other routes,
-use `spec.link(...)` for direct navigation or `.page(...)` inside a section. Follow
-[the layout/page skill](../onno-ui-layout-pages/SKILL.md), including its shell uniqueness checks.
+```ts
+import { defineConfig } from "vite";
+import { onno } from "@onno/ui/vite";
 
-Use `spec.section("Sales").icon("...").catalog(Customer.class).document(Invoice.class)` for entity
-links and `.page("/ops", "Sales Ops", "activity")` for authored pages. Use `profile()` and
-`viewport()` for personas: `Layout.profile()` names the persona and
-`spec.roles(...).priority(...)` selects it. Keep the default layout (`profile() == null`) for shared
-shell/identity and back-office users.
+export default defineConfig({ plugins: [onno()] });   // onno({ backend: "http://localhost:9090" }) to change the proxy target
+```
 
-With desktop `NavStyle.SIDEBAR`, each authored section is a workspace icon in the collapsible app
-rail and its entries fill the nested drawer. Name sections after user jobs/bounded workspaces
-(`Inbox`, `Sales`, `Configuration`), not framework storage kinds (`Catalogs`, `Documents`). Do not
-rebuild a second navigation shell inside a custom widget.
+`main.tsx` is one call. Everything in it is optional:
 
-## Page
+```tsx
+import { defineApp } from "@onno/ui";
+import { Activity, Settings, ShoppingCart } from "@onno/ui/icons";
+import { orders } from "./entities/Orders";
+import { HomePage } from "./pages/HomePage";
+import { SalesOpsPage } from "./pages/SalesOpsPage";
+import { SettingsPage } from "./pages/SettingsPage";
 
-Everything is a page: `/`, `/settings`, arbitrary routes, and default entity routes such as
-`/catalogs/{lowercase_snake_name}` or `/documents/{lowercase_snake_name}`. A `Page` bean at a
-default route overrides the framework's default surface.
+defineApp({
+  entities: { Orders: orders },
+  pages: [
+    { path: "/", component: HomePage },
+    { path: "/ops", component: SalesOpsPage, label: "Sales Ops", icon: Activity },
+    { path: "/settings", component: SettingsPage, label: "Settings", icon: Settings, roles: ["ADMIN"] },
+  ],
+  navigation: [
+    { title: "Sales", icon: ShoppingCart, items: ["Orders", "Customers", "/ops"] },
+    { title: "System", icon: Settings, items: ["/settings"] },
+  ],
+});
+```
 
-Common builders: `b.title`, `b.subtitle`, `b.bare()`, `b.header(false)`, `b.widget(...)`,
-`b.list(entity)`, `b.actions(...)`, `b.custom(type, payload)`, `b.row(...)`, and
-`b.aside(...)`.
+The declaration goes down the React tree in context; components read it from there. Never keep
+app configuration in module state.
 
-Render a constant setting with `b.widget(...).type("setting").config("constant", logicalName)`;
-there is no `b.constants(...)` API.
+## The typed model
 
-## EntityView
+`model.gen.ts` augments `@onno/ui`'s interfaces (`OnnoEntities`, `OnnoInformationRegisters`,
+`OnnoConstants`, `OnnoRoles`), so every name an app writes is checked:
 
-Use `list(ListSpec)` for columns, labels, filters, conditional row styles, and map views. Use
-`fields(EntityConfigBuilder)` for `.order()`, `.group()`, `.width()`, `.widget()`, `.format()`,
-`.placeholder()`, `.hint()`, `.label()`, `.refSecondary()`, `.refFilter()` (cascading ref pickers —
-narrow one picker's options by another field's value), `.refOptions(Decorator.class)` (live
-form/row-aware badges, disabled reasons, and filtering), `.uniqueWithinSection()`, visibility,
-built-in action placement, and related lists. Use
-`fields.validation(key, FormValidator.class).dependsOn(...).debounce(...)` for advisory live
-cross-record error/warning/info feedback; keep hard invariants in the authoritative write path.
+- **Entities are named by logical name** — the annotation's `name` (`"Orders"`, `"Stock Receipts"`),
+  never the Java class or the route. `EntityName`, `CatalogName`, `DocumentName`, `RegisterName`.
+- **Records and fields**: `RecordOf<"Orders">` is the generated `Order` type; `FieldOf<E>` lists its
+  fields with `"items.book"` for tabular-section columns; `TopField<E>` excludes those. A record
+  carries `<field>Display` (label of a reference/enum) and `<field>Ref` companions.
+- **Enums are constants with UUID values**, plus label maps:
+  `import { OrderStatus, OrderStatusLabels } from "../model.gen"`; compare
+  `order.status === OrderStatus.NEW`. Never compare against the constant's name string.
+- **Roles**: `RoleName` is every role an `@AccessControl` names plus `ADMIN`. A role that appears
+  only in a command's `roles(...)` or in configured users is declared by the app:
 
-Field widths serve two surfaces. Use `half`/`1/2`/`50%` for a half-row form field; the list ignores
-those tokens. Use a positive whole-pixel width such as `240` or `240px` only when a table column must
-be fixed. Never treat a form fraction as table pixels.
+  ```ts
+  declare module "@onno/ui" { interface OnnoRoles { SUPPORT: true } }
+  ```
 
-Use `detail(DetailSpec)` to place registry-backed custom widgets below the fields of a saved
-catalog/document record. The widget receives `widget.record` (`kind`, `name`, `id`, loaded `data`,
-`readOnly`) and is intentionally absent from New/Duplicate forms.
+When a type error says a name is not assignable, regenerate (`./gradlew generateUiModel`) before
+"fixing" the code — the Java model is the authority.
 
-Seed a blank New form with field initializers for scalars/enums. Use `OnFillingHandler` for
-create/save normalization and computed defaults, and
-query-param prefill for `Ref`s and cross-navigation
-(`…/new?room=<uuid>&startsAt=2026-07-16T19:00` — keys are write-path field names, `Ref`/enum values
-are UUIDs, temporals ISO).
+## The typed vocabulary
 
-Use `actions(ActionSpec)` for custom toolbar, row, and detail actions. Prefer state-aware
-`visibleWhen`, `enabledWhen`, `label(row -> ...)`, and `icon(row -> ...)` when a button depends on
-record state. For a dynamic server row action exposed to batch selection, always also set a
-human-facing `.label(String)`: the batch menu and progress messages have no single row context and
-otherwise show the action key. If a mixed-state batch would be ambiguous, declare separate
-deterministic actions. Configure an action form's canonical dialog inside `.form(f -> f.title(...)
-.description(...).submitLabel(...).cancelLabel(...).tone(...).size(...).input(...))`. Throw
-`ActionRejectedException` for an expected business rejection; use `fieldError`/`formError` so the
-open form retains its values and shows corrective feedback. Use
-`ActionResult.toast(ActionToast.success(title).message(...).detail(...))` for structured,
-severity-aware transient feedback and `ActionResult.dialog(ActionDialog…)` for a successful outcome
-that needs acknowledgement. Use `reload()` or `refresh(ActionToast|ActionDialog)` when the surface
-must refetch. Handler results contain only refresh intent and structured feedback; put static
-navigation on the action declaration with `.navigate(...)`.
+Everything handed to `@onno/ui` is a typed value, never a string the UI parses:
 
-## Custom Widgets
+| Concept | Type | Example |
+| --- | --- | --- |
+| Value format | `ValueFormat` | `{ money: "USD" }`, `{ number: { decimals: 0 } }`, `{ percent: { decimals: 1 } }`, `{ date: "medium" }` |
+| Edit control | `FieldInput` | `"textarea" \| "switch" \| "image" \| "images" \| "file" \| "color" \| "avatar" \| "map"` |
+| Form width | `FieldWidth` | `"full" \| "half"` (two `half` fields pair up) |
+| Row column width | `RowWidth` | flex weight `2`, or `{ px: 320 }` |
+| Icon | `IconName` | lucide names: `"shopping-cart"`, `"chart-column"`. In components: `import { Icon, Truck } from "@onno/ui/icons"` (all of lucide ships with `@onno/ui`; never add `lucide-react`) |
+| Which records | `Where<E>` | `{ posted: true, total: { gte: 100 }, status: { in: [OrderStatus.NEW] }, or: [...] }` |
+| A number over records | `Measure<E>` | `count("Orders", { open: true })`, `sum("Orders", "total", { posted: true })` |
+| Grouping | `By<E>` | `"status"`, `{ date: "week" }` |
+| Deep link | `OnnoLink` | `links.record("Orders", id)` → `onno://documents/orders/<id>` |
 
-Author app widgets in `src/main/widgets/*.tsx`, use `@onno/widget-sdk`, and apply the
-`su.onno.widgets` Gradle plugin. Prefer SDK UI primitives over lookalike controls. Literal Tailwind
-classes inside `src/main/widgets` are compiled into the widget CSS; dynamic classes are not scanned.
+`Where` is sent to the server as JSON and evaluated there — for lists, `useRecords`, measures and
+reference pickers alike. Operators: `eq`, `not`, `in`, `notIn`, `gt`, `gte`, `lt`, `lte`,
+`contains`, `startsWith`, plus `and`/`or`/`not` and `id: { in: ids }`.
 
-Declare optional browser libraries in the consuming Gradle build with
-`onnoWidgets { npmDependencies.put("package", "version") }`, then import them normally from TSX.
-They are bundled into the widget; React, React DOM, `@onno/widget-sdk`, and compiler packages remain
-framework-managed and cannot be overridden.
+## Intended dev loop
 
-Route-level operational workspaces should declare
-`page.list(Entity.class, view -> view.fill())`, consume that height (`h-full min-h-0`),
-keep headers/toolbars/composers fixed, and give scrolling only to bounded inner panes. Avoid widget
-`max-height`/viewport clamps and ever-growing feeds that make the entire tab scroll. Embedded
-dashboard widgets remain content-sized. Reuse entity avatar fields, resolved Ref `*Avatar`
-sidecars, and comment/profile avatar payloads; use Onno's Glass fallback only when no stored or
-source image exists. A conversation timeline should merge messages, Onno comments, and durable
-domain/system events chronologically.
+In the onno-framework repository, use the root scripts as the default edit loop:
 
-For fullscreen or full-height workspaces, read
-[the sizing and verification recipe](../onno-ui-widgets/references/full-height-workspaces.md)
-before implementation. Check all enclosing tab/page scroll containers; a viewport-sized document
-does not prove that the active tab has no scroll travel.
+```bash
+npm install                       # once, at the repository root
+npm run dev:backend               # terminal 1: example backend, DevTools, port 8091
+npm run dev:watch                 # terminal 2: application Java/resources + model.gen.ts
+npm run dev                       # terminal 3: Vite, http://localhost:5173
+```
 
-Data-backed custom widgets use `useWidgetUpdates(widget, load)` from `@onno/widget-sdk`; it filters
-and coalesces the host's shared live-event stream. Never open `new EventSource("/api/events")` in a
-widget. For unusual multi-entity or non-entity subscriptions, use the SDK's `events.subscribe` or
-`useUiEvents`. The underlying stream carries named events
-(`created`, `updated`, `deleted`, `posted`, `unposted`, `changed`). `onmessage` will not fire.
+Reuse a running backend and start only `npm run dev` for frontend-only work. Pages, components,
+styles and linked `@onno/*` source packages hot-reload. Do not rebuild jars or restart the backend
+for UI edits. Stop a packaged backend before switching to `dev:backend` on the same port; preserve
+`example/data/bookstore`. The development scripts skip production UI builds. Framework dependency
+jar/classpath changes may require a backend restart. Normal build/check/publish commands remain
+packaging and verification steps. See [the canonical workflow](../../../docs/RUNNING.md#intended-development-workflow).
 
-## Iterate With Dev Mode
+For a separate consumer application, start its backend, then run `npm run dev` in `src/main/ui`.
+The preset defaults to backend port 8080; override with `ONNO_BACKEND` or `onno({ backend })`.
+The repository root scripts above do not exist in consumer projects. Regenerate that app's typed
+model with `./gradlew generateUiModel` after Java model changes; enable DevTools and continuous
+compilation if it needs Java reloads too.
 
-Add `developmentOnly("org.springframework.boot:spring-boot-devtools")`, then run `bootRun` in one
-terminal and `./gradlew -t <app>:classes` in another — every save restarts the context and reloads
-all open browsers over SSE. Force a reload with `touch .onno-reload`. Do not full-rebuild per UI
-tweak.
+## Localize and brand
 
-## Reuse Canonical Components
+A first pass is unfinished while any surface is in a different language from the business:
 
-When touching the host SPA itself, `onno-ui-starter/src/main/frontend/DESIGN.md` is the law: one
-`Segmented`, one `FacetSheet`, one `RefSelect`, one date-picking system, islands without shadows.
-Radius tiers are `rounded-pill` (9999px compact actions/chips/badges), `rounded-field`
-(inputs/selects/rows/compact events), and `rounded-panel` (cards/bounded surfaces). The old
-`rounded-control` alias means **pill**, not “any control”; never use it on a panel, table/grid,
-schedule lane/event rectangle, generic row, empty-state box, or other large container.
-For host form controls, semantic radii are mandatory: inputs and every select, combobox, listbox,
-reference, and date trigger use `rounded-field`. Raw Tailwind radius utilities and literal radii are
-forbidden on those boundaries because they bypass branding tokens. Closed enum and catalog/document
-reference pickers share `selectTriggerClassName` from `components/ui/select.tsx`; extend that
-primitive rather than styling `RefSelect` independently, and add a component regression test when
-changing picker geometry.
+- Entity `title=`, attribute `displayName=`, `@Enumeration(title=…)` and `@EnumLabel("…")` in Java.
+- System columns (`code`, `description`, `number`, `date`, `posted`) and any field label: `label`
+  in the entity's `fields` customization (form) and `list.labels` (list header) — see
+  `onno-ui-entities`.
+- Page titles, nav section titles and page `label`s in the app's TSX.
+- Chrome (buttons, login, toasts, empty states): `onno.ui.locale` picks the built-in bundle,
+  `onno.ui.messages.<key>` overrides single strings. In components, `useTranslate()` /
+  `text(key)` read them; `useLocale()` / `locale()` the configured locale.
+- Branding: `onno.ui.branding.app-name`, `logo-url[-dark]`, `mark-url[-dark]`, `favicon-url`,
+  `light`/`dark` color maps; demo sign-in buttons: `onno.ui.login.demo-accounts`. The SPA is
+  mounted under `onno.ui.path` (default `/ui`).
 
-## Polish Checklist
+## Reuse the shell's components
 
-- Localize entity titles, field labels, enum labels, system columns, filters, actions, and shell
-  messages consistently.
-- Seed New forms so users do not start from blanks.
-- Format money, percentages, dates, booleans, statuses, and references deliberately.
-- Hide noisy fields from list/form/detail surfaces.
-- Verify text fits and controls remain stable on mobile and desktop.
-- Inspect the real rendered list after adding field widths; headers and representative row values
-  must remain visible, and no grid track may collapse to `1px`/`2px`.
+Import controls from `@onno/ui` (`Button`, `Badge`, `Input`, `Textarea`, `Checkbox`, `Switch`,
+`Segmented`, `Select…`, `Card…`, `Popover…`, `DialogShell`, `DatePicker`, `DateTimePicker`,
+`ColorPicker`, `RefSelect`, `WorkspaceToolbar`, `toast`, `HintIcon`) instead of building lookalikes;
+pick records with `RefSelect` (search, recent picks, "Show all…"), not a `Select` of fetched rows.
+Tailwind runs over `src/main/ui` with the shell's theme, so app components use the same tokens
+(`bg-card`, `border-border`, `text-muted-foreground`, `rounded-panel`, `rounded-field`,
+`rounded-pill`).
 
-Read `../onno/reference/cheatsheet.md` for the full UI DSL and `onno-ui-starter/README.md` for widget
-configuration.
+When editing `@onno/ui` itself, `onno-ui/DESIGN.md` is the law: one `Segmented`, one `FacetSheet`,
+one `RefSelect`, one date-picking system, islands without shadows. Radius tiers are `rounded-pill`
+(compact actions/chips/badges), `rounded-field` (inputs/selects/rows/compact events) and
+`rounded-panel` (cards/bounded surfaces); never put `rounded-pill` on a panel, table, lane or
+empty-state box. Inputs and every select/combobox/reference/date trigger use `rounded-field`
+through `selectTriggerClassName` (`components/ui/select.tsx`); add a component test when changing
+picker geometry.
+
+## Polish checklist
+
+- Localize entity titles, field and system-column labels, enum labels, filters, command titles and
+  chrome consistently.
+- Seed New forms (Java field initializers, `OnFillingHandler`, prefilled `links.newRecord`).
+- Format money, percentages and dates deliberately (`format`), choose inputs (`input`), hide noise
+  (`hideInList`/`hideInForm`/`hidden`).
+- Curate navigation by user job, not by storage kind.
+- Check the rendered list and form at desktop and phone width: headers readable, no clipped badges.
+
+## Verify
+
+```bash
+cd src/main/ui && npm run typecheck   # the app's TS against the generated model
+./gradlew build                        # generateUiModel + buildUi + tests
+```
+
+Then open the running app and look. Working on `@onno/ui` itself: in `onno-ui/`,
+`npx tsc --noEmit -p tsconfig.app.json`, `npx tsc --noEmit -p tsconfig.types.json` (type-level
+tests of the public API), `npx vitest run`; `./gradlew :onno-web-starter:testFrontend`.
+`docs/UI_TOUR.md` walks the package's internals.

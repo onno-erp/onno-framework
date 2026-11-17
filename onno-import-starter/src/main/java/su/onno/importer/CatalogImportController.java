@@ -4,9 +4,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
-import su.onno.ui.CatalogQueryService;
-import su.onno.ui.DocumentQueryService;
-import su.onno.ui.UiAccessService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.AccessService;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -22,14 +22,14 @@ public class CatalogImportController {
 
     private final CatalogQueryService catalogQuery;
     private final DocumentQueryService documentQuery;
-    private final UiAccessService access;
+    private final AccessService access;
     private final CatalogCsvImportService catalogImports;
     private final DocumentCsvImportService documentImports;
     private final OnnoImportProperties properties;
     private final ObjectMapper objectMapper;
 
     public CatalogImportController(CatalogQueryService catalogQuery, DocumentQueryService documentQuery,
-                                   UiAccessService access, CatalogCsvImportService catalogImports,
+                                   AccessService access, CatalogCsvImportService catalogImports,
                                    DocumentCsvImportService documentImports, OnnoImportProperties properties,
                                    ObjectMapper objectMapper) {
         this.catalogQuery = catalogQuery;

@@ -21,7 +21,7 @@ public final class Subject {
     private Subject() {
     }
 
-    /** The identity-linked record id of the signed-in user ({@code Layout.identity(...)}). */
+    /** The identity-linked record id of the signed-in user (the {@code IdentityLink}). */
     public static Value recordId() {
         return new Value(Source.RECORD_ID, null);
     }

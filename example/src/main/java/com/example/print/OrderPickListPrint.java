@@ -21,7 +21,7 @@ public class OrderPickListPrint extends PrintForm<Order> {
 
     @Override
     protected void configure(PrintFormSpec spec) {
-        spec.label("Pick list (Excel)").icon("sheet");
+        spec.label("Pick list (Excel)");
     }
 
     @Override

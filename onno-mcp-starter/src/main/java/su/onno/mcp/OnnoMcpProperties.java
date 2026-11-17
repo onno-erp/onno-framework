@@ -8,7 +8,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * <p>The server exposes the application's business model (catalogs, documents,
  * accumulation registers) as Model Context Protocol tools, generated generically
  * from the {@code MetadataRegistry} and enforced through the same
- * {@code UiAccessService} role model as the web UI.
+ * {@code AccessService} role model as the web UI.
  */
 @ConfigurationProperties(prefix = "onno.mcp")
 public class OnnoMcpProperties {

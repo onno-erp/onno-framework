@@ -3,7 +3,7 @@ name: onno-extensions
 description: >-
   Build or document onno-framework extensions: community integrations, commercial connectors,
   Spring Boot starters, SPI implementations, UI add-ons, skills/plugins, Kafka/outbox boundaries,
-  and onno-enterprise connector patterns. Use when adding a starter, connector, widget package,
+  and onno-enterprise connector patterns. Use when adding a starter, connector, UI package,
   auth/media/mail/print/storage SPI implementation, community registry entry, or deciding what
   belongs in open-core versus a separate extension artifact.
 ---
@@ -18,9 +18,8 @@ Extend onno without forking. Ship a separate artifact that a host app opts into.
 | --- | --- |
 | Connector | Spring Boot starter wrapping an external API |
 | SPI implementation | Bean implementing a framework extension point |
-| UI add-on | Additive `Page`/`Layout`/`EntityView`, actions, or custom widgets |
+| UI add-on | An npm package of React components next to the starter (`src/main/ui`, like `@onno/print`, `@onno/crm`) that apps render from their pages or contribute through `defineApp({ extensions })`; server actions as `Commands<E>` beans |
 | Skill/plugin | Agent guidance for a domain or integration |
-| Observability exporter | Consumer of the observability export SPI |
 | MCP tool pack | Additive `@McpTool` methods or `McpToolProvider` beans |
 
 Use `docs/EXTENDING.md` for public community integrations and `../onno/reference/connectors.md` for
@@ -37,8 +36,9 @@ commercial connector patterns.
   processor. Third-party metadata stays in that artifact; it does not enter this repository's
   generated `docs/CONFIGURATION.md`.
 - `@ConditionalOnProperty(prefix = "onno.<name>", name = "enabled")`
-- `@ConditionalOnMissingBean` only on singleton replacement SPIs. Additive `Page`, `Layout`,
-  `EntityView`, contributor, and tool beans must coexist.
+- `@ConditionalOnMissingBean` only on singleton replacement SPIs. Additive `Commands`, `Checks`,
+  contributor (`RecordActionContributor`, `SelectionDownloadContributor`) and tool beans must
+  coexist.
 - Order a replacement auto-configuration before the framework fallback it replaces.
 - Use the publisher's own Maven group and Java package; `su.onno.*` is reserved.
 - README or root docs explaining how consumers enable it

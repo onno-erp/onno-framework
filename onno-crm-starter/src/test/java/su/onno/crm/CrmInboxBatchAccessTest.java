@@ -20,7 +20,7 @@ import su.onno.crm.service.CrmContactService;
 import su.onno.crm.service.CrmInboxWorkspace;
 import su.onno.crm.service.CrmInboxWorkspaceService;
 import su.onno.crm.service.CrmWorkspaceService;
-import su.onno.ui.UiAccessService;
+import su.onno.service.AccessService;
 
 /**
  * The batch access filter has to answer exactly what asking row by row answers — it is the inbox's
@@ -29,7 +29,7 @@ import su.onno.ui.UiAccessService;
 class CrmInboxBatchAccessTest {
 
     private final Principal alice = () -> "alice";
-    private final UiAccessService access = mock(UiAccessService.class);
+    private final AccessService access = mock(AccessService.class);
     private final CrmContactService contacts = mock(CrmContactService.class);
 
     private Conversation conversation(String channel, UUID customer) {

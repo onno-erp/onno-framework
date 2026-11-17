@@ -23,7 +23,7 @@ public class CrmContactController {
     }
     @GetMapping("/workspace") public Map<String,Object> workspace(Principal p){
         inboxWorkspaces.requireAccess(p,false);
-        return Map.of("workspace",workspace.get(),"canConfigure",false,"customerCatalog",contacts.catalogName());
+        return Map.of("workspace",workspace.get(),"customerCatalog",contacts.catalogName());
     }
     @GetMapping("/contacts/{id}") public Object contact(@PathVariable UUID id,Principal p){
         inboxWorkspaces.requireCustomer(id,p,false);var c=contacts.get(id,p);

@@ -22,7 +22,7 @@ val releaseVersion = providers.gradleProperty("releaseVersion")
 allprojects {
     // Maven coordinate group. Artifacts publish to Maven Central under the `su.onno` namespace,
     // verified on the Central Portal via ownership of the `onno.su` domain. The groupId, the Java
-    // package root (`su.onno.*`) and the Gradle plugin id (`su.onno.desktop`) are all aligned, so
+    // package root (`su.onno.*`) and the Gradle plugin id (`su.onno.ui`) are all aligned, so
     // consumers write `su.onno:onno-framework-starter:<ver>` and `import su.onno...`.
     group = "su.onno"
     version = releaseVersion.get()
@@ -62,22 +62,18 @@ java {
 // (SONATYPE_HOST=CENTRAL_PORTAL) — see gradle.properties. Here we only supply the shared POM
 // metadata Central requires; the per-module name/description comes from the map below.
 //
-// `example` is not published; the desktop Gradle plugin lives in a separate included build and is
+// `example` is not published; the `su.onno.ui` Gradle plugin lives in a separate included build and is
 // released on its own.
 val publishedModules = mapOf(
     "onno-framework" to "Core domain model, JDBI persistence, and entity-change events for the onno ERP toolkit.",
-    "onno-framework-starter" to "Spring Boot autoconfiguration for the onno core: datasource, JDBC repositories, and JobRunr background jobs.",
-    "onno-ui-starter" to "Server-driven admin UI starter for onno — bundles the frontend and its Spring MVC endpoints.",
+    "onno-framework-starter" to "Spring Boot autoconfiguration for the onno core: datasource, JDBC repositories, JobRunr background jobs, and the transport-neutral query/command/access service layer.",
+    "onno-web-starter" to "Web layer for onno: the generic REST API, live events and the endpoints the React UI calls over the core service layer; serves the bundled default UI.",
     "onno-auth-starter" to "Authentication starter for onno: in-memory and OIDC / OAuth2 (Keycloak, Zitadel) single sign-on.",
     "onno-mcp-starter" to "Model Context Protocol (MCP) server starter exposing onno query and command services to AI agents.",
-    "onno-cluster-starter" to "Cross-node delivery of onno entity-change events for horizontal scale-out via a pluggable bus (default Postgres LISTEN/NOTIFY).",
-    "onno-kafka-starter" to "Kafka integration starter publishing onno entity-change events to topics.",
     "onno-import-starter" to "Data import starter for onno: xlsx / csv ingestion into catalogs and documents.",
     "onno-print-starter" to "Print forms for onno: fill Word (.docx) and Excel (.xlsx) templates from catalog and document records.",
-    "onno-observability-starter" to "Privacy-safe operational, UX, and business-outcome instrumentation exported through OpenTelemetry.",
     "onno-crm-channels-starter" to "Opt-in Telegram, Gmail, Instagram and WhatsApp adapters for the onno CRM inbox.",
     "onno-crm-starter" to "Reusable CRM module for onno with customers, opportunities, unified inboxes, comments, activity timelines, and a packaged workspace UI.",
-    "onno-desktop-starter" to "Desktop (Tauri) packaging starter bundling the onno shell for native app builds.",
 )
 
 configure(subprojects.filter { it.name in publishedModules.keys }) {
@@ -329,9 +325,8 @@ val configNotesDir = file("docs/_config")
 
 // Render order + human section titles. One entry per published starter that owns `onno.*` props.
 val configModuleProjects = listOf(
-    "onno-framework-starter", "onno-ui-starter", "onno-auth-starter", "onno-mcp-starter",
-    "onno-import-starter", "onno-print-starter", "onno-cluster-starter", "onno-kafka-starter",
-    "onno-observability-starter", "onno-desktop-starter", "onno-crm-channels-starter",
+    "onno-framework-starter", "onno-web-starter", "onno-auth-starter", "onno-mcp-starter",
+    "onno-import-starter", "onno-print-starter", "onno-crm-channels-starter",
 )
 
 // Make property descriptions deterministic. spring-boot-configuration-processor reads each
@@ -352,15 +347,12 @@ configure(subprojects.filter { it.name in configModuleProjects }) {
     }
 }
 val configModuleTitles = mapOf(
-    "onno-framework-starter" to "Core — `onno-framework-starter` (`OnnoProperties`, prefix `onno`)",
-    "onno-ui-starter" to "UI — `onno-ui-starter` (`UiProperties` prefix `onno.ui`, `MediaProperties` prefix `onno.media`, `CommentProperties` prefix `onno.comments`)",
+    "onno-framework-starter" to "Core — `onno-framework-starter` (`OnnoProperties` prefix `onno`, `WebProperties` prefix `onno.web`, `RecordAccessProperties` prefix `onno.access.records`)",
+    "onno-web-starter" to "Web — `onno-web-starter` (`UiProperties` prefix `onno.ui`, `UpdateProperties` prefix `onno.web.update-check`, `MediaProperties` prefix `onno.media`, `CommentProperties` prefix `onno.comments`)",
     "onno-auth-starter" to "Auth — `onno-auth-starter` (`OnnoAuthProperties`, prefix `onno.auth`)",
     "onno-mcp-starter" to "MCP — `onno-mcp-starter` (`OnnoMcpProperties`, prefix `onno.mcp`)",
     "onno-import-starter" to "Import — `onno-import-starter` (`OnnoImportProperties`, prefix `onno.import`)",
     "onno-print-starter" to "Print — `onno-print-starter` (`OnnoPrintProperties`, prefix `onno.print`)",
-    "onno-cluster-starter" to "Cluster — `onno-cluster-starter` (`OnnoClusterProperties`, prefix `onno.cluster`)",
-    "onno-kafka-starter" to "Kafka — `onno-kafka-starter` (`OnnoKafkaProperties`, prefix `onno.kafka`)",
-    "onno-desktop-starter" to "Desktop — `onno-desktop-starter` (`DesktopProperties`, prefix `onno.desktop`)",
 )
 
 // Collapse a fully-qualified type to readable simple names: java.util.List<java.lang.String> -> List<String>,

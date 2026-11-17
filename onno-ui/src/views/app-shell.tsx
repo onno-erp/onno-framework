@@ -1,0 +1,1907 @@
+import { navigationLinks } from "../lib/navigation-tree";
+import { NavigationHost } from "../components/shell/navigation";
+import type { IconSource } from "../lib/icons";
+import { isAppRoute, listenForNavigation } from "../lib/navigation";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
+import { Copy, ExternalLink, Link2, Trash2, X, type LucideIcon } from "lucide-react";
+import { toast } from "../components/ui/toast";
+import { useAuth } from "../providers/auth-provider";
+import { useTheme } from "../providers/theme-provider";
+import { useBranding } from "../providers/branding-provider";
+import { useMessages } from "../providers/messages-provider";
+import type { Translate } from "../lib/messages";
+import { api } from "../lib/api";
+import { cn, copyToClipboard } from "../lib/utils";
+import { stripBasePath, withBasePath } from "../lib/base-path";
+import { useDirtyForms } from "../lib/dirty-forms";
+import { MobileNavigationFrame } from "../components/shell/mobile-navigation-frame";
+import { ContentPane, type ContentAction } from "./content-pane";
+import { invalidateEntity } from "../lib/query";
+import { Icon } from "../lib/icons";
+import { BottomTabBar, MobileMenu, ShellContext, type ShellContextValue } from "../components/shell/mobile-shell";
+import { shellBrand, shellFromModel } from "../lib/app-model";
+import { clearModel, useModelLoader } from "../lib/model-store";
+import { matchRoute, route } from "../lib/routes";
+import { ShellRoutes, useAppConfig, useNavigation } from "../lib/app-config";
+
+// The mobile "More" hub is a client route like any other — an app can replace it.
+// Routes the shell serves itself, next to the app's pages.
+const SHELL_ROUTES = [route("/menu", () => <MobileMenu />, { clientOnly: true })];
+import type { NavStyle, ShellData } from "../lib/view-types";
+import { TabPresence } from "../components/collaboration/presence-surfaces";
+import { usePanePresence } from "../lib/presence-store";
+import { NotificationTrigger } from "../components/collaboration/notification-center";
+import {
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+} from "../components/ui/context-menu";
+import { useNotifications } from "../lib/notification-store";
+import { isInteractiveLayerOpen, shortcutLabel, useGlobalKeybindings } from "../lib/keybindings";
+import { useCommandFeedback } from "../lib/command-feedback";
+import { Button } from "../components/ui/button";
+import { DialogShell } from "../components/ui/dialog-shell";
+import { DesktopNavigation } from "../components/shell/desktop-navigation";
+import { DesktopAccountDock } from "../components/shell/desktop-account-dock";
+
+/**
+ * The authenticated app. The chrome is built client-side from the business model
+ * (`/api/ui/model`): navigation groups the readable entities by bounded context, unless the app
+ * replaced it with `setNavigation`. Each route renders in a {@link ContentPane} — an app's own
+ * React page (`registerRoute`) or the model's default surface. On desktop the content area is a
+ * Rider-style set of islands: each island carries its own tab strip, tabs can be dragged onto
+ * another island or onto an island's right edge to split into a new island, and the dividers
+ * between islands resize them. `onno://` action URLs become navigation, theme toggle and sign-out.
+ * A live SSE channel (/api/events) refetches whichever islands show the changed surface.
+ */
+// Phone-portrait gets the full-width bottom bar; large/landscape phones and tablets
+// share the "tablet" class (a compact bottom bar pinned bottom-right); desktop gets
+// the sidebar + islands.
+const MOBILE_MAX = 600;
+const TABLET_MAX = 1024;
+
+type Viewport = "mobile" | "tablet" | "desktop";
+
+// The device class, which picks the shell layout (sidebar on desktop, bottom bar otherwise).
+function viewportFor(width: number): Viewport {
+  if (width < MOBILE_MAX) return "mobile";
+  if (width < TABLET_MAX) return "tablet";
+  return "desktop";
+}
+
+export type WorkspaceTab = { path: string; title: string };
+
+// An island: an ordered set of open tabs plus the one currently shown. Several live
+// side by side, each sized by a flex weight in {@link Workspace.sizes}.
+export type Pane = { id: string; tabs: WorkspaceTab[]; activePath: string };
+
+// The desktop content area: islands left-to-right, their flex weights, and which one
+// has focus (the island the URL/navigation drives).
+export type Workspace = { panes: Pane[]; sizes: number[]; focused: string | null };
+
+export type WorkspaceTabState = "command-target" | "pane-active" | "open";
+
+/**
+ * A tab may be visible in its island without owning global keyboard commands. Keeping this
+ * classification explicit prevents pane focus from being collapsed into ordinary tab selection.
+ */
+export function workspaceTabState(active: boolean, focused: boolean): WorkspaceTabState {
+  if (!active) return "open";
+  return focused ? "command-target" : "pane-active";
+}
+
+// A pending confirmation shown in the in-app modal (replaces window.confirm), e.g.
+// delete confirmations. onConfirm runs the action; the modal closes either way.
+type ConfirmState = {
+  title: string;
+  message?: string;
+  confirmLabel: string;
+  danger?: boolean;
+  onConfirm: () => void;
+};
+
+/** Drops the loaded model so the next mount refetches `/api/ui/model` (sign-out, tests). */
+export function clearModelCache(): void {
+  clearModel();
+}
+
+let paneSeq = 0;
+function newPaneId(): string {
+  paneSeq += 1;
+  return `pane-${paneSeq}`;
+}
+
+// Percent-decode a single route segment for display. Route segments can be
+// percent-encoded (a non-ASCII or spaced entity name leaks into the URL as
+// e.g. "%D0%97..."), and a tab title built from the raw segment would show that
+// encoded form. Falls back to the raw segment if it isn't valid encoding.
+function decodeSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+function humanizeRouteToken(token: string): string {
+  return decodeSegment(token)
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+// A path may carry a query (a prefilled New form: …/new?startsAt=…). Keep the full string as the
+// stored tab path (the surface fetch needs the query), but read route segments from the query-less
+// form so verb detection and title/identity aren't thrown off by the "?…" tail.
+function stripQuery(pathname: string): string {
+  return pathname.split("?")[0];
+}
+
+function tabForPath(pathname: string): WorkspaceTab {
+  const path = pathname || "/";
+  if (stripQuery(path) === "/") return { path, title: "Dashboard" };
+
+  const [kind, name, detail, action] = stripQuery(path).split("/").filter(Boolean);
+  const entity = name ? humanizeRouteToken(name) : humanizeRouteToken(kind ?? "Page");
+
+  if (detail === "new") return { path, title: `New ${entity}` };
+  if (action === "duplicate") return { path, title: `Duplicate ${entity}` };
+  if (detail) return { path, title: `${entity} ${decodeSegment(detail).slice(0, 8)}` };
+  return { path, title: entity };
+}
+
+// The tab's display title, resolved at render time (not stored) so it tracks the shell's
+// title map — which loads async after the first tab is already open — and the active chrome
+// language. Prefers the entity's localized title from {@code titles}; falls back to the
+// humanized route token when the entity isn't in the nav (a directly-routed, unlisted entity)
+// or the shell hasn't loaded yet. The new/duplicate verbs come from UiMessages so the
+// whole tab localizes, not just the entity name.
+function titleForPath(
+  pathname: string,
+  titles: Record<string, string> | undefined,
+  t: Translate
+): string {
+  const path = stripQuery(pathname || "/");
+  if (path === "/") return titles?.["/"] ?? t("nav.dashboard");
+
+  const [kind, name, detail, action] = path.split("/").filter(Boolean);
+  const basePath = name ? `/${kind}/${name}` : `/${kind ?? ""}`;
+  const entity =
+    titles?.[basePath] ?? (name ? humanizeRouteToken(name) : humanizeRouteToken(kind ?? "Page"));
+
+  if (detail === "new") return t("tab.new", { entity });
+  if (action === "duplicate") return t("tab.duplicate", { entity });
+  if (detail) return `${entity} ${decodeSegment(detail).slice(0, 8)}`;
+  return entity;
+}
+
+function iconForPath(pathname: string, icons: Record<string, IconSource> | undefined): IconSource {
+  const path = stripQuery(pathname || "/");
+  const [kind, name] = path.split("/").filter(Boolean);
+  const basePath = name ? `/${kind}/${name}` : path;
+  const authored = icons?.[basePath];
+  if (authored) return authored;
+
+  if (path === "/") return "house";
+  if (kind === "catalogs") return "book-open";
+  if (kind === "documents") return "file-text";
+  if (kind === "registers") return "chart-column";
+  if (kind === "settings") return "settings";
+  return "panel-top";
+}
+
+// A record surface opened from a list — a document/catalog record or a "new" form (3 segments).
+// These open in their own island beside the list, master-detail style.
+function isRecordDetail(pathname: string): boolean {
+  const seg = stripQuery(pathname).split("/").filter(Boolean);
+  return seg.length === 3 && (seg[0] === "documents" || seg[0] === "catalogs");
+}
+
+function recordBasePath(pathname: string): string | null {
+  return isRecordDetail(pathname) ? stripQuery(pathname) : null;
+}
+
+// A catalog/document list route opened on a record: "/{kind}/{name}?focus={id}" (#410).
+export function isFocusedListPath(path: string): boolean {
+  const [pathname, search = ""] = path.split("?");
+  const seg = pathname.split("/").filter(Boolean);
+  return seg.length === 2 && (seg[0] === "catalogs" || seg[0] === "documents")
+    && new URLSearchParams(search).has("focus");
+}
+
+// Where "Open in list" lands: the pane already showing that list (its tab is re-pointed at the
+// focused route instead of opening a duplicate), else the first, main pane — the pane a navigation
+// click opens into. The record's own pane stays as it is, so the record remains open beside its list.
+export function workspaceWithFocusedList(ws: Workspace, path: string): Workspace {
+  const base = stripQuery(path);
+  const sameList = (tab: WorkspaceTab) => stripQuery(tab.path) === base;
+  const target = ws.panes.find((p) => p.tabs.some(sameList)) ?? ws.panes[0];
+  if (!target) return ws;
+  const panes = ws.panes.map((p) => {
+    if (p.id !== target.id) return p;
+    const tabs = p.tabs.some(sameList)
+      ? p.tabs.map((tab) => (sameList(tab) ? tabForPath(path) : tab))
+      : [...p.tabs, tabForPath(path)];
+    return { ...p, tabs, activePath: path };
+  });
+  return { ...ws, panes, focused: target.id };
+}
+
+function sameRecordTab(a: string, b: string): boolean {
+  const ar = recordBasePath(a);
+  const br = recordBasePath(b);
+  return ar != null && ar === br;
+}
+
+function tabsWithRecordPath(tabs: WorkspaceTab[], path: string): WorkspaceTab[] {
+  if (!recordBasePath(path)) {
+    return tabs.some((t) => t.path === path) ? tabs : [...tabs, tabForPath(path)];
+  }
+  return [...tabs.filter((t) => !sameRecordTab(t.path, path)), tabForPath(path)];
+}
+
+// Turn a row's open url ("onno://{kind}/{name}/{id}") into the delete action url
+// ("onno://delete/{kind}/{name}/{id}") handled by onCustomAction.
+function rowDeleteUrl(rowUrl: string): string {
+  return "onno://delete/" + rowUrl.slice("onno://".length);
+}
+
+// Turn a row's open url ("onno://{kind}/{name}/{id}") into its route path
+// ("/{kind}/{name}/{id}") — the same path the URL bar shows when the row is open.
+function rowOpenPath(rowUrl: string): string {
+  return "/" + rowUrl.slice("onno://".length);
+}
+
+// The absolute, shareable URL for an in-app route path. The app uses real browser URLs, so
+// origin + the base-path-prefixed path is a working deep link: pasted into a new tab it cold-loads
+// straight onto that surface inside the router's basename. `path` is router-relative (no prefix);
+// withBasePath adds the mount prefix (e.g. "/ui") so the link lands where the router expects it.
+function shareableUrl(path: string): string {
+  return window.location.origin + withBasePath(path);
+}
+
+function initialWorkspace(): Workspace {
+  // Router-relative path (prefix stripped) so the first tab matches the useLocation pathname the
+  // mirror effect compares against — otherwise a cold-loaded deep link would open a duplicate tab.
+  const path = stripBasePath(window.location.pathname) + window.location.search;
+  const id = newPaneId();
+  return { panes: [{ id, tabs: [tabForPath(path)], activePath: path }], sizes: [1], focused: id };
+}
+
+// Scale flex weights so they sum to the island count (mean 1 each). Flexbox only
+// distributes the *fraction* of free space equal to the sum of grow factors when that
+// sum is < 1 — so a lone survivor weighted 0.5 would fill only half. Renormalising on
+// every structural change keeps the sum >= 1, so the islands always fill the row.
+function normalize(sizes: number[]): number[] {
+  const sum = sizes.reduce((a, b) => a + b, 0) || 1;
+  const k = sizes.length / sum;
+  return sizes.map((s) => s * k);
+}
+
+// Drop the tab from whichever island holds it. If that empties the island, remove it
+// (and its size weight), keeping at least one island alive. Returns the trimmed
+// workspace; the caller re-points focus afterwards.
+function detachTab(ws: Workspace, path: string): Workspace {
+  const panes: Pane[] = [];
+  const sizes: number[] = [];
+  ws.panes.forEach((pane, i) => {
+    if (!pane.tabs.some((t) => t.path === path)) {
+      panes.push(pane);
+      sizes.push(ws.sizes[i]);
+      return;
+    }
+    const tabs = pane.tabs.filter((t) => t.path !== path);
+    if (tabs.length === 0) return; // drop the island entirely
+    const activePath =
+      pane.activePath === path ? (tabs[tabs.length - 1]?.path ?? tabs[0].path) : pane.activePath;
+    panes.push({ ...pane, tabs, activePath });
+    sizes.push(ws.sizes[i]);
+  });
+  if (panes.length === 0) {
+    // Was the only island and it would be empty — keep it on the dashboard.
+    return initialWorkspace();
+  }
+  const focused = panes.some((p) => p.id === ws.focused) ? ws.focused : panes[panes.length - 1].id;
+  return { panes, sizes: normalize(sizes), focused };
+}
+
+export function AppShell() {
+  return (
+    <ShellRoutes routes={SHELL_ROUTES}>
+      <Shell />
+    </ShellRoutes>
+  );
+}
+
+function Shell() {
+  const location = useLocation();
+  const routePath = location.pathname + location.search;
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+  const { theme, setTheme } = useTheme();
+  const branding = useBranding();
+  const t = useMessages();
+  const { openPanel: openNotificationPanel } = useNotifications();
+  const dirtyForms = useDirtyForms();
+  const [viewport, setViewport] = useState<Viewport>(() => viewportFor(window.innerWidth));
+  const [workspace, setWorkspace] = useState<Workspace>(initialWorkspace);
+  const wsRef = useRef(workspace);
+  wsRef.current = workspace;
+  // A single, always-mounted presence driver for the focused pane's route. Feeding it by prop (not a
+  // per-pane mounted component) means closing/opening/Esc-ing panes only changes its `path` — the hook
+  // never remounts, so the "this tab's own route" marker moves old→new without flashing through null
+  // (the self-dot no longer blinks on rapid pane churn).
+  usePanePresence(workspace.panes.find((p) => p.id === workspace.focused)?.activePath ?? "");
+  // Right-click menu for a list row: screen position + the row's onno:// open url.
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; url: string; writable: boolean } | null>(null);
+  // Right-click menu for a workspace tab: screen position + the tab's route path.
+  const [tabMenu, setTabMenu] = useState<{ x: number; y: number; path: string } | null>(null);
+  // The in-app confirmation modal (delete, etc.); null when closed.
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  // Mirror the menu/modal open-state into refs so the window-level Delete-key handler can read
+  // it without re-subscribing on every toggle.
+  const rowMenuOpenRef = useRef(false);
+  rowMenuOpenRef.current = rowMenu !== null;
+  const confirmOpenRef = useRef(false);
+  confirmOpenRef.current = confirm !== null;
+
+
+  const resolvedTheme = useMemo<"light" | "dark">(() => {
+    if (theme === "dark" || theme === "light") return theme;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }, [theme]);
+
+  useEffect(() => {
+    const onResize = () => setViewport(viewportFor(window.innerWidth));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // The nav highlight follows the focused island's active tab (not the raw URL), so
+  // it clears when that island is emptied and tracks focus between islands — all
+  // without re-fetching the shell. The icon bridge gets the same value, so glyphs and
+  // labels can't disagree about which item is active.
+
+  // Mirror the URL into the focused island: ensure it has a tab for the route and
+  // shows it. (Clicking a tab in another island focuses it and navigates here, so by
+  // the time this runs the focused island already matches — a no-op.)
+  useEffect(() => {
+    setWorkspace((ws) => {
+      const focused = ws.panes.find((p) => p.id === ws.focused) ?? ws.panes[0];
+      // An island intentionally emptied (last tab closed → URL reset to "/") stays blank;
+      // don't re-open a "/" tab for it. Real routes still open normally.
+      if (routePath === "/" && focused.tabs.length === 0) {
+        return ws;
+      }
+      if (
+        focused.activePath === routePath &&
+        focused.tabs.some((t) => t.path === routePath)
+      ) {
+        return ws;
+      }
+      const tab = tabForPath(routePath);
+      const panes = ws.panes.map((p) => {
+        if (p.id !== focused.id) return p;
+        const tabs = p.tabs.some((t) => t.path === tab.path) ? p.tabs : [...p.tabs, tab];
+        return { ...p, tabs, activePath: tab.path };
+      });
+      return { ...ws, panes, focused: focused.id };
+    });
+  }, [routePath]);
+
+  const model = useModelLoader();
+
+  // The shell is derived on the client: navigation from the model (or the app's override), the
+  // nav style from the viewport. Re-derived when an app registers routes/navigation late.
+  const { routes } = useAppConfig();
+  const navigation = useNavigation(model);
+  const shell = useMemo<ShellData | null>(() => {
+    if (!model || !navigation) return null;
+    const navStyle: NavStyle = viewport === "desktop" ? "sidebar" : "bottom_bar";
+    return shellFromModel(model, shellBrand(branding, resolvedTheme), navStyle,
+      matchRoute(routes, "/") != null, navigation);
+  }, [model, branding, resolvedTheme, viewport, routes, navigation]);
+
+  // Resolve a tab's localized display title from its path. Memoized on the shell's title map and
+  // the translator so every open tab re-titles the moment the shell loads or the language changes.
+  const tabTitle = useCallback(
+    (path: string) => titleForPath(path, shell?.titles, t),
+    [shell?.titles, t]
+  );
+  const tabIcon = useCallback(
+    (path: string) => iconForPath(path, shell?.icons),
+    [shell?.icons]
+  );
+
+  // Set just before closeTab navigates a now-empty island to "/", so the landing effect below
+  // skips the one auto-land that close would otherwise trigger. Without this, closing the last
+  // tab of a dashboard-less app instantly reopens the home screen (Esc never appears to close it).
+  const suppressLandingRef = useRef(false);
+
+  // When the app has no dashboard, "/" isn't a real surface — the shell reports the path
+  // to land on instead (the first nav item). Redirect there on load: drop the placeholder
+  // "/" tab so no stray "Dashboard" tab lingers, and replace history so Back doesn't
+  // return to the empty "/". An explicit "close the last tab" also routes to "/", but there the
+  // user wants a blank island, not a re-land — suppressLandingRef distinguishes the two.
+  useEffect(() => {
+    const home = shell?.home;
+    if (!home || home === "/" || location.pathname !== "/") return;
+    if (suppressLandingRef.current) {
+      suppressLandingRef.current = false;
+      return;
+    }
+    setWorkspace((ws) => {
+      const focused = ws.panes.find((p) => p.id === ws.focused) ?? ws.panes[0];
+      const panes = ws.panes.map((p) => {
+        if (p.id !== focused.id) return p;
+        const kept = p.tabs.filter((t) => t.path !== "/");
+        const tabs = kept.some((t) => t.path === home) ? kept : [...kept, tabForPath(home)];
+        return { ...p, tabs, activePath: home };
+      });
+      return { ...ws, panes, focused: focused.id };
+    });
+    navigate(home, { replace: true });
+  }, [shell, location.pathname, navigate]);
+
+  // When the focused surface 404s — a stale post-login `from`, a role switch, or a deep link to a
+  // route this profile can't reach — don't strand the user on a not-found card: drop the dead tab
+  // and land on the shell's home (the first real nav item). Guarded so it only acts on the *active*
+  // route and only when home is somewhere else, so it can't loop.
+  const pendingNotFoundRef = useRef<string | null>(null);
+  const landHome = useCallback((badPath: string, home: string) => {
+    setWorkspace((ws) => {
+      const focused = ws.panes.find((p) => p.id === ws.focused) ?? ws.panes[0];
+      const panes = ws.panes.map((p) => {
+        if (p.id !== focused.id) return p;
+        const kept = p.tabs.filter((t) => t.path !== badPath);
+        const tabs = kept.some((t) => t.path === home) ? kept : [...kept, tabForPath(home)];
+        return { ...p, tabs, activePath: home };
+      });
+      return { ...ws, panes, focused: focused.id };
+    });
+    navigate(home, { replace: true });
+  }, [navigate]);
+  const handleContentNotFound = useCallback((badPath: string) => {
+    if (badPath !== location.pathname) return;
+    const home = shell?.home;
+    // Shell not loaded yet (a cold post-login 404 can beat it) — remember the dead route and let
+    // the effect below redirect once `home` arrives, so we never flash the not-found card.
+    if (!home) {
+      pendingNotFoundRef.current = badPath;
+      return;
+    }
+    if (home === badPath) return;
+    landHome(badPath, home);
+  }, [shell, location.pathname, landHome]);
+  useEffect(() => {
+    const bad = pendingNotFoundRef.current;
+    const home = shell?.home;
+    if (bad && home && home !== bad && bad === location.pathname) {
+      pendingNotFoundRef.current = null;
+      landHome(bad, home);
+    }
+  }, [shell, location.pathname, landHome]);
+
+  // Open a route in the focused island: add a tab if missing and make it active, then
+  // sync the URL. Doing the workspace update directly (not just navigate) means it
+  // works even when the path equals the current URL — e.g. reopening the route whose
+  // last tab was just closed, which leaves the URL unchanged so navigate() is a no-op.
+  const openPath = useCallback(
+    (path: string) => {
+      setWorkspace((ws) => {
+        const focused = ws.panes.find((p) => p.id === ws.focused) ?? ws.panes[0];
+        const panes = ws.panes.map((p) => {
+          if (p.id !== focused.id) {
+            return recordBasePath(path) ? { ...p, tabs: p.tabs.filter((t) => !sameRecordTab(t.path, path)) } : p;
+          }
+          const tabs = tabsWithRecordPath(p.tabs, path);
+          return { ...p, tabs, activePath: path };
+        });
+        return { ...ws, panes, focused: focused.id };
+      });
+      // Always navigate — never guard on location.pathname. A handler that captured a stale
+      // `location.pathname` (the landing route "/") would make the guard `path !== location.pathname`
+      // wrongly skip navigating to the home page, leaving it unreachable from the nav. React Router no-ops a navigate to the current location.
+      navigate(path);
+    },
+    [navigate]
+  );
+
+  // Opening a rail section transfers command focus to navigation without closing or hiding
+  // any pane. Each pane keeps its visible active tab, but no tab receives global commands until
+  // the user picks a destination or interacts with a pane again.
+  const focusNavigation = useCallback(() => {
+    setWorkspace((ws) => (ws.focused === null ? ws : { ...ws, focused: null }));
+  }, []);
+
+  // Consumer widgets may mount their own React roots. React's synthetic
+  // capture handlers on the outer pane therefore do not reliably observe interaction inside those
+  // roots, even though the native event still crosses the pane in the DOM. Capture once at the
+  // document boundary and resolve the owning pane from the composed path so every body interaction
+  // (mouse, touch, or keyboard focus) transfers command focus consistently.
+  useEffect(() => {
+    const activateOwningPane = (event: Event) => {
+      const path = event.composedPath();
+      // Tab-strip controls already have precise activate/close/drag behavior; let those handlers
+      // own the transition instead of briefly navigating to the pane's previously active tab.
+      if (path.some((target) => target instanceof HTMLElement && target.hasAttribute("data-tab-strip"))) {
+        return;
+      }
+      const paneElement = path.find(
+        (target) => target instanceof HTMLElement && target.dataset.workspacePaneId
+      ) as HTMLElement | undefined;
+      const paneId = paneElement?.dataset.workspacePaneId;
+      if (!paneId) return;
+      const pane = wsRef.current.panes.find((candidate) => candidate.id === paneId);
+      if (!pane) return;
+      setWorkspace((ws) => (ws.focused === paneId ? ws : { ...ws, focused: paneId }));
+      if (pane.activePath && window.location.pathname + window.location.search !== pane.activePath) {
+        navigate(pane.activePath);
+      }
+    };
+    document.addEventListener("pointerdown", activateOwningPane, true);
+    document.addEventListener("focusin", activateOwningPane, true);
+    // Also supports accessibility/test environments whose semantic click does not synthesize a
+    // preceding pointer or focus event.
+    document.addEventListener("click", activateOwningPane, true);
+    return () => {
+      document.removeEventListener("pointerdown", activateOwningPane, true);
+      document.removeEventListener("focusin", activateOwningPane, true);
+      document.removeEventListener("click", activateOwningPane, true);
+    };
+  }, [navigate]);
+
+  // Open a record beside the focused island, master-detail style — but cap auto-opened
+  // columns at two so nested opens (a form, then "+ New" from a dropdown, then its edit…)
+  // tab into the existing detail column instead of cramming the screen with ever more
+  // panes. If it's already open anywhere, focus it; if a second column already exists,
+  // pile the record on there as a tab; otherwise spawn the detail column to the right.
+  const MAX_AUTO_COLUMNS = 2;
+  const openDetailRight = useCallback(
+    (path: string) => {
+      setWorkspace((ws) => {
+        const holder = ws.panes.find((p) =>
+          p.tabs.some((t) => t.path === path || sameRecordTab(t.path, path))
+        );
+        if (holder) {
+          return {
+            ...ws,
+            focused: holder.id,
+            panes: ws.panes.map((p) =>
+              p.id === holder.id
+                ? { ...p, tabs: tabsWithRecordPath(p.tabs, path), activePath: path }
+                : recordBasePath(path)
+                  ? { ...p, tabs: p.tabs.filter((t) => !sameRecordTab(t.path, path)) }
+                  : p
+            ),
+          };
+        }
+        const idx = Math.max(0, ws.panes.findIndex((p) => p.id === ws.focused));
+        // Already at the column cap → tab into the rightmost pane (the detail column)
+        // rather than splitting a new one.
+        if (ws.panes.length >= MAX_AUTO_COLUMNS) {
+          const target = ws.panes[ws.panes.length - 1];
+          return {
+            ...ws,
+            focused: target.id,
+            panes: ws.panes.map((p) =>
+              p.id === target.id
+                ? { ...p, tabs: tabsWithRecordPath(p.tabs, path), activePath: path }
+                : recordBasePath(path)
+                  ? { ...p, tabs: p.tabs.filter((t) => !sameRecordTab(t.path, path)) }
+                  : p
+            ),
+          };
+        }
+        const id = newPaneId();
+        const panes = [
+          ...ws.panes.slice(0, idx + 1),
+          { id, tabs: [tabForPath(path)], activePath: path },
+          ...ws.panes.slice(idx + 1),
+        ];
+        const sizes = [...ws.sizes];
+        const share = sizes[idx] / 2;
+        sizes[idx] = share;
+        sizes.splice(idx + 1, 0, share);
+        return { panes, sizes: normalize(sizes), focused: id };
+      });
+      if (path !== location.pathname) navigate(path);
+    },
+    [location.pathname, navigate]
+  );
+
+  // "Open in list" (#410): behaves like a navigation click on the list — see workspaceWithFocusedList.
+  const openFocusedList = useCallback(
+    (path: string) => {
+      setWorkspace((ws) => workspaceWithFocusedList(ws, path));
+      navigate(path);
+    },
+    [navigate]
+  );
+
+  // Close a tab by its path wherever it lives. Repoints focus to what remains in that island and
+  // follows it with the URL.
+  const closePath = useCallback(
+    (path: string) => {
+      // Programmatic close (post-save, post-delete): the initiator owns the data outcome, so any
+      // dirty flag is stale by definition — drop it rather than asking to discard.
+      dirtyForms.clear(path);
+      const ws = wsRef.current;
+      if (!ws.panes.some((p) => p.tabs.some((t) => t.path === path))) return;
+      const next = detachTab(ws, path);
+      setWorkspace(next);
+      const focused = next.panes.find((p) => p.id === next.focused) ?? next.panes[0];
+      if (focused?.activePath && focused.activePath !== location.pathname) navigate(focused.activePath);
+    },
+    [location.pathname, navigate]
+  );
+
+  // Copy the shareable deep link for a route path to the clipboard, with a toast. Used by the
+  // row right-click menu (a list row's record) and the tab right-click menu (any open surface —
+  // detail, list, page, dashboard, register), so every screen the app can show is shareable by URL.
+  const copyLink = useCallback((path: string) => {
+    void copyToClipboard(shareableUrl(path)).then((ok) =>
+      ok ? toast.success("Link copied") : toast.error("Couldn't copy link")
+    );
+  }, []);
+
+  // All navigation sources use the same pane placement and existing-tab reuse rules.
+  const openSurface = useCallback((path: string, explicitMain = false) => {
+    // "/" is the generic home intent, same as onno:// — dashboard-less personas (e.g. a manager)
+    // have no "/" page and declare their first reachable surface as shell.home.
+    if (path === "/") {
+      openPath(shell?.home ?? "/");
+      return;
+    }
+    if (isFocusedListPath(path)) {
+      // "Open in list" (#410) from a record header: {kind}/{name}?focus={id}.
+      openFocusedList(path);
+      return;
+    }
+    const base = recordBasePath(path);
+    const inMain = explicitMain || (base != null
+      && (shell?.mainRecordRoutes ?? []).includes(base.split("/").slice(0, 3).join("/")));
+    // On the desktop islands layout, a record opens in its own island to the right;
+    // elsewhere (single content pane) it just navigates.
+    if (!inMain && shell?.navStyle === "sidebar" && recordBasePath(path)) {
+      openDetailRight(path);
+    } else {
+      openPath(path);
+    }
+  }, [openPath, openDetailRight, openFocusedList, shell?.home, shell?.navStyle, shell?.mainRecordRoutes]);
+
+  const commandFeedback = useCommandFeedback();
+  const onCustomAction = useCallback(
+    (action: ContentAction) => {
+      const url = action?.url;
+      if (!url) return;
+      if (isAppRoute(url)) {
+        openSurface(url);
+        return;
+      }
+      if (!url.startsWith("onno://")) return;
+      const rest = url.slice("onno://".length); // "logout" | "theme/toggle" | "documents/foo/id"
+      if (rest === "logout") {
+        clearModel();
+        logout().finally(() => navigate("/login"));
+        return;
+      }
+      if (rest === "theme/toggle") {
+        setTheme(resolvedTheme === "dark" ? "light" : "dark");
+        return;
+      }
+      if (rest === "notifications") {
+        // The mobile menu's Notifications row — opens the client-owned panel, no route change.
+        openNotificationPanel();
+        return;
+      }
+      if (rest === "") {
+        // The logo and the home nav item emit the generic home intent. Resolve it through the
+        // shell rather than assuming "/" is a real page: with no home page, shell.home is the
+        // first reachable nav surface.
+        openPath(shell?.home ?? "/");
+        return;
+      }
+      if (rest.startsWith("download/")) {
+        // download/{path} — a server endpoint that returns a file with Content-Disposition:
+        // attachment. A full-page GET lets the browser save it (the attachment header means the
+        // current SPA view stays put). Used by print/export actions, e.g. Print to Word.
+        window.location.href = "/" + rest.slice("download/".length);
+        return;
+      }
+      if (rest.startsWith("open/")) {
+        // open/{url} — view a stored file (a detail surface's file chip). An absolute http(s)
+        // URL opens verbatim; an app-relative media path is re-rooted. New tab so the SPA stays put.
+        const target = rest.slice("open/".length);
+        const href = /^https?:\/\//i.test(target) ? target : "/" + target;
+        window.open(href, "_blank", "noopener,noreferrer");
+        return;
+      }
+      if (rest.startsWith("redirect/")) {
+        // redirect/{url} — full-page navigation to an external URL (verbatim, query string and all),
+        // e.g. an OAuth "Connect with X" consent screen that redirects back to our callback. Unlike
+        // open/ this replaces the current page so the provider's round-trip lands back in the app.
+        const target = rest.slice("redirect/".length);
+        if (/^https?:\/\//i.test(target)) window.location.href = target;
+        return;
+      }
+      if (rest.startsWith("delete/")) {
+        // delete/{kind}/{name}/{id} — confirm in the in-app modal, DELETE via REST, then
+        // back to the list (the SSE "deleted" event patches any other open list live).
+        const [kind, name, id] = rest.slice("delete/".length).split("/");
+        if (!name || !id) return;
+        // After deleting, close the record pane and let the list refresh over SSE.
+        const after = () => {
+          closePath("/" + kind + "/" + name + "/" + id);
+        };
+        if (kind === "documents") {
+          setConfirm({
+            title: t("confirm.delete.document.title"),
+            message: t("confirm.delete.document.message"),
+            confirmLabel: t("action.delete"),
+            danger: true,
+            onConfirm: () => api.deleteDocument(name, id).then(after).catch(() => {}),
+          });
+        } else if (kind === "catalogs") {
+          setConfirm({
+            title: t("confirm.delete.item.title"),
+            message: t("confirm.delete.item.message"),
+            confirmLabel: t("action.delete"),
+            danger: true,
+            onConfirm: () => api.deleteCatalogItem(name, id).then(after).catch(() => {}),
+          });
+        }
+        return;
+      }
+      if (rest.startsWith("command/")) {
+        // command/{kind}/{name}/{key}[/{id}] — an entity command (a record command with its id).
+        // POST it (CSRF-aware, errors self-toast) and apply the CommandResult.
+        const [kind, name, key, id] = rest.slice("command/".length).split("/");
+        if (!kind || !name || !key) return;
+        // A URL-dispatched command has no React control to spin, so a loading toast gives feedback
+        // while a slow/async handler runs.
+        const loadingId = toast.loading(t("loading.working"));
+        api
+          .runCommand(kind, name, key, id)
+          .then((result) => {
+            toast.dismiss(loadingId);
+            commandFeedback.applyResult(result, { refresh: () => invalidateEntity(`${kind}/${name}`, id ? [id] : undefined) });
+          })
+          .catch((error) => {
+            toast.dismiss(loadingId);
+            commandFeedback.fromError(error);
+          });
+        return;
+      }
+      if (rest.startsWith("post/") || rest.startsWith("unpost/")) {
+        // post/{name}/{id} or unpost/{name}/{id} — drive the document's posting state via
+        // REST. Posting emits ("posted"/"unposted", document) + ("changed","register","*")
+        // over SSE, so the detail surface and any open register refresh themselves; no
+        // manual navigation needed. The api layer toasts any failure (validation/balance).
+        const unpost = rest.startsWith("unpost/");
+        const [name, id] = rest.slice((unpost ? "unpost/" : "post/").length).split("/");
+        if (!name || !id) return;
+        const op = unpost ? api.unpostDocument(name, id) : api.postDocument(name, id);
+        op.then(() => toast.success(t(unpost ? "toast.unposted" : "toast.posted"))).catch(() => {});
+        return;
+      }
+      const explicitMain = rest.startsWith("main/");
+      openSurface("/" + (explicitMain ? rest.slice("main/".length) : rest), explicitMain);
+    },
+    [
+      navigate,
+      location.pathname,
+      routePath,
+      logout,
+      setTheme,
+      resolvedTheme,
+      openPath,
+      openSurface,
+      closePath,
+      shell?.home,
+      t,
+      openNotificationPanel,
+      commandFeedback,
+    ]
+  );
+
+  // A stable dispatcher over the latest onCustomAction, for chrome that must not re-render on
+  // every handler identity change.
+  const onCustomActionRef = useRef(onCustomAction);
+  onCustomActionRef.current = onCustomAction;
+  const hoveredRowUrl = useCallback(() => {
+    const el = document.querySelector("[data-onno-row]:hover") as HTMLElement | null;
+    return el?.dataset.onnoRow;
+  }, []);
+  // Whether the hovered row's entity is writable by the viewer. Rows stamp
+  // data-onno-row-writable="0" when the server said canWrite=false (see ListDescriptor.canWrite);
+  // absent means writable (older servers) so behavior doesn't regress.
+  const hoveredRowWritable = useCallback(() => {
+    const el = document.querySelector("[data-onno-row]:hover") as HTMLElement | null;
+    return el?.dataset.onnoRowWritable !== "0";
+  }, []);
+  const noActiveTextSelection = useCallback(() => {
+    const selection = window.getSelection();
+    return !selection || selection.isCollapsed || !selection.toString().trim();
+  }, []);
+
+  // Right-click on a list row (stamped with data-onno-row)
+  // opens a small Open / Edit menu. One window-level listener serves every island; any
+  // left-click / Esc / resize dismisses it.
+  useEffect(() => {
+    const onCtx = (e: MouseEvent) => {
+      // The entity list owns its rows' menu (record commands, submenus, batch ops) and
+      // preventDefaults the event — this DOM-sniffing fallback serves the remaining rows.
+      if (e.defaultPrevented) return;
+      // Yield to an active text selection: if the user highlighted a value and right-clicks,
+      // let the browser's native Copy menu through instead of hijacking it with the row menu.
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed && selection.toString().trim()) return;
+      const el = (e.target as HTMLElement)?.closest?.("[data-onno-row]") as HTMLElement | null;
+      const url = el?.dataset.onnoRow;
+      if (!url) return;
+      e.preventDefault();
+      setTabMenu(null);
+      // writable mirrors hoveredRowWritable: "0" = the server denied write on this entity.
+      setRowMenu({ x: e.clientX, y: e.clientY, url, writable: el?.dataset.onnoRowWritable !== "0" });
+    };
+    const close = () => {
+      setRowMenu(null);
+      setTabMenu(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("contextmenu", onCtx);
+    window.addEventListener("click", close);
+    window.addEventListener("resize", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("contextmenu", onCtx);
+      window.removeEventListener("click", close);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
+
+  const rowKeybindings = useMemo(
+    () => [
+      {
+        key: "Enter",
+        mod: true,
+        run: () => {
+          if (rowMenuOpenRef.current || confirmOpenRef.current) return;
+          const url = hoveredRowUrl();
+          if (url) onCustomAction({ url });
+        },
+      },
+      {
+        // The record route is the editable object form, so the edit shortcut opens it directly.
+        key: "e",
+        mod: true,
+        run: () => {
+          if (rowMenuOpenRef.current || confirmOpenRef.current) return;
+          const url = hoveredRowUrl();
+          if (url && hoveredRowWritable()) onCustomAction({ url });
+        },
+      },
+      {
+        key: "d",
+        mod: true,
+        shift: true,
+        run: () => {
+          if (rowMenuOpenRef.current || confirmOpenRef.current) return;
+          const url = hoveredRowUrl();
+          if (url && hoveredRowWritable()) onCustomAction({ url: `${url}/duplicate` });
+        },
+      },
+      {
+        key: "c",
+        mod: true,
+        shift: true,
+        run: () => {
+          if (rowMenuOpenRef.current || confirmOpenRef.current || !noActiveTextSelection()) return;
+          const url = hoveredRowUrl();
+          if (url) copyLink(rowOpenPath(url));
+        },
+      },
+      {
+        key: "Delete",
+        run: () => {
+          if (rowMenuOpenRef.current || confirmOpenRef.current) return;
+          const url = hoveredRowUrl();
+          if (url && hoveredRowWritable()) onCustomAction({ url: rowDeleteUrl(url) });
+        },
+      },
+    ],
+    [copyLink, hoveredRowUrl, hoveredRowWritable, noActiveTextSelection, onCustomAction]
+  );
+  useGlobalKeybindings(rowKeybindings);
+
+  // Every openRoute / closeRoute in the app lands here: open an onno:// link or app route through
+  // the action handler (open record, open catalog new-form, …), close a form pane after save/cancel.
+  useEffect(
+    () => listenForNavigation({ open: (url) => onCustomAction({ url }), close: closePath }),
+    [onCustomAction, closePath],
+  );
+
+  // Esc dismisses the confirmation modal.
+  useEffect(() => {
+    if (!confirm) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setConfirm(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [confirm]);
+
+  // ----- island / tab operations -----
+
+  // Show a tab: focus its island, make it active, and sync the URL.
+  const activateTab = useCallback(
+    (paneId: string, path: string) => {
+      setWorkspace((ws) => ({
+        ...ws,
+        focused: paneId,
+        panes: ws.panes.map((p) => (p.id === paneId ? { ...p, activePath: path } : p)),
+      }));
+      if (path !== location.pathname) navigate(path);
+    },
+    [location.pathname, navigate]
+  );
+
+  // Self-reference so the discard-confirm can re-enter the (by then flag-cleared) close without
+  // capturing a stale callback identity.
+  const closeTabRef = useRef<((paneId: string, path: string) => void) | null>(null);
+  const closeTab = useCallback(
+    (paneId: string, path: string) => {
+      // A form tab with unsaved edits doesn't close silently — confirm the discard first (the
+      // form marks/clears its flag; save and Cancel clear it before they close, so only a stray
+      // X / Esc / middle-click lands here). Confirming re-enters with the flag cleared.
+      if (dirtyForms.isDirty(path)) {
+        setConfirm({
+          title: t("confirm.discard.title"),
+          message: t("confirm.discard.message"),
+          confirmLabel: t("action.discard"),
+          danger: true,
+          onConfirm: () => {
+            dirtyForms.clear(path);
+            closeTabRef.current?.(paneId, path);
+          },
+        });
+        return;
+      }
+      const ws = wsRef.current;
+      const pane = ws.panes.find((p) => p.id === paneId);
+      if (!pane) return;
+      // Closing the last tab of the only island leaves it blank (an empty island).
+      // Reset the URL to the app root so it no longer points at the just-closed surface, and tell
+      // the landing effect to leave it blank rather than re-landing the home path (which would make
+      // the just-closed tab reappear instantly on dashboard-less apps).
+      if (ws.panes.length === 1 && pane.tabs.length === 1) {
+        setWorkspace({ panes: [{ ...pane, tabs: [], activePath: "" }], sizes: [1], focused: pane.id });
+        if (location.pathname !== "/") {
+          suppressLandingRef.current = true;
+          navigate("/", { replace: true });
+        }
+        return;
+      }
+      const next = detachTab(ws, path);
+      setWorkspace(next);
+      // If we closed the active tab of the focused island, follow it to the new active.
+      if (path === location.pathname) {
+        const focused = next.panes.find((p) => p.id === next.focused) ?? next.panes[0];
+        if (focused.activePath && focused.activePath !== location.pathname) {
+          navigate(focused.activePath);
+        }
+      }
+    },
+    [location.pathname, navigate, t]
+  );
+  closeTabRef.current = closeTab;
+
+  // ----- drag a tab between / out of islands -----
+
+  const dragRef = useRef<{ path: string; fromPaneId: string } | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ paneId: string; mode: "left" | "into" | "right" } | null>(
+    null
+  );
+  // The strip + slot a reorder/move would drop into, driving the live preview gap.
+  const [tabDrop, setTabDrop] = useState<{ paneId: string; index: number } | null>(null);
+  // The tab currently being dragged (reactive mirror of dragRef, for the preview).
+  const [dragState, setDragState] = useState<{ path: string; fromPaneId: string } | null>(null);
+  // Native HTML drag is still the reliable way to cross pane/portal boundaries, but its default
+  // translucent screenshot looks detached from our live reorder preview. Keep one deliberate,
+  // lifted drag image alive until dragend (Safari requires it to remain in the document).
+  const tabDragImageRef = useRef<HTMLElement | null>(null);
+
+  const clearTabDrag = useCallback(() => {
+    tabDragImageRef.current?.remove();
+    tabDragImageRef.current = null;
+    dragRef.current = null;
+    setDragState(null);
+    setDropTarget(null);
+    setTabDrop(null);
+  }, []);
+
+  // Move a dragged tab into an existing island (append + activate there).
+  const moveTabInto = useCallback(
+    (targetPaneId: string, path: string) => {
+      const ws = wsRef.current;
+      const target = ws.panes.find((p) => p.id === targetPaneId);
+      if (!target) return;
+      if (target.tabs.some((t) => t.path === path)) {
+        activateTab(targetPaneId, path);
+        return;
+      }
+      const detached = detachTab(ws, path);
+      const tab = tabForPath(path);
+      const panes = detached.panes.map((p) =>
+        p.id === targetPaneId ? { ...p, tabs: [...p.tabs, tab], activePath: path } : p
+      );
+      setWorkspace({ panes, sizes: detached.sizes, focused: targetPaneId });
+      if (path !== location.pathname) navigate(path);
+    },
+    [activateTab, location.pathname, navigate]
+  );
+
+  // Split: drop the dragged tab to the right of an island as a brand-new island.
+  const splitRight = useCallback(
+    (afterPaneId: string, path: string) => {
+      const ws = wsRef.current;
+      const source = ws.panes.find((p) => p.tabs.some((t) => t.path === path));
+      // Splitting a single-tab island off itself is a no-op — nothing to split.
+      if (source && source.id === afterPaneId && source.tabs.length === 1) {
+        activateTab(afterPaneId, path);
+        return;
+      }
+      const detached = detachTab(ws, path);
+      const idx = detached.panes.findIndex((p) => p.id === afterPaneId);
+      if (idx < 0) {
+        moveTabInto(detached.panes[0].id, path);
+        return;
+      }
+      const id = newPaneId();
+      const tab = tabForPath(path);
+      const panes = [
+        ...detached.panes.slice(0, idx + 1),
+        { id, tabs: [tab], activePath: path },
+        ...detached.panes.slice(idx + 1),
+      ];
+      // Give the new island half of its left neighbour's weight, then renormalise.
+      const sizes = [...detached.sizes];
+      const share = sizes[idx] / 2;
+      sizes[idx] = share;
+      sizes.splice(idx + 1, 0, share);
+      setWorkspace({ panes, sizes: normalize(sizes), focused: id });
+      if (path !== location.pathname) navigate(path);
+    },
+    [activateTab, moveTabInto, location.pathname, navigate]
+  );
+
+  // Split: drop the dragged tab to the left of an island as a brand-new island inserted
+  // before it (dropping on the leftmost island's left edge pins the tab to the far left).
+  const splitLeft = useCallback(
+    (beforePaneId: string, path: string) => {
+      const ws = wsRef.current;
+      const source = ws.panes.find((p) => p.tabs.some((t) => t.path === path));
+      if (source && source.id === beforePaneId && source.tabs.length === 1) {
+        activateTab(beforePaneId, path);
+        return;
+      }
+      const detached = detachTab(ws, path);
+      const idx = detached.panes.findIndex((p) => p.id === beforePaneId);
+      if (idx < 0) {
+        moveTabInto(detached.panes[0].id, path);
+        return;
+      }
+      const id = newPaneId();
+      const tab = tabForPath(path);
+      const panes = [
+        ...detached.panes.slice(0, idx),
+        { id, tabs: [tab], activePath: path },
+        ...detached.panes.slice(idx),
+      ];
+      // Split the target's weight with the new island inserted before it.
+      const sizes = [...detached.sizes];
+      const share = sizes[idx] / 2;
+      sizes[idx] = share;
+      sizes.splice(idx, 0, share);
+      setWorkspace({ panes, sizes: normalize(sizes), focused: id });
+      if (path !== location.pathname) navigate(path);
+    },
+    [activateTab, moveTabInto, location.pathname, navigate]
+  );
+
+  // Reorder within an island, or move a tab into one at a precise slot — the tab
+  // strip's drop. {@code slot} is the insertion index among the target's tabs with
+  // the dragged tab excluded (so it matches the live preview order exactly).
+  const dropOnStrip = useCallback(
+    (targetPaneId: string, slot: number) => {
+      const drag = dragRef.current;
+      if (!drag) return;
+      const { path, fromPaneId } = drag;
+      if (fromPaneId === targetPaneId) {
+        setWorkspace((ws) => ({
+          ...ws,
+          focused: targetPaneId,
+          panes: ws.panes.map((p) => {
+            if (p.id !== targetPaneId) return p;
+            const dragged = p.tabs.find((t) => t.path === path);
+            if (!dragged) return p;
+            const others = p.tabs.filter((t) => t.path !== path);
+            const at = Math.max(0, Math.min(others.length, slot));
+            return { ...p, tabs: [...others.slice(0, at), dragged, ...others.slice(at)] };
+          }),
+        }));
+        return;
+      }
+      const ws = wsRef.current;
+      const detached = detachTab(ws, path);
+      const tab = tabForPath(path);
+      const panes = detached.panes.map((p) => {
+        if (p.id !== targetPaneId) return p;
+        const at = Math.max(0, Math.min(p.tabs.length, slot));
+        return { ...p, tabs: [...p.tabs.slice(0, at), tab, ...p.tabs.slice(at)], activePath: path };
+      });
+      setWorkspace({ panes, sizes: detached.sizes, focused: targetPaneId });
+      if (path !== location.pathname) navigate(path);
+    },
+    [location.pathname, navigate]
+  );
+
+  const onTabDragStart = useCallback((paneId: string, path: string, e: React.DragEvent) => {
+    activateTab(paneId, path);
+    dragRef.current = { path, fromPaneId: paneId };
+    setDragState({ path, fromPaneId: paneId });
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", path);
+
+    tabDragImageRef.current?.remove();
+    const source = e.currentTarget as HTMLElement;
+    const rect = source.getBoundingClientRect();
+    const image = source.cloneNode(true) as HTMLElement;
+    image.removeAttribute("data-tab");
+    image.removeAttribute("data-flip");
+    image.removeAttribute("draggable");
+    image.removeAttribute("title");
+    image.classList.remove("onno-workspace-tab--dragging");
+    image.classList.add("onno-workspace-tab-drag-image");
+    image.style.width = `${rect.width}px`;
+    image.style.background =
+      source.style.background && source.style.background !== "transparent"
+        ? source.style.background
+        : "hsl(var(--accent))";
+    image.style.color = getComputedStyle(source).color;
+    image.setAttribute("aria-hidden", "true");
+    document.body.appendChild(image);
+    tabDragImageRef.current = image;
+
+    // Preserve the exact point the user grabbed instead of snapping the pointer to the preview's
+    // corner. A small clamp keeps browser rounding from placing the hot spot outside the image.
+    const offsetX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const offsetY = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+    e.dataTransfer.setDragImage(image, offsetX, offsetY);
+  }, [activateTab]);
+
+  const onTabDragEnd = useCallback(() => {
+    clearTabDrag();
+  }, [clearTabDrag]);
+
+  useEffect(
+    () => () => {
+      tabDragImageRef.current?.remove();
+      tabDragImageRef.current = null;
+    },
+    []
+  );
+
+  // Insertion slot in a strip for the cursor x: the count of tabs (excluding the one
+  // being dragged) whose midpoint sits left of the cursor. Excluding the dragged tab
+  // keeps the slot stable even as the live preview shuffles tabs around it.
+  const stripInsertIndex = (strip: HTMLElement, clientX: number, draggedPath?: string): number => {
+    const tabsEls = [...strip.querySelectorAll<HTMLElement>("[data-tab]")].filter(
+      (el) => el.dataset.tab !== draggedPath
+    );
+    let idx = tabsEls.length;
+    for (let i = 0; i < tabsEls.length; i++) {
+      const r = tabsEls[i].getBoundingClientRect();
+      if (clientX < r.left + r.width / 2) {
+        idx = i;
+        break;
+      }
+    }
+    return idx;
+  };
+
+  // Where over an island the cursor is: the left edge splits a new island before it, the
+  // right edge splits one after it, the middle moves the tab into it. Computed from
+  // geometry on the spot so it never lags drop state.
+  const dropModeAt = (clientX: number, rect: DOMRect): "left" | "into" | "right" => {
+    const edge = Math.min(120, rect.width * 0.33);
+    if (clientX < rect.left + edge) return "left";
+    if (clientX > rect.right - edge) return "right";
+    return "into";
+  };
+
+  const onDrop = useCallback(
+    (paneId: string, mode: "left" | "into" | "right") => {
+      const drag = dragRef.current;
+      clearTabDrag();
+      if (!drag) return;
+      if (mode === "right") splitRight(paneId, drag.path);
+      else if (mode === "left") splitLeft(paneId, drag.path);
+      else moveTabInto(paneId, drag.path);
+    },
+    [clearTabDrag, moveTabInto, splitRight, splitLeft]
+  );
+
+  useEffect(() => {
+    const clearIfDragging = () => {
+      if (dragRef.current || dragState) clearTabDrag();
+    };
+    const clearAfterNativeDrop = () => window.setTimeout(clearIfDragging, 0);
+    const clearAfterPointerRelease = () => window.setTimeout(clearIfDragging, 0);
+    const clearOnEscape = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || (!dragRef.current && !dragState)) return;
+      e.preventDefault();
+      clearTabDrag();
+    };
+    const clearOnVisibilityChange = () => {
+      if (document.visibilityState === "hidden") clearIfDragging();
+    };
+
+    window.addEventListener("dragend", clearIfDragging);
+    window.addEventListener("drop", clearAfterNativeDrop);
+    window.addEventListener("pointerup", clearAfterPointerRelease);
+    window.addEventListener("blur", clearIfDragging);
+    window.addEventListener("keydown", clearOnEscape);
+    document.addEventListener("visibilitychange", clearOnVisibilityChange);
+    return () => {
+      window.removeEventListener("dragend", clearIfDragging);
+      window.removeEventListener("drop", clearAfterNativeDrop);
+      window.removeEventListener("pointerup", clearAfterPointerRelease);
+      window.removeEventListener("blur", clearIfDragging);
+      window.removeEventListener("keydown", clearOnEscape);
+      document.removeEventListener("visibilitychange", clearOnVisibilityChange);
+    };
+  }, [clearTabDrag, dragState]);
+
+  // Esc closes the focused island's active tab. Higher interactive layers and components that
+  // deliberately consume Escape prevent the event first; a plain form control does not.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      if (e.key !== "Escape" || viewport !== "desktop") return;
+      if (dragRef.current || dragState) return;
+      if (isInteractiveLayerOpen()) return;
+      const ws = wsRef.current;
+      const focused = ws.panes.find((p) => p.id === ws.focused);
+      if (focused?.activePath) closeTab(focused.id, focused.activePath);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [closeTab, dragState, viewport]);
+
+  // ----- resize between islands -----
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // FLIP: when the tab order shifts (live drag preview, or a committed reorder), slide
+  // each tab from its old x to its new one instead of snapping. We record every tab's
+  // position after each render and animate the delta on the next.
+  const flipRects = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const prev = flipRects.current;
+    const next = new Map<string, number>();
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    for (const el of container.querySelectorAll<HTMLElement>("[data-flip]")) {
+      const key = el.dataset.flip!;
+      // offsetLeft, not getBoundingClientRect: the layout position, immune to the
+      // tab's own in-flight transform and to the strip's scroll. Measuring the
+      // visual box instead would record a mid-slide tab's interpolated position as
+      // the baseline, so the next delta — and the animation back — would be wrong.
+      const left = el.offsetLeft;
+      next.set(key, left);
+      if (reduceMotion) {
+        el.style.transition = "none";
+        el.style.transform = "";
+        continue;
+      }
+      // Don't fight the pointer: leave the tab being dragged alone.
+      if (dragState && key.endsWith(":" + dragState.path)) continue;
+      const old = prev.get(key);
+      const dx = old != null ? old - left : 0;
+      if (Math.abs(dx) > 0.5) {
+        el.style.transition = "none";
+        el.style.transform = `translateX(${dx}px)`;
+        // Play: next frame, release to the real position with a transition. A stale
+        // frame from an earlier render is harmless — every play does the same thing.
+        requestAnimationFrame(() => {
+          el.style.transition = "transform var(--duration-fast) var(--ease-smooth-out)";
+          el.style.transform = "";
+        });
+      }
+    }
+    flipRects.current = next;
+  });
+
+  const startResize = useCallback((index: number, e: React.PointerEvent) => {
+    e.preventDefault();
+    const container = containerRef.current;
+    if (!container) return;
+    const totalWidth = container.getBoundingClientRect().width;
+    const startX = e.clientX;
+    const startSizes = wsRef.current.sizes.slice();
+    const total = startSizes.reduce((a, b) => a + b, 0);
+    const pair = startSizes[index] + startSizes[index + 1];
+    const minWeight = total * 0.12; // each island keeps ~12% of the row
+
+    const onMove = (ev: PointerEvent) => {
+      const deltaWeight = ((ev.clientX - startX) / totalWidth) * total;
+      let left = startSizes[index] + deltaWeight;
+      left = Math.max(minWeight, Math.min(pair - minWeight, left));
+      const sizes = startSizes.slice();
+      sizes[index] = left;
+      sizes[index + 1] = pair - left;
+      setWorkspace((ws) => ({ ...ws, sizes }));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }, []);
+
+  // ----- presentation tokens -----
+
+  // The shell paints its own islands/tabs from this palette. A consumer's brand overrides arrive
+  // via /api/branding and
+  // win per slot — the strip uses the branded surface/border and the active tab uses
+  // the palette's soft primary accent instead of a hard-coded neutral or red-tinted pill.
+  const brand = (resolvedTheme === "dark" ? branding.palette?.dark : branding.palette?.light) ?? {};
+  const pageBg = brand.page ?? (resolvedTheme === "dark" ? "#0D0D0D" : "#FFFFFF");
+  const skeletonBg = resolvedTheme === "dark" ? "#1F1F1F" : "#F5F5F5";
+  const surfaceBg = brand.surface ?? (resolvedTheme === "dark" ? "#121212" : "#FFFFFF");
+  const borderColor = brand.border ?? (resolvedTheme === "dark" ? "#242424" : "#EBEBEB");
+  const tabStripBg = brand.surface ?? (resolvedTheme === "dark" ? "#0E0E0E" : "#FAFAFA");
+  // Pane borders stay structural and neutral. Brand color is reserved for transient drag targets
+  // and the active tab, so selecting a pane does not draw a loud frame around its content.
+  const dropBorder = brand.primary ? `${brand.primary}40` : (resolvedTheme === "dark" ? "#3A3A3A" : "#D4D4D4");
+  const accent = brand.primary ?? (resolvedTheme === "dark" ? "#E5E5E5" : "#171717");
+  const activeTabBg = brand.primarySoft ?? "hsl(var(--accent))";
+  const activeTabText = brand.primary ?? "hsl(var(--accent-foreground))";
+  // The nav style is a function of the viewport alone, so pick the final layout before the model
+  // lands, so panes never remount (and refetch their view) once it does.
+  const navStyle: NavStyle = shell?.navStyle ?? (viewport === "desktop" ? "sidebar" : "bottom_bar");
+
+  const desktopAccountEl = (compact: boolean) => shell?.accountInfo ? (
+    <DesktopAccountDock
+      account={shell.accountInfo}
+      theme={theme}
+      compact={compact}
+      surface={surfaceBg}
+      border={borderColor}
+      onThemeChange={setTheme}
+      onSignOut={() => {
+        clearModel();
+        logout().finally(() => navigate("/login"));
+      }}
+      t={t}
+    />
+  ) : null;
+
+  const shellContext = useMemo<ShellContextValue>(() => ({
+    shell,
+    activePath: workspace.panes.find((p) => p.id === workspace.focused)?.activePath ?? "",
+    resolvedTheme,
+    onAction: (url: string) => onCustomActionRef.current({ url }),
+    t,
+  }), [shell, workspace, resolvedTheme, t]);
+
+  // A single content surface for the non-desktop layouts (no islands/tabs there).
+  // Driven by the focused pane's activePath — which openPath() updates synchronously in
+  // the tap handler — not by useLocation: react-router v7 wraps navigation in
+  // startTransition, so sustained default-lane render churn can starve the location
+  // update and freeze bottom-bar navigation. The workspace seeds from the URL on
+  // first mount (initialWorkspace) and mirrors location changes (popstate/back) via the
+  // URL-mirror effect above, so deep links and history navigation still land here; the
+  // URL itself is just a cosmetic sync.
+  const commandPane = workspace.panes.find((p) => p.id === workspace.focused);
+  const focusedPane = commandPane ?? workspace.panes[0];
+
+  // Shared by the list-row menu and workspace-tab menu so right-click affordances look and behave
+  // alike. The row shortcuts operate on the same hovered row this menu targets.
+  type MenuItem = {
+    label: string;
+    icon: LucideIcon;
+    run: () => void;
+    danger?: boolean;
+    divider?: boolean;
+    shortcut?: string;
+  };
+  const contextMenu = (pos: { x: number; y: number }, items: MenuItem[], close: () => void) => (
+    <ContextMenuContent
+      open
+      position={pos}
+      onOpenChange={(open) => {
+        if (!open) close();
+      }}
+      width={216}
+      estimatedHeight={items.length * 38 + 24}
+      style={{ background: surfaceBg, borderColor }}
+    >
+      {items.map(({ label, icon: Icon, run, danger, divider, shortcut }) => (
+        <div key={label}>
+          {divider ? <ContextMenuSeparator style={{ backgroundColor: borderColor }} /> : null}
+          <ContextMenuItem
+            variant={danger ? "destructive" : "default"}
+            onSelect={() => {
+              run();
+              close();
+            }}
+          >
+            <Icon className={cn(danger ? "text-destructive" : "text-muted-foreground")} aria-hidden="true" />
+            <span>{label}</span>
+            {shortcut ? <ContextMenuShortcut>{shortcut}</ContextMenuShortcut> : null}
+          </ContextMenuItem>
+        </div>
+      ))}
+    </ContextMenuContent>
+  );
+
+  // The row right-click menu, rendered once per layout. Write actions (Edit/Duplicate/Delete)
+  // drop out when the row's entity isn't writable by the viewer (data-onno-row-writable="0").
+  const rowMenuEl = rowMenu
+    ? contextMenu(
+        rowMenu,
+        [
+          {
+            label: t("action.open"),
+            icon: ExternalLink,
+            run: () => onCustomAction({ url: rowMenu.url }),
+            shortcut: shortcutLabel({ key: "Enter", mod: true }),
+          },
+          ...(rowMenu.writable
+            ? [
+                {
+                  label: t("action.duplicate"),
+                  icon: Copy,
+                  run: () => onCustomAction({ url: rowMenu.url + "/duplicate" }),
+                  shortcut: shortcutLabel({ key: "d", mod: true, shift: true }),
+                },
+              ]
+            : []),
+          {
+            label: t("action.copyLink"),
+            icon: Link2,
+            run: () => copyLink(rowOpenPath(rowMenu.url)),
+            divider: rowMenu.writable,
+            shortcut: shortcutLabel({ key: "c", mod: true, shift: true }),
+          },
+          // delete/{kind}/{name}/{id} — routes through the same confirm + REST flow as the
+          // detail header's delete (handled in onCustomAction).
+          ...(rowMenu.writable
+            ? [
+                {
+                  label: t("action.delete"),
+                  icon: Trash2,
+                  run: () => onCustomAction({ url: rowDeleteUrl(rowMenu.url) }),
+                  danger: true,
+                  divider: true,
+                  shortcut: shortcutLabel({ key: "Delete" }),
+                },
+              ]
+            : []),
+        ],
+        () => setRowMenu(null)
+      )
+    : null;
+
+  // The tab right-click menu — copy a shareable link to whatever surface the tab shows
+  // (record detail, list, page, dashboard, register), covering the cases a list row can't.
+  const tabMenuEl = tabMenu
+    ? contextMenu(
+        tabMenu,
+        [{ label: t("action.copyLink"), icon: Link2, run: () => copyLink(tabMenu.path) }],
+        () => setTabMenu(null)
+      )
+    : null;
+
+  // The in-app confirmation modal (replaces window.confirm): a backdrop over a centered
+  // card with Cancel / confirm actions. Backdrop click or Esc cancels.
+  const confirmEl = confirm ? (
+    <DialogShell
+      role="alertdialog"
+      title={confirm.title}
+      description={confirm.message}
+      tone={confirm.danger ? "error" : "info"}
+      size="sm"
+      onOpenChange={(open) => {
+        if (!open) setConfirm(null);
+      }}
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setConfirm(null)}
+          >
+            {t("action.cancel")}
+          </Button>
+          <Button
+            type="button"
+            autoFocus
+            variant={confirm.danger ? "destructive" : "default"}
+            onClick={() => {
+              confirm.onConfirm();
+              setConfirm(null);
+            }}
+          >
+            {confirm.confirmLabel}
+          </Button>
+        </>
+      }
+    />
+  ) : null;
+
+  // One island: a tab strip in its header (drop target + drag handles) over its
+  // active surface. The whole island is a drop target ("into"); a strip down its
+  // right edge is the "split" target that opens a new island.
+  const island = (pane: Pane) => {
+    const isDropInto = dropTarget?.paneId === pane.id && dropTarget.mode === "into";
+    const isDropRight = dropTarget?.paneId === pane.id && dropTarget.mode === "right";
+    const isDropLeft = dropTarget?.paneId === pane.id && dropTarget.mode === "left";
+    const hasTabs = pane.tabs.length > 0;
+    const focused = pane.id === workspace.focused;
+    const showFocusedChrome = focused && hasTabs;
+
+    // While a tab is dragged over this strip, lay the tabs out in their would-be
+    // order so the row visibly shifts to open a gap: the dragged tab (if it's ours)
+    // moves to the slot; a tab from another island shows a translucent ghost there.
+    type Slot = { kind: "tab"; tab: WorkspaceTab } | { kind: "ghost"; title: string };
+    let displayTabs: Slot[] = pane.tabs.map((tab) => ({ kind: "tab", tab }));
+    if (dragState && tabDrop?.paneId === pane.id) {
+      const others = pane.tabs.filter((t) => t.path !== dragState.path);
+      const at = Math.max(0, Math.min(others.length, tabDrop.index));
+      if (dragState.fromPaneId === pane.id) {
+        const dragged = pane.tabs.find((t) => t.path === dragState.path);
+        const rest: Slot[] = others.map((t) => ({ kind: "tab", tab: t }));
+        if (dragged) rest.splice(at, 0, { kind: "tab", tab: dragged });
+        displayTabs = rest;
+      } else {
+        const rest: Slot[] = pane.tabs.map((t) => ({ kind: "tab", tab: t }));
+        rest.splice(at, 0, { kind: "ghost", title: tabTitle(dragState.path) });
+        displayTabs = rest;
+      }
+    }
+    return (
+      <section
+        data-workspace-pane-id={pane.id}
+        className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-card border transition-colors"
+        style={{ background: surfaceBg, borderColor }}
+        onDragOver={(e) => {
+          if (!dragRef.current) return;
+          e.preventDefault();
+          const mode = dropModeAt(e.clientX, e.currentTarget.getBoundingClientRect());
+          setDropTarget((t) =>
+            t?.paneId === pane.id && t.mode === mode ? t : { paneId: pane.id, mode }
+          );
+        }}
+        onDragLeave={(e) => {
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+          setDropTarget((t) => (t?.paneId === pane.id ? null : t));
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          onDrop(pane.id, dropModeAt(e.clientX, e.currentTarget.getBoundingClientRect()));
+        }}
+      >
+        {/* tab strip — lives inside the island, Rider-style. Owns the reorder/move
+            drop (precise slot); the island body owns the append/split drop. */}
+        <div
+          data-tab-strip
+          data-reordering={dragState ? "true" : undefined}
+          className="flex h-11 shrink-0 items-center gap-1 overflow-x-auto overflow-y-hidden border-b px-2 py-1.5"
+          style={{ background: tabStripBg, borderColor }}
+          onDragOver={(e) => {
+            if (!dragRef.current) return;
+            e.preventDefault();
+            e.stopPropagation();
+            setDropTarget(null);
+            const index = stripInsertIndex(e.currentTarget, e.clientX, dragRef.current.path);
+            setTabDrop((t) =>
+              t?.paneId === pane.id && t.index === index ? t : { paneId: pane.id, index }
+            );
+          }}
+          onDragLeave={(e) => {
+            if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+            setTabDrop((t) => (t?.paneId === pane.id ? null : t));
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const slot = stripInsertIndex(e.currentTarget, e.clientX, dragRef.current?.path);
+            dropOnStrip(pane.id, slot); // reads dragRef.current
+            clearTabDrag();
+          }}
+        >
+          {displayTabs.map((slot) => {
+            if (slot.kind === "ghost") {
+              // Where a tab from another island will land.
+              return (
+                <div
+                  key="ghost"
+                  className="flex h-8 max-w-56 shrink-0 items-center rounded-field px-3 text-sm text-muted-foreground"
+                  style={{ background: `${accent}14`, border: `1px dashed ${dropBorder}` }}
+                >
+                  <span className="truncate">{slot.title}</span>
+                </div>
+              );
+            }
+            const tab = slot.tab;
+            const label = tabTitle(tab.path);
+            const icon = tabIcon(tab.path);
+            const active = tab.path === pane.activePath;
+            // Every island has an active (visible) tab, but only the focused island owns
+            // global commands such as Escape. Keep those states visually distinct: brand
+            // accent for the command target, muted surface for another island's active tab,
+            // and neutral chrome for a merely open background tab.
+            const tabState = workspaceTabState(active, focused);
+            const commandTarget = tabState === "command-target";
+            const dragging = dragState?.fromPaneId === pane.id && dragState.path === tab.path;
+            // Selection reads in the configured brand accent. With an explicit
+            // primarySoft that is the fill; otherwise it
+            // falls back to the shadcn accent variable that BrandingProvider derives from
+            // the brand primary.
+            const fill = commandTarget ? activeTabBg : undefined;
+            const activeText = commandTarget ? activeTabText : undefined;
+            return (
+              <div
+                key={tab.path}
+                data-tab={tab.path}
+                data-active={active ? "true" : "false"}
+                data-command-target={commandTarget ? "true" : "false"}
+                data-tab-state={tabState}
+                data-flip={`${pane.id}:${tab.path}`}
+                title={label}
+                draggable
+                onDragStart={(e) => onTabDragStart(pane.id, tab.path, e)}
+                onDragEnd={onTabDragEnd}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setRowMenu(null);
+                  setTabMenu({ x: e.clientX, y: e.clientY, path: tab.path });
+                }}
+                className={cn(
+                  "onno-workspace-tab group flex h-8 max-w-56 shrink-0 cursor-grab items-center rounded-field border border-transparent pl-1 text-sm active:cursor-grabbing",
+                  dragging && "onno-workspace-tab--dragging",
+                  tabState === "command-target"
+                    ? "font-medium text-foreground"
+                    : tabState === "pane-active"
+                      ? "bg-muted font-medium text-foreground hover:bg-muted/80"
+                      : "font-normal text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                )}
+                style={{ background: fill, color: activeText }}
+              >
+                <button
+                  type="button"
+                  aria-label={label}
+                  className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-left"
+                  onClick={() => activateTab(pane.id, tab.path)}
+                >
+                  <span
+                    className={cn(
+                      "shrink-0 transition-opacity",
+                      active ? "opacity-100" : "opacity-70"
+                    )}
+                    data-tab-icon={icon}
+                    aria-hidden="true"
+                  >
+                    <Icon name={icon} size={14} />
+                  </span>
+                  <span className="truncate">{label}</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Close ${label}`}
+                  className="mr-1 grid size-5 shrink-0 place-items-center rounded-md opacity-60 transition hover:bg-foreground/10 hover:opacity-100"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    closeTab(pane.id, tab.path);
+                  }}
+                >
+                  <X className="size-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            );
+          })}
+          {/* Collaborator avatars for the focused pane's record — pinned right of the tabs. */}
+          {showFocusedChrome && pane.activePath ? (
+            <div className="ml-auto flex shrink-0 items-center pl-2 pr-1">
+              <TabPresence path={pane.activePath} />
+            </div>
+          ) : null}
+        </div>
+        {/* Presence for the focused pane is driven once at the top of AppShell (a single stable hook),
+            not per-pane — see usePanePresence(focused pane's activePath) there. */}
+
+        {/* Every open tab stays mounted in its own scroll container; only the active
+            one is shown. Keeping them alive preserves each tab's scroll position,
+            component state, and form inputs across switches (no remount, no refetch). */}
+        <div className="relative min-h-0 flex-1">
+          {pane.tabs.length === 0 ? (
+            <div className="grid h-full place-items-center">
+              <p className="text-sm text-muted-foreground">No open tabs</p>
+            </div>
+          ) : (
+            pane.tabs.map((tab) => (
+              <div
+                key={tab.path}
+                // Inactive tabs stay laid out (visibility, not display:none) so widgets
+                // that measure on mount — e.g. @hello-pangea/dnd boards — keep working,
+                // and each tab holds its own scroll position.
+                className="absolute inset-0 overflow-auto"
+                style={{ visibility: tab.path === pane.activePath ? "visible" : "hidden" }}
+              >
+                <ContentPane
+                  path={tab.path}
+                  onAction={onCustomAction}
+                  skeletonBg={skeletonBg}
+                />
+              </div>
+            ))
+          )}
+          {/* Drag overlay over the body, live only while a tab is being dragged. The body's
+              content can be a React portal (the onno-list grid mounts via createPortal into
+              its <onno-list> host), and a portal's events bubble to its React parent — not to
+              this <section>. So a tab dragged over the list never reaches the island's own
+              onDragOver/onDrop, and the drop is silently rejected (no split). This overlay
+              lives in the section's own subtree and sits above the content, so it catches the
+              drag for every surface type and routes it to the same split/move handlers. */}
+          {dragState ? (
+            <div
+              data-testid="tab-drag-overlay"
+              className="absolute inset-0 z-10"
+              onDragOver={(e) => {
+                if (!dragRef.current) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const mode = dropModeAt(e.clientX, e.currentTarget.getBoundingClientRect());
+                setDropTarget((t) =>
+                  t?.paneId === pane.id && t.mode === mode ? t : { paneId: pane.id, mode }
+                );
+              }}
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                setDropTarget((t) => (t?.paneId === pane.id ? null : t));
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDrop(pane.id, dropModeAt(e.clientX, e.currentTarget.getBoundingClientRect()));
+              }}
+            />
+          ) : null}
+        </div>
+
+        {/* drop hints while dragging a tab over the body (append / split) */}
+        {isDropInto ? (
+          <div
+            className="pointer-events-none absolute inset-0 rounded-card"
+            style={{ background: `${accent}14`, boxShadow: `inset 0 0 0 2px ${accent}66` }}
+          />
+        ) : null}
+        {isDropRight ? (
+          <div
+            className="pointer-events-none absolute inset-y-0 right-0 w-1/3 rounded-r-2xl"
+            style={{ background: `${accent}1f`, boxShadow: `inset 0 0 0 2px ${accent}80` }}
+          />
+        ) : null}
+        {isDropLeft ? (
+          <div
+            className="pointer-events-none absolute inset-y-0 left-0 w-1/3 rounded-l-2xl"
+            style={{ background: `${accent}1f`, boxShadow: `inset 0 0 0 2px ${accent}80` }}
+          />
+        ) : null}
+      </section>
+    );
+  };
+
+  if (navStyle === "sidebar") {
+    return (
+      <ShellContext.Provider value={shellContext}>
+      <div className="flex h-screen w-full overflow-hidden" style={{ background: pageBg }}>
+        {shell ? (
+          <NavigationHost navigation={shell.navigation} activePath={commandPane?.activePath ?? ""} mobile={false} onNavigate={openPath}
+            header={<button type="button" onClick={() => openPath(shell.home)} className="px-2 py-3 text-left text-lg font-semibold">{shell.brand || "onno"}</button>}
+            footer={<div className="mt-auto space-y-2"><NotificationTrigger />{desktopAccountEl(false)}</div>}>
+          <DesktopNavigation
+            brand={shell.brand}
+            mark={shell.mark}
+            markFramed={shell.markFramed}
+            navigation={shell.navigation}
+            activePath={commandPane?.activePath ?? ""}
+            home={shell.home}
+            onNavigate={openPath}
+            onSectionFocus={focusNavigation}
+            account={desktopAccountEl}
+            notification={<NotificationTrigger compact />}
+            surface={surfaceBg}
+            border={borderColor}
+            primary={accent}
+            primarySoft={activeTabBg}
+            t={t}
+          />
+          </NavigationHost>
+        ) : (
+          <aside className="h-screen w-64 shrink-0" />
+        )}
+        <div ref={containerRef} className="flex min-w-0 flex-1 items-stretch py-2 pr-2">
+          {workspace.panes.map((pane, i) => (
+            <div
+              key={pane.id}
+              className="flex min-w-0"
+              style={{ flexGrow: workspace.sizes[i], flexBasis: 0 }}
+            >
+              {island(pane)}
+              {i < workspace.panes.length - 1 ? (
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  onPointerDown={(e) => startResize(i, e)}
+                  className="group mx-0.5 flex w-2 shrink-0 cursor-col-resize items-center justify-center"
+                >
+                  <div className="h-10 w-1 rounded-control bg-border transition-colors group-hover:bg-blue-500" />
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+        {rowMenuEl}
+        {tabMenuEl}
+        {confirmEl}
+      </div>
+      </ShellContext.Provider>
+    );
+  }
+
+  // Bottom bar: full-width centered on small phones; a compact corner island on tablets and
+  // large phones (pinned bottom-right). Account lives on the /account page here.
+  return (
+    <ShellContext.Provider value={shellContext}>
+    <div className="h-[100dvh] w-full overflow-hidden" style={{ background: pageBg }}>
+      <MobileNavigationFrame
+        path={focusedPane?.activePath || location.pathname}
+        roots={(shell?.navigation ?? []).flatMap(section => navigationLinks(section.items).map(item => item.path))}
+        backLabel={t("action.back")}
+        back={path => {
+          const current = focusedPane?.activePath || location.pathname;
+          if (dirtyForms.isDirty(current)) setConfirm({title:t("confirm.discard.title"), message:t("confirm.discard.message"),
+            confirmLabel:t("action.discard"), danger:true, onConfirm:() => {dirtyForms.clear(current); openPath(path);}});
+          else openPath(path);
+        }}
+        render={path => <ContentPane path={path}
+          onAction={onCustomAction} skeletonBg={skeletonBg} onNotFound={handleContentNotFound} />}
+        navigation={<nav className="pointer-events-none bg-transparent">
+          <div className={viewport === "tablet" ? "pointer-events-auto ml-auto w-fit" : "pointer-events-auto mx-auto max-w-md"}>
+            <BottomTabBar compact={viewport === "tablet"} />
+          </div>
+        </nav>}
+      />
+      {rowMenuEl}
+      {confirmEl}
+    </div>
+    </ShellContext.Provider>
+  );
+}

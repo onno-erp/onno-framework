@@ -31,17 +31,17 @@ class ConversationServiceTest {
 
     @Mock CrmMessageTransport transport;
     /** Every key resolves; the point under test is the message, not the storage backend. */
-    private final CrmAttachments attachments = new CrmAttachments(new su.onno.ui.media.MediaStorage() {
-        public su.onno.ui.media.StoredMedia store(java.io.InputStream content, String filename, String contentType, long size) {
+    private final CrmAttachments attachments = new CrmAttachments(new su.onno.web.media.MediaStorage() {
+        public su.onno.web.media.StoredMedia store(java.io.InputStream content, String filename, String contentType, long size) {
             throw new UnsupportedOperationException();
         }
-        @Override public Optional<su.onno.ui.media.LoadedMedia> load(String key) {
-            return Optional.of(new su.onno.ui.media.LoadedMedia(
+        @Override public Optional<su.onno.web.media.LoadedMedia> load(String key) {
+            return Optional.of(new su.onno.web.media.LoadedMedia(
                     new org.springframework.core.io.ByteArrayResource("file".getBytes()),
                     key.endsWith(".png") ? "image/png" : "application/pdf", 4,
                     key.substring(key.lastIndexOf('/') + 1)));
         }
-    }, new su.onno.ui.media.MediaProperties());
+    }, new su.onno.web.media.MediaProperties());
     @Mock ConversationRepository conversations;
     @Mock ConversationMessageRepository messages;
 

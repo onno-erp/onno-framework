@@ -8,7 +8,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.web.server.ResponseStatusException;
 import su.onno.crm.domain.*;
 import su.onno.crm.repository.ConversationRepository;
-import su.onno.ui.UiAccessService;
+import su.onno.service.AccessService;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -34,7 +34,7 @@ class CrmConnectionAccountsTest {
     @Test void ownershipSurvivesRecreatingTheServiceAndHiddenInboxesApplyToSingleAndBatchReads() {
         var personal=accounts.create("gmail",su.onno.crm.service.CrmConnectionAccounts.Scope.PERSONAL,"Private",alice);UUID inbox=UUID.randomUUID();accounts.bindInbox(personal.id(),inbox);
         var c=new Conversation();c.setId(UUID.randomUUID());c.setCustomer(UUID.randomUUID());c.setInbox(su.onno.types.Ref.of(Inbox.class,inbox));
-        var access=mock(UiAccessService.class);when(access.roles(any())).thenReturn(Set.of("ADMIN"));
+        var access=mock(AccessService.class);when(access.roles(any())).thenReturn(Set.of("ADMIN"));
         var contacts=mock(CrmContactService.class);when(contacts.canRead(any(),any())).thenReturn(true);when(contacts.readable(any(),any())).thenReturn(Set.of(c.getCustomer()));
         var repository=mock(ConversationRepository.class);when(repository.findActiveById(c.getId())).thenReturn(Optional.of(c));
         var service=new CrmInboxWorkspaceService(List.of(new CrmInboxWorkspace("all","All",Set.of("ADMIN"),row->true)),repository,access,mock(CrmWorkspaceService.class),contacts,accounts);

@@ -1,0 +1,17 @@
+{
+  "name": "onno-framework-workspace",
+  "private": true,
+  "description": "npm workspace for the framework's frontend packages and the example app. One install, one node_modules.",
+  "workspaces": [
+    "onno-ui",
+    "onno-print-starter/src/main/ui",
+    "onno-crm-starter/src/main/ui",
+    "onno-crm-channels-starter/src/main/ui",
+    "example/src/main/ui"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=onno-books-ui -- --host 127.0.0.1 --port 5173 --strictPort",
+    "dev:backend": "./gradlew :example:generateUiModel :example:bootRun -x :example:buildUi -x :onno-web-starter:buildFrontend --args=--server.port=8091",
+    "dev:watch": "./gradlew --continuous :example:classes :example:generateUiModel -x :example:buildUi -x :onno-web-starter:buildFrontend"
+  }
+}

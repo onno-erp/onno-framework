@@ -1,6 +1,6 @@
 package su.onno.print;
 
-import su.onno.ui.SelectionDownloadContributor;
+import su.onno.web.SelectionDownloadContributor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,10 +23,10 @@ public class PrintSelectionDownloads implements SelectionDownloadContributor {
         for (PrintForm<?> form : print.formsFor(request.type())) {
             if (!print.permits(form, request.subject())) continue;
             String url = "/api/print/batch/" + request.kind() + "/" + request.name() + "/" + form.key();
-            downloads.add(new SelectionDownload("print-" + form.key(), print.icon(form), form.label(), url));
+            downloads.add(new SelectionDownload("print-" + form.key(), form.label(), url));
             PrintVariant variant = PrintVariant.of(print, form);
             if (variant != null) {
-                downloads.add(new SelectionDownload("print-" + form.key() + "-" + variant.suffix(), variant.icon(),
+                downloads.add(new SelectionDownload("print-" + form.key() + "-" + variant.suffix(),
                         form.label() + " · " + variant.format().toUpperCase(), url + "?format=" + variant.format()));
             }
         }

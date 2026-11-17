@@ -1,0 +1,11 @@
+{
+  // The app onnoUiInit seeds (onno-ui-gradle-plugin's template tree), checked against this
+  // package's current public API so the template cannot drift from it. `@onno/ui` resolves through
+  // the workspace, exactly as in a seeded app; no generated model, so the untyped fallback applies.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "types": ["vite/client"],
+    "paths": {}
+  },
+  "include": ["../onno-ui-gradle-plugin/src/main/resources/su/onno/ui/template"]
+}

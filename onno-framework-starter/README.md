@@ -28,7 +28,8 @@ live outside the application package, or if there is no `@SpringBootApplication`
 |-----|---------|---------|
 | `onno.scan-packages` | *(empty — falls back to `@SpringBootApplication` packages)* | Base packages scanned for catalog/document/register/enumeration/constant classes. A non-empty list overrides the auto-detected packages. If neither is resolvable, startup fails with an explanatory `IllegalStateException`. |
 
-This is the only property the starter exposes. Everything else is derived from your annotated metadata.
+Besides `onno.cluster.*` (see [Multi-node live UI](#multi-node-live-ui-cluster-bus)), this is the only
+property the starter exposes. Everything else is derived from your annotated metadata.
 
 ## What gets auto-configured
 
@@ -45,13 +46,22 @@ This is the only property the starter exposes. Everything else is derived from y
     `append(...)` joins an active Spring transaction; posting uses its handle-bound overload)
   - register persistence/repository maps, `PostingService` (wrapping a `PostingEngine`)
   - information-register, constant and enumeration persistence/managers
-  - the UI layout model (`LayoutSet`, `UiLayout`, resolvers) assembled from your `Layout` beans
+  - the `CommandRegistry`, `CheckRegistry` and `PickerOptionsService` over your `Commands`,
+    `Checks` and `PickerOptions` beans
   - `BackgroundJobs` and `ScheduledJobRegistrar` — only when a JobRunr `JobScheduler` bean is present
     (`@ConditionalOnBean(JobScheduler.class)`)
 - **`OnnoRepositoriesAutoConfiguration`** — replaces Spring Boot's stock
   `JdbcRepositoriesAutoConfiguration` with one that excludes `RegisterRepository` subtypes, and
   scans register repositories separately. Register repositories are register-shaped (append-only
   movement records) rather than aggregate-shaped, so they need their own factory.
+
+### TypeScript model for the UI
+
+`su.onno.spring.codegen.TypeScriptModelGenerator` writes `model.gen.ts` — the entities, their
+fields and record types, enumerations (values and `@EnumLabel` labels), information registers,
+constants and `@AccessControl` roles — for an app's React UI. The `su.onno.ui` Gradle plugin
+([onno-ui-gradle-plugin](../onno-ui-gradle-plugin/README.md)) runs it as `generateUiModel` before
+every UI build.
 
 ### Schema generation
 
@@ -81,8 +91,7 @@ path binds the stable UUID into movement and totals tables, converts enum filter
 and restores the enum constant on typed reads.
 
 The converters also read enums (and `Ref<T>`) back from a **`varchar` column that holds the UUID as
-text**, not just a native `uuid` column. Enum constant names are not a persisted format in 2.0;
-convert old rows with `Ui2MigrationTool.migrateEnumNames(...)` before upgrading.
+text**, not just a native `uuid` column. Enum constant names are not a persisted format.
 
 ## Usage
 
@@ -159,7 +168,7 @@ void receiveAndPost(GoodsReceipt doc) {
 After a post (or unpost) transaction commits, the framework publishes a Spring application event —
 `DocumentPostedEvent` / `DocumentUnpostedEvent` (both carry the `DocumentObject`). This is the
 **Spring-bean-reachable "after post" extension point**: unlike the domain `AfterPostHandler.afterPost()`
-(which has no access to your beans) and the Kafka outbox (which requires that starter), an
+(which has no access to your beans) and the transactional outbox (which needs a relay), an
 `@EventListener` is an ordinary bean with full DI, ideal for firing an external integration.
 The listener runs after the post has committed, so an exception it throws is logged and does not
 fail the post. (Spring still skips later listeners of that same event, so keep listeners
@@ -258,3 +267,76 @@ management:
 If your app puts a JobRunr `JobScheduler` on the context, the starter contributes `BackgroundJobs`
 (a `JobrunrBackgroundJobs` adapter) and a `ScheduledJobRegistrar` that registers your annotated
 scheduled jobs. Without a `JobScheduler` bean these are simply absent — jobs are opt-in.
+
+## Multi-node live UI (cluster bus)
+
+Cross-node delivery of entity-change events so a horizontally-scaled onno app — more than one instance
+behind a load balancer — keeps its live UI in sync. A write on one node lights up the browsers
+connected to every other node.
+
+### Why it exists
+
+The live UI uses Server-Sent Events: `EventPublisher` fans an `EntityChangedEvent` out to the
+`SseEmitter`s **held in that JVM**. With a single node that is the whole story. With several nodes, a
+browser connected to node B never sees a change made on node A, because the event never leaves A.
+
+The framework starter closes that gap with a small SPI and a database-backed default:
+
+- **`ClusterEventBus`** (`su.onno.cluster`, in `onno-framework`) — the pluggable transport. Swappable
+  exactly like `MediaStorage`.
+- **`PostgresClusterEventBus`** (`su.onno.cluster.pg`, in this starter) — the default, using Postgres `LISTEN`/`NOTIFY`. No
+  infrastructure beyond the database you already run.
+- **`NoOpClusterEventBus`** — the local-only fallback used on H2/dev or when disabled.
+
+It is a **best-effort live-UI signal, not a guaranteed event log.** An event dropped during a
+reconnect is fine — the browser re-fetches the affected surface on its next interaction. For durable,
+exactly-once domain-event distribution between *services*, use the transactional outbox (`onno_outbox`) with an application-owned relay.
+
+### How it works
+
+```
+node A: write ──► EntityChangedEvent ──► local SSE clients (synchronous)
+                                     └──► ClusterEntityChangeRelay ──► bus.publish ──► pg_notify
+                                                                                          │
+node B: LISTEN ◄──────────────────────────────────────────────────────────────────────┘
+        getNotifications ──► ClusterEventBridge ──► EventPublisher.publish ──► node B's SSE clients
+```
+
+A received event is pushed straight to the SSE stream — it is **never re-published as a Spring
+`ApplicationEvent`**. So business `@EventListener`s (cache revalidation, search indexing, post-hooks,
+the outbox) still run exactly once, on the node that made the change. A node filters out its own
+`NOTIFY` echo by the event's `originNodeId`.
+
+### Activation
+
+When the datasource is **PostgreSQL**, the bus activates automatically. On H2
+(dev/test) or when the PostgreSQL driver is absent, it falls back to the no-op bus and nothing changes.
+
+It contributes a bus only with `@ConditionalOnMissingBean(ClusterEventBus.class)`, so to plug in a
+different transport (Kafka, Redis, …) just expose your own `ClusterEventBus` bean:
+
+```java
+@Bean
+ClusterEventBus clusterEventBus(/* your deps */) {
+    return new MyRedisClusterEventBus(/* … */);
+}
+```
+
+### Configuration (`onno.cluster.*`)
+
+| Property | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `true` | Master switch. When off, a local-only no-op bus is used. |
+| `channel` | `onno_cluster_events` | `LISTEN`/`NOTIFY` channel (bare identifier). |
+| `node-id` | random UUID | This node's id, used to drop its own `NOTIFY` echoes. |
+| `poll-timeout` | `5s` | How long the listener blocks before re-checking for shutdown. |
+| `reconnect-backoff-max` | `30s` | Cap on the reconnect backoff after a dropped connection. |
+| `max-payload-bytes` | `7000` | Soft cap below Postgres's 8000-byte `NOTIFY` limit; larger events drop their natural key, then degrade to a coarse `*` notice. |
+
+### Operational notes
+
+- The listener holds **one connection** from the datasource pool for its lifetime; size the pool with
+  that in mind (e.g. `+1`).
+- Multi-node scale-out also needs, outside the framework: a stable `onno.auth.session.remember-me.key`
+  (or sticky/shared sessions), and a shared `MediaStorage` (the filesystem default is per-node). See
+  the "Scaling out" section of `docs/ARCHITECTURE.md`.

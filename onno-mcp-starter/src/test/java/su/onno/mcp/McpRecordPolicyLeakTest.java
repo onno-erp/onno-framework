@@ -1,5 +1,7 @@
 package su.onno.mcp;
 
+import su.onno.service.TestEntityStore;
+
 import su.onno.access.AccessSubject;
 import su.onno.access.RecordAccessPolicy;
 import su.onno.access.RecordPolicies;
@@ -17,14 +19,14 @@ import su.onno.numbering.NumberGenerator;
 import su.onno.schema.SchemaGenerator;
 import su.onno.security.SecretCipher;
 import su.onno.types.Ref;
-import su.onno.ui.CatalogCommandService;
-import su.onno.ui.CatalogQueryService;
-import su.onno.ui.DocumentCommandService;
-import su.onno.ui.DocumentQueryService;
-import su.onno.ui.RecordScopeCompiler;
-import su.onno.ui.RegisterQueryService;
-import su.onno.ui.UiAccessService;
-import su.onno.ui.UiProperties;
+import su.onno.service.CatalogCommandService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentCommandService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.RecordScopeCompiler;
+import su.onno.service.RegisterQueryService;
+import su.onno.service.AccessService;
+import su.onno.service.WebProperties;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -93,7 +95,7 @@ class McpRecordPolicyLeakTest {
                 RecordAccessPolicy.forCatalog(McpTenant.class).appliesTo("CUSTOMER")
                         .read(RecordScope.eq("owner", Subject.recordId()))));
         RecordScopeCompiler compiler = new RecordScopeCompiler(policies);
-        UiAccessService access = new UiAccessService(registry);
+        AccessService access = new AccessService(registry);
         CatalogQueryService catalogQuery = new CatalogQueryService(registry, jdbi, compiler, access);
         AtomicInteger seq = new AtomicInteger();
         NumberGenerator numbers = new NumberGenerator() {
@@ -105,8 +107,8 @@ class McpRecordPolicyLeakTest {
                 return "C" + seq.incrementAndGet();
             }
         };
-        CatalogCommandService catalogCommands = new CatalogCommandService(registry, jdbi, new UiProperties(),
-                numbers, catalogQuery, access, event -> { }, new SecretCipher(null));
+        TestEntityStore.Stack stack = TestEntityStore.builder(ds, registry).numbers(numbers).cipher(new SecretCipher(null)).events(event -> { }).build();
+        CatalogCommandService catalogCommands = new CatalogCommandService(registry, stack.jdbi(), new WebProperties(), catalogQuery, access, stack.store());
 
         AccessSubject system = AccessSubject.system();
         ownerA = id(catalogCommands.create(owners, body("description", "Owner Alpha", "email", "a@x"), system));
@@ -119,7 +121,7 @@ class McpRecordPolicyLeakTest {
         props.setWritesEnabled(true);
         tools = new MetadataToolFactory(registry, null, access, catalogQuery, mock(DocumentQueryService.class),
                 mock(RegisterQueryService.class), catalogCommands, mock(DocumentCommandService.class), props,
-                new UiProperties(), new JacksonMcpJsonMapper(new ObjectMapper().findAndRegisterModules()));
+                new WebProperties(), new JacksonMcpJsonMapper(new ObjectMapper().findAndRegisterModules()));
     }
 
     @Test

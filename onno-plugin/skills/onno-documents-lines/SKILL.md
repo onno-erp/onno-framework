@@ -25,12 +25,13 @@ payment, timesheet, work order, adjustment, or check-in.
 6. Compute totals in `BeforeWriteHandler`.
 7. Validate with `Validated`.
 8. If the event affects registers, implement `Postable` or use `onno-posting`.
-9. Add typed `EntityView<E>` hints with getter references: `field`, `refField`, `rowField`, and
-   `rowRefField`. String/dot-path overloads are only unsafe dynamic escape hatches.
+9. Customize the list and form in the entity's TSX pages under `src/main/ui/pages/`
+   (`onno-ui-entities`): header fields by name, line columns as `"items.quantity"` — all checked
+   against the generated model.
 10. If the record is legally or operationally significant (medical record, contract, price),
     set `history = true` on `@Document`/`@Catalog`: every write path then records who changed
     which field (lines included) and post/unpost events in `onno_record_history`, shown in the
-    record's History panel and at `GET /api/history/{kind}/{name}/{id}`.
+    record page's History panel (`<RecordHistory />`) and at `GET /api/history/{kind}/{name}/{id}`.
 
 ## Read The Examples
 
@@ -41,7 +42,7 @@ Read [references/examples.md](references/examples.md) when writing code. It incl
 - idempotent `onFilling`
 - status enum usage
 - document repository usage
-- typed `EntityView` header and row hints
+- a typed UI customization of header fields and line columns
 - authenticated create/validate/get/list verification and line-replacement semantics
 - common modeling mistakes
 

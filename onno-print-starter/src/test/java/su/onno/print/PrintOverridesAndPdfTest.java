@@ -163,13 +163,13 @@ class PrintOverridesAndPdfTest {
         var subject = su.onno.access.AccessSubject.user("u", java.util.Set.of("X"));
 
         var actions = new PrintRecordActions(service).actions(
-                new su.onno.ui.RecordActionContributor.RecordActionRequest("documents", "Invoices", Invoice.class, id, subject));
+                new su.onno.web.RecordActionContributor.RecordActionRequest("documents", "Invoices", Invoice.class, id, subject));
         assertThat(actions).extracting(a -> a.key() + " " + a.url()).containsExactly(
                 "print-invoice onno://download/api/print/documents/Invoices/" + id + "/invoice",
                 "print-invoice-pdf onno://download/api/print/documents/Invoices/" + id + "/invoice?format=pdf");
 
         var downloads = new PrintSelectionDownloads(service).downloads(
-                new su.onno.ui.SelectionDownloadContributor.SelectionRequest("documents", "Invoices", Invoice.class, subject));
+                new su.onno.web.SelectionDownloadContributor.SelectionRequest("documents", "Invoices", Invoice.class, subject));
         assertThat(downloads).extracting(d -> d.key() + " " + d.url()).containsExactly(
                 "print-invoice /api/print/batch/documents/Invoices/invoice",
                 "print-invoice-pdf /api/print/batch/documents/Invoices/invoice?format=pdf");

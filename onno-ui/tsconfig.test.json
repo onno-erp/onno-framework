@@ -1,0 +1,32 @@
+{
+  // Type-checks the Vitest suite and vite.config.ts, which tsconfig.app.json (src only) never sees.
+  // Tests also import the CRM and channels packages' sources, so those are checked here too.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    // Tests run on Node 22, so they may use ES2022 APIs such as Array.prototype.at.
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    // vitest/jsdom declares the `jsdom` global (the JSDOM instance) the jsdom environment exposes.
+    "types": [
+      "vitest/globals",
+      "vitest/jsdom",
+      "node"
+    ],
+    // Tests import the CRM and channels packages, which resolve @onno/ui through the workspace.
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    }
+  },
+  "include": [
+    "tests",
+    "vite.config.ts",
+    "src/**/*.d.ts"
+  ],
+  // The type-level tests bring their own model (tsconfig.types.json).
+  "exclude": ["tests/types"]
+}

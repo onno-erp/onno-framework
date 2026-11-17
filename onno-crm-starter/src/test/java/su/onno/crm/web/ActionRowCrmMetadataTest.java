@@ -1,5 +1,6 @@
 package su.onno.crm.web;
 
+import su.onno.command.CommandRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 import su.onno.access.AccessSubject;
@@ -7,7 +8,9 @@ import su.onno.crm.domain.Conversation;
 import su.onno.crm.service.CrmInboxWorkspaceService;
 import su.onno.metadata.DefaultNamingStrategy;
 import su.onno.metadata.MetadataScanner;
-import su.onno.ui.*;
+import su.onno.command.*;
+import su.onno.web.*;
+import su.onno.service.*;
 
 import java.security.Principal;
 import java.util.List;
@@ -25,20 +28,20 @@ class ActionRowCrmMetadataTest {
     @Test
     void conversationMenuAndExecutionResolveCamelCaseFields() {
         AtomicInteger handled = new AtomicInteger();
-        EntityView<Conversation> view = new EntityView<>() {
+        Commands<Conversation> view = new Commands<>() {
             @Override
             public Class<Conversation> entity() {
                 return Conversation.class;
             }
             @Override
-            public void actions(ActionSpec<Conversation> spec) {
-                spec.action("review").scope(ActionScope.ROW)
-                        .label(row -> row.text(Conversation::getLastMessagePreview))
-                        .visibleWhen(row -> row.get(Conversation::getLastMessagePreview) != null)
+            public void define(CommandSpec<Conversation> spec) {
+                spec.command("review")
+                        .title(row -> row.text(Conversation::getLastMessagePreview))
+                        .availableWhen(row -> row.get(Conversation::getLastMessagePreview) != null)
                         .enabledWhen(row -> "Review me".equals(row.text(Conversation::getLastMessagePreview)))
-                        .handler(ctx -> {
+                        .run(ctx -> {
                             handled.incrementAndGet();
-                            return ActionResult.ok();
+                            return CommandResult.ok();
                         });
             }
         };
@@ -51,10 +54,10 @@ class ActionRowCrmMetadataTest {
         when(catalogs.get(AccessSubject.system(), descriptor, id))
                 .thenReturn(Map.of("last_message_preview", "Review me"));
         when(scopes.permitted(isNull(), eq(principal), eq(true))).thenReturn(true);
-        var controller = new CrmActionController(scopes, new UiActionResolver(List.of(view)),
-                mock(UiAccessService.class), catalogs, new UiProperties());
+        var controller = new CrmActionController(scopes, new CommandRegistry(List.of(view)),
+                mock(AccessService.class), catalogs, new WebProperties());
         assertThat((List<?>) controller.list("support", id, principal))
-                .singleElement().isEqualTo(Map.of("id", "review", "label", "Review me", "visible", true, "enabled", true));
+                .singleElement().isEqualTo(Map.of("id", "review", "title", "Review me", "visible", true, "enabled", true));
         controller.run("support", id, "review", Map.of(), principal, AccessSubject.user("reader", Set.of()));
         assertThat(handled).hasValue(1);
         when(catalogs.get(AccessSubject.system(), descriptor, id))

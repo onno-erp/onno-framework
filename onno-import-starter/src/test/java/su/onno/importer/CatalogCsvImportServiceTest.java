@@ -1,7 +1,7 @@
 package su.onno.importer;
 
 import su.onno.metadata.CatalogDescriptor;
-import su.onno.ui.CatalogCommandService;
+import su.onno.service.CatalogCommandService;
 
 import org.h2.jdbcx.JdbcDataSource;
 import org.jdbi.v3.core.Jdbi;

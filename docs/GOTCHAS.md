@@ -10,13 +10,11 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
 
 ## Auth & session
 
-- **`onno.auth.public-paths` REPLACES the built-in defaults — it does not append.** Set it without
-  re-listing the defaults and login itself starts returning 401. The current default list (repeat
-  all of it when overriding): `/error`, `/api/theme`, `/api/config`, `/api/branding`,
-  `/api/auth/login`, `/api/auth/me`, `/api/auth/csrf`, `/api/divkit/login`, `/api/desktop/ready`,
-  `/api/desktop/manifest`. Same trap does *not* apply to `onno.auth.csrf-ignored-paths` semantics,
-  but its default is just `[/api/auth/login]` — SSO callback paths (e.g.
-  `/api/auth/telegram/**`) must be added to **both** lists.
+- **Add public paths with `onno.auth.additional-public-paths`.** The framework's own public paths
+  (`/error`, `/api/theme`, `/api/config`, `/api/branding`, `/api/auth/login`, `/api/auth/me`,
+  `/api/auth/csrf`, `/api/ui/login`) always stay
+  public; your patterns are added to them. `onno.auth.csrf-ignored-paths` defaults to just
+  `[/api/auth/login]` — SSO callback paths (e.g. `/api/auth/telegram/**`) must be added to **both**.
 - **A blank `onno.auth.session.remember-me.key` fails startup on purpose.** Earlier versions
   silently rotated the key per boot, which invalidated every session cookie on redeploy. Now the app
   refuses to start with a clear message; for dev, `onno.auth.session.remember-me.allow-ephemeral-key: true`
@@ -30,16 +28,16 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
 ## Record-level access
 
 - **Typed repositories are not record-scoped.** `RecordAccessPolicy` is enforced by the generic
-  REST/DivKit/MCP surfaces and the UI starter's query/command services. `CatalogRepository`,
+  REST/UI/MCP surfaces and the service layer's query/command services (`su.onno.service`). `CatalogRepository`,
   `DocumentRepository` and `RegisterRepository` are trusted code (posting, jobs, processes) and see
-  every record. A custom controller, page action or `@McpTool` that serves an external user from a
+  every record. A custom controller, command handler or `@McpTool` that serves an external user from a
   repository must check with `RecordAccess.require(subject, Type.class, id, AccessMode.READ)` (or
   `filter(...)` for many ids).
 - **Never pass `AccessSubject.system()` on a user's behalf.** It bypasses every policy. Request code
   declares an `AccessSubject` controller parameter (or calls `AccessSubjectResolver.resolve(principal)`);
   only background work uses `system()`.
-- **A scoped user without an identity record sees nothing.** `Subject.recordId()` comes from
-  `Layout.identity(...)`; if the login matches no identity row, every scope that reads it is false.
+- **A scoped user without an identity record sees nothing.** `Subject.recordId()` comes from the
+  `IdentityLink` bean; if the login matches no identity row, every scope that reads it is false.
 - **Refs into unreadable entities render restricted — even without policies.** Since 3.4 a ref whose
   target entity the viewer can't read shows `—` with `{field}Restricted: true` and no id. Grant read
   access on the target if users need to see those names.
@@ -64,7 +62,7 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
 ## UI chrome & localization
 
 - **`onno.ui.messages` is a fixed key namespace (~190 keys); unknown keys are silently ignored.**
-  The authoritative list is `su.onno.ui.UiMessages.DEFAULTS` — grep it before a localization pass.
+  The authoritative list is `su.onno.web.UiMessages.DEFAULTS` — grep it before a localization pass.
   Resolution is three layers: English defaults → `onno.ui.locale` bundle (`ru` ships complete; a
   consumer app can add `onno/messages/messages-<locale>.properties` on the classpath, which wins) →
   explicit per-key `onno.ui.messages.*` overrides.
@@ -117,8 +115,7 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
 - **The SPA fallback is navigation-only.** A `GET` under `onno.ui.path` falls back to
   `index.html` only when the request accepts `text/html` and the path does not look like a file.
   Missing assets and unknown `/api/**` routes return `404`. Spring Boot's standard consumer static
-  locations remain available; bundled UI assets and `{onno.ui.path}/plugins/**` retain their own
-  handlers. If an API call returns HTML, verify that a proxy has not rewritten it to a UI route.
+  locations remain available; the UI's assets keep their own handler. If an API call returns HTML, verify that a proxy has not rewritten it to a UI route.
 
 ## Live updates (SSE)
 
@@ -130,45 +127,40 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
   Keepalives are SSE comments.
 - **The stream is lossy by design.** There is no `Last-Event-ID`/since replay; on reconnect
   (client retries every 3s) refetch the surfaces you care about. Events are role-filtered per
-  subscriber. In a browser, the SPA already multiplexes one connection per origin (Web Locks
+  subscriber. In a browser, `@onno/ui` already multiplexes one connection per origin (Web Locks
   leader + BroadcastChannel) — don't open a second one per tab.
-- **Custom widgets subscribe through `@onno/widget-sdk`, never through `EventSource`.** Use
-  `useWidgetUpdates(widget, load)` for the normal entity-bound case, or `events.subscribe` /
-  `useUiEvents` for unusual matching. These APIs reuse the SPA's authenticated, reconnecting,
-  cross-tab stream; a raw widget connection bypasses that sharing and session recovery.
+- **App components never open an `EventSource`.** `@onno/ui`'s data hooks (`useRecords`,
+  `useAggregate`, …) refresh themselves on entity changes; `useUiEvents(listener, filter)` covers
+  other events. Both reuse the shell's authenticated, reconnecting, cross-tab stream; a raw
+  connection bypasses that sharing and session recovery.
 
-## Custom widgets
+## App UI
 
-- **Host UI primitives are exposed to widgets** (contract v2+): `Button`, `Badge`, `Input`,
-  `Label`, `Textarea`, `Checkbox`, `Switch`, `Segmented`, `DatePicker`, `Card`, `Popover`,
-  `Select` — import them from `@onno/widget-sdk` instead of rebuilding lookalikes.
-- **Tailwind in widgets works, with two caveats.** The `su.onno.widgets` Gradle plugin runs
-  Tailwind over widget sources (utilities-only, preflight off, host tokens), but it scans only
-  `src/main/widgets`, and runtime-concatenated class names (`` `text-${c}` ``) are invisible to
-  it — use literal class strings, or inline `style` with `hsl(var(--primary))`.
-- **Plugin CSS must load before the host stylesheet.** Each widget artifact emits a coordinate-specific
-  `*-widgets.css`; these are unscoped
-  Tailwind utilities pass; its selectors tie with the host's on specificity, so document order
-  decides every conflict. Appended after the host sheet, a plugin's bare utility (`.flex-col`)
-  silently beats the host's responsive variant of the same property (`sm:flex-row`) on any host
-  element carrying both classes — this once collapsed the desktop date-range popover (presets
-  rail + calendar) into a stacked column. `injectPluginStyles` therefore inserts plugin `<link>`s
-  *before* the first host style; keep that invariant if you touch style injection, and never
-  append third-party utility CSS to the end of `<head>`.
+- **Import host primitives from `@onno/ui`** — `Button`, `Badge`, `Input`, `Label`, `Textarea`,
+  `Checkbox`, `Switch`, `Segmented`, `DatePicker`, `Card`, `Popover`, `Select`, … — instead of
+  rebuilding lookalikes. The app's Vite config is `plugins: [onno()]` from `@onno/ui/vite`, which
+  sets up React and Tailwind with the shell's theme tokens; use literal class strings (Tailwind
+  can't see runtime-concatenated names like `` `text-${c}` ``) or inline `style` with
+  `hsl(var(--primary))`.
+- **`model.gen.ts` is generated — never edit or commit it.** `generateUiModel` rewrites it from the
+  compiled Java model before every UI build; after changing an entity, run it (or any build) so the
+  types catch up.
+- **Enum values in `where` and on records are UUIDs.** Compare with the generated constants
+  (`order.status === OrderStatus.NEW`), not the constant name.
 
 ## Forms
 
-- **The New form prefills from query params.** Append write-path field names to the New route:
-  `/ui/documents/Reservations/new?room=<uuid>&startsAt=2026-07-16T19:00`. `Ref`/enum values are
-  UUID strings, temporals ISO, everything else verbatim; `viewport`/`theme`/`profile` are reserved;
-  unknown keys and bad values are skipped silently. Prefill applies after `OnFillingHandler` and
+- **The New form prefills from query params.** Append write-path field names to the New route —
+  `/ui/documents/reservations/new?room=<uuid>&startsAt=2026-07-16T19:00`, or build it with
+  `links.newRecord("Reservations", { room, startsAt })`. `Ref`/enum values are UUID strings,
+  temporals ISO, everything else verbatim; unknown keys and bad values are skipped silently. Prefill applies after `OnFillingHandler` and
   field initializers. This is the way to seed a `Ref` default (a `Ref` can't be a literal field
   initializer).
 
 
 ## Live lists and transaction visibility
 
-The local `UiEventPublisher` dispatches entity-change SSE notifications after the publishing Spring
+The local `EventPublisher` dispatches entity-change SSE notifications after the publishing Spring
 transaction commits (and immediately outside a transaction). Never push a controller-only SSE event
 from the middle of a transaction: a fast browser can refetch before the inserted row is visible.
 Rolled-back repository changes must not emit a client invalidation.

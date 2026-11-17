@@ -14,7 +14,7 @@
 ```kotlin
 dependencies {
     implementation("su.onno:onno-framework-starter:$onnoVersion")
-    implementation("su.onno:onno-ui-starter:$onnoVersion")
+    implementation("su.onno:onno-web-starter:$onnoVersion")
     implementation("su.onno:onno-auth-starter:$onnoVersion")
     implementation("su.onno:onno-mcp-starter:$onnoVersion")
 }
@@ -74,7 +74,7 @@ Do not guess route/entity names from Java classes. Use metadata.
 - `onno.mcp.writes-enabled=false` removes create/update/delete tools.
 - `onno.mcp.posting-enabled=false` removes post/unpost/preview tools.
 - Entity `@AccessControl` still gates every operation.
-- `onno.ui.read-only=true` independently blocks mutation services even if MCP write tools exist.
+- `onno.web.read-only=true` independently blocks mutation services even if MCP write tools exist.
 - The HTTP chain rejects anonymous requests. Direct/internal anonymous metadata calls hide
   RBAC-controlled entities; enum metadata is not a substitute for authenticated entity access.
 
@@ -89,7 +89,7 @@ Do not guess route/entity names from Java classes. Use metadata.
 | create tools | `name`, `values` | write fields use model names; Ref/enum values are UUID strings |
 | update tools | `name`, UUID `id`, `values` | partial update |
 | delete/post/unpost/preview | `name`, UUID `id` | command result/preview |
-| `register_balance` | `name` | dimension `filters`; errors above 5,000 matching rows |
+| `register_balance` | `name` | `where` over balance rows, `asOf`; errors above 5,000 matching rows |
 | `register_movements` | `name` | ISO `from`/`to`; errors above 1,000 matching rows |
 
 ## Custom Tools
@@ -115,7 +115,7 @@ when `onno.mcp.writes-enabled=false`. Use an `McpToolProvider` bean for direct S
 - If `describe_metadata` is empty, check user roles and `@AccessControl`.
 - If writes are missing, check `onno.mcp.writes-enabled`.
 - If posting tools are missing, check `onno.mcp.posting-enabled`.
-- If tools exist but writes return `403`, check `onno.ui.read-only` and entity write roles.
+- If tools exist but writes return `403`, check `onno.web.read-only` and entity write roles.
 - If auth fails, remember `/mcp` is stateless and authenticates per request.
 - If a tool sees stale metadata, restart the app after changing model classes.
 

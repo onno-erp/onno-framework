@@ -7,54 +7,112 @@ the bundled example app and to consumer apps; agent-specific verification ladder
 > **Keep this current.** If a command, port, credential, or dev-mode mechanism changes, update this
 > page in the same PR.
 
-## Run the example app
+## Intended development workflow
 
-Requires **JDK 21**. The SPA is prebuilt into `onno-ui-starter` — there is no separate frontend
-process to run.
+Develop against the example using **Vite for the frontend** and a separate backend. Run all
+commands below from the repository root. Requires **JDK 21** and **Node 22+**; run `npm install`
+once to install the shared npm workspace.
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Vite with React Fast Refresh at `http://localhost:5173`; proxies the backend on port 8091. |
+| `npm run dev:backend` | Generate the typed UI model and start the example backend on port 8091 with Spring DevTools. |
+| `npm run dev:watch` | Continuously compile application Java/resources and regenerate `model.gen.ts`; DevTools restarts the running development backend. |
+
+For a fresh development session, use three terminals:
 
 ```bash
-./gradlew :example:bootRun                                # http://localhost:8080
-./gradlew :example:bootRun --args='--server.port=8090'    # alternate port
+# Terminal 1: backend
+npm run dev:backend
+
+# Terminal 2: application Java/model changes
+npm run dev:watch
+
+# Terminal 3: frontend — open http://localhost:5173
+npm run dev
 ```
+
+For frontend-only work, reuse an existing backend on port 8091 and run **only `npm run dev`**.
+Pages, components, styles, and linked `@onno/*` UI sources hot-reload through Vite. Do not rebuild a
+jar or restart the backend for a frontend edit. Open port **5173** to see live changes; the UI served
+by the backend on **8091** is a built snapshot. API, auth, SSE, and default branding requests proxy
+to the backend. To use another backend:
+
+```bash
+ONNO_BACKEND=http://localhost:8080 npm run dev
+```
+
+For application Java/model/resource changes, use `dev:backend` with `dev:watch`. These commands
+skip production frontend builds, so UI edits stay in Vite. DevTools restarts the application
+context after recompilation: onno rescans metadata, reconciles the schema, and tells connected
+browsers to refresh over `/api/events`. The watcher also regenerates `model.gen.ts` after model
+changes. If a framework dependency jar or the runtime classpath changes, restart `dev:backend`
+to load it; do not assume DevTools reloads dependency jars.
+
+A packaged `java -jar` backend does not enable DevTools restarts. Stop it before switching to
+`dev:backend` on the same port. Use one backend for the example's existing file-H2 database at
+`example/data/bookstore`; this workflow does not reset the data. Stop each development command
+with Ctrl+C in its terminal.
+
+Production packaging and verification remain separate: use `./gradlew check`,
+`./gradlew :example:bootJar`, and `./gradlew publishToMavenLocal` to verify tests and artifacts.
+They retain their normal frontend packaging; do not carry the development task exclusions into
+release or verification commands.
+
+### DevTools and explicit reloads
+
+The example already includes:
+
+```kotlin
+dependencies { developmentOnly("org.springframework.boot:spring-boot-devtools") }
+```
+
+onno's backend live-reload support enables itself when DevTools is on the classpath
+(`onno.web.dev-mode` overrides explicitly). The client reloads when a `ready` event's `bootId`
+changes while `devMode` is on. To force a reload without changing code, touch the configured
+`onno.web.dev-reload-trigger` file (`.onno-reload` relative to the backend's working directory;
+polled every 500 ms).
+
+### Consumer applications
+
+The root npm commands above belong to this repository. For a separate application using
+`su.onno.ui`, run its backend and `npm run dev` in its `src/main/ui` directory. The preset defaults
+to port 8080; set `ONNO_BACKEND` or `onno({ backend })` to match that application's backend.
+For Java reloads, add DevTools and continuously compile that app's classes and regenerate its
+UI model. See [the UI plugin](../onno-ui-gradle-plugin/README.md#development-loop).
+
+## Run with the built UI
+
+Use this to inspect production-style frontend output, rather than as the routine edit loop:
+
+```bash
+./gradlew :example:bootJar
+cd example
+java -jar build/libs/example-2.0.0-SNAPSHOT.jar --server.port=8091
+# http://localhost:8091/ui/ (use the jar matching the checkout's version)
+```
+
+Gradle bundles the example's Vite UI into the jar; its first build downloads the managed Node
+runtime and installs the npm workspace. JDK 21 is required.
 
 The example automatically logs anonymous visitors in as `manager@onnobooks.local` (default profile)
 through `onno.auth.demo.auto-login-username`. Remove that property to restore the login screen, where
 `admin@onnobooks.local`/`admin`, `manager@onnobooks.local`/`manager`, and the one-tap demo buttons are
-available. First launch seeds a fixed-RNG bookstore into the file-H2 database at `example/data/` —
-delete that directory to re-seed.
+available. First launch seeds a fixed-RNG bookstore into the file-H2 database at `example/data/`.
+Keep that directory to preserve the existing data.
 
 The example temporarily defaults `ONNO_DEMO_FRAME_ANCESTORS` to `*`, so any landing page can frame
 it. Set that variable to an exact origin to restore an allowlist. For an HTTPS cross-site iframe,
 also set `ONNO_DEMO_COOKIE_SAME_SITE=none` and `ONNO_DEMO_COOKIE_SECURE=true`; those settings preserve
 session/CSRF state.
 
-To reach the app from a phone on the same network, bind to all interfaces and use the machine's
-LAN address:
+To reach the built app from a phone on the same network, bind to all interfaces and use the
+machine's LAN address:
 
 ```bash
-./gradlew :example:bootRun --args='--server.address=0.0.0.0'
-# then open http://<your-lan-ip>:8080 on the device
+java -jar build/libs/example-2.0.0-SNAPSHOT.jar --server.port=8091 --server.address=0.0.0.0
+# from example/, open http://<your-lan-ip>:8091/ui/ on the device
 ```
-
-## Iterate with dev mode (no manual reloads)
-
-Dev mode pushes live-reload signals over the existing `/api/events` stream. It switches on
-automatically when `spring-boot-devtools` is on the classpath (`onno.ui.dev-mode` overrides
-explicitly).
-
-```kotlin
-dependencies { developmentOnly("org.springframework.boot:spring-boot-devtools") }
-```
-
-```bash
-./gradlew :example:bootRun          # terminal 1 — the app
-./gradlew -t :example:classes       # terminal 2 — continuous compile
-```
-
-Save a file → devtools restarts the context → every open browser reloads itself (the client
-full-reloads when the `ready` event's `bootId` changes while `devMode` is on). To force a reload
-without a code change, touch the trigger file: `touch .onno-reload` (path configurable via
-`onno.ui.dev-reload-trigger`; polled every 500 ms, no HTTP/auth involved).
 
 ## Run a release smoke test
 

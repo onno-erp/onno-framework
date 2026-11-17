@@ -38,8 +38,8 @@ tag-driven publishing workflow completes and the artifacts appear on Maven Centr
 ## Upgrade order
 
 1. Back up the production database and rehearse the upgrade on a staging copy.
-2. Read [Migrating an application to onno 2.0](MIGRATING_TO_2_0.md), add the required
-   `AppMigration` conversions, and update Java metadata and API clients.
+2. Add the required `AppMigration` conversions (stored enum names to UUIDs, `data:` images to
+   media URLs, `"lat,lng"` points to GeoJSON) and update Java metadata and API clients.
 3. If the application uses typed processes, follow
    [Migrating typed authoring](MIGRATING_TYPED_AUTHORING.md) and provide definition migrations for
    active instances.

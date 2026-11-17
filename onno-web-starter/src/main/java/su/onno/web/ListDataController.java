@@ -1,0 +1,380 @@
+package su.onno.web;
+
+import su.onno.service.AccessService;
+import su.onno.service.AggregateBuckets;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.EntityJsonRepresentation;
+import su.onno.service.KeysetPage;
+import su.onno.service.ListGroups;
+import su.onno.service.Where;
+import su.onno.command.CommandRegistry;
+import su.onno.access.AccessSubject;
+import su.onno.metadata.AttributeDescriptor;
+import su.onno.metadata.CatalogDescriptor;
+import su.onno.metadata.DocumentDescriptor;
+
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+/**
+ * Serves pages of list data to the list grid. The default is <b>keyset (seek) pagination</b>: the
+ * client passes an opaque {@code cursor} (the {@code nextCursor} from the previous window) plus a
+ * {@code limit}, and the server seeks straight to the next window with an indexed comparison — so
+ * page 1 and page 10 000 cost the same, and rows are never skipped/duplicated when data shifts mid
+ * scroll. The envelope is {@code {rows, nextCursor, hasMore, prevCursor, hasPrevious}}; a COUNT runs
+ * only when the client opts in via {@code ?count=exact} (or {@code estimate} for a cheap planner
+ * figure), since the scroller needs {@code hasMore}, not a live total, to keep loading.
+ * <p>{@code ?focus=<id>} returns the window that contains that record instead of the first one (the
+ * "open in list" jump), and {@code ?before=<prevCursor>} returns the window just above a window
+ * (see {@link KeysetPage}).
+ * <p>Sort, case-insensitive search, and column filters are applied server-side; the descriptor
+ * (columns, labels, sort, actions) comes from the list view descriptor ({@code /api/ui/view/…}).
+ *
+ * <p>Row predicates: {@code where} is the client format — URL-encoded JSON compiled by
+ * {@link Where} ({@code where={"posted":true,"total":{"gte":100}}}). It applies to the window,
+ * focus window, count, groups and aggregates alike.</p>
+ */
+@RestController
+@RequestMapping("/api/list")
+public class ListDataController {
+
+    private final CatalogQueryService catalogQuery;
+    private final DocumentQueryService documentQuery;
+    private final AccessService access;
+    private final CommandRegistry actionResolver;
+
+    public ListDataController(CatalogQueryService catalogQuery, DocumentQueryService documentQuery,
+                              AccessService access, CommandRegistry actionResolver) {
+        this.catalogQuery = catalogQuery;
+        this.documentQuery = documentQuery;
+        this.access = access;
+        this.actionResolver = actionResolver;
+    }
+
+    @GetMapping("/catalogs/{name}")
+    public Map<String, Object> catalogPage(@PathVariable String name,
+                                           @RequestParam(defaultValue = "100") int limit,
+                                           @RequestParam(required = false) String sort,
+                                           @RequestParam(required = false) String dir,
+                                           @RequestParam(required = false) String q,
+                                           HttpServletRequest request,
+                                           AccessSubject subject) {
+        CatalogDescriptor desc = catalogQuery.require(name);
+        access.requireRead(subject, desc);
+        EntityJsonRepresentation.Mode representation =
+                EntityJsonRepresentation.parse(request.getParameter("representation"));
+        // Surgical refresh: when the island asks for specific ids (a single-row live patch), return
+        // just those decorated rows and skip paging/filtering entirely. The presence of the param —
+        // not the parse result — selects ids-mode, so an all-unparseable request returns no rows
+        // (the requested ids matched nothing) rather than falling back to a full page.
+        if (request.getParameterValues("ids") != null) {
+            List<UUID> ids = parseIds(request);
+            List<Map<String, Object>> picked = ids.isEmpty() ? List.of() : catalogQuery.rowsByIds(subject, desc, ids);
+            decorateRowActions(desc.javaClass(), picked, desc.attributes());
+            picked = EntityJsonRepresentation.catalogs(desc, picked, representation);
+            return keysetEnvelope(new KeysetPage(picked, null, false), request.getParameter("count") == null ? null : (long) picked.size());
+        }
+        // Read filter params raw: Spring's List<String> binding splits a single value on commas,
+        // which would mangle our "column,value" encoding. getParameterValues keeps each verbatim.
+        List<String> eq = multi(request, "eq");
+        List<String> in = multi(request, "in");
+        List<String> like = multi(request, "like");
+        List<String> prefix = multi(request, "prefix");
+        List<String> ge = multi(request, "ge");
+        List<String> le = multi(request, "le");
+        String where = where(request);
+        KeysetPage kp = catalogQuery.keysetPage(subject, desc, request.getParameter("cursor"),
+                request.getParameter("before"), parseId(request.getParameter("focus")), limit, sort,
+                descending(dir), q, eq, in, like, prefix, ge, le, where);
+        decorateRowActions(desc.javaClass(), kp.rows(), desc.attributes());
+        kp = kp.withRows(EntityJsonRepresentation.catalogs(desc, kp.rows(), representation));
+        boolean filtered = isFiltered(q, eq, in, like, prefix, ge, le) || where != null;
+        Long total = total(request.getParameter("count"),
+                () -> catalogQuery.count(subject, desc, q, eq, in, like, prefix, ge, le, where),
+                () -> catalogQuery.estimateCount(subject, desc, filtered));
+        return keysetEnvelope(kp, total);
+    }
+
+    @GetMapping("/documents/{name}")
+    public Map<String, Object> documentPage(@PathVariable String name,
+                                            @RequestParam(defaultValue = "100") int limit,
+                                            @RequestParam(required = false) String sort,
+                                            @RequestParam(required = false) String dir,
+                                            @RequestParam(required = false) String q,
+                                            @RequestParam(required = false) String from,
+                                            @RequestParam(required = false) String to,
+                                            HttpServletRequest request,
+                                            AccessSubject subject) {
+        DocumentDescriptor desc = documentQuery.require(name);
+        access.requireRead(subject, desc);
+        EntityJsonRepresentation.Mode representation =
+                EntityJsonRepresentation.parse(request.getParameter("representation"));
+        // Surgical refresh by id (single-row live patch) — see catalogPage.
+        if (request.getParameterValues("ids") != null) {
+            List<UUID> ids = parseIds(request);
+            List<Map<String, Object>> picked = ids.isEmpty() ? List.of() : documentQuery.rowsByIds(subject, desc, ids);
+            decorateRowActions(desc.javaClass(), picked, desc.attributes());
+            picked = EntityJsonRepresentation.documents(desc, picked, representation);
+            return keysetEnvelope(new KeysetPage(picked, null, false), request.getParameter("count") == null ? null : (long) picked.size());
+        }
+        // See catalogPage: filter params are read raw to avoid Spring's comma-splitting.
+        List<String> eq = multi(request, "eq");
+        List<String> in = multi(request, "in");
+        List<String> like = multi(request, "like");
+        List<String> prefix = multi(request, "prefix");
+        List<String> ge = multi(request, "ge");
+        List<String> le = multi(request, "le");
+        String where = where(request);
+        KeysetPage kp = documentQuery.keysetPage(subject, desc, request.getParameter("cursor"),
+                request.getParameter("before"), parseId(request.getParameter("focus")), limit, sort,
+                descending(dir), q, from, to, eq, in, like, prefix, ge, le, where);
+        decorateRowActions(desc.javaClass(), kp.rows(), desc.attributes());
+        kp = kp.withRows(EntityJsonRepresentation.documents(desc, kp.rows(), representation));
+        boolean filtered = from != null || to != null || isFiltered(q, eq, in, like, prefix, ge, le)
+                || where != null;
+        Long total = total(request.getParameter("count"),
+                () -> documentQuery.count(subject, desc, q, from, to, eq, in, like, prefix, ge, le, where),
+                () -> documentQuery.estimateCount(subject, desc, filtered));
+        return keysetEnvelope(kp, total);
+    }
+
+    /**
+     * Group a catalog list by a column: one collapsible header per distinct value (or per date
+     * bucket), with a row count + requested subtotals, over the same sort/search/filters as the flat
+     * list. The flat list ({@link #catalogPage}) loads a group's rows via the {@code expand} filter
+     * each header carries. Envelope: {@code {groups, capped}} — {@code capped} true when the group
+     * count hit {@link ListGroups#MAX_GROUPS}.
+     */
+    @GetMapping("/catalogs/{name}/groups")
+    public Map<String, Object> catalogGroups(@PathVariable String name,
+                                             @RequestParam String groupBy,
+                                             @RequestParam(required = false) String granularity,
+                                             @RequestParam(required = false) String q,
+                                             HttpServletRequest request,
+                                             AccessSubject subject) {
+        CatalogDescriptor desc = catalogQuery.require(name);
+        access.requireRead(subject, desc);
+        ListGroups.GroupResult result = catalogQuery.groups(subject, desc, groupBy, granularity, q,
+                multi(request, "eq"), multi(request, "in"), multi(request, "like"),
+                multi(request, "prefix"), multi(request, "ge"), multi(request, "le"),
+                where(request), aggregates(request));
+        return groupsEnvelope(result);
+    }
+
+    /** Group a document list by a column — the document analogue of {@link #catalogGroups}. */
+    @GetMapping("/documents/{name}/groups")
+    public Map<String, Object> documentGroups(@PathVariable String name,
+                                              @RequestParam String groupBy,
+                                              @RequestParam(required = false) String granularity,
+                                              @RequestParam(required = false) String q,
+                                              @RequestParam(required = false) String from,
+                                              @RequestParam(required = false) String to,
+                                              HttpServletRequest request,
+                                              AccessSubject subject) {
+        DocumentDescriptor desc = documentQuery.require(name);
+        access.requireRead(subject, desc);
+        ListGroups.GroupResult result = documentQuery.groups(subject, desc, groupBy, granularity, q, from, to,
+                multi(request, "eq"), multi(request, "in"), multi(request, "like"),
+                multi(request, "prefix"), multi(request, "ge"), multi(request, "le"),
+                where(request), aggregates(request));
+        return groupsEnvelope(result);
+    }
+
+    /**
+     * Pre-aggregated buckets for a chart/stat/sparkline/gauge widget (#199): a server-side
+     * {@code GROUP BY groupBy[, seriesBy]} with an optional date-unit bucket and time window,
+     * returning O(buckets) rows instead of the entity's whole table. Blank {@code groupBy} yields
+     * one grand-total bucket (the gauge case). See {@link AggregateBuckets} for the envelope.
+     */
+    @GetMapping("/catalogs/{name}/aggregate")
+    public Map<String, Object> catalogAggregate(@PathVariable String name,
+                                                AggregateBuckets.Request request,
+                                                AccessSubject subject) {
+        CatalogDescriptor desc = catalogQuery.require(name);
+        access.requireRead(subject, desc);
+        try {
+            return catalogQuery.aggregateBuckets(subject, desc, request);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+
+    /** The document analogue of {@link #catalogAggregate}. */
+    @GetMapping("/documents/{name}/aggregate")
+    public Map<String, Object> documentAggregate(@PathVariable String name,
+                                                 AggregateBuckets.Request request,
+                                                 AccessSubject subject) {
+        DocumentDescriptor desc = documentQuery.require(name);
+        access.requireRead(subject, desc);
+        try {
+            return documentQuery.aggregateBuckets(subject, desc, request);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+
+    private static Map<String, Object> groupsEnvelope(ListGroups.GroupResult result) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("groups", result.groups());
+        out.put("capped", result.capped());
+        return out;
+    }
+
+    /**
+     * The requested per-group subtotals: the repeated {@code agg} param, each a {@code "fn,column"}
+     * pair (e.g. {@code agg=sum,total}). Malformed tokens are skipped; the query service re-validates
+     * every fn/column, so an unknown one is dropped rather than 400ing the request.
+     */
+    private static List<ListGroups.Agg> aggregates(HttpServletRequest request) {
+        String[] raw = request.getParameterValues("agg");
+        if (raw == null || raw.length == 0) {
+            return List.of();
+        }
+        List<ListGroups.Agg> out = new java.util.ArrayList<>();
+        for (String value : raw) {
+            if (value == null) continue;
+            int comma = value.indexOf(',');
+            if (comma <= 0 || comma == value.length() - 1) continue;
+            out.add(new ListGroups.Agg(value.substring(0, comma).trim(), value.substring(comma + 1).trim()));
+        }
+        return out;
+    }
+
+    /**
+     * Attach per-row state for any per-record commands (see {@link su.onno.command.Command}) under each row's
+     * {@code _actions} key ({@code {visible, enabled, title?}} per command key), so the grid offers
+     * each row's commands correctly. A no-op (rows untouched) when the entity has no such commands —
+     * the common case — so those lists pay nothing.
+     */
+    private <E> void decorateRowActions(Class<E> entity, List<Map<String, Object>> rows,
+                                    List<AttributeDescriptor> attributes) {
+        if (entity == null || !actionResolver.hasPerRecordCommands(entity)) {
+            return;
+        }
+        for (Map<String, Object> row : rows) {
+            Map<String, Object> state = actionResolver.rowState(entity, row, attributes);
+            if (!state.isEmpty()) {
+                row.put("_actions", state);
+            }
+        }
+    }
+
+    /**
+     * The structured {@code where} predicate (URL-encoded JSON, see {@link Where}), or {@code null}
+     * when absent/blank. Read raw from the request (like the filter params) and compiled by the
+     * query service, which answers a malformed or unknown-field predicate with a 400.
+     */
+    private static String where(HttpServletRequest request) {
+        String raw = request.getParameter("where");
+        return raw == null || raw.isBlank() ? null : raw;
+    }
+
+    /** Raw repeated query-param values (no comma-splitting), or an empty list when absent. */
+    private static List<String> multi(HttpServletRequest request, String name) {
+        String[] values = request.getParameterValues(name);
+        return values == null ? List.of() : List.of(values);
+    }
+
+    /**
+     * The requested row ids for a surgical refresh: the repeated {@code ids} param, also accepting a
+     * single comma-separated value. Unparseable tokens are skipped, so a malformed id never 400s the
+     * refresh (it just resolves to fewer/zero rows and the client falls back to a full reload).
+     */
+    private static List<UUID> parseIds(HttpServletRequest request) {
+        String[] raw = request.getParameterValues("ids");
+        if (raw == null || raw.length == 0) {
+            return List.of();
+        }
+        List<UUID> out = new java.util.ArrayList<>();
+        for (String value : raw) {
+            if (value == null) continue;
+            for (String token : value.split(",")) {
+                String trimmed = token.trim();
+                if (trimmed.isEmpty()) continue;
+                try {
+                    out.add(UUID.fromString(trimmed));
+                } catch (IllegalArgumentException ignored) {
+                    // skip a malformed id rather than failing the whole refresh
+                }
+            }
+        }
+        return out;
+    }
+
+    /** The {@code focus} record id, or {@code null} when absent or malformed (a bad id is no focus, never a 400). */
+    private static UUID parseId(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(raw.trim());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /**
+     * The keyset envelope: rows + the opaque {@code nextCursor} to fetch the next window and a
+     * {@code hasMore} flag, plus {@code prevCursor}/{@code hasPrevious} for the rows above a window
+     * that does not start at the top (a focused or backward window). {@code focus} is present only
+     * when the window was anchored on the requested record. {@code total} is included only when the
+     * client opted into a count ({@code ?count=exact|estimate}); the default omits it, which is what
+     * makes the fast path fast.
+     */
+    private static Map<String, Object> keysetEnvelope(KeysetPage kp, Long total) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("rows", kp.rows());
+        out.put("nextCursor", kp.nextCursor());
+        out.put("hasMore", kp.hasMore());
+        out.put("prevCursor", kp.prevCursor());
+        out.put("hasPrevious", kp.hasPrevious());
+        if (kp.focus() != null) {
+            out.put("focus", kp.focus().toString());
+        }
+        if (total != null) {
+            out.put("total", total);
+        }
+        return out;
+    }
+
+    /**
+     * Resolve the optional total for keyset mode: {@code exact} runs a COUNT, {@code estimate} uses
+     * cheap planner statistics (PostgreSQL; may be {@code null} → omitted), anything else (the
+     * default) skips counting entirely.
+     */
+    private static Long total(String countMode,
+                              java.util.function.Supplier<Long> exact,
+                              java.util.function.Supplier<Long> estimate) {
+        if ("exact".equalsIgnoreCase(countMode)) {
+            return exact.get();
+        }
+        if ("estimate".equalsIgnoreCase(countMode)) {
+            return estimate.get();
+        }
+        return null;
+    }
+
+    /** Whether any search or column filter is active — gates whether an estimate is meaningful. */
+    private static boolean isFiltered(String q, List<String> eq, List<String> in, List<String> like,
+                                      List<String> prefix, List<String> ge, List<String> le) {
+        return (q != null && !q.isBlank())
+                || !eq.isEmpty() || !in.isEmpty() || !like.isEmpty()
+                || !prefix.isEmpty() || !ge.isEmpty() || !le.isEmpty();
+    }
+
+    private static boolean descending(String dir) {
+        return dir == null || dir.isBlank() || dir.equalsIgnoreCase("desc");
+    }
+}

@@ -5,7 +5,7 @@ Generic CSV import endpoints for onno applications.
 The first slice imports catalog and document records from uploaded CSV files. It deliberately
 writes through `CatalogCommandService` and `DocumentCommandService`, so imports use the same
 authorization, validation, secret handling, number generation, optimistic locking, posting, and
-change events as the generated REST UI.
+change events as the generic REST API (`onno-web-starter`).
 
 ## Usage
 
@@ -15,7 +15,7 @@ dependencies {
 }
 ```
 
-The starter auto-configures when `MetadataRegistry` and `onno-ui-starter` services are present.
+The starter auto-configures when `MetadataRegistry` and `onno-web-starter` services are present.
 
 ## Endpoints
 

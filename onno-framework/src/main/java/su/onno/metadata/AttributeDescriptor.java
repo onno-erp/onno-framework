@@ -2,6 +2,11 @@ package su.onno.metadata;
 
 import java.util.List;
 
+/**
+ * One attribute (or register dimension/resource) as the model declares it: name, storage, type,
+ * reference target and validation constraints. Presentation (order, grouping, widths, widgets,
+ * visibility) is not part of the model — clients decide it.
+ */
 public record AttributeDescriptor(
         String fieldName,
         String displayName,
@@ -14,54 +19,19 @@ public record AttributeDescriptor(
         List<ReferenceTargetDescriptor> refTargets,
         int precision,
         int scale,
-        boolean visibleInList,
-        boolean visibleInForm,
-        boolean visibleInDetail,
-        int order,
-        String group,
-        String widthHint,
-        String widget,
         Constraints constraints,
         boolean secret,
         List<String> previousNames,
         boolean searchIndex
 ) {
 
-    /** Backward-compatible constructor for callers predating {@code searchIndex}. */
+    /** A single-target (or non-reference) attribute without rename history or search index. */
     public AttributeDescriptor(
             String fieldName, String displayName, String columnName, Class<?> javaType,
             int length, boolean required, boolean isRef, String refTarget,
-            List<ReferenceTargetDescriptor> refTargets, int precision, int scale,
-            boolean visibleInList, boolean visibleInForm, boolean visibleInDetail, int order,
-            String group, String widthHint, String widget, Constraints constraints,
-            boolean secret, List<String> previousNames) {
+            int precision, int scale, Constraints constraints, boolean secret) {
         this(fieldName, displayName, columnName, javaType, length, required, isRef, refTarget,
-                refTargets, precision, scale, visibleInList, visibleInForm, visibleInDetail, order,
-                group, widthHint, widget, constraints, secret, previousNames, false);
-    }
-
-    /** Backward-compatible full constructor for callers predating polymorphic references. */
-    public AttributeDescriptor(
-            String fieldName, String displayName, String columnName, Class<?> javaType,
-            int length, boolean required, boolean isRef, String refTarget,
-            int precision, int scale, boolean visibleInList, boolean visibleInForm,
-            boolean visibleInDetail, int order, String group, String widthHint,
-            String widget, Constraints constraints, boolean secret, List<String> previousNames) {
-        this(fieldName, displayName, columnName, javaType, length, required, isRef, refTarget,
-                List.of(), precision, scale, visibleInList, visibleInForm, visibleInDetail, order,
-                group, widthHint, widget, constraints, secret, previousNames);
-    }
-
-    /** Backward-compatible constructor for callers predating {@code previousNames}. */
-    public AttributeDescriptor(
-            String fieldName, String displayName, String columnName, Class<?> javaType,
-            int length, boolean required, boolean isRef, String refTarget,
-            int precision, int scale, boolean visibleInList, boolean visibleInForm,
-            boolean visibleInDetail, int order, String group, String widthHint,
-            String widget, Constraints constraints, boolean secret) {
-        this(fieldName, displayName, columnName, javaType, length, required, isRef, refTarget,
-                List.of(), precision, scale, visibleInList, visibleInForm, visibleInDetail, order, group,
-                widthHint, widget, constraints, secret, List.of());
+                List.of(), precision, scale, constraints, secret, List.of(), false);
     }
 
     public boolean isPolymorphicRef() {

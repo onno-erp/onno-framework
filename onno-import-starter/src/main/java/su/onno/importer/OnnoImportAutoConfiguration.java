@@ -2,12 +2,12 @@ package su.onno.importer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import su.onno.metadata.MetadataRegistry;
-import su.onno.ui.CatalogCommandService;
-import su.onno.ui.CatalogQueryService;
-import su.onno.ui.DocumentCommandService;
-import su.onno.ui.DocumentQueryService;
-import su.onno.ui.UiAccessService;
-import su.onno.ui.UiAutoConfiguration;
+import su.onno.service.CatalogCommandService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentCommandService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.AccessService;
+import su.onno.web.UiAutoConfiguration;
 
 import org.jdbi.v3.core.Jdbi;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -23,7 +23,7 @@ import org.springframework.context.annotation.Bean;
         CatalogCommandService.class,
         DocumentQueryService.class,
         DocumentCommandService.class,
-        UiAccessService.class
+        AccessService.class
 })
 @EnableConfigurationProperties(OnnoImportProperties.class)
 @ConditionalOnProperty(prefix = "onno.import", name = "enabled", havingValue = "true", matchIfMissing = true)
@@ -46,7 +46,7 @@ public class OnnoImportAutoConfiguration {
     @Bean
     public CatalogImportController catalogImportController(CatalogQueryService catalogQueryService,
                                                            DocumentQueryService documentQueryService,
-                                                           UiAccessService access,
+                                                           AccessService access,
                                                            CatalogCsvImportService catalogImports,
                                                            DocumentCsvImportService documentImports,
                                                            OnnoImportProperties properties,

@@ -32,6 +32,9 @@ concurrency:
 
 jobs:
   sync:
+    # Pre-release tags (v5.0.0-alpha.1, -rc.1, …) publish artifacts but leave the live demo on the
+    # latest stable release; a manual dispatch still syncs any version.
+    if: github.event_name == 'workflow_dispatch' || !contains(github.ref_name, '-')
     runs-on: ubuntu-latest
     steps:
       - name: Resolve version
@@ -45,15 +48,15 @@ jobs:
 
       # The tag starts this workflow and Publish Packages at the same moment, and this one finishes in
       # seconds — so without waiting, onno-demo was pinned to a version that wasn't downloadable yet
-      # and its deploy failed resolving su.onno:* / the su.onno.widgets plugin (seen on 4.1.0). Wait
+      # and its deploy failed resolving su.onno:* / the su.onno.ui plugin (seen on 4.1.0). Wait
       # until both places the demo build resolves from serve the release: the core on Maven Central
-      # (which also lags the Central Portal upload) and the widgets plugin on the onno-cloud registry
+      # (which also lags the Central Portal upload) and the su.onno.ui plugin on the onno-cloud registry
       # (mirrored at the end of Publish Packages).
       - name: Wait for the release to be resolvable
         run: |
           V="${{ steps.v.outputs.version }}"
           CORE="https://repo1.maven.org/maven2/su/onno/onno-framework/$V/onno-framework-$V.pom"
-          PLUGIN="https://cloud.onno.su/modules/su/onno/widgets/su.onno.widgets.gradle.plugin/$V/su.onno.widgets.gradle.plugin-$V.pom"
+          PLUGIN="https://cloud.onno.su/modules/su/onno/ui/su.onno.ui.gradle.plugin/$V/su.onno.ui.gradle.plugin-$V.pom"
           for i in $(seq 1 180); do
             core=$(curl -s -o /dev/null -w '%{http_code}' "$CORE")
             plugin=$(curl -s -o /dev/null -w '%{http_code}' "$PLUGIN")
@@ -81,7 +84,7 @@ jobs:
           # renamed/removed classes propagate. onno-demo keeps its own build files, application.yaml
           # (cloud-tuned), and any src/main/widgets wiring — those are NOT overwritten here.
           rsync -a --delete framework/example/src/main/java/ demo/src/main/java/
-          # Custom widgets (src/main/widgets/*.tsx) — compiled by the su.onno.widgets plugin, which
+          # Custom widgets (src/main/widgets/*.tsx) — compiled by the su.onno.ui plugin, which
           # onno-demo applies (see its build.gradle.kts / settings.gradle.kts). The plugin ships from
           # onno >= 1.6.1, so widgets only build once onno-demo is on such a version (this sync pins it).
           if [ -d framework/example/src/main/widgets ]; then

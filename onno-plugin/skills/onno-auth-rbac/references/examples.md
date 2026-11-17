@@ -83,18 +83,8 @@ URL.
 onno:
   auth:
     mode: resource-server
-    # This property replaces the defaults. Preserve every bootstrap path before adding custom ones.
-    public-paths:
-      - /error
-      - /api/theme
-      - /api/config
-      - /api/branding
-      - /api/auth/login
-      - /api/auth/me
-      - /api/auth/csrf
-      - /api/divkit/login
-      - /api/desktop/ready
-      - /api/desktop/manifest
+    # The framework's bootstrap paths are always public; add only your own.
+    additional-public-paths:
       - /api/health
       - /api/health/**
     oidc:
@@ -135,34 +125,30 @@ public class Order extends DocumentObject {
 `Employee` is readable by managers for pickers/assignment but writable only by admins. `Order` is
 read/write for managers. `ADMIN` can always read/write even if not listed.
 
-## UI Profile Roles
+## UI Roles
 
-```java
-@Component
-public class AdminLayout implements Layout {
-    @Override
-    public String profile() {
-        return "admin";
-    }
+Pages and nav items take `roles` in the app's `main.tsx`; components check with `useHasRole`:
 
-    @Override
-    public void configure(LayoutSpec spec) {
-        spec.roles("ADMIN").priority(100);
-        spec.section("People").catalog(Employee.class);
-    }
-}
+```tsx
+defineApp({
+  pages: [{ path: "/settings", component: SettingsPage, label: "Settings", icon: "settings", roles: ["ADMIN"] }],
+  navigation: [{ title: "People", icon: "users", items: ["/team", { entity: "Employees", roles: ["ADMIN"] }] }],
+});
 ```
 
-This controls nav/persona, not entity authorization. Do both.
+This curates the UI, not entity authorization: an unreadable entity drops out of navigation by
+itself, and the data stays guarded by `@AccessControl`. Do both. Role names are typed from the
+model; a role only commands or configured users use is declared with
+`declare module "@onno/ui" { interface OnnoRoles { SUPPORT: true } }`.
 
 ## Debugging 401 vs 403
 
 - `401` means no valid authenticated identity for the request.
 - `403` means authenticated but not allowed, or—only in cookie modes—CSRF token missing/invalid for
   a mutation. Resource-server mode has CSRF disabled.
-- If login screen breaks after changing `onno.auth.public-paths`, remember the property replaces the
-  defaults. Repeat required defaults such as `/api/config`, `/api/auth/login`, `/api/auth/me`, and
-  `/api/auth/csrf`.
+- If the login screen breaks, check that nothing in front of the app (a custom security chain, a
+  proxy) blocks the framework bootstrap paths (`/api/config`, `/api/branding`, `/api/auth/me`,
+  `/api/auth/csrf`, `/api/ui/login`).
 - If a picker is empty, check target entity `@AccessControl(readRoles=...)`.
 - If MCP can read less than the UI, check the MCP user's roles and whether the client authenticates
   each request.

@@ -1,3 +1,0 @@
-org.springframework.boot.env.EnvironmentPostProcessor=\
-  su.onno.desktop.DesktopEnvironmentPostProcessor,\
-  su.onno.desktop.SessionSchemaEnvironmentPostProcessor

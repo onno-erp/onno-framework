@@ -3,7 +3,7 @@ package su.onno.importer;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.TabularSectionDescriptor;
-import su.onno.ui.DocumentCommandService;
+import su.onno.service.DocumentCommandService;
 
 import org.h2.jdbcx.JdbcDataSource;
 import org.jdbi.v3.core.Jdbi;
@@ -163,8 +163,7 @@ class DocumentCsvImportServiceTest {
 
     private static AttributeDescriptor attr(String name) {
         return new AttributeDescriptor(name, name, name, String.class, 255, false, false, null,
-                0, 0, true, true, true, 0, null, null, null,
-                AttributeDescriptor.Constraints.NONE, false);
+                0, 0, AttributeDescriptor.Constraints.NONE, false);
     }
 
     private static Jdbi jdbi() {

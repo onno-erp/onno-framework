@@ -14,8 +14,8 @@
 | --- | --- | --- |
 | annotation/base model/posting core | `./gradlew :onno-framework:test` | `./gradlew clean check` |
 | starter auto-config | `./gradlew :module:compileJava` | `./gradlew clean check` |
-| UI Java/controller behavior | `./gradlew :onno-ui-starter:test` | `./gradlew clean check` |
-| frontend only | `./gradlew :onno-ui-starter:testFrontend :onno-ui-starter:buildFrontend` | `./gradlew clean check` |
+| UI Java/controller behavior | `./gradlew :onno-web-starter:test` | `./gradlew clean check` |
+| frontend only | `./gradlew :onno-web-starter:testFrontend :onno-web-starter:buildFrontend` | `./gradlew clean check` |
 | config property docs | `./gradlew generateConfigDocs` | `./gradlew checkConfigDocs clean check` |
 | community registry | `./gradlew generateIntegrationsDoc` | `./gradlew clean check` |
 | publication/POM/Javadoc | `./gradlew publishToMavenLocal` | `./gradlew publishToMavenLocal` |

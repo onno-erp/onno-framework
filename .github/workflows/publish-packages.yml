@@ -63,11 +63,11 @@ jobs:
           cache: npm
           cache-dependency-path: |
             docs/package-lock.json
-            onno-ui-starter/src/main/frontend/package-lock.json
+            package-lock.json
 
       - name: Audit frontend dependencies
-        run: npm ci && node ../../../../.github/scripts/npm-audit.mjs
-        working-directory: onno-ui-starter/src/main/frontend
+        run: npm ci && node ../.github/scripts/npm-audit.mjs
+        working-directory: onno-ui
 
       - name: Build and audit documentation
         run: npm ci && npm audit && npm run docs:build
@@ -75,9 +75,6 @@ jobs:
 
       - name: Check
         run: ./gradlew clean check -PreleaseVersion="${{ steps.version.outputs.release_version }}"
-
-      - name: Audit generated widget toolchain
-        run: node .github/scripts/npm-audit.mjs --prefix example/build/onno-widgets
 
       - name: Verify local publication and Javadoc
         env:
@@ -123,12 +120,12 @@ jobs:
         run: ./gradlew publishAllPublicationsToOnnoCloudRepository -PreleaseVersion="${{ steps.version.outputs.release_version }}" --no-configuration-cache
 
       - name: Mirror the widgets Gradle plugin to the onno-cloud module registry
-        # The su.onno.widgets plugin lives in a pluginManagement includeBuild, so the root mirror
+        # The su.onno.ui plugin lives in a pluginManagement includeBuild, so the root mirror
         # step above never reaches it — publish its project explicitly. Consumers with custom widgets
         # (e.g. tenant apps built by onno-cloud in a container with no local checkout) resolve
-        # `id("su.onno.widgets") version <v>` from here. Its publications aren't signed, so no key.
+        # `id("su.onno.ui") version <v>` from here. Its publications aren't signed, so no key.
         env:
           ONNO_REGISTRY_URL: ${{ vars.ONNO_REGISTRY_URL || 'https://cloud.onno.su/modules' }}
           ONNO_REGISTRY_USER: ${{ secrets.ONNO_REGISTRY_USER || 'publisher' }}
           ONNO_REGISTRY_TOKEN: ${{ secrets.ONNO_REGISTRY_TOKEN }}
-        run: ./gradlew :onno-widgets-gradle-plugin:publishAllPublicationsToOnnoCloudRepository -PreleaseVersion="${{ steps.version.outputs.release_version }}" --no-configuration-cache
+        run: ./gradlew :onno-ui-gradle-plugin:publishAllPublicationsToOnnoCloudRepository -PreleaseVersion="${{ steps.version.outputs.release_version }}" --no-configuration-cache

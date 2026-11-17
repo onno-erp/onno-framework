@@ -29,7 +29,7 @@ import java.util.List;
  */
 // A calendar entry, not an accounting event: closing a period must not freeze the schedule.
 @PeriodCloseExempt
-@Document(name = "Schedule Events", title = "Team event", numberPrefix = "EV-", context = "People")
+@Document(name = "Schedule Events", title = "Team events", numberPrefix = "EV-", context = "People")
 @AccessControl(readRoles = {"MANAGER", "ADMIN"}, writeRoles = {"MANAGER", "ADMIN"})
 @Getter
 @Setter

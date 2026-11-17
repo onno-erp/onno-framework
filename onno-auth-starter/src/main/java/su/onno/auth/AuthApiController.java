@@ -10,6 +10,9 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.authentication.AccountStatusUserDetailsChecker;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.RememberMeServices;
@@ -18,14 +21,20 @@ import org.springframework.security.web.context.HttpSessionSecurityContextReposi
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import su.onno.auth.users.AccountUserDetails;
+import su.onno.auth.spi.LoginMethod;
+import su.onno.auth.spi.LoginRejectedException;
 import su.onno.auth.users.UserAccounts;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -39,6 +48,12 @@ class AuthApiController {
     /** Non-null only in database mode; records the last sign-in time. */
     private final UserAccounts userAccounts;
     private final SecurityContextRepository contextRepository = new HttpSessionSecurityContextRepository();
+    /** Non-null only in the password modes: resolves the account an application login method names. */
+    private final UserDetailsService userDetailsService;
+    /** Application-defined login methods ({@link LoginMethod}) by id. */
+    private final Map<String, LoginMethod> loginMethods;
+
+    private static final Pattern METHOD_ID = Pattern.compile("[a-z0-9][a-z0-9-]*");
 
     AuthApiController(AuthenticationManager authenticationManager,
                       RememberMeServices rememberMeServices,
@@ -50,10 +65,36 @@ class AuthApiController {
                       RememberMeServices rememberMeServices,
                       OnnoAuthProperties properties,
                       UserAccounts userAccounts) {
+        this(authenticationManager, rememberMeServices, properties, userAccounts, null, List.of());
+    }
+
+    AuthApiController(AuthenticationManager authenticationManager,
+                      RememberMeServices rememberMeServices,
+                      OnnoAuthProperties properties,
+                      UserAccounts userAccounts,
+                      UserDetailsService userDetailsService,
+                      List<LoginMethod> loginMethods) {
         this.authenticationManager = authenticationManager;
         this.rememberMeServices = rememberMeServices;
         this.properties = properties;
         this.userAccounts = userAccounts;
+        this.userDetailsService = userDetailsService;
+        this.loginMethods = indexLoginMethods(loginMethods);
+    }
+
+    private static Map<String, LoginMethod> indexLoginMethods(List<LoginMethod> methods) {
+        Map<String, LoginMethod> byId = new LinkedHashMap<>();
+        for (LoginMethod method : methods) {
+            String id = method.id();
+            if (id == null || !METHOD_ID.matcher(id).matches()) {
+                throw new IllegalStateException("LoginMethod " + method.getClass().getName()
+                        + " has an invalid id '" + id + "': use lower-case letters, digits and dashes");
+            }
+            if (byId.putIfAbsent(id, method) != null) {
+                throw new IllegalStateException("Two LoginMethod beans share the id '" + id + "'");
+            }
+        }
+        return Map.copyOf(byId);
     }
 
     @GetMapping("/me")
@@ -82,35 +123,113 @@ class AuthApiController {
             Authentication authentication = authenticationManager.authenticate(
                     UsernamePasswordAuthenticationToken.unauthenticated(body.username(), body.password()));
 
-            // This controller performs authentication outside Spring Security's login filters, so
-            // their SessionFixationProtectionStrategy is not invoked for us. Rotate any session
-            // established before authentication before storing the privileged security context.
-            if (request.getSession(false) != null) {
-                request.changeSessionId();
-            }
-
-            SecurityContext context = SecurityContextHolder.createEmptyContext();
-            context.setAuthentication(authentication);
-            SecurityContextHolder.setContext(context);
-            contextRepository.saveContext(context, request, response);
-
-            // Persist the login beyond the session's idle timeout unless the caller opted out. The
-            // remember-me cookie re-authenticates a later request whose session has lapsed, so the
-            // user isn't bounced to the login screen on the next action after a parked tab.
-            boolean remember = body.remember() == null || body.remember();
-            if (remember && rememberMeServices != null) {
-                rememberMeServices.loginSuccess(request, response, authentication);
-            }
-
-            if (userAccounts != null) {
-                userAccounts.recordLogin(authentication.getName());
-            }
-            return ResponseEntity.ok(AuthUser.from(authentication, authMode()));
+            return ResponseEntity.ok(signIn(authentication, body.remember(), request, response));
         } catch (AuthenticationException ex) {
             // Bad credentials, an unknown user and a disabled account all answer the same 401, so
             // the endpoint does not reveal which accounts exist or are disabled.
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
+    }
+
+    /**
+     * The first step of an application {@link LoginMethod} — e.g. send a one-time code. Answers the
+     * method's (non-secret) result, {@code 404} for an unknown method, and {@code 401} with the
+     * method's message when it refuses.
+     */
+    @PostMapping("/login/{method}/challenge")
+    ResponseEntity<Map<String, Object>> challenge(@PathVariable String method,
+                                                  @RequestBody(required = false) Map<String, Object> body) {
+        LoginMethod loginMethod = loginMethods.get(method);
+        if (loginMethod == null) {
+            return ResponseEntity.notFound().build();
+        }
+        if (userDetailsService == null) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+        try {
+            Map<String, Object> result = loginMethod.challenge(body == null ? Map.of() : body);
+            return ResponseEntity.ok(result == null ? Map.of() : result);
+        } catch (LoginRejectedException ex) {
+            return rejected(ex.getMessage());
+        }
+    }
+
+    /**
+     * Signs in through an application {@link LoginMethod}: the method verifies the posted
+     * credentials and names the account; the session is then established exactly as for a
+     * password login. An unknown, disabled or locked account answers the same {@code 401} as wrong
+     * credentials. A {@code remember} boolean in the body opts out of remember-me like
+     * {@link #login}.
+     */
+    @PostMapping("/login/{method}")
+    ResponseEntity<?> loginWith(@PathVariable String method,
+                                @RequestBody(required = false) Map<String, Object> body,
+                                HttpServletRequest request,
+                                HttpServletResponse response) {
+        LoginMethod loginMethod = loginMethods.get(method);
+        if (loginMethod == null) {
+            return ResponseEntity.notFound().build();
+        }
+        // OIDC / resource-server: the identity provider owns sign-in and there is no local account
+        // store to resolve the method's user against.
+        if (userDetailsService == null) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(AuthUser.anonymous(authMode()));
+        }
+        Map<String, Object> credentials = body == null ? Map.of() : body;
+        String username;
+        try {
+            username = loginMethod.authenticate(credentials);
+        } catch (LoginRejectedException ex) {
+            return rejected(ex.getMessage());
+        }
+        if (username == null || username.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        UserDetails user;
+        try {
+            user = userDetailsService.loadUserByUsername(username);
+            new AccountStatusUserDetailsChecker().check(user);
+        } catch (AuthenticationException ex) { // unknown (UsernameNotFound), disabled, locked
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        Authentication authentication = UsernamePasswordAuthenticationToken.authenticated(
+                user, null, user.getAuthorities());
+        Boolean remember = credentials.get("remember") instanceof Boolean b ? b : null;
+        return ResponseEntity.ok(signIn(authentication, remember, request, response));
+    }
+
+    private static ResponseEntity<Map<String, Object>> rejected(String message) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(message == null || message.isBlank() ? Map.of() : Map.of("message", message));
+    }
+
+    /** Stores an authenticated principal as the session's security context, as every login path does. */
+    private AuthUser signIn(Authentication authentication, Boolean rememberRequested,
+                            HttpServletRequest request, HttpServletResponse response) {
+        // This controller performs authentication outside Spring Security's login filters, so
+        // their SessionFixationProtectionStrategy is not invoked for us. Rotate any session
+        // established before authentication before storing the privileged security context.
+        if (request.getSession(false) != null) {
+            request.changeSessionId();
+        }
+
+        SecurityContext context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(authentication);
+        SecurityContextHolder.setContext(context);
+        contextRepository.saveContext(context, request, response);
+
+        // Persist the login beyond the session's idle timeout unless the caller opted out. The
+        // remember-me cookie re-authenticates a later request whose session has lapsed, so the
+        // user isn't bounced to the login screen on the next action after a parked tab.
+        boolean remember = rememberRequested == null || rememberRequested;
+        if (remember && rememberMeServices != null) {
+            rememberMeServices.loginSuccess(request, response, authentication);
+        }
+
+        if (userAccounts != null) {
+            userAccounts.recordLogin(authentication.getName());
+        }
+        return AuthUser.from(authentication, authMode());
     }
 
     @PostMapping("/logout")

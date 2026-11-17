@@ -1,0 +1,14 @@
+{
+  "name": "@onno/print",
+  "version": "2.0.0",
+  "description": "Print-form administration for onno apps (onno-print-starter).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "peerDependencies": {
+    "@onno/ui": "*",
+    "react": "^19.2.7"
+  }
+}

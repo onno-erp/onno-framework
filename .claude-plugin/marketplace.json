@@ -6,13 +6,13 @@
   },
   "metadata": {
     "description": "Agent skills for building ERP applications on the onno-framework.",
-    "version": "0.0.3"
+    "version": "0.0.4"
   },
   "plugins": [
     {
       "name": "onno",
       "source": "./onno-plugin",
-      "description": "Skills for building apps on the onno-framework (catalogs, documents, registers, posting, schema migration, generic UI, MCP, auth/RBAC).",
+      "description": "Skills for building apps on the onno-framework (catalogs, documents, registers, posting, schema migration, commands, the React UI, MCP, auth/RBAC).",
       "skills": [
         "./skills/onno",
         "./skills/onno-modeling",
@@ -23,9 +23,9 @@
         "./skills/onno-rules-lifecycle",
         "./skills/onno-schema-migrations",
         "./skills/onno-ui",
-        "./skills/onno-ui-layout-pages",
-        "./skills/onno-ui-entity-views",
-        "./skills/onno-ui-widgets",
+        "./skills/onno-ui-entities",
+        "./skills/onno-ui-pages",
+        "./skills/onno-commands",
         "./skills/onno-posting",
         "./skills/onno-runtime",
         "./skills/onno-runtime-api",
@@ -33,7 +33,10 @@
         "./skills/onno-mcp",
         "./skills/onno-testing-release",
         "./skills/onno-extensions",
-        "./skills/onno-connectors"
+        "./skills/onno-connectors",
+        "./skills/onno-crm-adopt",
+        "./skills/onno-crm-channel-setup",
+        "./skills/onno-crm-channel-debug"
       ]
     }
   ]

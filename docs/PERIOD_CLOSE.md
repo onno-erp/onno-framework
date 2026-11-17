@@ -71,9 +71,10 @@ and application services:
   restoration (`PostingOrder.CHRONOLOGICAL`) checks every later document it would repost, so a
   backdated change in an open context is rejected when its cascade would recalculate a document
   closed by another context or register. The whole restoration rolls back.
-- **Repository saves** — `OnnoBeforeConvertCallback`, including the soft delete.
-- **The generic command path** — `DocumentCommandService` create/update/delete, which serves the UI,
-  REST, CSV import and MCP.
+- **Saves** — `OnnoBeforeConvertCallback`, including the soft delete, on repository saves and on the
+  generic command path (`DocumentCommandService` create/update/delete serving the UI, REST, CSV
+  import and MCP saves through the same callbacks). A delete of a posted document is checked before
+  it is unposted.
 
 A rejection throws `PeriodClosedException`, naming the closed period and the remediation:
 
@@ -105,14 +106,32 @@ user learns the post would be rejected before trying.
 
 ## Administration UI and API
 
-The UI starter registers a page at `/period-close` showing the closes in force, **Close period** and
-**Reopen period** buttons (manage roles only; an organization picker appears when a document declares
-`@PeriodCloseOrganization`) and the recent audit trail. Navigation is curated, so
-link it from a layout:
+The admin screen is `@onno/ui`'s `<PeriodClose />` component: the closes in force, **Close
+period** and **Reopen period** forms (manage roles only) and the recent audit trail. The web starter
+serves only the API and reports `features.periodClose` in `/api/ui/model` when the service is wired.
+An app registers the component as an ordinary page and links it from navigation:
 
-```java
-spec.section("Finance").page(PeriodClosePage.ROUTE, "Period close", "lock");
+```tsx
+// pages/PeriodClosePage.tsx
+import { Page, PeriodClose } from "@onno/ui";
+
+export function PeriodClosePage() {
+  return (
+    <Page title="Period close">
+      <PeriodClose />
+    </Page>
+  );
+}
+
+// main.tsx
+{ path: "/period-close", component: PeriodClosePage, label: "Period close", icon: Lock,
+  roles: ["ADMIN"], when: (model) => model.features.periodClose === true },
 ```
+
+The forms offer `global`, every bounded `context:<name>` and every accumulation `register:<name>`
+by default. There is no organization picker: pass organization scopes (`organization:<id>`) through
+the `scopes` prop, which replaces the default list. `title` and `auditRows` (the audit rows shown)
+are optional.
 
 ```text
 GET  /api/period-close                 closes in force (+ label, soft/hard state) + canManage (any signed-in user)

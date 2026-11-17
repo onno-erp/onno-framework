@@ -6,8 +6,8 @@
      `./gradlew generateConfigDocs`; `./gradlew check` fails if this file drifts. -->
 
 Every `onno.*` configuration property, by module, with type and default. Each integration starter is
-auto-configured on the classpath and gated by its own `onno.<module>.enabled` flag (default `true`,
-except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail.*`,
+auto-configured on the classpath and gated by its own `onno.<module>.enabled` flag (default `true`).
+Standard Spring keys (`spring.datasource.*`, `spring.mail.*`,
 `spring.security.oauth2.client.*`) are used where noted and are not repeated here.
 
 > **You don't edit the tables below.** They are generated from each starter's
@@ -16,10 +16,18 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 > `META-INF/additional-spring-configuration-metadata.json`, then run `./gradlew generateConfigDocs`.
 > Editorial prose lives in `docs/_config/`.
 
-## Core — `onno-framework-starter` (`OnnoProperties`, prefix `onno`)
+## Core — `onno-framework-starter` (`OnnoProperties` prefix `onno`, `WebProperties` prefix `onno.web`, `RecordAccessProperties` prefix `onno.access.records`)
 
 | Property | Type | Default | Meaning |
 | --- | --- | --- | --- |
+| `onno.access.records.create-indexes` | `Boolean` | `true` | Create an index for every column a record policy scopes by (if missing), so a scoped list never degrades to a full table scan. Skipped when `onno.schema.mode` does not resolve to `apply` (blank counts as `apply`); the statements are then logged as a warning. On PostgreSQL the indexes are built in the background with `CREATE INDEX CONCURRENTLY`, so neither startup nor writes wait, and an index left invalid by an interrupted build is rebuilt; other databases build them at startup. |
+| `onno.access.records.log-denials` | `Boolean` | `false` | Log every request denied because the record lies outside the caller's record scope (the 404s that are indistinguishable from a missing record) at DEBUG on `su.onno.service.RecordAccess`, with the subject, entity and id — for troubleshooting a policy. |
+| `onno.cluster.channel` | `String` | `onno_cluster_events` | Postgres `LISTEN`/`NOTIFY` channel carrying cross-node entity-change notices. Must be a bare identifier (`[A-Za-z0-9_]`); an invalid value falls back to the default. |
+| `onno.cluster.enabled` | `Boolean` | `true` | Master switch for the cross-node event bus. When `false`, a local-only no-op bus is used and live-UI (SSE) updates do not propagate between nodes. |
+| `onno.cluster.max-payload-bytes` | `Integer` | `7000` | Soft cap (bytes) kept below Postgres's 8000-byte `NOTIFY` limit. A larger event first drops its natural key, then degrades to a coarse "something changed" notice rather than failing. |
+| `onno.cluster.node-id` | `String` | — | Stable id identifying this node when filtering out its own `NOTIFY` echoes. Defaults to a random per-JVM UUID; set it only if you want a deterministic id in logs. |
+| `onno.cluster.poll-timeout` | `Duration` | `5s` | How long the listener blocks waiting for notifications before looping to re-check for shutdown. Bounds shutdown latency; does not affect delivery speed. |
+| `onno.cluster.reconnect-backoff-max` | `Duration` | `30s` | Upper bound on the exponential backoff between reconnect attempts after the listener drops. |
 | `onno.history.enabled` | `Boolean` | `true` | Whether field-level change history is recorded for catalogs and documents that opt in with `@Catalog(history = true)` / `@Document(history = true)`. Entities that have not opted in are never recorded. Set to `false` to stop recording everywhere (the `onno_record_history` table is then not created and the history panel and `/api/history` endpoint disappear) without touching the model. |
 | `onno.period-close.enabled` | `Boolean` | `true` | Enables period close: documents dated on or before a closed date cannot be created, changed, deleted, posted, reposted or unposted. With no period closed nothing is rejected. Set to `false` to remove the service and every check. |
 | `onno.period-close.manage-roles` | `List<String>` | — | Roles allowed to close and reopen periods through the UI page and `/api/period-close`. `ADMIN` is always allowed. |
@@ -30,13 +38,17 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 | `onno.schema.mode` | `String` | `apply` | What to do about differences between the metadata model and the database at startup: `apply` (default — execute safe changes, report destructive ones), `plan` (log the plan, change nothing), `validate` (fail startup on any difference or unapplied migration), or `off`. |
 | `onno.schema.search-indexes` | `String` | `auto` | Which PostgreSQL trigram (`pg_trgm`) indexes back the list/ref-picker substring search: `auto` (default — the system code/description/number columns plus every attribute declared `@Attribute(searchIndex = true)`) or `off` (none). Indexes the framework owns but no longer declares are dropped, and missing ones are built with `CREATE INDEX CONCURRENTLY` on a background thread after startup. Search still covers every String attribute; this only decides which columns are index-backed. |
 | `onno.security.secret-key` | `String` | — | Encryption key for `@Attribute(secret = true)` values. Any passphrase works (it is hashed to a 256-bit AES key). Required only when an entity declares a secret attribute; supply it from an environment variable, never hard-code it. |
+| `onno.web.batch.parallelism` | `Integer` | `4` | Maximum number of records a batch resolves in parallel per request. Each id runs its own transaction on a worker thread, so keep this comfortably below the datasource's `maximum-pool-size` or the fan-out will starve the JDBC pool. `1` runs the set sequentially. Parallel document deletes reverse postings concurrently, which can contend on the same accumulation-register rows — lower this (or set `1`) if you hit lock timeouts on heavily-shared registers. |
+| `onno.web.dev-mode` | `Boolean` | — | Live-reload dev mode. When on, the `ready` ack of the `/api/events` SSE stream marks the server as a development instance, and the web client answers a server restart (a changed `bootId` across a stream reconnect) with a full page reload — so a devtools restart cycle ends with the browser refreshing itself: save a file, see the change. Unset (the default) auto-detects: dev mode turns on exactly when `spring-boot-devtools` is on the classpath — present under `bootRun`/exploded-classpath runs, absent from the production boot jar — so a plain deployment never reloads a user's page on redeploy. Set explicitly to force it either way (e.g. `true` for a hosted preview instance that rebuilds without devtools). |
+| `onno.web.dev-reload-trigger` | `String` | `.onno-reload` | The dev-mode reload trigger file, resolved against the working directory. While dev mode is on, touching this file (`touch .onno-reload`) broadcasts a `reload` event over the `/api/events` SSE stream and every connected browser does a full refresh — an explicit "refresh now" for scripts and agents, with no HTTP endpoint or CSRF dance. Ignored outside dev mode. |
+| `onno.web.enabled` | `Boolean` | `true` | Master switch for the web starter: the REST API, the event stream and the served UI. The service layer it calls (query/command services, access control) stays on, so MCP, import and application code keep working. Also gated on a `MetadataRegistry` bean being present. |
+| `onno.web.list.page-size` | `Integer` | `50` | Default rows returned per keyset window. Clamped to the server ceiling (500). |
+| `onno.web.read-only` | `Boolean` | `false` | When true, the application accepts no writes: every create, update, delete, post/unpost and command — over REST, MCP and starter endpoints alike — is rejected with `403`, and the model reports no write rights so the UI renders read-only. |
 
-## UI — `onno-ui-starter` (`UiProperties` prefix `onno.ui`, `MediaProperties` prefix `onno.media`, `CommentProperties` prefix `onno.comments`)
+## Web — `onno-web-starter` (`UiProperties` prefix `onno.ui`, `UpdateProperties` prefix `onno.web.update-check`, `MediaProperties` prefix `onno.media`, `CommentProperties` prefix `onno.comments`)
 
 | Property | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `onno.access.records.create-indexes` | `Boolean` | `true` | Create an index for every column a record policy scopes by (if missing), so a scoped list never degrades to a full table scan. Skipped when `onno.schema.mode` does not resolve to `apply` (blank counts as `apply`); the statements are then logged as a warning. On PostgreSQL the indexes are built in the background with `CREATE INDEX CONCURRENTLY`, so neither startup nor writes wait, and an index left invalid by an interrupted build is rebuilt; other databases build them at startup. |
-| `onno.access.records.log-denials` | `Boolean` | `false` | Log every request denied because the record lies outside the caller's record scope (the 404s that are indistinguishable from a missing record) at DEBUG on `su.onno.ui.RecordAccess`, with the subject, entity and id — for troubleshooting a policy. |
 | `onno.comments.enabled` | `Boolean` | `true` | Whether the comments endpoint, its storage table, and the detail-page comments panel are wired at all. Turn it off to drop the feature from every entity without touching the model. |
 | `onno.comments.max-length` | `Integer` | `4000` | Largest comment body accepted, in characters. The server rejects a longer body with 422; the compose box mirrors the limit client-side. Defaults to 4000. |
 | `onno.comments.mentions.enabled` | `Boolean` | `true` | Whether `@`-mentions are parsed, resolved and offered in the compose typeahead. Turn it off to keep plain-text comments without touching `onno.comments.enabled`; existing mention tokens then degrade to their plain label text. |
@@ -53,26 +65,27 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 | `onno.notifications.page-size` | `Integer` | `100` | Rows fetched per timeline window (the bell panel scrolls these keyset windows). Defaults to 100; the shared hard ceiling is 500. |
 | `onno.notifications.replies.enabled` | `Boolean` | `true` | Whether replying to a user's comment raises a notification for that user. |
 | `onno.notifications.retention-days` | `Integer` | `90` | How many days a <em>read</em> notification is kept before the daily retention sweep deletes it. Unread notifications are never pruned. `0` disables pruning (keep read history forever). Defaults to 90. |
-| `onno.ui.batch.parallelism` | `Integer` | `4` | Maximum number of records a bulk action resolves in parallel per request. Each id runs its own transaction on a worker thread, so keep this comfortably below the datasource's `maximum-pool-size` or the fan-out will starve the JDBC pool. `1` forces the old sequential behaviour. Note that parallel document deletes reverse postings concurrently, which can contend on the same accumulation-register rows — lower this (or set `1`) if you hit lock timeouts on heavily-shared registers. |
-| `onno.ui.dashboard.widget-parallelism` | `Integer` | `8` | Maximum number of widget aggregates resolved in parallel per dashboard render. Bounded so a wide dashboard can't exhaust the JDBC connection pool — keep it comfortably below the datasource's `maximum-pool-size`. `1` forces the old sequential behaviour. |
-| `onno.ui.dev-mode` | `Boolean` | — | Live-reload dev mode. When on, the `ready` ack of the `/api/events` SSE stream marks the server as a development instance, and the web client answers a server restart (a changed `bootId` across a stream reconnect) with a full page reload — so a devtools restart cycle (recompile → context restart → schema re-diff → layout/page rebuild) ends with the browser refreshing itself: save a file, see the change. Unset (the default) auto-detects: dev mode turns on exactly when `spring-boot-devtools` is on the classpath — present under `bootRun`/exploded-classpath runs, absent from the production boot jar — so a plain deployment never reloads a user's page on redeploy. Set explicitly to force it either way (e.g. `true` for a hosted preview instance that rebuilds without devtools). |
-| `onno.ui.dev-reload-trigger` | `String` | `.onno-reload` | The dev-mode reload trigger file, resolved against the working directory. While dev mode is on, touching this file (`touch .onno-reload`) broadcasts a `reload` event over the `/api/events` SSE stream and every connected browser does a full refresh — an explicit "refresh now" for scripts and agents, with no HTTP endpoint or CSRF dance. Complements the automatic reload a devtools restart already performs. Ignored outside dev mode. |
-| `onno.ui.enabled` | `Boolean` | `true` | Master switch for the UI starter. Also gated on a `MetadataRegistry` bean being present. |
-| `onno.ui.list.page-size` | `Integer` | `50` | Default rows fetched per keyset window. Clamped to the server ceiling (500). |
-| `onno.ui.locale` | `String` | `en` | The chrome language: a built-in message bundle to base every chrome string on, so a deployment localizes the whole shell with one line instead of a full `onno.ui.messages` map. Resolution layers three levels, later wins: the English DEFAULTS → the `locale` bundle → any explicit getMessages per-key override. `"en"` (the default) uses the built-in English defaults with no bundle file. Other values load `classpath:/su/onno/ui/messages/messages-<locale>.properties` (a UTF-8 properties file); onno ships `ru`. An app can add its own locale — or override a shipped one — by putting `messages-<locale>.properties` on the classpath at `onno/messages/` (that location wins over the bundled file). A missing bundle is a no-op (falls back to the English defaults). |
+| `onno.ui.branding.app-name` | `String` | — | App name shown in the shell and on the login screen; blank uses "onno". |
+| `onno.ui.branding.dark` | `Map<String,String>` | — | Dark-theme color overrides, same keys as `light`. |
+| `onno.ui.branding.favicon-url` | `String` | — | Favicon URL. |
+| `onno.ui.branding.light` | `Map<String,String>` | — | Light-theme color overrides (page, surface, border, text, muted, primary, primary-soft), as hex. |
+| `onno.ui.branding.logo-height` | `Integer` | — | Fixed logo height in px. |
+| `onno.ui.branding.logo-url` | `String` | — | Logo image URL for the light theme. |
+| `onno.ui.branding.logo-url-dark` | `String` | — | Logo image URL for the dark theme; blank reuses the light logo. |
+| `onno.ui.branding.logo-width` | `Integer` | — | Fixed logo width in px; unset keeps the intrinsic aspect ratio. |
+| `onno.ui.branding.mark-framed` | `Boolean` | `true` | Whether the compact mark sits in a framed tile. |
+| `onno.ui.branding.mark-url` | `String` | — | Compact square mark for the collapsed navigation rail (light theme). |
+| `onno.ui.branding.mark-url-dark` | `String` | — | Compact mark for the dark theme; blank reuses the light mark. |
+| `onno.ui.locale` | `String` | `en` | The chrome language: a built-in message bundle to base every chrome string on, so a deployment localizes the whole shell with one line instead of a full `onno.ui.messages` map. Resolution layers three levels, later wins: the English DEFAULTS → the `locale` bundle → any explicit getMessages per-key override. `"en"` (the default) uses the built-in English defaults with no bundle file. Other values load `classpath:/su/onno/web/messages/messages-<locale>.properties` (a UTF-8 properties file); onno ships `ru`. An app can add its own locale — or override a shipped one — by putting `messages-<locale>.properties` on the classpath at `onno/messages/` (that location wins over the bundled file). A missing bundle is a no-op (falls back to the English defaults). |
 | `onno.ui.login.demo-accounts` | `List<DemoAccount>` | — | One-tap sign-in shortcuts shown on the login screen; empty (default) shows none. |
-| `onno.ui.messages` | `Map<String,String>` | — | Overrides for the framework's own chrome strings — action buttons, confirmation dialogs, the login screen, empty/loading states, and client-side validation messages. Keys come from DEFAULTS (e.g. `login.title`, `action.new`); each value replaces the English default. The resolved map renders the server-side DivKit chrome and is handed to the web client via `GET /api/config`, so a one-language deployment can fully localize the shell without patching framework code. Because the keys contain dots, quote them in YAML so they bind as literal map keys (e.g. `"action.new": "Новый"` nested under `onno.ui.messages`); in a properties file use bracket notation instead (`onno.ui.messages[action.new]=Новый`). NOTE: the key set is fixed. Only keys present in DEFAULTS are ever read — an unknown key (a guessed `form.save` / `list.new`) is stored but never consumed, so it silently does nothing. The authoritative list lives in `UiMessages.DEFAULTS` (real keys are `action.save` — whose default is "Write" — `action.new`, `list.search`, …). Grep that class before writing a localization pass. |
-| `onno.ui.path` | `String` | `/ui` | URL prefix the SPA is mounted under. Baked into the served `index.html` (and returned as `basePath` from `GET /api/config`) so the web client adopts it as its router basename and deep-link prefix; the bare root redirects here. Default `/ui`; set to `/` to mount the app at the web root. |
-| `onno.ui.plugins.enabled` | `Boolean` | `true` | Whether to scan for, serve, and advertise custom widget plugins. |
-| `onno.ui.plugins.extra-urls` | `List<String>` | — | Extra absolute plugin-module URLs to load in addition to the classpath ones — e.g. a CDN-hosted widget or one served by another app. Appended verbatim to `pluginScripts`. |
-| `onno.ui.plugins.location` | `String` | `classpath*:/onno-plugins/` | Classpath location holding the compiled plugin modules (`*.js`). The Gradle plugin emits here; change it only if you stage plugin bundles somewhere non-standard. Must be a `classpath:`/`classpath*:` location ending in `/`. |
-| `onno.ui.read-only` | `Boolean` | `false` | When true, every mutating REST call is rejected with `403 UI is in read-only mode`. |
+| `onno.ui.messages` | `Map<String,String>` | — | Overrides for the framework's own chrome strings — action buttons, confirmation dialogs, the login screen, empty/loading states, and client-side validation messages. Keys come from DEFAULTS (e.g. `login.title`, `action.new`); each value replaces the English default. The resolved map labels the server-built descriptors and is handed to the web client via `GET /api/config`, so a one-language deployment can fully localize the shell without patching framework code. Because the keys contain dots, quote them in YAML so they bind as literal map keys (e.g. `"action.new": "Новый"` nested under `onno.ui.messages`); in a properties file use bracket notation instead (`onno.ui.messages[action.new]=Новый`). NOTE: the key set is fixed. Only keys present in DEFAULTS are ever read — an unknown key (a guessed `form.save` / `list.new`) is stored but never consumed, so it silently does nothing. The authoritative list lives in `UiMessages.DEFAULTS` (real keys are `action.save` — whose default is "Write" — `action.new`, `list.search`, …). Grep that class before writing a localization pass. |
+| `onno.ui.path` | `String` | `/ui` | URL prefix the SPA is mounted under. Baked into the served `index.html` so the web client adopts it as its router basename and deep-link prefix; the bare root redirects here. Default `/ui`; set to `/` to mount the app at the web root. |
 | `onno.ui.theme` | `Map<String,String>` | — | Free-form theme key/values served verbatim from `GET /api/theme`. |
 | `onno.ui.time-zone` | `String` | `` | The display time zone for `Instant` fields: an IANA zone id such as `Europe/Moscow`. An `Instant` is stored and transported as an absolute UTC moment; the web client renders and edits it as wall time in this zone, so every viewer of a single-site deployment sees the same clock. Empty (the default) uses each viewer's browser zone. `LocalDate`, `LocalDateTime` and `LocalTime` fields are zone-less wall values and are never shifted. An unknown zone id fails startup. |
-| `onno.ui.update-check.enabled` | `Boolean` | `true` | Master switch. When false no outbound call is ever made and the notice never appears. |
-| `onno.ui.update-check.initial-delay` | `Duration` | `1m` | Delay before the first check, so startup is never blocked on a network round-trip. |
-| `onno.ui.update-check.interval` | `Duration` | `24h` | How often to poll after the first check. Floored at 60s. |
-| `onno.ui.update-check.url` | `String` | `https://cloud.onno.su/releases/v1/latest` | The onno-cloud endpoint that announces the latest release (see onno-cloud's ReleaseController). |
+| `onno.web.update-check.enabled` | `Boolean` | `true` | Master switch. When false no outbound call is ever made and the notice never appears. |
+| `onno.web.update-check.initial-delay` | `Duration` | `1m` | Delay before the first check, so startup is never blocked on a network round-trip. |
+| `onno.web.update-check.interval` | `Duration` | `24h` | How often to poll after the first check. Floored at 60s. |
+| `onno.web.update-check.url` | `String` | `https://cloud.onno.su/releases/v1/latest` | The onno-cloud endpoint that announces the latest release (see onno-cloud's ReleaseController). |
 
 ## Auth — `onno-auth-starter` (`OnnoAuthProperties`, prefix `onno.auth`)
 
@@ -97,7 +110,7 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 | `onno.auth.oidc.roles.prefix` | `String` | `ROLE_` | Prefix prepended to each mapped role so `hasRole(..)` works (Spring convention). |
 | `onno.auth.oidc.roles.realm-roles` | `Boolean` | `true` | Keycloak preset: map realm-level roles (`realm_access.roles`). |
 | `onno.auth.oidc.roles.sources` | `List<RoleSource>` | — | Explicit role sources. When empty, the Provider preset supplies defaults. Each source names a claim and the shape of its value. |
-| `onno.auth.public-paths` | `List<String>` | — | Public API/config endpoints permitted without authentication so the login screen can render and authenticate. The SPA shell itself (everything outside `/api/**`) is public by default; only `/api/**` requires a session. Legacy configuration: custom values are combined with the mandatory framework paths. Prefer `onno.auth.additional-public-paths` for new configurations. The defaults are: `/error`, `/api/theme`, `/api/config`, `/api/branding`, `/api/auth/login`, `/api/auth/me`, `/api/auth/csrf`, `/api/divkit/login`, `/api/desktop/ready`, `/api/desktop/manifest`. |
+| `onno.auth.public-paths` | `List<String>` | — | Public API/config endpoints permitted without authentication so the login screen can render and authenticate. The SPA shell itself (everything outside `/api/**`) is public by default; only `/api/**` requires a session. Legacy configuration: custom values are combined with the mandatory framework paths. Prefer `onno.auth.additional-public-paths` for new configurations. The defaults are: `/error`, `/api/theme`, `/api/config`, `/api/branding`, `/api/auth/login`, `/api/auth/login/{method}` and `/api/auth/login/{method}/challenge` (application login methods), `/api/auth/me`, `/api/auth/csrf`, `/api/ui/login`. |
 | `onno.auth.session.remember-me.allow-ephemeral-key` | `Boolean` | `false` | When key is blank, allow the app to start anyway with a built-in non-secret dev key. Off by default so a multi-node deployment fails fast instead of silently signing cookies a load-balanced peer can't verify. Turn on only for single-node/dev — never with a real secret expectation. |
 | `onno.auth.session.remember-me.enabled` | `Boolean` | `true` | Whether to issue and honour the persistent remember-me cookie. |
 | `onno.auth.session.remember-me.key` | `String` | — | Secret that signs the remember-me cookie. Set a stable, non-guessable value in production so cookies survive restarts, can't be forged, and validate across every node of a horizontally-scaled deployment. When blank, startup fails fast unless allowEphemeralKey is set (a blank key would otherwise sign cookies with a secret that peer nodes reject, breaking login under a load balancer). |
@@ -136,62 +149,12 @@ OIDC and resource-server modes also read the standard `spring.security.oauth2.cl
 | `onno.print.batch.max-records` | `Integer` | `200` | Most records one batch print request may include; larger selections are rejected. |
 | `onno.print.enabled` | `Boolean` | `true` | Master switch for print forms. When false, no PrintService, print endpoints or record "Print" actions are registered, even if PrintForm beans exist. |
 | `onno.print.pdf.gotenberg.timeout` | `Duration` | `60s` | Timeout of one Gotenberg conversion request. |
-| `onno.print.pdf.gotenberg.url` | `URI` | — | Base URL of a Gotenberg service, e.g. http://localhost:3000. Setting it enables PDF output. |
+| `onno.print.pdf.gotenberg.url` | `URI` | — | Base URL of a Gotenberg service (for a local one, port 3000 on localhost). Setting it enables PDF output. |
 | `onno.print.pdf.libreoffice.command` | `String` | — | The soffice executable (a name on the PATH or an absolute path, e.g. /Applications/LibreOffice.app/Contents/MacOS/soffice). Setting it enables PDF output. |
 | `onno.print.pdf.libreoffice.timeout` | `Duration` | `120s` | Timeout of one LibreOffice conversion. |
 | `onno.print.templates.enabled` | `Boolean` | `true` | Whether admins may upload replacement templates (stored in the onno_print_templates table) that take precedence over the built-in ones. |
 | `onno.print.templates.manage-roles` | `List<String>` | — | Roles allowed to list, download, upload and reset print templates. ADMIN always passes. |
 | `onno.print.templates.max-size` | `DataSize` | `10MB` | Largest accepted uploaded template. |
-
-## Cluster — `onno-cluster-starter` (`OnnoClusterProperties`, prefix `onno.cluster`)
-
-| Property | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `onno.cluster.channel` | `String` | `onno_cluster_events` | Postgres `LISTEN`/`NOTIFY` channel carrying cross-node entity-change notices. Must be a bare identifier (`[A-Za-z0-9_]`); an invalid value falls back to the default. |
-| `onno.cluster.enabled` | `Boolean` | `true` | Master switch for the cross-node event bus. When `false`, a local-only no-op bus is used and live-UI (SSE) updates do not propagate between nodes. |
-| `onno.cluster.max-payload-bytes` | `Integer` | `7000` | Soft cap (bytes) kept below Postgres's 8000-byte `NOTIFY` limit. A larger event first drops its natural key, then degrades to a coarse "something changed" notice rather than failing. |
-| `onno.cluster.node-id` | `String` | — | Stable id identifying this node when filtering out its own `NOTIFY` echoes. Defaults to a random per-JVM UUID; set it only if you want a deterministic id in logs. |
-| `onno.cluster.poll-timeout` | `Duration` | `5s` | How long the listener blocks waiting for notifications before looping to re-check for shutdown. Bounds shutdown latency; does not affect delivery speed. |
-| `onno.cluster.reconnect-backoff-max` | `Duration` | `30s` | Upper bound on the exponential backoff between reconnect attempts after the listener drops. |
-
-## Kafka — `onno-kafka-starter` (`OnnoKafkaProperties`, prefix `onno.kafka`)
-
-| Property | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `onno.kafka.enabled` | `Boolean` | `true` | Master switch for the outbound relay beans. |
-| `onno.kafka.inbound.auto-offset-reset` | `String` | `latest` | Kafka offset reset policy applied when no committed offset exists (`latest` / `earliest`). |
-| `onno.kafka.inbound.concurrency` | `Integer` | `1` | Listener container concurrency (number of consumer threads). |
-| `onno.kafka.inbound.dead-letter-topic` | `String` | — | When set, messages that fail handling (or are malformed) are published here instead of being redelivered. |
-| `onno.kafka.inbound.enabled` | `Boolean` | `false` | Opt-in switch for the inbound consumer. Off by default. |
-| `onno.kafka.inbound.group-id` | `String` | — | Consumer group id. When blank, defaults to `<serviceName>-inbound`. |
-| `onno.kafka.inbound.topics` | `List<String>` | — | Topics to consume. When empty, defaults to the outbound `onno.kafka.topic`. |
-| `onno.kafka.relay-batch-size` | `Integer` | `100` | Maximum number of outbox rows drained per `relayPending()` call. |
-| `onno.kafka.remote-services` | `Map<String,String>` | — | Service name to base-URL map used by `RemoteRefClient` to resolve cross-service refs. |
-| `onno.kafka.service-name` | `String` | `onno-service` | CloudEvent `source` for emitted events; also the prefix for the default inbound group id. |
-| `onno.kafka.topic` | `String` | `onno.domain-events` | Outbound topic events are published to (and the inbound default when no inbound topics are set). |
-
-The outbound relay is **not** auto-scheduled — call `OutboxRelay.relayPending()` from your own
-`@Scheduled` bean. Requires a `KafkaTemplate` and an `OutboxWriter` (from the core).
-
-## onno-observability-starter
-
-| Property | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `onno.telemetry.allowed-dimensions` | `Set<String>` | — | Low-cardinality dimension keys allowed to leave the application. |
-| `onno.telemetry.browser-sample-rate` | `Double` | `1` | Fraction of browser sessions captured, from 0 through 1. |
-| `onno.telemetry.enabled` | `Boolean` | `false` | Master switch. Disabled by default; onno-cloud enables it through injected environment variables. |
-
-## Desktop — `onno-desktop-starter` (`DesktopProperties`, prefix `onno.desktop`)
-
-| Property | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `onno.desktop.enabled` | `Boolean` | `true` | Whether the desktop endpoints and data relocation are active. |
-| `onno.desktop.home` | `String` | `` | Per-user data home the shell passes at launch (via `--onno.desktop.home`). When set, an embedded H2 file datasource is relocated under `<home>/data` so the database lives in the OS app-data directory rather than next to the binary. Left unset during `bootRun`/dev, so normal runs are untouched. |
-
-Window appearance is configured in code via a `DesktopApp` bean (`DesktopSpec`), not properties.
-The `onno-desktop-gradle-plugin` is configured through the `onnoDesktop { … }` Gradle extension
-(`productName`, `identifier`, `bundleTargets`, `iconSource`, macOS signing) — see
-[onno-desktop-starter/README.md](../onno-desktop-starter/README.md).
 
 ## onno-crm-channels-starter
 

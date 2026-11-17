@@ -3,7 +3,7 @@ package su.onno.crm.service;
 import java.util.*;
 import java.util.function.Function;
 import su.onno.model.CatalogObject;
-import su.onno.ui.CurrentUserResolver.CurrentUser;
+import su.onno.service.CurrentUserResolver.CurrentUser;
 
 /** Optional assignment capability backed by the host's employee/identity catalog. */
 public record CrmAgentBinding<T extends CatalogObject>(CrmCatalogBinding<T> catalog,

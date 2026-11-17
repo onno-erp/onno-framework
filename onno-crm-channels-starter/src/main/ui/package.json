@@ -1,0 +1,15 @@
+{
+  "name": "@onno/crm-channels",
+  "version": "2.0.0",
+  "description": "Channel setup screens for the onno CRM (onno-crm-channels-starter).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "peerDependencies": {
+    "@onno/ui": "*",
+    "react": "^19.2.7",
+    "@onno/crm": "*"
+  }
+}

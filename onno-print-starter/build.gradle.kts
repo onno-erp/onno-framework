@@ -1,13 +1,11 @@
 plugins {
     `java-library`
-    // Compiles src/main/widgets/*.tsx (the printTemplates admin widget) into this starter's jar.
-    id("su.onno.widgets")
 }
 
 dependencies {
     api(project(":onno-framework"))
     // api: PrintController and the contributor beans expose UI-starter types in public signatures (#464).
-    api(project(":onno-ui-starter"))
+    api(project(":onno-web-starter"))
 
     api(libs.poi.ooxml)
 
@@ -26,6 +24,3 @@ dependencies {
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 
-onnoWidgets {
-    npmDependencies.put("lucide-react", "^0.469.0")
-}

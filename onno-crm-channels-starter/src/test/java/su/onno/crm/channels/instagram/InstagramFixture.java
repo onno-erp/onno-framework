@@ -18,7 +18,7 @@ import su.onno.crm.channels.CrmChannelsProperties;
 import su.onno.crm.domain.*;
 import su.onno.crm.repository.*;
 import su.onno.crm.service.*;
-import su.onno.ui.UiMessages;
+import su.onno.web.UiMessages;
 
 /**
  * An InstagramBridge over an in-memory database and in-memory conversations, talking to a fake

@@ -9,8 +9,9 @@ import org.springframework.util.LinkedMultiValueMap;
 import su.onno.crm.domain.Conversation;
 import su.onno.crm.service.*;
 import su.onno.metadata.CatalogDescriptor;
-import su.onno.ui.*;
-import su.onno.ui.comments.*;
+import su.onno.web.*;
+import su.onno.service.*;
+import su.onno.web.comments.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -23,8 +24,7 @@ class CrmInboxReadPerformanceTest {
     final Map<UUID,String> names=new HashMap<>();
     CrmInboxWorkspaceController controller;
     @BeforeEach void setup() {
-        var workspace=new CrmInboxWorkspace("support","Support",Set.of("READER"),c->true)
-            .list(s->s.filter(Conversation::getChannel).options(Map.of("WILDBERRIES","WB","TELEGRAM","TG")));
+        var workspace=new CrmInboxWorkspace("support","Support",Set.of("READER"),c->true);
         when(workspaces.requireWorkspace("support",principal,false)).thenReturn(workspace);
         when(workspaces.members(workspace)).thenReturn(members);
         when(workspaces.canAccess(any(),eq(principal),eq(false))).thenReturn(true);
@@ -35,15 +35,14 @@ class CrmInboxReadPerformanceTest {
             List<Conversation> candidates=invocation.getArgument(0);
             return candidates.stream().filter(c->workspaces.canAccess(c,principal,false)).toList();
         });
-        when(workspaces.config(workspace)).thenReturn(new CrmWorkspaceService.Config(List.of(),List.of(),"","","",true,true,true,true,true,true));
-        var descriptor=mock(CatalogDescriptor.class);when(descriptor.attributes()).thenReturn(List.of());
+        when(workspaces.config(workspace)).thenReturn(new CrmWorkspaceService.Config(Set.of(),List.of()));
+        var descriptor=new su.onno.metadata.MetadataScanner(new su.onno.metadata.DefaultNamingStrategy()).scan(Conversation.class);
         when(catalogs.forClass(Conversation.class)).thenReturn(descriptor);
         when(catalogs.get(any(),eq(descriptor),any())).thenReturn(Map.of());
-        var views=mock(UiViewResolver.class);var view=mock(ResolvedListView.class);
-        when(views.catalogList(eq(descriptor),any(ListSpec.class))).thenReturn(view);
-        when(view.title()).thenReturn("Inbox");when(view.columns()).thenReturn(List.of());when(view.filters()).thenReturn(List.of());
+        var views=mock(DefaultListViews.class);
+        when(views.catalogList(descriptor)).thenReturn(new DefaultListView("Inbox",List.of(),List.of(),50));
         controller=new CrmInboxWorkspaceController(workspaces,catalogs,mock(CurrentUserResolver.class),mock(CommentService.class),
-            mock(CommentAuthorAvatars.class),mock(AccessSubjectResolver.class),contacts,new org.springframework.beans.factory.support.StaticListableBeanFactory().getBeanProvider(org.springframework.core.ResolvableType.forClassWithGenerics(CrmAgentBinding.class, org.springframework.core.ResolvableType.forClass(Object.class))),mock(UiAccessService.class));
+            mock(CommentAuthorAvatars.class),mock(AccessSubjectResolver.class),contacts,new org.springframework.beans.factory.support.StaticListableBeanFactory().getBeanProvider(org.springframework.core.ResolvableType.forClassWithGenerics(CrmAgentBinding.class, org.springframework.core.ResolvableType.forClass(Object.class))),mock(AccessService.class));
         var dataSource=new org.h2.jdbcx.JdbcDataSource();dataSource.setURL("jdbc:h2:mem:"+UUID.randomUUID()+";DB_CLOSE_DELAY=-1");
         var metadata=new su.onno.metadata.MetadataRegistry();var scanner=new su.onno.metadata.MetadataScanner(new su.onno.metadata.DefaultNamingStrategy());
         metadata.registerCatalog(scanner.scan(Conversation.class));metadata.registerCatalog(scanner.scan(su.onno.crm.domain.ConversationMessage.class));

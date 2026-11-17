@@ -9,7 +9,7 @@ implementation("su.onno:onno-print-starter:$onnoVersion")
 ```
 
 The starter is on whenever it is on the classpath. Set `onno.print.enabled=false` to turn it off.
-It needs `onno-ui-starter`, which provides the record surface, access checks and download scheme.
+It needs `onno-web-starter`, which provides the record surface, access checks and download scheme.
 
 ## Declaring a form
 
@@ -27,7 +27,6 @@ public class OrderInvoicePrint extends PrintForm<Order> {
     protected void configure(PrintFormSpec spec) {
         spec.label("Invoice (Word)")           // menu label (defaults to the key)
             .template("classpath:/print/invoice.docx") // default: classpath:/print/{key}.docx, then .xlsx
-            .icon("file-text")                 // lucide icon (default "printer")
             .roles("MANAGER")                  // optional; ADMIN always passes
             .locale(Locale.GERMANY)            // Word number/date patterns (default: JVM locale)
             .pdf();                            // optional: download as PDF by default (needs a converter)
@@ -101,7 +100,7 @@ default output. An unsupported format, or `pdf` with no converter configured, is
 `kind` is `catalogs` or `documents`, and `name` is the entity's route name (for example `Orders`).
 Both endpoints require read access to the entity and to the record under any `RecordAccessPolicy`:
 a record outside the caller's scope is a `404`. A form with `roles(...)` returns `403` to other
-callers. Printing is a read, so it works in `onno.ui.read-only` mode too; template upload and reset
+callers. Printing is a read, so it works in `onno.web.read-only` mode too; template upload and reset
 are rejected with `403` in that mode.
 
 The endpoints authorize the *printed record*. What `fill(...)` reads beyond it is application code:
@@ -110,10 +109,11 @@ and typed repositories are unscoped — if a form loads other records for a non-
 to data that reader of the record is meant to see.
 
 On the record surface, each permitted form adds an entry with the key `print-{key}` to the ⋯ menu.
-The entry links to `onno://download/api/print/...`. Its placement follows the usual override, for
-example `f.action("print-invoice").primary()` to show it as a button or `.hidden()` to drop it.
-The menu entry comes from a `RecordActionContributor` bean (an `onno-ui-starter` SPI), so other
-modules can add read-only record actions the same way.
+The entry links to `onno://download/api/print/...`. The server sends only its key, title and URL; the
+app's React `commands` customization places and icons it like any command, for example
+`commands: { "print-invoice": { placement: "primary", icon: "printer" } }` or `"hidden"` to drop it.
+The entry comes from a `RecordActionContributor` bean (an `onno-web-starter` SPI), so other modules
+can add read-only record actions the same way.
 
 With a PDF converter configured, each menu entry gets a sibling: `Invoice · PDF` (key
 `print-{key}-pdf`) for a Word/Excel form, or `Invoice · DOCX` (`print-{key}-source`) for a `pdf()`
@@ -125,16 +125,19 @@ Select rows in a catalog/document list (⌘/Ctrl/Shift-click, ⌘A) and the sele
 permitted form (and its PDF/source sibling). It POSTs the ids and saves one zip with a file per
 record; duplicate names get `(2)`, `(3)`… Records outside the caller's scope are skipped. At most
 `onno.print.batch.max-records` (default 200) per request. The buttons come from a
-`SelectionDownloadContributor` bean (an `onno-ui-starter` SPI) and are shown to every reader, not
+`SelectionDownloadContributor` bean (an `onno-web-starter` SPI) and are shown to every reader, not
 only writers.
 
 ## Uploaded templates
 
-Admins can edit templates without a redeploy. Put the bundled `printTemplates` widget on an admin
-page:
+Admins can edit templates without a redeploy. The starter's UI package `@onno/print`
+(`src/main/ui`) exports a `PrintTemplates` component; add `"@onno/print"` to the app's
+`src/main/ui/package.json` and render it on an admin page:
 
-```java
-b.widget("Print templates").type("printTemplates").width("full");
+```tsx
+import { PrintTemplates } from "@onno/print";
+
+<PrintTemplates title="Print templates" hint="Edit the Word and Excel files behind the Print menu." />
 ```
 
 It lists every form with **Download** (the effective template, or the built-in one), **Upload** (an

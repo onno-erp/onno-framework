@@ -8,7 +8,7 @@ This is a breaking release; no automatic migration from the 2.5 CRM model is inc
 - Bind an existing customer catalog with `CrmCustomerBinding`; without a binding, CRM is inactive.
 - Bind existing employee identities only when needed. CRM no longer supplies customer or agent catalogs.
 - Status and priority choices come from optional host catalogs or enumerations. There are no built-in priority choices or default priority, and no mirrored CRM status catalog.
-- Sales opportunities and metrics are an ordinary example recipe, compiled only with `-PsalesExample`.
+- Sales opportunities and metrics belong to the host application, outside the CRM artifact.
 - Host pages, navigation and `ListSpec`/`EntityView` definitions control inbox columns, filters, sorting, search, selection and renderer.
 
 ## Extensions and messaging

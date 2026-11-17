@@ -1,7 +1,7 @@
 package su.onno.mcp;
 
 import su.onno.access.AccessSubject;
-import su.onno.ui.AccessSubjectResolver;
+import su.onno.service.AccessSubjectResolver;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
@@ -27,7 +27,7 @@ import java.util.Map;
  * survive the hop to a Reactor scheduler thread.
  *
  * <p>This makes every tool execute as the connecting user, so the existing
- * {@code UiAccessService} deny-by-default role checks apply unchanged. The user's full
+ * {@code AccessService} deny-by-default role checks apply unchanged. The user's full
  * {@link AccessSubject} (roles, identity record, contributed attributes) is resolved here too, on
  * the request thread, so every tool also runs inside the user's record scope.
  */
@@ -90,7 +90,7 @@ public class McpPrincipalContext implements McpTransportContextExtractor<HttpSer
     /**
      * Reads the authenticated principal captured for the current tool call, or {@code null}
      * when the request was anonymous. A {@code null} principal is denied everything by
-     * {@code UiAccessService} (deny by default), which is the desired behavior.
+     * {@code AccessService} (deny by default), which is the desired behavior.
      */
     public static Principal principal(McpSyncServerExchange exchange) {
         if (exchange == null) {

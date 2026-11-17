@@ -51,7 +51,7 @@ business system needs:
 | --- | --- | --- |
 | Business entities and references | Database schema and safe migrations | Posting and lifecycle rules |
 | Documents and line items | Typed repositories and authenticated REST | Integrations and custom services |
-| Balances and historical facts | Role-aware web UI and dashboards | UI composition and custom widgets |
+| Balances and historical facts | A role-aware React UI for every entity | Your own pages and components |
 | Human and automatic processes | Tasks, events, and MCP tools for AI agents | Every source file and every deployment |
 
 No proprietary designer. No duplicated table, DTO, API, and form definitions. No framework-specific
@@ -93,7 +93,7 @@ public class SalesOrder extends DocumentObject implements Postable {
     />
   </a>
   <br />
-  <sub>The generated UI is ready to use, role-aware, and fully authorable from Java. <a href="https://demo.cloud.onno.su/ui">Open the live demo →</a></sub>
+  <sub>The default UI is ready to use and role-aware; an app reshapes it in an ordinary React app. <a href="https://demo.cloud.onno.su/ui">Open the live demo →</a></sub>
 </div>
 
 ## How it works
@@ -135,7 +135,7 @@ val onnoVersion = "2.0.0"
 
 dependencies {
     implementation("su.onno:onno-framework-starter:$onnoVersion")
-    implementation("su.onno:onno-ui-starter:$onnoVersion")
+    implementation("su.onno:onno-web-starter:$onnoVersion")
     implementation("su.onno:onno-auth-starter:$onnoVersion")
     runtimeOnly("com.h2database:h2")
 }
@@ -152,7 +152,7 @@ spring:
 
 onno:
   auth:
-    # Accounts live in the database and are managed at runtime (users widget, /api/auth/users).
+    # Accounts live in the database and are managed at runtime (<UserAccounts />, /api/auth/users).
     mode: database
     # Seeds the first account into the empty store once; it must set a new password at first
     # sign-in, and the list is ignored afterwards. Remove it once you have signed in.
@@ -165,19 +165,45 @@ onno:
 Put your annotated model under the `@SpringBootApplication` package and start the application.
 onno scans the model, creates the schema, wires the repositories, and serves the UI.
 
-For a complete runnable project with seeded data, posting, role-specific layouts, dashboards,
-comments, media, and live custom widgets backed by the host's shared SSE stream, see the
+For a complete runnable project with seeded data, posting, commands, role-specific pages,
+dashboards, comments, media, and live React components over the shared SSE stream, see the
 [Onno Books example](example). For a high-density customer workspace with a unified seeded
 multi-channel inbox, replies, internal notes, assignment, lifecycle stages, and opportunities, see
 the reusable [CRM starter](onno-crm-starter).
 
-Custom widgets can import ordinary npm libraries without adding a frontend project: declare them
-with `onnoWidgets { npmDependencies.put("package", "version") }`; the managed widget build installs
-and bundles them while keeping React and `@onno/widget-sdk` host-owned.
+## The UI
 
-Custom widgets can import ordinary npm libraries without adding a frontend project: declare them
-with `onnoWidgets { npmDependencies.put("package", "version") }`; the managed widget build installs
-and bundles them while keeping React and `@onno/widget-sdk` host-owned.
+With no UI code, the app serves a default React UI: a list and form for every entity the user may
+read, navigation grouped by bounded context, register reports, comments and tasks. To shape it, apply
+the `su.onno.ui` Gradle plugin and run `./gradlew onnoUiInit`: `src/main/ui` becomes an ordinary
+Vite app on [`@onno/ui`](onno-ui/README.md), typed from the Java model, that declares only what
+differs.
+
+```tsx
+import { defineApp, type EntityCustomization } from "@onno/ui";
+import { Check, ClipboardList } from "@onno/ui/icons";
+import { Dashboard } from "./pages/Dashboard";
+
+// entities/SalesOrders.ts: how the entity presents, wherever it shows.
+const salesOrders = {
+  icon: ClipboardList,
+  list: { columns: ["number", "date", "customer", "total"], sort: "-date" },
+  fields: { total: { format: { money: "USD" } } },
+  commands: { approve: { placement: "row", icon: Check } },
+} satisfies EntityCustomization<"Sales Orders">;
+
+defineApp({
+  entities: { "Sales Orders": salesOrders },
+  pages: [{ path: "/", component: Dashboard }],
+});
+```
+
+Default components are optional: the [UI SDK](docs/UI_SDK.md) exposes the shared record controller,
+typed field bindings, list-renderer selection/pagination callbacks, metadata and control props.
+A replacement editor or page keeps the same lifecycle without importing private implementation files.
+
+What can be done with records stays in Java: a `Commands<SalesOrder>` bean declares `approve`, its
+inputs and who may run it, and the server enforces that on REST, in the UI and over MCP alike.
 
 ## Business concepts
 
@@ -195,18 +221,19 @@ and bundles them while keeping React and `@onno/widget-sdk` host-owned.
 | A future service or team boundary | `context = "…"` |
 
 The model remains small because references are typed (`Ref<T>`), behavior uses ordinary Java
-interfaces, and UI metadata lives in focused `Layout`, `Page`, and `EntityView` beans.
+interfaces and beans (`Commands`, `Checks`), and presentation lives in the React app, not on the
+domain classes.
 
 ## What ships
 
 | Area | Packages and modules |
 | --- | --- |
 | Foundation | [`onno-framework`](onno-framework), [`onno-framework-starter`](onno-framework-starter) |
-| Application surface | [`onno-ui-starter`](onno-ui-starter), [`onno-auth-starter`](onno-auth-starter) |
+| Application surface | [`onno-web-starter`](onno-web-starter), [`onno-auth-starter`](onno-auth-starter) |
 | Composable messaging | [`onno-crm-starter`](onno-crm-starter) |
-| Data and integration | [`onno-import-starter`](onno-import-starter), [`onno-print-starter`](onno-print-starter), [`onno-kafka-starter`](onno-kafka-starter), [`onno-cluster-starter`](onno-cluster-starter) |
-| AI and operations | [`onno-mcp-starter`](onno-mcp-starter), [`onno-observability-starter`](onno-observability-starter) |
-| Native and custom UI | [`onno-desktop-starter`](onno-desktop-starter), [`onno-desktop-gradle-plugin`](onno-desktop-gradle-plugin), [`onno-widgets-gradle-plugin`](onno-widgets-gradle-plugin), [`@onno/widget-sdk`](onno-widget-sdk) |
+| Data and integration | [`onno-import-starter`](onno-import-starter), [`onno-print-starter`](onno-print-starter) |
+| AI | [`onno-mcp-starter`](onno-mcp-starter) |
+| Custom UI | [`onno-ui-gradle-plugin`](onno-ui-gradle-plugin), [`@onno/ui`](onno-ui) |
 | Consumer examples | [`example`](example) |
 
 Spring Boot starters expose auto-configuration through
@@ -218,17 +245,17 @@ repository. Authentication—including OIDC and SSO—remains in the Apache-2.0 
 
 Applications add `implementation("su.onno:onno-crm-starter:$onnoVersion")` and explicitly bind
 their existing customer catalog with `CrmCustomerBinding`. The starter supplies messaging and the
-inbox widget; the host owns customers, employees, fields, permissions, pages and navigation.
-Assignment, conversation statuses and personal groups are optional. The sales pipeline is an
-ordinary onno recipe under `example/src/sales/java`, not part of the CRM artifact. See the
+`@onno/crm` inbox components; the host owns customers, employees, fields, permissions, pages and navigation.
+Assignment, conversation statuses and personal groups are optional. Sales pipelines and metrics
+belong to the host application. See the
 [composition guide](onno-crm-starter/README.md).
 
 ## Designed for humans and AI agents
 
 The same typed model that drives the application also gives agents a safe, inspectable surface:
 
-- `onno-mcp-starter` exposes metadata, reads, writes, register queries, posting, and custom
-  `@McpTool` methods with the application's authorization rules.
+- `onno-mcp-starter` exposes metadata, reads, writes, register queries, posting, every command, and
+  custom `@McpTool` methods with the application's authorization rules.
 - The [`onno` agent skills](onno-plugin/skills/onno/SKILL.md) teach coding agents how to model a
   business, author UI, implement posting, evolve schemas, and verify a running application.
 - [Building ERPs with onno and AI agents](BUILDING_ERPS_WITH_AGENTS.md) is the end-to-end handoff
@@ -252,9 +279,10 @@ hand-written guides, generated configuration reference, and aggregated Javadocs.
 | [Configuration](docs/CONFIGURATION.md) | Every `onno.*` property and default, generated from source metadata |
 | [Headless Read API](docs/HEADLESS_READ_API.md) | JSON contracts, reference expansion, redaction, and keyset pagination |
 | [Running and verification](docs/RUNNING.md) | Local development and authenticated runtime smoke tests |
+| [UI tour](docs/UI_TOUR.md) | How `@onno/ui` and an app's `src/main/ui` fit together |
+| [UI SDK](docs/UI_SDK.md) | Replace default components using public controllers, bindings and primitives |
 | [3.0 release notes](docs/RELEASE_NOTES_3_0.md) | Composable CRM, breaking changes, and upgrade requirements |
 | [2.0 release notes](docs/RELEASE_NOTES_2_0.md) | Highlights, breaking changes, and the release gate |
-| [Migrating to 2.0](docs/MIGRATING_TO_2_0.md) | Source, data, and client migration checklist |
 | [Extending onno](docs/EXTENDING.md) | Community connectors, SPI implementations, UI add-ons, and skills |
 | [Community integrations](INTEGRATIONS.md) | Generated catalog of third-party projects |
 | [Contributing](CONTRIBUTING.md) | Development workflow and contribution guidelines |
@@ -289,27 +317,26 @@ npm run docs:dev
 
 ## Local development
 
-The Gradle wrapper is the source of truth. Node 22.22 is downloaded automatically for the packaged
-frontend.
+The intended edit loop is **Vite hot reload with a separate backend**, using JDK 21 and Node 22+.
+Install the shared npm workspace once with `npm install`, then run from the repository root:
 
-```bash
-./gradlew clean check
-./gradlew publishToMavenLocal
-./gradlew :example:bootRun
-```
+| Terminal | Command | What it runs |
+| --- | --- | --- |
+| 1 | `npm run dev:backend` | Example backend with DevTools on port 8091. |
+| 2 | `npm run dev:watch` | Continuous application Java compilation and typed-model generation. |
+| 3 | `npm run dev` | React Fast Refresh at **http://localhost:5173**. |
 
-`publishToMavenLocal` is part of the verification loop: it catches sources, Javadoc, POM, and binary
-artifact problems that project dependencies can hide.
+For frontend-only changes, reuse the running backend and start only `npm run dev`. Pages, styles,
+components and linked framework UI sources hot-reload; no jar rebuild or backend restart is needed.
+`ONNO_BACKEND` selects a different backend. The backend's packaged UI is a built snapshot;
+use the Vite URL while editing. All example modes preserve `example/data/bookstore`.
 
-For a save-to-screen loop, run the example and continuous compilation in separate terminals:
+Use `./gradlew check`, `./gradlew :example:bootJar`, and `./gradlew publishToMavenLocal` for
+verification and packaging. Maven-local publication checks sources, Javadoc, POM and binary
+artifacts that project dependencies can hide; it is not needed for each edit.
 
-```bash
-./gradlew :example:bootRun
-./gradlew -t :example:classes
-```
-
-Spring Boot DevTools restarts the application context; onno rescans metadata, reapplies the schema
-diff, rebuilds UI metadata, and tells connected browsers to refresh.
+See [Running & verifying](docs/RUNNING.md#intended-development-workflow) for startup, switching
+from a packaged backend, Java reload limits, consumer apps and release smoke tests.
 
 ## Schema evolution
 
@@ -332,7 +359,7 @@ contract.
 ## Extending onno
 
 Extend the framework without forking it. Community projects can ship connectors, SPI
-implementations, UI widgets and pages, MCP tools, or agent skills as separate artifacts. The
+implementations, UI component packages, MCP tools, or agent skills as separate artifacts. The
 [extension guide](docs/EXTENDING.md) documents the contracts, naming rules, and definition of done.
 
 Built one? Add it to [`community/registry.json`](community/registry.json), run
@@ -382,11 +409,6 @@ private Telegram text chats using an opt-in bot connection. The reusable CRM mod
 [`CrmMessageTransport`](onno-crm-starter/README.md#message-delivery-contract) for host-owned channel
 adapters.
 
-Custom widgets can show action feedback with the shared `toast` export from
-`@onno/widget-sdk`; see [widget SDK](onno-widget-sdk/README.md#action-notifications).
-They can open pages and records without reloading the workspace using
-[`Link`, `navigate` and `openRecord`](onno-widget-sdk/README.md#in-app-navigation).
-
 The CRM starter supports application-authored inbox workspaces with independent chat-selection
 rules, folders, presentation and team read/write permissions. See
 [the CRM workspace contract](onno-crm-starter/README.md#inbox-workspaces-and-channel-accounts).
@@ -395,45 +417,21 @@ rules, folders, presentation and team read/write permissions. See
 
 `su.onno:onno-crm-channels-starter` packages opt-in Telegram, Gmail, Instagram, and WhatsApp adapters on top of the reusable CRM. See [setup, limitations, and local webhook testing](onno-crm-channels-starter/README.md). Adopter skills are in [onno-crm-adopt](onno-plugin/skills/onno-crm-adopt/SKILL.md), [channel setup](onno-plugin/skills/onno-crm-channel-setup/SKILL.md), and [channel debugging](onno-plugin/skills/onno-crm-channel-debug/SKILL.md).
 
-Selection toolbar extensions: `ListSpec.selectionWidget("type")` mounts an SDK
-`registerListSelection("type", Component)` component when rows are selected and the viewer has
-write access. It receives `ids` and `complete()` (clear selection and reload after success).
-Commands must enforce their own server-side authorization; unknown widget types are omitted.
+CRM message bodies can be drawn by the app with `<CrmInbox messageRenderers={[…]} />`. Record tags
+(stable IDs, colors, authorized assignments) render with `@onno/ui`'s `<EntityTags />`; see
+[onno-web-starter](onno-web-starter/README.md#tags--apitagskindname). Apps add buttons and panels
+to named outlets (`ExtensionSlot`) with `defineApp({ extensions })`; see
+[the extension guide](docs/EXTENDING.md#ui-contributions).
 
-Custom widgets can import `DatePicker` (date only) and `DateTimePicker` (local date and
-24-hour time) from `@onno/widget-sdk`. They share the host calendar and emit ISO strings
-at day and minute precision, respectively. Generated `LocalDateTime` fields use
-`DateTimePicker`. See the [SDK date/time guide](onno-widget-sdk/README.md#date-and-time-fields).
-
-CRM message bodies support `registerChatMessageRenderer` from `@onno/widget-sdk` (UI host v4+), with predicate/priority selection, live registration, and plain-text error fallback. See [the SDK guide](onno-widget-sdk/README.md#custom-crm-chat-message-bodies).
-
-Onno UI supports reusable colored record tags with stable IDs, a shared chip picker, and authorized record assignments; see `onno-ui-starter/README.md` for the `entityTags` widget.
-
-### UI extension outlets
-
-Host contract v5 adds `registerExtension` and `ExtensionSlot`: opt-in contributions to page/list/form
-controls, entity and CRM context menus, composer tools, and right-panel sections. Contributions
-receive scoped context and supported host callbacks, have deterministic ordering and isolated
-render failures, and can be replaced/unregistered without modifying the host. Backend authorization
-continues to govern commands. Timeline bodies retain `registerChatMessageRenderer`.
-See [the extension guide](docs/EXTENDING.md#ui-contributions-host-contract-v5).
-
-The example application owns Templates as a `crm.chat.composer` contribution
-(`example.crm.composer.templates`), including its catalog and picker. The CRM
-starter supplies the empty composer slot and controls draft insertion and limits.
-
-CRM conversation-status definitions, colors, and transitions are authored in application Java (`CrmStateConfiguration`); application TSX owns header and Templates buttons. See [the extension guide](docs/EXTENDING.md).
+CRM conversation-status definitions, colors, and transitions are authored in application Java (`CrmStateConfiguration`); the application's React code owns header and template buttons. See [the extension guide](docs/EXTENDING.md).
 
 CRM channels use extensible string keys with connector-owned `CrmChannelDefinition` metadata
 (`GET /api/crm/channels/types`); no fixed channel enumeration or Channels page is installed.
-The optional settings widget uses `crm.channel.settings` extension contributions; bundled provider
-setup and branding live in the channels starter. Workspace `.list(...)`/`.view(...)` uses ordinary
-`ListSpec` resolution for both the inbox renderer and table. Status bindings read an existing host
+`<CrmConnections setups={[channelSetups]} />` takes provider setup forms as components; bundled provider
+setup and branding live in the channels starter (`@onno/crm-channels`). The inbox's columns, sort and
+filters are `<CrmInbox list={…} />` props. Status bindings read an existing host
 catalog or enumeration through `CrmStateConfiguration.catalog(...)`/`.enumeration(...)`, with no
 CRM status table or mirrored records. Channel keys and status UUIDs are breaking storage changes.
-
-Custom list renderers with nested scroll panes can use the SDK's optional pagination state and
-`loadMore()` callback; see [pagination in custom list panes](onno-widget-sdk/README.md#pagination-in-custom-list-panes).
 
 CRM Connections supports host-configured shared/personal sections, provider availability and
 account lifecycle controls. Gmail supports multiple mailboxes with owner-scoped personal inboxes;

@@ -12,11 +12,11 @@ import su.onno.crm.domain.*;
 import su.onno.crm.repository.*;
 import su.onno.crm.service.*;
 import su.onno.types.Ref;
-import su.onno.ui.CurrentUserResolver;
-import su.onno.ui.UiAccessService;
-import su.onno.ui.UiProperties;
-import su.onno.ui.comments.CommentService;
-import su.onno.ui.comments.CommentAuthorAvatars;
+import su.onno.service.CurrentUserResolver;
+import su.onno.service.AccessService;
+import su.onno.service.WebProperties;
+import su.onno.web.comments.CommentService;
+import su.onno.web.comments.CommentAuthorAvatars;
 
 /** Contact history includes only conversations readable by the requesting user. */
 @RestController
@@ -27,21 +27,21 @@ public class CrmActivityController {
     private final ConversationMessageRepository messages;
     private final InboxRepository inboxes;
     private final CrmInboxWorkspaceService workspaces;
-    private final UiAccessService access;
+    private final AccessService access;
     private final CurrentUserResolver users;
     private final CommentService comments;
     private final CommentAuthorAvatars authorAvatars;
     private final su.onno.crm.service.CrmAttachments attachments;
-    private final UiProperties uiProperties;
+    private final WebProperties webProperties;
     // The repository beans are registered by OnnoJdbcRepositoriesRegistrar at runtime.
     @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
     public CrmActivityController(CrmContactService contacts,ConversationRepository ignoredConversations,
             ConversationMessageRepository messages,InboxRepository inboxes,CrmInboxWorkspaceService workspaces,
-            UiAccessService access,CurrentUserResolver users,CommentService comments,CommentAuthorAvatars authorAvatars,
-            su.onno.crm.service.CrmAttachments attachments,UiProperties uiProperties) {
+            AccessService access,CurrentUserResolver users,CommentService comments,CommentAuthorAvatars authorAvatars,
+            su.onno.crm.service.CrmAttachments attachments,WebProperties webProperties) {
         this.contacts=contacts;this.messages=messages;this.inboxes=inboxes;
         this.workspaces=workspaces;this.access=access;this.users=users;this.comments=comments;this.authorAvatars=authorAvatars;
-        this.attachments=attachments;this.uiProperties=uiProperties;
+        this.attachments=attachments;this.webProperties=webProperties;
     }
     /**
      * {@code attachments} carries the files on a message, empty for a note and for anything that has
@@ -131,7 +131,7 @@ public class CrmActivityController {
     public record LogEvent(UUID conversationId,EventType type,String details,LocalDateTime scheduledFor) {}
     @PostMapping @Transactional public Map<String,UUID> log(@PathVariable UUID customer,@RequestBody LogEvent request,Principal principal) {
         require(principal);
-        if(uiProperties.isReadOnly())throw new ResponseStatusException(HttpStatus.FORBIDDEN,"The application is read-only");
+        if(webProperties.isReadOnly())throw new ResponseStatusException(HttpStatus.FORBIDDEN,"The application is read-only");
         if(request.conversationId()==null||request.type()==null||request.details()==null||request.details().isBlank()||request.details().length()>7000)
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,"Choose an event type and enter details (up to 7000 characters)");
         workspaces.requireCustomer(customer,principal,true);

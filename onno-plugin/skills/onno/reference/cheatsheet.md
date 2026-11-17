@@ -125,11 +125,11 @@ Graph validation rejects a missing start target, duplicate/blank stable keys, du
 cross-graph connections, unreachable nodes, incomplete task/decision/fork/subprocess routes,
 parallel branches that bypass their paired join, and immediate-only cycles.
 
-The starter persists instances, work items, and transitions in `onno_process_*`. The authenticated
-UI starter exposes the inbox plus claim/delegate/history/complete commands and the built-in `tasks`
-page widget. Delegation uses the configured `Layout.identity(...)` catalog as its employee picker.
+The starter persists instances, work items, and transitions in `onno_process_*`. The web starter
+exposes the inbox plus claim/delegate/history/complete endpoints (`/api/tasks`), rendered by the
+`<TaskInbox />` component of `@onno/ui`. Delegation uses the `IdentityLink` catalog as its employee picker.
 Avatar/image/photo-hinted identity fields supply live photos in ownership, delegation, and history.
-`HumanTask.subject(payload)` may return a typed catalog/document `Ref<T>`; the widget opens that
+`HumanTask.subject(payload)` may return a typed catalog/document `Ref<T>`; the task inbox opens that
 record in the shell's adjacent detail pane while retaining an ordinary deep-link `href`.
 `subjectLabel(payload)` optionally persists a human-readable link snapshot such as
 `"Order " + payload.orderNumber()`.
@@ -161,8 +161,10 @@ command services take an `AccessSubject` (controller parameter; `AccessSubject.s
 code); app code checks with the `RecordAccess` bean (`require|can|filter|clause`). Typed repositories
 are unscoped.
 
-### UI authoring
-UI is authored via `Layout`/`Page`/`EntityView` beans, not domain annotations.
+### UI and behaviour
+Presentation is React in the app's `src/main/ui` (`@onno/ui`), never domain annotations. Server
+behaviour beyond CRUD is `Commands<E>` / `Checks<E>` / `PickerOptions<E>` / `IdentityLink` beans —
+see the UI and commands sections below.
 
 ## Base classes & types (package `su.onno.model`, `su.onno.types`)
 
@@ -241,8 +243,9 @@ validation exception/payload.
 - `@PeriodCloseExempt` on a `@Document` class opts a non-accounting document out.
 - Roles: `onno.period-close.manage-roles` (+`ADMIN`) close/reopen; `onno.period-close.override-roles`
   bypass (empty by default; `ADMIN` only when listed). All audited in `onno_period_close_audit`.
-- UI: `GET /api/period-close`, `GET /audit`, `POST /close`, `POST /reopen`; built-in page
-  `PeriodClosePage.ROUTE` (`/period-close`) — link it via `section(...).page(...)`.
+- API: `GET /api/period-close`, `GET /audit`, `POST /close`, `POST /reopen`; `/api/ui/model`
+  reports `features.periodClose`. UI: `@onno/ui`'s `<PeriodClose scopes? auditRows? />`, registered
+  by the app as a page (e.g. `/period-close`, ADMIN, `when: m => m.features.periodClose === true`).
 
 ## Runtime query paths
 
@@ -250,10 +253,8 @@ There is no universal query DSL. Use `CatalogRepository` / `DocumentRepository` 
 reads and `RegisterRepository.query()` for typed balance/turnover reads. The generated REST, UI, and
 MCP surfaces use dedicated metadata-driven catalog, document, and register query services.
 
-The `su.onno.fields.Field<E,V>` getter token is the preferred field API in UI authoring:
-`list.columns(Order::getNumber, Order::getStatus)`, `f.field(Order::getCustomer)`,
-`f.relatedList("orders", Order.class).via(Order::getCustomer)`, and
-`row.enumValue(Order::getStatus, OrderStatus.class)`. String overloads are unsafe escape hatches for
+The `su.onno.fields.Field<E,V>` getter token is the preferred field API in authored Java:
+`row.enumValue(Order::getStatus, OrderStatus.class)`, `check.dependsOn(ScheduleEvent::getStartsAt)`. String overloads are unsafe escape hatches for
 dynamic metadata; routes, labels, role/action/process keys, and filter expressions remain strings
 because they are not Java field references.
 
@@ -293,244 +294,122 @@ because they are not Java field references.
   migration or to debug a drifted balance.
 - Optimistic locking: `@Version` mismatch on save throws `OptimisticLockException` (`409` via API).
 
-## UI DSL (package `su.onno.ui`)
+## Commands, checks, pickers, identity (packages `su.onno.command`, `su.onno.validation`, `su.onno.picker`, `su.onno.identity`)
 
-- `Layout` — `profile()` (persona or null=default), `viewport()`, `configure(LayoutSpec)`:
-  `spec.section(name).icon(…).catalog(X.class).document(Y.class)`, `spec.shell().nav(NavStyle.SIDEBAR)`,
-  `spec.title/theme/priority/roles(...)`, `spec.identity(directoryClass, loginField)`.
-  Shell, branding, and `identity(...)` are global: configure them only on the default layout;
-  startup rejects those settings on a named profile.
-  `spec.section(name).page(route, label, icon)` adds a sidebar link to an authored `Page` at an
-  arbitrary route (the nav peer of `.catalog(...)`) — e.g. a custom dashboard `.page("/ops", "Sales Ops", "activity")`.
-  - Branding: `spec.shell().logo(url)` or `.logo(lightUrl, darkUrl)` supplies the horizontal
-    wordmark; `.logoWidth(px)` / `.logoHeight(px)` (or `.logoSize(w, h)`) sizes portable/login
-    surfaces. `spec.shell().mark(url)` or `.mark(lightUrl, darkUrl)` supplies the compact square
-    desktop app-rail mark. Without one, the rail falls back to the favicon, then the logo, then the
-    first brand letter. The mark is framed by default; `.markFrame(false)` removes the shell border
-    for artwork that already includes its own circle or tile. Serve assets from `classpath:/static/ui/...`.
-- `Page` — `route()`, `profile()`, `viewport()`, `compose(PageBuilder)`: `b.title/subtitle`,
-  `b.bare()` / `b.header(false)` (drop the title/subtitle row),
-  `b.widget(title)` → `WidgetBuilder.type(…).width(…).document/catalog(…).config(k,v)` (the
-  `stat` tile's period-over-period caption defaults to the `widget.stat.comparison` chrome
-  message, so `onno.ui.locale`/`onno.ui.messages` localize it; `.config("comparisonLabel", …)`
-  overrides it per tile, on both the sparkline and headline-only layouts), or the
-  typed `b.chart(title, Source.class)` → `.time/category(…)`, `.count/sum/average/minimum/maximum(…)`,
-  `.bar/line/area/donut/pie()`, optional `.secondary(…)`, `.axis(…)`, `.threshold(…)`, per-measure /
-  per-series colours, legend/labels/curve/points/grid/height; `b.text`,
-  Grid: widgets flow into rows by `width("1/4"|"1/3"|"1/2"|"2/3"|"full"|any "n/m")` in `order(n)`;
-  a row closes when fractions sum to 1. Cells are weights, so a row that doesn't sum to 1 stretches
-  its widgets proportionally past their declared width — `rowBreak()` forces the widget to start a
-  fresh row instead of joining a half-filled one. Multi-widget rows render equal-height (cards
-  stretch to the tallest neighbour). Mobile stacks everything full-width.
-  `b.list(entity)` (embeds an entity's full interactive list surface — New button, custom actions,
-  search/sort), `b.actions(heading, ActionSpec)`
-  (a section of server-handled buttons, reusing the entity `ActionSpec` DSL), `b.custom(type, payload)`,
-  `b.row(r -> r.col("2/3", c -> …).col("1/3", c -> …))` (arbitrary column layout — widths are
-  fractions / `"<n>px"` / null=equal; a column is a full region so rows nest; columns stack on
-  mobile), `b.aside(a -> …)` (shortcut for the common right-rail two-column case).
-  - **Everything is a page.** A `Page` is served at *any* route: `/` (home dashboard), `/settings`,
-    a default surface route (`/catalogs/{name}`, `/documents/{name}`, or `/registers/{name}` — an
-    authored page there **overrides** that surface's default list/report), or an arbitrary custom route (`/ops`, `/reports`,
-    via the `GET /api/divkit/{*route}` catch-all). The framework serves a sensible default at every
-    surface; a registered `Page` bean at that route replaces it. So dashboards, settings, and list
-    pages are one concept — a page — not three subsystems. `profile()`/`viewport()` pick the most
-    specific match (like `EntityView`). A custom route only shows in the nav once a `Layout` section
-    links it with `.page(route, label, icon)`.
-  A widget's `type(…)` may be a **custom widget** the framework has no built-in for: author it as a
-  React component in `src/main/widgets/*.tsx` (via `@onno/widget-sdk`) and apply the `su.onno.widgets`
-  Gradle plugin — it compiles (Node + esbuild, React aliased to the host), serves under
-  `{onno.ui.path}/plugins/**`, and auto-loads at boot; no frontend project. Config `onno.ui.plugins.*`.
-  - **Host UI primitives** (≥ host contract v2 / framework 1.5.0): `import { Segmented, Select, Button,
-    Badge, DatePicker, … } from "@onno/widget-sdk"` (or `ui.Segmented`) — the app's real controls, not
-    lookalikes. Reach for these before hand-rolling. Record pickers use `RefSelect` (contract v7): the
-    form's reference field with typeahead, "+ New" and "Show all…" — never a `Select` of fetched rows.
-  - **Styling** (since 1.5.0): the plugin now runs **Tailwind over `src/main/widgets`** and ships
-    a coordinate-specific `*-widgets.css` (utilities-only, preflight off, host tokens), injected at boot *before* the
-    host stylesheet (its unscoped utilities tie with the host's on specificity, so loaded last a bare
-    `.flex-col` would beat the host's `sm:flex-row` and break host layouts) — so a widget's
-    own utility classes (incl. `border-l`, arbitrary `-left-[5px]`) get real CSS. Residual caveats:
-    only `src/main/widgets` is scanned (class names in imported helpers or built by string
-    concatenation aren't seen — keep them literal), and dynamic colors still want inline `style` with
-    `hsl(var(--primary))` / `hsl(var(--border))`.
-  - **Third-party packages:** declare
-    `onnoWidgets { npmDependencies.put("package", "version") }` in the consuming Gradle build, then
-    import the package normally from TSX. It is installed in the managed workspace and bundled into
-    the widget. React, React DOM, `@onno/widget-sdk`, and compiler packages remain framework-managed
-    and cannot be overridden.
-  - **Live updates:** the SDK `api` is read-only (no event subscription). A widget that must react to
-    others' writes uses `useWidgetUpdates(widget, load)` from `@onno/widget-sdk`, which filters and
-    coalesces the host's shared SSE stream. Never open a per-widget `EventSource`; use
-    `events.subscribe`/`useUiEvents` only for unusual multi-entity or non-entity matching. Events are
-    **named** (`created`/`updated`/`deleted`/`posted`/`unposted`/`changed`), but that wire detail is
-    owned by the SDK/host rather than each widget.
-- **Static assets** (logos, kiosk/TV pages, fonts) must live under `classpath:/static/ui/…`; they're
-  served at the web root. Anything that does NOT resolve to a real file there falls through to the SPA
-  `index.html` (HTTP 200, `text/html`) — so a file under a bare `static/` (not `static/ui/`), or a
-  mistyped path, silently returns the app shell instead of a 404, and won't render under `nosniff`.
-  `/api/**` and `{onno.ui.path}/plugins/**` are exempt. For a custom path or content-type, add a
-  dedicated `@GetMapping` (a controller out-precedences the SPA fallback).
-- `EntityView<E>` — `Class<E> entity()` (names the target catalog/document/register), `profile()`
-  (a profile's own view replaces the default one for its list *and* record surface),
-  `list(ListSpec<E>)`, `fields(EntityConfigBuilder<E>)`, `detail(DetailSpec<E>)`,
-  `actions(ActionSpec<E>)`, `inputs(InputSpec)`,
-  `comments()` (return `true` to opt this catalog/document into the `/api/comments` discussion
-  thread; off by default, gated by the global `onno.comments.enabled` switch), `opensInMain()`
-  (return `true` so records open in the focused pane instead of a detail island beside the list).
-  - `detail.widget("Timeline").type("orderTimeline").width("full").config(key, value)` embeds a
-    registered custom widget below the fields of a saved catalog/document record. Its
-    `WidgetProps.widget.record` carries `kind`, `name`, `id`, loaded `data`, and `readOnly`;
-    New/Duplicate forms omit detail widgets until a record has been saved.
-  - `ListSpec` (every builder method returns `ListSpec<E>`, so string and compiler-checked
-    getter-reference calls chain in any order): `title`, `searchable/noSearch`,
-    `sortBy(field, desc)`, `columns(...)`,
-    `column(field,label)`, `label(field,label)`, `width(field, px)` / `width(field, "<n>px")`
-    (list-only column width; wins over a pixel field hint; non-pixel values fail fast),
-    `hide(...)`, `pageSize(n)` (rows per keyset window;
-    else `onno.ui.list.page-size`; lists are always cursor/keyset-scrolled),
-    `groupable(field…)` (columns for a backend "Group by ▾" picker — a date field buckets by
-    day/month/year, a group's rows expand lazily) + `aggregate(field, Agg.SUM|AVG|MIN|MAX[, label])`
-    (per-group subtotal on each header) + `defaultGroupBy(field)` (open the list already grouped by
-    that column — must also be `groupable`, else ignored with a warning; the viewer can still switch
-    back to "None"),
-    `filter(field)` →
-    `options/multiOptions(String...)` (value shown verbatim), `options/multiOptions(Map<value,label>)`
-    (value→label split: query matches the value, dropdown shows the label — pass a `LinkedHashMap` for
-    order), or `options/multiOptions(Collection<ListSpec.Option>)` when choices need richer display
-    such as `ListSpec.Option.withAvatar(employeeId, name, avatarUrl)`; `.options(...).multiple()` is
-    the configurable form of the same multi-select behavior
-    as `.multiOptions(...)`; `contains` / `startsWith` / `dateRange` / `numberRange` (from–to over a
-    numeric field, either bound optional, inclusive; `ge`/`le` feed params); an **`@Enumeration` field** persists as
-    deterministic UUIDs, so the resolver translates its select options — author the constant name
-    (`"SHIPPED"`) or its `@EnumLabel` text, or author **no options** (`.multiOptions()`) to offer
-    every declared value labelled like the pills; `map()` → `MapSpec<E>` adds a Table⇄Map toggle —
-    `lat(getter).lng(getter)` or `geoJson(String)`, `label(getter)` (marker popup), `defaultView()`
-    (open on the map); `calendar(startGetter[, endGetter])` → `CalendarSpec<E>` adds a month/week/day
-    Calendar view and `timeline(startGetter, endGetter[, laneRefGetter])` → `TimelineSpec<E>` a
-    day scheduler with one lane per record of the lane `Ref` — both read the list feed with the
-    list's search/filters, refresh live, open the record on click and, with write access, save a
-    drag (move / resize / lane change) as a partial update through the generic command path;
-    `title(getter)`, `colorBy(getter)`, `defaultView()`, calendar `defaultMode(CalendarMode.WEEK)`,
-    timeline `slotMinutes(10)` + `hours(8, 21)`; a non-temporal start/end drops the view;
-    `custom(type)` → `CustomSpec` delegates the list **body** to a
-    widget-registry component (`registerListRenderer(type, C)` from `@onno/widget-sdk`; props =
-    `{rows, list, open, openUrl}`) behind a Table⇄custom toggle — `label(s)` (toggle label, else the
-    `list.customView` message), `defaultView()`; the framework keeps search/filters/sort/feed/live
-    refresh, and an unregistered type degrades to the default grid (no toggle). A route-level
-    operational renderer should opt in with `page.list(Entity.class, v -> v.fill())`, fill the host
-    allocation (`h-full min-h-0 overflow-hidden`), and
-    scroll only its bounded inner panes; do not cap it with viewport clamps or grow the whole page.
-    Use entity/ref/comment avatar payloads and merge durable system activity into communication
-    timelines. `rowStyle(row →
-    RowStyle)` = **conditional row formatting** — evaluated server-side per row (same `ActionRow<E>` as
-    state-aware actions), returns `ListSpec.RowStyle.DANGER/WARNING/SUCCESS/ACCENT/MUTED` or `null`
-    (default look); the grid renders a theme-aware translucent wash (e.g. urgent rows red, cancelled
-    faded), also inside expanded groups; a throwing function = `null` for that row.
-  - `ActionSpec<E>` retains the view entity in all row callbacks, including `dynamic` providers;
-    getters from unrelated entities do not compile. Page actions use `ActionSpec<Void>`.
-    Action DSL: `action(key)` → `ActionBuilder.label/icon(String)`, `logo(urlOrStaticPath)` (image
-    instead of the lucide icon — e.g. a brand mark), `scope(ActionScope.ROW|TOOLBAR|DETAIL)`,
-    `handler(ctx→ActionResult)` or `navigate(url)`. `roles("MANAGER", …)` restricts who may run the
-    action (`ADMIN` always passes; #227): on an entity action it's a finer gate on top of the
-    entity's write roles, on a page action (which has no entity to gate on) it's the only
-    authorization and the button is hidden from callers who lack it. Server actions honour
-    `onno.ui.read-only` (page actions too). `dynamic(live→…)` declares late-bound actions backed by
-    editable business data: the provider is retained (not evaluated) at startup, then resolved on
-    every row/cell context-menu open and again for execution/form/batch key lookup. Current
-    add/remove/rename/order/icon/color changes appear on the next open; a failed refresh keeps the
-    last-known client snapshot; a removed key executes as the normal unknown-action `404`.
-    Static-only entities make no menu-open request. Providers are read-only and should be fast;
-    static + dynamic declarations preserve authored order and first-view/first-key wins.
-    `form(f→…)` makes the click open a **modal input
-    dialog** first (same DSL as toolbar inputs, plus `.required()` and `InputType.TEXTAREA`); the
-    submitted values reach the handler as `ctx.input(key)` — the "Cancel with a reason" idiom. Works
-    on every scope (row/toolbar/detail, context menu, batch — a batch collects once and applies to
-    every selected row). The form spec also configures the canonical shell with `title`,
-    `description`, `submitLabel`, `cancelLabel`, `icon`, `tone(ActionSeverity)` and
-    `size(DialogSize)`. Throw `ActionRejectedException` for expected business rejection (HTTP 422
-    typed feedback); `fieldError`/`formError` keep the form open with its entered values. A no-form
-    rejection defaults to an error dialog. `ActionResult.toast(ActionToast…)` is the structured
-    transient-feedback path and `ActionResult.dialog(ActionDialog…)` is the successful
-    acknowledgement-dialog path; `reload()` and `refresh(ActionToast|ActionDialog)` add refresh
-    intent. Handler results contain `{refresh,feedback,navigateTo}`; `ActionResult.open(ref)` /
-    `.navigate(route)` choose a post-handler destination, applied after feedback/source refresh.
-    `navigateTo` is optional/null for old results; batch summaries omit per-record navigation.
-    Fixed navigation is declared on
-    the action. A form field can be a **reference picker** of another entity via
-    `input(key).reference(Target.class)` (`InputType.REFERENCE`; value is the picked record's id),
-    and a form can declare a **repeatable row group** `group(key, g→ g.column(col, c→…))` — an
-    add/remove tabular grid whose columns reuse the field DSL (incl. `.reference(...)`), read back
-    with `ctx.inputRows(key)` → `List<Map<String,String>>` (`.required()` = at least one row).
-    Groups are action-form only; a toolbar renders scalars and ignores them (#248). A **row** action may vary per row — `icon(row→String)`,
-    `label(row→String)`, `visibleWhen(row→bool)`, `enabledWhen(row→bool)` — taking an `ActionRow<E>`
-    (`id()`, `text(col)`, `enumValue(col,Type)`, `bool(col)`), evaluated as the list renders (#116).
-    A dynamic **server ROW** action should also declare a human-facing `label(String)`: batch
-    selection has no single row context, so its menu and progress messages use the fixed label and
-    otherwise fall back to the action key. If a mixed-state batch is not deterministic, declare
-    separate actions instead of a toggle.
-    The **same functions apply to a `DETAIL` action**, evaluated against the loaded record as the
-    record surface renders (#255) — a header button can hide/relabel/grey itself by the record's
-    state (`visibleWhen` false drops it; `enabledWhen` false greys it); two DETAIL actions with
-    complementary `visibleWhen` swap a plain button for a form-opening one in a specific state.
-    TOOLBAR actions have no record context (fixed icon/label).
-    `menu("Change status")` moves a ROW action off the inline row buttons into the row's
-    **right-click context menu**, under a submenu with that label (same-label actions group; one
-    action per enum value is the idiom). `color("#…")` renders a compact swatch for menu entries
-    such as status choices; `logo(url)` renders there too, useful for assignee avatars. The list
-    also supports **batch selection** (⌘/Ctrl-click
-    toggle, Shift-click range, ⌘A = all loaded rows, ⇧⌘↓/⇧⌘↑ = extend to bottom/top, gated on the
-    list being engaged): right-clicking the selection runs any server row action over every
-    selected id — as ONE request via `POST /api/actions/{kind}/{name}/{key}/batch` (`{ids,inputs}`,
-    ≤500, returns `{ok,failed,total}`) — plus a two-step "Delete N" via
-    `POST /api/{kind}/{name}/batch-delete`. **⌘C/⌘V**: copy puts the rows on the clipboard as TSV
-    (pasteable into text/spreadsheets) + an app payload; paste (≤50) on the same entity's list
-    creates server-side copies via `POST /api/{kind}/{name}/{id}/duplicate` (fresh identity,
-    catalog description + " (copy)" [`duplicate.copySuffix`], documents unposted/dated now,
-    secrets unset). Forms with unsaved edits confirm "Discard changes?" before the tab closes.
-  - `EntityConfigBuilder<E>`: typed `field/refField/rowField/rowRefField` getter overloads are the
-    authored default; string names are unsafe dynamic escape hatches.
-    `validation(key, FormValidator.class)`
-    → `.dependsOn(fields…)` (dotted section paths supported) + `.debounce(Duration)` for live,
-    advisory error/warning/info feedback; validators are Spring beans and never replace
-    authoritative save/post rules; `icon(name)` (nav icon, any lucide
-    name); a **tabular-section column** is addressed with a section-scoped key
-    `field("<section>.<field>")` (e.g. `field("items.unitPrice").format("currency:USD")`) — the
-    prefix is the `@TabularSection(name=…)`, and it scopes the hint so it can't collide with a
-    same-named top-level field; a **register's** resource columns format the same way via an
-    `EntityView` whose `entity()` is the register class (no served surface, just the hints);
-    `action(name)` → `ActionHintBuilder` places a **record-header** action (`unpost`/`duplicate`/
-    `delete`/`openInList` or a custom one; `openInList` needs only read access, #410) as `.primary()` / `.inMenu()` (overflow ⋯) / `.hidden()` (stays
-    on REST), #185 — the record surface is the editable form itself (no separate detail/edit
-    pages), so `post` is the form's built-in Post button (`.hidden()` hides it) and there is no
-    `edit` action anymore; `relatedList(name, sourceEntity)` → `RelatedListBuilder` renders an inline
-    related-rows panel on a catalog (the catalog analogue of a document `@TabularSection`) —
-    `.via(field)` (Ref scoping rows to the parent, required), `.display(field)` (Ref shown/picked per
-    row, required), `.columns(fields…)`, `.label(text)`, `.hideInDetail()`.
-  - `FieldHintBuilder`: `order(int)`, `group(String)` (fields sharing a group render as their own
-    card with that heading on the edit form), `width(String)` (`half`/`1/2`/`50%` = half a row on
-    wide screens; else full — a form-layout hint; a list column falls back to it only when it is a
-    positive whole-pixel value such as `240` or `240px`; size list columns with `ListSpec.width`), `widget(String)` (`switch`,
-    `textarea`; `color` (visual picker + `#RRGGBB` input); media:
-    `image`/`avatar`/`images`/`gallery`/`file` — streamed to
-    `POST /api/media`, the attribute stores the returned URL; `geojson`), `placeholder`, `format`
-    (`currency:EUR`, `integer`/`decimal`/`percent`, date patterns `dd-MM-yy`/`dd/MM/yyyy HH:mm`, …),
-    `hint(String)`, `label(String)`, `refSecondary(targetField)` (shows a second attribute under each
-    Ref-picker option to disambiguate same-named records, #185), `refOptions(Decorator.class)`
-    (live form/row/id badges, colors, disable reasons, and `filteredOut()` filtering),
-    `uniqueWithinSection()` (sibling-row uniqueness), `openButton(bool)` / `clearButton(bool)`
-    (Ref picker's open-record and clear buttons, both on by default; a required ref is never
-    clearable; #409), `hideInList/Form/Detail()`,
-    `visibleInList/Form/Detail(bool)`, chain `.field(next)`. `label(String)` localizes a field's
-    form/detail/list label — including the built-in system columns (`code`/`description`,
-    `number`/`date`/`posted`) that have no other DSL label path (#154), e.g. `.field("posted").label("Статус")`.
-    A `String` attribute with `length` > 1000 (or unbounded) renders as a textarea automatically.
-    A Ref picker's pinned "+ New" opens the target's create form in a side pane and, on save,
-    auto-selects the new record back into the field (cancel/manual pick drops the hand-off).
+- `Commands<E>` bean — `Class<E> entity()`, `define(CommandSpec<E> c)`. Several beans per entity
+  merge (first key wins). Every command is on every surface: UI, REST (`/api/commands/{kind}/{name}
+  [/{key}[/defaults|/batch]]`), MCP tool `<entity>_<key>` (static commands only; needs
+  `onno.mcp.writes-enabled`).
+  - `c.command(key)` record command; `c.collectionCommand(key)` no record id; `c.dynamic(live -> …)`
+    commands from live data (re-evaluated per listing/run; not MCP tools).
+  - `CommandBuilder`: `title(String)`, `title(row -> String)` (record only), `description`,
+    `group("Change status")` (UI submenu), `roles(...)` (any-of on top of write access; `ADMIN`
+    passes), `availableWhen(row -> bool)` (unlisted + rejected), `enabledWhen(row -> bool)`
+    (listed disabled), `input(key, i -> i.title(…).text()|longText()|date()|number()|oneOf(…)|
+    reference(Target.class).defaultValue(…).required())`, `inputRows(key, g -> g.title(…).required()
+    .column(col, c -> …))`, `defaults(ctx -> CommandDefaults.ofValues(map)|ofRows(group, rows))`,
+    `run(ctx -> CommandResult)` (required).
+  - `RecordRow<E>`: `id()`, `get(getter|col)`, `text(getter|col)` (display), `bool(...)`,
+    `enumValue(getter, Enum.class)`, `values()`.
+  - `CommandContext`: `id()`, `input(key)` (`""` if absent), `inputRows(key)` (`List<Map<String,
+    String>>`), `user()`, `subject()` (pass to `RecordAccess` for other records).
+  - `CommandResult.ok()|reload()|success|info|warning|error(msg)` `.title(…)`, `.detail(…)`,
+    `.details(list)`, `.andRefresh()`; `CommandResult.open(Ref)` / `.navigate(route)` /
+    `.andNavigate(route)` set `navigateTo` (app path or `onno://`; command/external URLs rejected;
+    applied after feedback and refresh). Expected refusal: `throw CommandRejectedException.builder()
+    .title(…).message(…).fieldError(input, msg).formError(msg).build()` (HTTP 422; keeps the input
+    dialog open).
+- `Checks<E>` bean — `define(CheckSpec<E> v)`: `v.check(key, ctx -> List<Feedback>)
+  .dependsOn(E::getA, E::getB).andDependsOn(E::getLines, Line::getX).debounce(Duration)`.
+  `CheckContext`: `kind`, `name`, `entityType`, `id` (null on create), `values` (by field name).
+  `Feedback.error|warning|info(field, msg)`, `Feedback.formError(msg)`. Advisory dry run
+  (`POST /api/checks/{kind}/{name}/{key}`); `Validated` stays authoritative.
+- `PickerOptions<E>` bean — `entity()`, `field()` (`"customer"` or `"section.field"`; one bean per
+  field), `decorate(PickerContext, List<PickerCandidate>) → Map<UUID, PickerOption>`.
+  `PickerContext`: `targetKind`, `targetName`, `fieldPath`, `formValues`, `section`, `rowIndex`,
+  `rowValues`, `recordId`. `PickerOption.badge(label, PickerTone)`, `.disabled(label, tone, reason)`,
+  `.filteredOut()`; `PickerTone.NEUTRAL|SUCCESS|WARNING|DANGER`.
+- `IdentityLink` bean — `IdentityLink.of(Employee.class, "email")`: login → catalog record (task
+  routing/delegation, comment authors, notifications, `Subject.recordId()`).
 
-An entity surface is only served if it has an `EntityView` for the active profile (no view → `404`);
-that is necessary **but not sufficient** for the sidebar. **Nav is curated:** an entity shows in the
-sidebar only if a `Layout` section lists it (`spec.section(...).catalog(X.class)`) — a view alone
-makes it reachable by direct route but unlisted. No auto-listing of unclaimed catalogs (removed; cf.
-#69). Media widgets stream the file to `MediaStorage` and persist the returned URL (see
+## UI (`@onno/ui`; app in `src/main/ui`; Gradle plugin `su.onno.ui`)
+
+- Gradle: `id("su.onno.ui")`; tasks `onnoUiInit` (seed), `generateUiModel` (`model.gen.ts` from the
+  Java entities), `buildUi` (`vite build` → jar `onno-app/`, served instead of the default shell).
+  `onnoUi { sourceDir; npmProjectDir; nodeVersion; modelPackages }`. `vite.config.ts`:
+  `plugins: [onno()]` from `@onno/ui/vite` (`onno({ backend })` for the dev proxy target).
+- `defineApp({ entities, pages, navigation, extensions })` — once, in `main.tsx`:
+  - `entities: { [logicalName]: EntityCustomization<E> }` — one per entity (`entities/Orders.ts`,
+    `satisfies EntityCustomization<"Orders">`), applied wherever it shows — `icon`, `comments`,
+    `list`, `form`, `fields`,
+    `rowStyle(record) → "danger"|"warning"|"success"|"accent"|"muted"|null`,
+    `commands: { key: { placement: "primary"|"menu"|"row"|"hidden", icon, title } | placement }`
+    (keys: server commands, built-ins `post`/`unpost`/`duplicate`/`delete`/`openInList`,
+    `print-<form>[-pdf]`), `recordPanels: [{ component, title, hint, width }]`.
+  - `list`: `columns`, `labels`, `sort` (`"-date"`), `groupBy`, `groupable` (`["status",
+    { date: "month" }]`), `aggregates` (`{ sum|avg|min|max: field, label, format }`), `filters`
+    (`{ field, label, type?: "options"|"multiOptions"|"contains"|"startsWith"|"dateRange"|
+    "numberRange", options?, optionsFrom? }`), `where`, `title`, `map` (`{ lat, lng, label?,
+    defaultView? }`), `custom` (`{ component: ListRendererProps → node, label, defaultView }`),
+    `selection` (component `{ ids, complete }`), `selectionCheckboxes`, `calendar`, `timeline`.
+  - `form`: `fields` — header fields shown, in order. Selection/order is only ever an array
+    (`list.columns`, `form.fields`).
+  - `fields[field | "section.field"]` (presentation only; key order means nothing): `label`,
+    `hidden`, `hideInList`, `hideInForm`, `group`, `width: "full"|"half"`, `input: "textarea"|"switch"|"image"|"images"|"file"|"color"|
+    "avatar"|"map"`, `format: { money: "USD" } | { number: { decimals, grouping } } | { percent:
+    { decimals } } | { date: "short"|"medium"|"long"|"full" | Intl options }`, `render(value,
+    record)`, `placeholder`, `hint`, `refSecondary`, `filterBy: { targetField: formField }`,
+    `openButton`, `clearButton`, `uniqueWithinSection`.
+  - `pages: [{ path, component, label, icon, roles, when(model), view }]` — `"/"` is home; an
+    entity route (`/documents/orders`) replaces that default screen; `:param`/`*` captures reach
+    the component as `RouteProps` (`path`, `params`, `query`, `view`, `renderDefault()`).
+  - `navigation: [{ title, icon, items: [entityName | pagePath | { entity|path, label, icon,
+    roles }] }]` or `(model, defaults) => sections`; omitted → pages + one section per `context`.
+  - `extensions: [{ id, slot, order, visible(ctx), component }]` — slots `entity.list.context-menu`,
+    `entity.list.actions`, `entity.list.selection`, `entity.form.actions`, `entity.form.aside`,
+    `crm.chat.*`, `crm.contact.actions|profile`, `crm.inbox.toolbar`.
+- Typed model (`model.gen.ts`): `EntityName`, `CatalogName`/`DocumentName`/`RegisterName`,
+  `RecordOf<E>` (with `<f>Display`, `<f>Ref` companions), `FieldOf<E>`, `TopField<E>`, `FormField<E>` (form-layout fields: no sections, no document `number`/`date`/`posted`), enum
+  constants + `…Labels`, `RoleName` (extend: `declare module "@onno/ui" { interface OnnoRoles {
+  X: true } }`), `InformationRegisterName`, `ConstantName`.
+- `Where<E>`: `{ field: value | null | { eq, not, in, notIn, gt, gte, lt, lte, contains,
+  startsWith }, id, and, or, not }`; registers' `MovementWhere` adds `period`, `recorder`,
+  `movementType`.
+- Measures: `count(entity, where?)`, `sum|avg|min|max(entity, numericField, where?)`; `By<E>` =
+  field or `{ dateField: "minute"|"hour"|"day"|"week"|"month" }`.
+- Page blocks: `Page` (`title`, `subtitle`, `actions`), `Row` (`widths: (number | { px })[]`),
+  `EntityList` (`entity`, `where`, `columns`, `labels`, `overrides`, `customization`, `fill`,
+  `defaultView|GroupBy|Sort`, controlled `view|groupBy|sort|search|selection` + `on…Change`),
+  `RecordPage`, `RecordFields` (`fields: FormField[]`, `overrides`), `RecordLines` (`section`,
+  `overrides`), `DefaultView`
+  (`path`), `DefaultHome`, `PageHeader`, `EntityListView` (+ `applyListOptions`) over an own feed.
+- Widgets (all `title`, `hint`): `Stat` (`measure`, `compare`, `trend`, `sparkline`, `ratioTo`,
+  `currency`, `unit`, `format`), `Sparkline`, `Gauge` (`target`), `Chart` (`measure`+`by` or
+  `series[]`, `type`, `splitBy`, `stacked`, `axes`, `thresholds`, `legend`, `curve`, `bucketMode`),
+  `TimeRange` (`presets`, `default`, `id`), `Calendar` (`entity`, `start`, `end`|`duration`,
+  `itemTitle`, `subtitle`, `color`, `fill`), `Kanban` (`entity`, `by` enum/ref/`posted`),
+  `RecentRecords`, `EntityMap` (`lat`/`lng` or `geoJson`), `Setting` (`constant`), `TaskInbox`,
+  `UserAccounts`, `ChangePassword`. Starters: `PrintTemplates` (`@onno/print`), `CrmInbox`,
+  `CrmConnections`, `CrmConversationPage`, `CrmContactDetails` (`@onno/crm`), `channelSetups`
+  (`@onno/crm-channels`).
+- Data hooks (TanStack Query, live via `/api/events`): `useRecords(e, { where, sort, limit })`,
+  `useRecord(e, id)`, `useAggregate(measure, by?)`, `useBalance(reg, { where, asOf })`,
+  `useTurnover(reg, { from, to, where })`, `useMovements(reg, { from, to, where })`,
+  `useInformationRegister(name, { where, at })`, `useConstant(name)`, `useSetConstants()`,
+  `useCreateRecord`, `useUpdateRecord` (`{ id, values }`), `useDeleteRecord`, `usePostDocument`,
+  `useUnpostDocument`, `useCommand(e, key)` (`mutate({ id?, inputs? })`); `useModel`,
+  `useHasRole`, `useUiEvents(listener, filter)` (non-entity events), `useQuery`/`queryClient`/`api`.
+- Navigation: `openRecord(e, id = "new", prefill?)`, `openRoute(link | path)`, `links.record|
+  newRecord|list({ where })|page` → `onno://documents/orders/<id>`, `…/new?customer=<id>`,
+  `…?where=<json>`, `onno://ops`.
+- Text/format: `useTranslate`, `text(key)`, `useLocale`, `locale()`, `formatMoney(v, "USD")`,
+  `formatDate(v, opts?)`, `displayOf(record, field)`.
+- Config: `onno.ui.path` (`/ui`), `onno.ui.locale`, `onno.ui.messages.*`, `onno.ui.branding.*`,
+  `onno.ui.login.demo-accounts`; `onno.web.read-only`, `onno.web.list.page-size`,
+  `onno.web.dev-mode`.
+
+Every readable entity is served by default; access is `@AccessControl` + record policies, never a
+UI allowlist. Media inputs stream the file to `MediaStorage` and persist the returned URL (see
 `docs/MEDIA_UPLOADS.md`).
 
 ## Print forms (onno-print-starter, package `su.onno.print`; `onno.print.enabled`)
@@ -544,18 +423,19 @@ makes it reachable by direct route but unlisted. No auto-listing of unclaimed ca
   Word only; Excel cells keep their own format.
 - Template syntax `{{key}}`, table rows `{{items.col}}` (row repeats per item). Unknown keys stay
   visible. Excel `SUM` ranges ending on the template row stretch over inserted rows.
-- UI: record ⋯ menu entry per permitted form, action key `print-{key}` (`f.action("print-invoice").primary()`).
+- UI: record ⋯ menu entry per permitted form, command key `print-{key}` (`print-{key}-pdf` for PDF);
+  place/icon it in the entity customization: `commands: { "print-invoice": { placement: "primary", icon: "printer" } }`.
 - REST: `GET /api/print/{kind}/{name}/{id}` (list), `GET /api/print/{kind}/{name}/{id}/{form}[?format=pdf]`
   (file), `POST /api/print/batch/{kind}/{name}/{form}` `{"ids":[…]}` (zip), `/api/print/templates/**` (admin).
 - Batch: list selection toolbar → zip (`onno.print.batch.max-records`, default 200).
-- Uploaded templates: `b.widget("Print templates").type("printTemplates")`; `onno.print.templates.*`
+- Uploaded templates: `<PrintTemplates />` from `@onno/print`; `onno.print.templates.*`
   (`enabled`, `manage-roles` = ADMIN, `max-size` = 10MB); same format as the built-in file.
 - PDF: `onno.print.pdf.gotenberg.url` or `onno.print.pdf.libreoffice.command` (or a `PdfConverter`
   bean); `spec.pdf()` makes PDF the default (fails startup without a converter); menu gains `· PDF`.
-- Generic SPIs behind it: `su.onno.ui.RecordActionContributor` (record ⋯ menu) and
-  `su.onno.ui.SelectionDownloadContributor` (list selection-toolbar downloads).
+- Generic SPIs behind it: `su.onno.web.RecordActionContributor` (record ⋯ menu) and
+  `su.onno.web.SelectionDownloadContributor` (list selection-toolbar downloads).
 
-## Notifications (package `su.onno.ui.notifications`; `onno.notifications.*`)
+## Notifications (package `su.onno.web.notifications`; `onno.notifications.*`)
 
 - Per-user timeline behind the shell's bell + `/api/notifications` (sidebar trigger on desktop, a
   Notifications row in the More menu on mobile — with unread badges and a dot on the More tab).
@@ -568,7 +448,7 @@ makes it reachable by direct route but unlisted. No auto-listing of unclaimed ca
 - Built-in, config-gated producers: **mentions** (`onno.notifications.mentions.enabled`) turn a comment
   `@`-mention of a user into a notification; **assignment** (`onno.notifications.assignments.enabled`)
   notifies the target of an `@AssigneeField`-annotated `Ref<>` when it's set/changed to a user.
-- `@AssigneeField` (on a catalog/document `Ref<>` attribute pointing at the identity catalog) — marks
+- `@AssigneeField` (`su.onno.annotations`; on a catalog/document `Ref<>` attribute pointing at the identity catalog) — marks
   the assignee; setting it fires the assignment producer. Notification hint only; no storage/UI effect.
 
 ## Events & outbox (packages `su.onno.events`, `su.onno.messaging`)
@@ -581,7 +461,7 @@ makes it reachable by direct route but unlisted. No auto-listing of unclaimed ca
 - `OutboxWriter.append(aggregateType, aggregateId, eventType, payload)` → `onno_outbox`; the
   starter wires it to join active Spring JDBC transactions. Posting uses
   `append(Handle, ...)` so the business mutation and outbox row commit or roll back together.
-  `onno-kafka-starter` relays committed rows as CloudEvents.
+  An application-owned relay reads committed rows.
 
 ## Schema & migration (packages `su.onno.schema`, `su.onno.migration`)
 
@@ -609,16 +489,8 @@ Add application tools with `@McpTool` on public Spring bean methods and describe
 `@McpToolParam`; `Principal`/`McpToolContext` are injectable, `roles` restricts callers, and
 `readOnly = false` opts into the global write gate. Use `McpToolProvider` for direct SDK tools.
 
-For optional visual selection in standard catalog/document lists, declare
-`list.selectionCheckboxes(true)` inside `EntityView.list(...)`. It defaults off, works in flat and
-grouped tables, and uses the existing batch server ROW actions via inline toolbar buttons. The
-mixed-state header selects only loaded rows, not all unseen matches. Maps/custom renderers keep
-their own selection UI. Use a static human label for batch actions, even with per-row dynamic labels.
-
-Selection toolbar extensions: `ListSpec.selectionWidget("type")` mounts an SDK
-`registerListSelection("type", Component)` component when rows are selected and the viewer has
-write access. It receives `ids` and `complete()` (clear selection and reload after success).
-Commands must enforce their own server-side authorization; unknown widget types are omitted.
+Commands are MCP tools too: every static `Commands<E>` command is a tool `<entity>_<key>` with its
+inputs as the schema (see the commands section).
 
 ## Composable CRM messaging
 
@@ -627,34 +499,26 @@ inbound callback returns a saved `Ref<T>`. `CrmAgentBinding<T>` adds host identi
 No CRM customer/employee/sales catalogs or navigation are installed. Customer fields, stages,
 forms and sales metrics use ordinary onno metadata. See `onno-crm-starter/README.md`.
 
-CRM connection pages (`Scope` is `CrmConnectionAccounts.Scope`): `p.view(new CrmConnectionsView().scopes(Scope.SHARED, Scope.PERSONAL)
-.defaultScope(...).sharedLabel(...).personalLabel(...).providers("gmail", ...).showUnavailable(true))`
-emits the `crmConnections` widget (raw `crmSettings` widget config with the same keys still works). Provider metadata
+CRM connection pages: `<CrmConnections setups={[channelSetups]} scopes={["shared", "personal"]} defaultScope="shared"
+sharedLabel=… personalLabel=… providers={["gmail", …]} showUnavailable />` (React, `@onno/crm`). Provider metadata
 comes from `CrmAccountProvider`; ownership from `CrmConnectionAccounts`. Personal scope must
-isolate credentials and inboxes. `UiEntityAccessPolicy.includesAdministrators()` is an explicit
+isolate credentials and inboxes. `EntityAccessPolicy.includesAdministrators()` is an explicit
 opt-in privacy boundary, not the default role behavior.
 
-### Reusable page views
+### CRM screens
 
-`PageView` composes reusable content through `PageBuilder.view(view)`, including in rows and
-asides. Configure view instances at startup; `ListView` and the CRM views freeze on first placement
-and throw `IllegalStateException` if mutated afterwards.
-`ListView<E>` places the existing entity list and accepts `.defaults(d -> d.fill().sort("date", true))`.
-`EntityView<E>` still owns entity columns, fields and actions; permissions and data resolution use
-the existing renderer. A Page owns the route and header; a PageView does not register navigation.
-CRM provides `su.onno.crm.ui.CrmInboxView` (final; declare it as a `@Bean`, inject into the Page)
-for typed inbox presentation: one method per surface plus an optional breakpoint, e.g.
-`header(h -> ...)`, `header(Breakpoint.NARROW|MOBILE, h -> ...)`, `listHeader(MOBILE, ...)`,
-`composer(MOBILE, ...)`. Each configured toolbar fully replaces renderer defaults (unset regions are
-empty; an item may sit in one region only). Workspace beans still own the authorized feed and
-declared filters; `CrmInboxViewValidator` fails startup if a `CrmInboxView` bean names an unknown
-workspace and fails on filter keys the workspace bean does not declare (facets with runtime options use `CrmInboxWorkspace.FacetOptions`). `CrmConnectionsView` types the `crmConnections` connections widget (`crmSettings` remains an alias).
-Existing `page.list(...)` and widget config remain valid.
-
+The CRM's screens are React components of `@onno/crm` with typed props, rendered from the app's
+pages: `<CrmInbox workspace="support" list={…} contactFields={…} folders={…} />`,
+`<CrmConnections setups={[channelSetups]} />`, `CrmContactDetails` (a record panel),
+`CrmConversationPage` (at `/catalogs/crm_conversations/:id`). Workspace beans own the authorized
+feed, commands, folders and facets; the server never names a component.
 
 Collection reads: use limit/cursor and `{rows,nextCursor,hasMore}` (100 default, 500 max).
 Only su.onno.query.Cursor issues context-bound typed positions; use KeysetWindow for SQL seek.
 SQL DATE values must remain typed. Count only by explicit request; never compute a report from
 a silently capped preview. A plain-`List` Java method drains the cursor
-(`KeysetWindow.drain`) instead of returning the first window. Register SDK reads return pages. See docs/HEADLESS_READ_API.md,
-Collection pagination, for the cursor-only contract, bounded selectors and CRM callback limits.
+(`KeysetWindow.drain`) instead of returning the first window; request paths use the paged variants
+(`RegisterQueryService.movementsPage`/`balancePage`/`turnoverPage`). In `@onno/ui`,
+`getMovements`/`getBalance`/`getTurnover` return pages and `allRegisterRows` follows the cursor.
+See docs/HEADLESS_READ_API.md, Collection pagination, for the cursor-only contract, bounded
+selectors and CRM callback limits.

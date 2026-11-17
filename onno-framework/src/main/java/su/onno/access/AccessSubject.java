@@ -12,7 +12,7 @@ import java.util.UUID;
  * Who is asking for data — the value every record-scoped read and write is evaluated against.
  *
  * <p>A {@link User} is a signed-in person: their login, normalized roles, the identity-linked
- * catalog record (from {@code Layout.identity(...)}) and app-defined attributes contributed by
+ * catalog record (from the {@code IdentityLink}) and app-defined attributes contributed by
  * {@link AccessSubjectContributor} beans. {@link System} is trusted framework or application code
  * (posting, jobs, processes, migrations, connectors) and is never scoped.
  *
@@ -48,7 +48,7 @@ public sealed interface AccessSubject permits AccessSubject.User, AccessSubject.
      * @param username   the login (principal name)
      * @param roles      the granted roles, normalized to upper case without a {@code ROLE_} prefix
      * @param recordId   the identity-linked catalog record id, or {@code null} when no
-     *                   {@code Layout.identity(...)} is configured or no record matches
+     *                   {@code IdentityLink} is configured or no record matches
      * @param attributes app-defined attributes from {@link AccessSubjectContributor} beans
      */
     record User(String username, Set<String> roles, UUID recordId, Map<String, Object> attributes)

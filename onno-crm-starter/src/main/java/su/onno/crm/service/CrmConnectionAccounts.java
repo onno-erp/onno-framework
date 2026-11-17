@@ -11,7 +11,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.server.ResponseStatusException;
-import su.onno.ui.UiEventPublisher;
+import su.onno.web.EventPublisher;
 
 /**
  * Durable ownership of connected provider accounts, separate from provider credentials.
@@ -59,14 +59,14 @@ public class CrmConnectionAccounts {
     private final JdbcTemplate jdbc;
     private final CrmChannelAccess access;
     private final CrmFeatures features;
-    private final ObjectProvider<UiEventPublisher> events;
+    private final ObjectProvider<EventPublisher> events;
 
     public CrmConnectionAccounts(JdbcTemplate jdbc, CrmChannelAccess access, CrmFeatures features) {
         this(jdbc, access, features, null);
     }
 
     public CrmConnectionAccounts(JdbcTemplate jdbc, CrmChannelAccess access, CrmFeatures features,
-                                 ObjectProvider<UiEventPublisher> events) {
+                                 ObjectProvider<EventPublisher> events) {
         this.jdbc = jdbc;
         this.access = access;
         this.features = java.util.Objects.requireNonNull(features, "features");

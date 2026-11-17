@@ -7,8 +7,8 @@ import java.util.function.Consumer;
  * deployment — the mechanism that keeps live-UI updates in sync when more than one instance runs
  * behind a load balancer.
  *
- * <p>It is swappable exactly like {@code su.onno.ui.media.MediaStorage}: the framework wires a
- * {@link NoOpClusterEventBus} when nothing better is available, {@code onno-cluster-starter} supplies
+ * <p>It is swappable exactly like {@code su.onno.web.media.MediaStorage}: the framework wires a
+ * {@link NoOpClusterEventBus} when nothing better is available, {@code onno-framework-starter} supplies
  * a Postgres {@code LISTEN}/{@code NOTIFY} default on a Postgres datasource, and a commercial build
  * can replace either by exposing its own {@code ClusterEventBus} bean (e.g. Kafka- or Redis-backed),
  * which the auto-configuration's {@code @ConditionalOnMissingBean} default then steps aside for.
@@ -16,7 +16,7 @@ import java.util.function.Consumer;
  * <p><strong>This is a best-effort live-UI signal, not a guaranteed-delivery event log.</strong> An
  * event dropped during a reconnect is acceptable — the browser re-fetches the affected surface on its
  * next interaction. Durable, exactly-once domain-event distribution is the job of the outbox relay
- * ({@code su.onno.messaging.OutboxWriter} + {@code onno-kafka-starter}), not this bus.
+ * ({@code su.onno.messaging.OutboxWriter} plus an application-owned relay), not this bus.
  */
 public interface ClusterEventBus {
 

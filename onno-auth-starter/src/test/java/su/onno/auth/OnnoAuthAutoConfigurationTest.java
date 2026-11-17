@@ -97,8 +97,8 @@ class OnnoAuthAutoConfigurationTest {
             assertThat(properties.getAdditionalPublicPaths()).isEmpty();
             assertThat(properties.effectivePublicPaths()).containsExactly(
                     "/error", "/api/theme", "/api/config", "/api/branding", "/api/auth/login",
-                    "/api/auth/me", "/api/auth/csrf", "/api/divkit/login",
-                    "/api/desktop/ready", "/api/desktop/manifest");
+                    "/api/auth/login/*", "/api/auth/login/*/challenge",
+                    "/api/auth/me", "/api/auth/csrf", "/api/ui/login");
             assertPublicPaths(context.getBean(SecurityFilterChain.class), properties.effectivePublicPaths());
         });
     }

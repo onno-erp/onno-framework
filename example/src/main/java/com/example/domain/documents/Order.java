@@ -6,6 +6,7 @@ import com.example.domain.enumerations.OrderStatus;
 import com.example.domain.registers.BookSales;
 import com.example.domain.registers.BookStock;
 import su.onno.annotations.AccessControl;
+import su.onno.annotations.AssigneeField;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Document;
 import su.onno.annotations.TabularSection;
@@ -16,7 +17,6 @@ import su.onno.posting.PostingContext;
 import su.onno.rules.BusinessRule;
 import su.onno.rules.Validated;
 import su.onno.types.Ref;
-import su.onno.ui.notifications.AssigneeField;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -45,7 +45,7 @@ import java.util.List;
  * <p>{@code items} is a {@code @TabularSection}: repeated {@link OrderLine} rows stored with the
  * order. {@code @AccessControl} lets any MANAGER read and write orders.</p>
  */
-@Document(name = "Orders", title = "Order", numberPrefix = "O-", context = "Sales", history = true)
+@Document(name = "Orders", numberPrefix = "O-", context = "Sales", history = true)
 @AccessControl(readRoles = {"MANAGER"}, writeRoles = {"MANAGER"})
 @Getter
 @Setter

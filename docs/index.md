@@ -6,7 +6,7 @@ hero:
   text: Model the business. Generate the rest.
   tagline: >-
     Reusable Spring Boot starters that turn typed Java metadata — catalogs, documents, registers —
-    into a database schema, a generic REST API, a server-driven UI, and an MCP tool surface for AI agents.
+    into a database schema, a generic REST API, a React UI, and an MCP tool surface for AI agents.
   actions:
     - theme: brand
       text: Architecture
@@ -26,8 +26,8 @@ features:
     title: Generated, not hand-written
     details: Schema, repositories, generated query services, the generic REST API, and migration history are all derived from the model at boot.
   - icon: 🖥️
-    title: Server-driven UI + MCP
-    details: A DivKit admin UI and a Model Context Protocol tool surface for AI agents, both generated from the same metadata and gated by the same RBAC.
+    title: A React UI + MCP
+    details: A default React UI for every entity (customize it in an ordinary Vite app on @onno/ui) and a Model Context Protocol tool surface for AI agents, both driven by the same model and gated by the same RBAC.
   - icon: 📄
     title: Docs from the source of truth
     details: The configuration reference is generated from the @ConfigurationProperties Javadoc — and the build fails if it ever drifts from the code.

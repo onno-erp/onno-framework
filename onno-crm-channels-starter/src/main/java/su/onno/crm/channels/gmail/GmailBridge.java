@@ -59,9 +59,9 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
     private final su.onno.crm.service.CrmAttachments attachments;
     private final CrmChannelsProperties.Gmail settings;
     /** Reloads open inboxes once per history batch; absent in tests and headless setups. */
-    private volatile su.onno.ui.UiEventPublisher uiEvents;
+    private volatile su.onno.web.EventPublisher uiEvents;
     @org.springframework.beans.factory.annotation.Autowired(required=false)
-    void setUiEvents(su.onno.ui.UiEventPublisher events) { this.uiEvents=events; }
+    void setUiEvents(su.onno.web.EventPublisher events) { this.uiEvents=events; }
     /** How a message comes in: as it arrived, from a scan of recent mail, or as old history. */
     enum Mode { LIVE, SCAN, HISTORY }
     /** Media keys of files kept in Gmail: {@code gmail/<id>/<name>}. */
@@ -617,7 +617,7 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
         return name.length()<=80?name:name.substring(name.length()-80);
     }
     /** A file kept in Gmail, described from the table; its bytes are fetched only when it is read. */
-    Optional<su.onno.ui.media.LoadedMedia> file(String key) {
+    Optional<su.onno.web.media.LoadedMedia> file(String key) {
         if(!key.startsWith(FILE_PREFIX))return Optional.empty();
         String rest=key.substring(FILE_PREFIX.length());int slash=rest.indexOf('/');
         UUID id;try{id=UUID.fromString(slash<0?rest:rest.substring(0,slash));}catch(IllegalArgumentException e){return Optional.empty();}
@@ -639,7 +639,7 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
                 }
             };
             // The size is unknown until Gmail sends the bytes, so none is announced.
-            return new su.onno.ui.media.LoadedMedia(resource,rs.getString(5),-1,filename);
+            return new su.onno.web.media.LoadedMedia(resource,rs.getString(5),-1,filename);
         },id).stream().findFirst();
     }
     /** Fetch one file of a Gmail message by its part: the part's current attachment id, then its bytes. */

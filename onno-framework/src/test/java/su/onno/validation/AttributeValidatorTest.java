@@ -21,14 +21,12 @@ class AttributeValidatorTest {
 
     private static AttributeDescriptor required(String field) {
         return new AttributeDescriptor(field, field, field, String.class, 0, true, false, null,
-                0, 0, true, true, true, 0, null, null, null,
-                AttributeDescriptor.Constraints.NONE, false);
+                0, 0, AttributeDescriptor.Constraints.NONE, false);
     }
 
     private static AttributeDescriptor optional(String field) {
         return new AttributeDescriptor(field, field, field, String.class, 0, false, false, null,
-                0, 0, true, true, true, 0, null, null, null,
-                AttributeDescriptor.Constraints.NONE, false);
+                0, 0, AttributeDescriptor.Constraints.NONE, false);
     }
 
     private final List<AttributeDescriptor> attrs = List.of(required("customer"), optional("note"));
@@ -62,8 +60,7 @@ class AttributeValidatorTest {
     @Test
     void partialValidationChecksConstraintsOnSubmittedFields() {
         AttributeDescriptor bounded = new AttributeDescriptor("note", "Note", "note", String.class,
-                5, false, false, null, 0, 0, true, true, true, 0, null, null, null,
-                AttributeDescriptor.Constraints.NONE, false);
+                5, false, false, null, 0, 0, AttributeDescriptor.Constraints.NONE, false);
         ValidationErrors errors = new ValidationErrors();
         validator.validatePartial(Map.of("note", "way too long"), List.of(bounded), errors);
 

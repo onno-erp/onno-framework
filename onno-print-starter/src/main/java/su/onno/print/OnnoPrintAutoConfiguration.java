@@ -2,11 +2,11 @@ package su.onno.print;
 
 import su.onno.metadata.MetadataRegistry;
 import su.onno.types.RefResolver;
-import su.onno.ui.CatalogQueryService;
-import su.onno.ui.DocumentQueryService;
-import su.onno.ui.UiAccessService;
-import su.onno.ui.UiAutoConfiguration;
-import su.onno.ui.UiProperties;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentQueryService;
+import su.onno.service.AccessService;
+import su.onno.web.UiAutoConfiguration;
+import su.onno.service.WebProperties;
 
 import org.jdbi.v3.core.Jdbi;
 import org.springframework.beans.factory.ObjectProvider;
@@ -28,7 +28,7 @@ import java.util.Map;
  */
 @AutoConfiguration(after = UiAutoConfiguration.class)
 @ConditionalOnBean({MetadataRegistry.class, RefResolver.class, CatalogQueryService.class,
-        DocumentQueryService.class, UiAccessService.class})
+        DocumentQueryService.class, AccessService.class})
 @EnableConfigurationProperties(OnnoPrintProperties.class)
 @ConditionalOnProperty(prefix = "onno.print", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class OnnoPrintAutoConfiguration {
@@ -85,12 +85,12 @@ public class OnnoPrintAutoConfiguration {
 
     @Bean
     public PrintController printController(PrintService print, CatalogQueryService catalogs,
-                                           DocumentQueryService documents, UiAccessService access,
+                                           DocumentQueryService documents, AccessService access,
                                            RefResolver refs, OnnoPrintProperties properties,
-                                           UiProperties uiProperties) {
+                                           WebProperties webProperties) {
         return new PrintController(print, catalogs, documents, access, refs,
                 properties.getTemplates().getManageRoles(), properties.getBatch().getMaxRecords(),
-                uiProperties.isReadOnly());
+                webProperties.isReadOnly());
     }
 
     private static String route(String logicalName) {

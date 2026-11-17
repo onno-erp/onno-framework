@@ -17,11 +17,13 @@ set and business logic branches on constants.
 
 1. Decide whether each list is runtime master data or a code-controlled state/category.
 2. Keep annotation `name` ASCII and route-safe. Put user-facing/localized labels in `title`,
-   `displayName`, `EntityView.field(...).label(...)`, and `@EnumLabel`.
+   `displayName`, `@EnumLabel`, and the UI entity customization's `fields[f].label` (the only way to
+   relabel `code`/`description`).
 3. Use `Ref<T>` for links to catalogs/documents. Do not embed target objects.
 4. Add `@AccessControl`; entities without explicit roles are deny-by-default.
-5. Add an `EntityView` if the catalog should be served by DivKit/UI routes. Generic REST and MCP
-   exposure depend on metadata registration and RBAC, not on `EntityView`.
+5. Every readable catalog gets a default list and form, REST endpoints and MCP tools from metadata
+   and RBAC alone. Customize its presentation in `src/main/ui/entities/` (`onno-ui-entities`) and
+   place it in `navigation` (`onno-ui-pages`) only where the defaults don't fit.
 6. Add repository methods only when app logic needs them; prefer active finders for business rules.
 
 ## Read The Examples

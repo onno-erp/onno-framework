@@ -48,4 +48,5 @@ Produce:
 - open questions that block safe implementation
 
 Then implement with the focused skills: `onno-catalogs-enums`, `onno-documents-lines`,
-`onno-registers`, `onno-rules-lifecycle`, `onno-posting`, and `onno-ui-entity-views`.
+`onno-registers`, `onno-rules-lifecycle`, `onno-posting`, `onno-commands`, `onno-ui-entities`, and
+`onno-ui-pages`.

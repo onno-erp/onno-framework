@@ -10,7 +10,7 @@ Because onno is metadata-driven, the tools are **generated generically** from th
 typed process-graph names at runtime.
 
 Every tool call runs **as the authenticated user** and is enforced through the same
-`UiAccessService` deny-by-default role model as the web UI — and inside the same record scope
+`AccessService` deny-by-default role model as the web UI — and inside the same record scope
 (`RecordAccessPolicy`): a tool never returns or changes a record the user couldn't open in the UI.
 The LLM is just another caller — it never gains access a user role wouldn't have.
 
@@ -34,11 +34,13 @@ security filter chain scoped to that endpoint that reuses your existing
 | `posting_preview` | read | Show the register movements a document would make if posted. *(gated by `onno.mcp.posting-enabled`)* |
 | `period_close_status` | read | Closed accounting periods (scope, inclusive `closedThrough`, `soft`/`hard`), so an agent knows a backdated write will be rejected. Registered when period close is enabled. |
 | `post_document`, `unpost_document` | write | Post/unpost a document to registers. **Has ledger side-effects.** Honours the document's `@AccessControl(postRoles/unpostRoles)` like the REST API. *(gated by `onno.mcp.posting-enabled`)* |
+| `<entity>_<command>` | write | One tool per command of a `Commands<E>` bean (see below). *(gated by `onno.mcp.writes-enabled`)* |
 
 ## Usage
 
-Add the dependency (alongside `onno-ui-starter` and a security provider such as
-`onno-auth-starter`):
+Add the dependency (alongside a security provider such as `onno-auth-starter`). The query/command
+services it exposes come from `onno-framework-starter` (`su.onno.service`), so `onno-web-starter` is
+not required:
 
 ```kotlin
 dependencies {
@@ -60,6 +62,18 @@ It auto-configures when a `MetadataRegistry` bean and Spring Security are presen
 | `onno.mcp.server-version` | `0.1.0` | Version advertised in the handshake. |
 | `onno.mcp.instructions` | _(generated)_ | Client-facing usage instructions. |
 
+### Commands as tools
+
+Every command an application declares with a `Commands<E>` bean (`su.onno.command`) is also an MCP
+tool, so an agent can do what a user does under the same rules. The tool is named `<entity>_<key>`
+(restricted to `[A-Za-z0-9_.-]`, at most 64 characters), described by the command's `description`
+(else its title), and takes one property per input (a number, a date, an enum of options or a
+referenced record's UUID), an array of objects per row group, and the record `id` for a record
+command. A call runs through the web starter's `CommandService` as the caller: entity write access,
+the command's roles, read-only mode, record scope and `availableWhen`/`enabledWhen` apply exactly as on
+`/api/commands`. The result is the command's feedback; a `CommandRejectedException` comes back as a
+tool error. Commands declared with `c.dynamic(...)` change at runtime and are not published as tools.
+
 ### Connecting a client
 
 Point an MCP client at `http(s)://<host>/mcp` using **streamable HTTP** transport and
@@ -72,7 +86,7 @@ Add `@McpTool` to a public instance method on any Spring bean. Ordinary paramete
 JSON-schema inputs and are converted to their declared Java types. `Principal`, `AccessSubject`,
 `McpToolContext`, and `McpSyncServerExchange` parameters are injected and do not appear in the
 schema. A tool that reads or changes records on the caller's behalf passes the `AccessSubject`
-(also `McpToolContext.subject()`) to the UI starter's query services or checks with `RecordAccess` —
+(also `McpToolContext.subject()`) to the service layer's query services (`su.onno.service`) or checks with `RecordAccess` —
 typed repositories are not record-scoped.
 
 ```java

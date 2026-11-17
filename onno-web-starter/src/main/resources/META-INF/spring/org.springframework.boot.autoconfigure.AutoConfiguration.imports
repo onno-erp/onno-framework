@@ -1,0 +1,6 @@
+su.onno.web.UiAutoConfiguration
+su.onno.web.media.MediaAutoConfiguration
+su.onno.web.comments.CommentsAutoConfiguration
+su.onno.web.notifications.NotificationsAutoConfiguration
+
+su.onno.web.tags.TagsAutoConfiguration

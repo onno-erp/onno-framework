@@ -115,7 +115,7 @@ public class OnnoPrintProperties {
     /** Converts through a Gotenberg service. */
     public static class Gotenberg {
 
-        /** Base URL of a Gotenberg service, e.g. http://localhost:3000. Setting it enables PDF output. */
+        /** Base URL of a Gotenberg service (for a local one, port 3000 on localhost). Setting it enables PDF output. */
         private URI url;
 
         /** Timeout of one Gotenberg conversion request. */

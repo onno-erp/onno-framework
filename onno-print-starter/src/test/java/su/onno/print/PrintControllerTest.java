@@ -6,10 +6,10 @@ import su.onno.metadata.DocumentDescriptor;
 import su.onno.model.DocumentObject;
 import su.onno.types.Ref;
 import su.onno.types.RefResolver;
-import su.onno.ui.CatalogQueryService;
-import su.onno.ui.DocumentQueryService;
-import su.onno.ui.RecordActionContributor;
-import su.onno.ui.UiAccessService;
+import su.onno.service.CatalogQueryService;
+import su.onno.service.DocumentQueryService;
+import su.onno.web.RecordActionContributor;
+import su.onno.service.AccessService;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,7 +67,7 @@ class PrintControllerTest {
         ResourceLoader resources = new org.springframework.core.io.DefaultResourceLoader();
         service = new PrintService(List.of(new InvoiceForm()), Map.of(Invoice.class, "documents/Invoices"), refs, resources);
         controller = new PrintController(service, mock(CatalogQueryService.class), documents,
-                mock(UiAccessService.class), refs);
+                mock(AccessService.class), refs);
         when(documents.require("Invoices")).thenReturn(desc);
         doReturn(Invoice.class).when(desc).javaClass();
         Invoice invoice = new Invoice();
@@ -112,7 +112,7 @@ class PrintControllerTest {
         var request = new RecordActionContributor.RecordActionRequest("documents", "Invoices", Invoice.class, id, manager);
         assertThat(actions.actions(request)).singleElement().satisfies(a -> {
             assertThat(a.key()).isEqualTo("print-invoice");
-            assertThat(a.icon()).isEqualTo("printer");
+            assertThat(a.title()).isEqualTo(service.formsFor(Invoice.class).getFirst().label());
             assertThat(a.url()).isEqualTo("onno://download/api/print/documents/Invoices/" + id + "/invoice");
         });
         assertThat(actions.actions(new RecordActionContributor.RecordActionRequest(
@@ -140,7 +140,7 @@ class PrintControllerTest {
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
         PrintController small = new PrintController(service, mock(CatalogQueryService.class), documents,
-                mock(UiAccessService.class), refs, List.of("ADMIN"), 1);
+                mock(AccessService.class), refs, List.of("ADMIN"), 1);
         assertThatThrownBy(() -> small.batch("documents", "Invoices", "invoice", null,
                 new PrintController.BatchRequest(List.of(id, hidden)), manager))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
@@ -178,14 +178,14 @@ class PrintControllerTest {
         assertThat(template.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION)).contains("invoice.docx");
 
         PrintController managers = new PrintController(service, mock(CatalogQueryService.class), documents,
-                mock(UiAccessService.class), refs, List.of("ROLE_MANAGER"), 10);
+                mock(AccessService.class), refs, List.of("ROLE_MANAGER"), 10);
         assertThat(managers.templates(manager).forms()).hasSize(1);
     }
 
     @Test
     void readOnlyModeRejectsTemplateChangesButStillPrints() {
         PrintController readOnly = new PrintController(service, mock(CatalogQueryService.class), documents,
-                mock(UiAccessService.class), refs, List.of("ADMIN"), 10, true);
+                mock(AccessService.class), refs, List.of("ADMIN"), 10, true);
         AccessSubject admin = AccessSubject.user("root", Set.of("ADMIN"));
         org.springframework.mock.web.MockMultipartFile file =
                 new org.springframework.mock.web.MockMultipartFile("file", "invoice.docx", null, new byte[] {1});

@@ -56,8 +56,8 @@ public class OnnoAuthProperties {
      * Legacy configuration: custom values are combined with the mandatory framework paths.
      * Prefer {@code onno.auth.additional-public-paths} for new configurations.
      * The defaults are: {@code /error}, {@code /api/theme}, {@code /api/config}, {@code /api/branding},
-     * {@code /api/auth/login}, {@code /api/auth/me}, {@code /api/auth/csrf}, {@code /api/divkit/login},
-     * {@code /api/desktop/ready}, {@code /api/desktop/manifest}.
+     * {@code /api/auth/login}, {@code /api/auth/login/{method}} and {@code /api/auth/login/{method}/challenge}
+     * (application login methods), {@code /api/auth/me}, {@code /api/auth/csrf}, {@code /api/ui/login}.
      */
     private List<String> publicPaths = new ArrayList<>(FRAMEWORK_PUBLIC_PATHS);
 
@@ -72,6 +72,11 @@ public class OnnoAuthProperties {
             // screen carries the consumer's brand. Non-sensitive, like theme/config.
             "/api/branding",
             "/api/auth/login",
+            // Application-defined login methods (su.onno.auth.spi.LoginMethod): a one-time code, a
+            // magic link, … Unlike the password login these stay CSRF-protected; the SPA already
+            // holds the XSRF-TOKEN cookie from its /api/auth/me call before it shows the login page.
+            "/api/auth/login/*",
+            "/api/auth/login/*/challenge",
             // Current auth state + the login methods to offer (mode, SSO loginUrl, logoutUrl). Must
             // be reachable unauthenticated so the SPA can decide what to render before sign-in;
             // returns only non-sensitive routing info (anonymous state when not logged in).
@@ -80,13 +85,8 @@ public class OnnoAuthProperties {
             // mobile: iOS hides Set-Cookie, no document.cookie). Public like /me so the token can be
             // bootstrapped before sign-in; it's only ever this caller's own session token.
             "/api/auth/csrf",
-            // The server-driven (DivKit) login screen. Public so it can render before sign-in.
-            "/api/divkit/login",
-            // Desktop shell liveness + window manifest. The native shell polls these
-            // before any user can log in, so they must be reachable unauthenticated;
-            // both are non-sensitive (readiness probe + window geometry/title).
-            "/api/desktop/ready",
-            "/api/desktop/manifest");
+            // The login screen description. Public so it can render before sign-in.
+            "/api/ui/login");
 
     /**
      * Request paths exempted from CSRF protection in the cookie-based modes

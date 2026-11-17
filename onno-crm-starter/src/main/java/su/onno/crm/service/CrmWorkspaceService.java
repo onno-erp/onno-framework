@@ -2,21 +2,12 @@ package su.onno.crm.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import su.onno.repository.EnumerationPersistence;
 import jakarta.annotation.PostConstruct;
-import java.lang.reflect.Field;
 import java.util.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.context.ApplicationEventPublisher;
-import su.onno.annotations.Attribute;
-import su.onno.crm.domain.Conversation;
-import su.onno.crm.domain.Channel;
 
-import su.onno.events.EntityChangedEvent;
-
-/** Developer-authored inbox presentation around a bound host catalog. */
+/** The CRM workspace defaults (actions, folders) around a bound host catalog, customized by {@link CrmWorkspaceCustomizer} beans. */
 @Service
 public class CrmWorkspaceService {
     private final JdbcTemplate jdbc;
@@ -24,57 +15,30 @@ public class CrmWorkspaceService {
     private final List<CrmWorkspaceCustomizer> customizers;
     private Config declaredConfig;
     private final CrmCustomerBinding<?> customers;
-    private final boolean assignment;
     private final CrmStateConfiguration states;
     public CrmStateConfiguration statuses() { return states; }
     public CrmWorkspaceService(JdbcTemplate jdbc, ObjectMapper json, List<CrmWorkspaceCustomizer> customizers, CrmCustomerBinding<?> customers,
             org.springframework.beans.factory.ObjectProvider<CrmAgentBinding<?>> agents,CrmStateConfiguration states) {
-        this.jdbc = jdbc; this.json = json; this.customizers = customizers; this.customers = customers; this.assignment = agents.getIfAvailable() != null;this.states=states;
+        this.jdbc = jdbc; this.json = json; this.customizers = customizers; this.customers = customers; this.states=states;
     }
     public static UUID statusId(String value) {
         return UUID.fromString(value);
     }
-    public record DisplayField(String key, String label, String section, String format, boolean visible, boolean editable) {}
-    public record Action(String key, String label, boolean visible) {}
+    /** The conversation actions a workspace may offer; a workspace's {@link Config#actions()} enables a subset. */
+    public static final Set<String> ACTIONS = Collections.unmodifiableSet(new LinkedHashSet<>(List.of(
+            "logActivity", "edit", "details", "reply", "note", "sendReply", "sendNote", "retry")));
     /** Folder rules intersect; empty criteria match every value. Order in Config controls display order. */
     public record Folder(String key, String label, List<String> channels,
-                         List<String> statuses, List<String> priorities, boolean unreadOnly, List<UUID> conversationIds, boolean matchNone,
-                         String icon, String color) {
-        /** Lucide glyph names, as the shell's icon bridge takes them elsewhere in the UI. */
-        private static final java.util.regex.Pattern ICON = java.util.regex.Pattern.compile("[a-z0-9]+(-[a-z0-9]+)*");
-        private static final java.util.regex.Pattern COLOR = java.util.regex.Pattern.compile("#[0-9a-fA-F]{6}");
+                         List<String> statuses, List<String> priorities, boolean unreadOnly, List<UUID> conversationIds, boolean matchNone) {
         public Folder {
             conversationIds = List.copyOf(conversationIds);
             channels = List.copyOf(channels);
             statuses = List.copyOf(statuses);
             priorities = List.copyOf(priorities);
-            // Both reach the browser as an element property and an inline style, so neither is taken
-            // on trust: an unrecognised value falls back to the plain folder rather than rendering.
-            icon = icon == null || !ICON.matcher(icon).matches() ? null : icon;
-            color = color == null || !COLOR.matcher(color).matches() ? null : color;
-        }
-        public Folder(String key, String label, List<String> channels,
-                      List<String> statuses, List<String> priorities, boolean unreadOnly, List<UUID> conversationIds, boolean matchNone) {
-            this(key,label,channels,statuses,priorities,unreadOnly,conversationIds,matchNone,null,null);
-        }
-        /**
-         * The same folder, showing a glyph and a hue of its own.
-         *
-         * <p>A column of folders that all draw the same grey folder reads as one repeated row. Where
-         * a workspace's folders mean something the application already knows — a pipeline whose
-         * folders are its stages, each with a colour the planning team chose — it can say so here
-         * rather than leaving the inbox to guess from the wording of a label, which no longer works
-         * the moment that label is written in another language.
-         *
-         * @param icon a lucide glyph name such as {@code party-popper}; null keeps the folder glyph
-         * @param color a {@code #rrggbb} hue, drawn as the glyph's colour over a faded ground
-         */
-        public Folder withIcon(String icon, String color) {
-            return new Folder(key,label,channels,statuses,priorities,unreadOnly,conversationIds,matchNone,icon,color);
         }
         /** Explicitly empty folders remain visible without matching the entire inbox. */
         public static Folder empty(String key, String label) {
-            return new Folder(key,label,List.of(),List.of(),List.of(),false,List.of(),true,null,null);
+            return new Folder(key,label,List.of(),List.of(),List.of(),false,List.of(),true);
         }
         public Folder(String key, String label, List<String> channels, List<String> statuses,
                       List<String> priorities, boolean unreadOnly, List<UUID> conversationIds) {
@@ -95,35 +59,29 @@ public class CrmWorkspaceService {
             return new Folder(key, label, List.of(channel), List.of(), List.of(), false);
         }
     }
-    public record Config(List<DisplayField> fields, List<Action> actions,
-                         String listTitle, String listSubtitle, String listPreview, boolean showAvatar,
-                         boolean showIdentities, boolean showEmpty, boolean showSystemEvents, boolean showTimestamps,
-                         boolean showDeliveryStatus, List<Folder> folders) {
-        public Config { folders = List.copyOf(folders); }
-        public Config withFields(List<DisplayField> value) { return new Config(List.copyOf(value),actions,listTitle,listSubtitle,listPreview,showAvatar,showIdentities,showEmpty,showSystemEvents,showTimestamps,showDeliveryStatus,folders); }
-        public Config withActions(List<Action> value) { return new Config(fields,List.copyOf(value),listTitle,listSubtitle,listPreview,showAvatar,showIdentities,showEmpty,showSystemEvents,showTimestamps,showDeliveryStatus,folders); }
-        public Config withFolders(List<Folder> value) { return new Config(fields,actions,listTitle,listSubtitle,listPreview,showAvatar,showIdentities,showEmpty,showSystemEvents,showTimestamps,showDeliveryStatus,value); }
-        /** Without folders, conversations remain in a flat list. */
-        public Config(List<DisplayField> fields, List<Action> actions,
-                      String listTitle, String listSubtitle, String listPreview, boolean showAvatar,
-                      boolean showIdentities, boolean showEmpty, boolean showSystemEvents, boolean showTimestamps,
-                      boolean showDeliveryStatus) {
-            this(fields,actions,listTitle,listSubtitle,listPreview,showAvatar,showIdentities,showEmpty,showSystemEvents,showTimestamps,showDeliveryStatus,List.of());
+    /**
+     * What a workspace does: the {@link #ACTIONS} it enables (a read-only monitoring workspace drops
+     * {@code reply} and {@code sendReply}) and the folders that group its conversations. How the
+     * inbox presents — labels, icons, which contact fields show — is the client's.
+     */
+    public record Config(Set<String> actions, List<Folder> folders) {
+        public Config {
+            actions = Collections.unmodifiableSet(new LinkedHashSet<>(actions));
+            folders = List.copyOf(folders);
         }
+        public Config withActions(Set<String> value) { return new Config(value, folders); }
+        /** The same configuration without these actions. */
+        public Config without(String... value) {
+            var next = new LinkedHashSet<>(actions);
+            List.of(value).forEach(next::remove);
+            return new Config(next, folders);
+        }
+        public Config withFolders(List<Folder> value) { return new Config(actions, value); }
     }
-    public record Workspace(long version, Config config, List<DisplayField> availableFields) {}
-    public static final Set<String> FORMATS = Set.of("text", "badge", "email", "phone", "url", "date", "number", "boolean");
-    public static final Set<String> TYPES = Set.of("text", "number", "date", "boolean", "select", "email", "phone", "url");
-    public static final Map<String, String> ACTIONS = new LinkedHashMap<>();
-    static {
-        ACTIONS.put("logActivity", "Log activity");
-        ACTIONS.put("edit", "Open contact");
-
-        ACTIONS.put("details", "Details");
-        ACTIONS.put("reply", "Reply"); ACTIONS.put("note", "Internal note"); ACTIONS.put("sendReply", "Send reply"); ACTIONS.put("sendNote", "Add note"); ACTIONS.put("retry", "Retry");
-    }
+    /** The declared configuration and the bound contact fields ({@code customer.<key>}), in binding order. */
+    public record Workspace(long version, Config config, List<String> fields) {}
     @PostConstruct public void initialize() {
-        Config config = defaults();
+        Config config = new Config(ACTIONS, List.of());
         for (var customizer : customizers) config = customizer.customize(config);
         validate(config);
         declaredConfig = config;
@@ -131,57 +89,21 @@ public class CrmWorkspaceService {
         jdbc.execute("INSERT INTO onno_crm_contact_guard (id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM onno_crm_contact_guard WHERE id=1)");
 
     }
-    public List<DisplayField> builtins() {
-        List<DisplayField> fields = new ArrayList<>(customers.catalog().displayFields());
-        for (Field field : Conversation.class.getDeclaredFields()) {
-            Attribute a = field.getAnnotation(Attribute.class);
-            if (a == null || a.secret()) continue;
-            fields.add(new DisplayField("conversation." + field.getName(),
-                    a.displayName().isBlank() ? field.getName() : a.displayName(), "Conversation",
-                    field.getType().isEnum() ? "badge" : "text", true, false));
-        }
-        return fields;
-    }
-    private Config defaults() {
-        return new Config(customers.catalog().displayFields(),
-                ACTIONS.entrySet().stream().map(e -> new Action(e.getKey(), e.getValue(),
-                        (!e.getKey().equals("assign") || assignment) && (!Set.of("close","reopen").contains(e.getKey()) || states.transitions()!=null))).toList(),
-                "conversation.customer", "conversation.subject", "conversation.lastMessagePreview",
-                true, true, false, true, true, true);
-    }
     public Workspace get() {
-        Config c = declaredConfig;
-        List<DisplayField> available = new ArrayList<>(builtins());
-        return new Workspace(0,c,List.copyOf(available));
+        return new Workspace(0, declaredConfig, customers.catalog().keys());
     }
     public void lock() { jdbc.queryForObject("SELECT id FROM onno_crm_contact_guard WHERE id=1 FOR UPDATE", Integer.class); }
     public void validate(Config c) {
-        if (c == null || c.fields() == null || c.actions() == null
-                || c.fields().size() > 100 || c.actions().size() > ACTIONS.size())
+        if (c == null || c.actions() == null || c.folders() == null || !ACTIONS.containsAll(c.actions()))
             throw new IllegalArgumentException("Invalid workspace configuration");
         if (c.folders().size() > 30) throw new IllegalArgumentException("At most 30 conversation folders are allowed");
         Set<String> folderKeys = new HashSet<>();
         for (Folder folder : c.folders()) {
             if (folder.key() == null || !folder.key().matches("[a-z][a-z0-9_]{0,39}") || !folderKeys.add(folder.key()))
                 throw new IllegalArgumentException("Folders need unique stable keys");
-            text(folder.label(), "Folder label", 80);
+            if (folder.label() == null || folder.label().isBlank() || folder.label().length() > 80)
+                throw new IllegalArgumentException("Folder label is required (max 80)");
         }
-        Set<String> keys = new HashSet<>(); builtins().forEach(f -> keys.add(f.key()));
-        Set<String> displayed = new HashSet<>();
-        for (DisplayField f : c.fields()) {
-            if (!keys.contains(f.key()) || !displayed.add(f.key()) || !FORMATS.contains(f.format())) throw new IllegalArgumentException("Invalid or repeated display field");
-            text(f.label(), "Label", 80); text(f.section(), "Section", 80);
-        }
-        for (String key : List.of(c.listTitle(), c.listSubtitle(), c.listPreview()))
-            if (!keys.contains(key) || !key.startsWith("conversation.")) throw new IllegalArgumentException("List fields must come from the conversation");
-        Set<String> actions = new HashSet<>();
-        for (Action a : c.actions()) {
-            if (!ACTIONS.containsKey(a.key()) || !actions.add(a.key())) throw new IllegalArgumentException("Unknown or repeated action");
-            text(a.label(), "Button label", 80);
-        }
-    }
-    private static void text(String value, String label, int max) {
-        if (value == null || value.isBlank() || value.length() > max) throw new IllegalArgumentException(label + " is required (max " + max + ")");
     }
     public String encode(Object data) { try { return json.writeValueAsString(data); } catch (Exception e) { throw new IllegalArgumentException("Invalid CRM data"); } }
     public <T> T decode(String value, Class<T> type) { try { return json.readValue(value, type); } catch (Exception e) { throw new IllegalArgumentException("Invalid stored CRM data"); } }

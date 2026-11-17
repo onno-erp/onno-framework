@@ -1,4 +1,4 @@
-plugins { `java-library`; id("su.onno.widgets") }
+plugins { `java-library` }
 dependencies {
     api(project(":onno-crm-starter"))
     implementation(libs.spring.boot.starter.web)
@@ -12,4 +12,3 @@ dependencies {
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 
-onnoWidgets { npmDependencies.put("lucide-react", "^0.469.0") }

@@ -11,17 +11,20 @@ import su.onno.crm.domain.*;
 import su.onno.crm.repository.*;
 import su.onno.crm.service.*;
 import su.onno.types.Ref;
-import su.onno.ui.*;
 
-/** Run with the crm profile to add an inbox to the bookstore's existing catalogs. */
+/**
+ * Run with the crm profile to add an inbox to the bookstore's existing catalogs. The inbox page
+ * itself ({@code /support}) is React: {@code src/main/ui/pages/SupportPage.tsx}, registered in
+ * {@code main.tsx} when the CRM is present.
+ */
 @Configuration
 @Profile("crm")
 public class InboxConfiguration {
     @Bean CrmCustomerBinding<Customer> bookstoreContacts(CustomerRepository customers) {
         var catalog = new CrmCatalogBinding<>(Customer.class, customers::findActiveById)
-                .field("email", "Email", "email", Customer::getEmail)
-                .field("phone", "Phone", "phone", Customer::getPhone)
-                .field("city", "City", "text", Customer::getCity);
+                .field("email", Customer::getEmail)
+                .field("phone", Customer::getPhone)
+                .field("city", Customer::getCity);
         return new CrmCustomerBinding<>(catalog, incoming -> {
             // This app's policy creates a distinct customer for a new channel identity.
             // Apps may instead resolve an existing record, require review, or reject unknown peers.
@@ -34,32 +37,14 @@ public class InboxConfiguration {
     }
     @Bean CrmAgentBinding<Employee> bookstoreAgents(EmployeeRepository employees) {
         return new CrmAgentBinding<>(new CrmCatalogBinding<>(Employee.class, employees::findActiveById)
-                .field("avatarUrl", "Photo", "url", Employee::getAvatarUrl), user -> {
+                .field("avatarUrl", Employee::getAvatarUrl), user -> {
             if(user==null || !"Employees".equals(user.entityName()) || user.recordId()==null)return Optional.empty();
             return Optional.of(UUID.fromString(user.recordId()));
         });
     }
+    /** Which conversations the support inbox holds and who may use it; how it presents is {@code SupportPage.tsx}. */
     @Bean CrmInboxWorkspace bookstoreInbox() {
-        return new CrmInboxWorkspace("support", "Customer support", Set.of("MANAGER"), conversation -> true)
-                .list(list -> {
-                    list.title("Inbox");
-                    list.columns(Conversation::getCustomer, Conversation::getSubject,
-                            Conversation::getLastMessageAt, Conversation::getUnreadCount);
-                    list.sortBy(Conversation::getLastMessageAt, true);
-                    list.custom("crmInbox").label("Inbox").defaultView();
-                    list.filter(Conversation::getSubject).label("Subject").contains();
-                    list.filter(Conversation::getLastMessageAt).label("Last message").dateRange();
-                });
-    }
-    @Bean Page supportPage() {
-        return new Page() {
-            public String route() { return "/support"; }
-            public void compose(PageBuilder page) { page.header(false);page.widget("Inbox").type("crmInboxWorkspaces").config("workspace","support"); }
-        };
-    }
-    @Bean Layout supportNavigation() {
-        return spec -> spec.section("Support").icon("messages-square")
-                .page("/support", "Inbox", "inbox");
+        return new CrmInboxWorkspace("support", "Customer support", Set.of("MANAGER"), conversation -> true);
     }
     @Bean ApplicationRunner inboxSample(CustomerRepository customers, InboxRepository inboxes,
             ConversationRepository conversations) {

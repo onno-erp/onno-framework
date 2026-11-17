@@ -4,8 +4,8 @@ plugins {
 
 dependencies {
     api(project(":onno-framework"))
-    // Query + command services and the UiAccessService authz chokepoint live here.
-    implementation(project(":onno-ui-starter"))
+    // Query + command services and the AccessService authz chokepoint (su.onno.service) live here.
+    implementation(project(":onno-framework-starter"))
 
     implementation(libs.spring.boot.autoconfigure)
     implementation(libs.spring.boot.starter.web)
@@ -23,6 +23,7 @@ dependencies {
     testImplementation(libs.spring.boot.starter.security)
     testImplementation("io.modelcontextprotocol.sdk:mcp-json-jackson2")
     testImplementation(libs.junit.jupiter)
+    testImplementation(testFixtures(project(":onno-framework-starter")))
     testImplementation(libs.assertj.core)
     testImplementation(libs.mockito.core)
     // The MCP record-policy leak test runs the real query/command services against H2.
