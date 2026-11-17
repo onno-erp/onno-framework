@@ -129,6 +129,24 @@ public class GmailClient {
     public JsonNode get(String path) {return request("GET","https://gmail.googleapis.com/gmail/v1/users/me/"+path,accessToken(),null);}
     /** A JSON {@code POST} to a Gmail API path under {@code users/me/}, such as {@code messages/batchModify}. */
     public JsonNode post(String path,JsonNode body) {return request("POST","https://gmail.googleapis.com/gmail/v1/users/me/"+path,accessToken(),body);}
+    /** How long a mailbox's signature is reused before Gmail is asked again. */
+    static final Duration SIGNATURE_TTL=Duration.ofMinutes(10);
+    private record CachedSignature(String html,Instant until) {}
+    private final java.util.concurrent.ConcurrentMap<String,CachedSignature> signatures=new java.util.concurrent.ConcurrentHashMap<>();
+    /**
+     * The signature set in Gmail for this send-as address (the mailbox itself or one of its aliases),
+     * sanitized like any email HTML, or null when it has none. Read through
+     * {@code users.settings.sendAs}, which {@code gmail.readonly} covers, and cached for
+     * {@link #SIGNATURE_TTL}, so an edit in Gmail shows up within minutes. Gmail failures propagate.
+     */
+    public String signature(String sendAsEmail) {
+        String key=sendAsEmail.strip().toLowerCase(Locale.ROOT);
+        var cached=signatures.get(key);
+        if(cached!=null && cached.until().isAfter(Instant.now()))return cached.html();
+        String html=EmailHtml.sanitize(get("settings/sendAs/"+encode(key)).path("signature").asText(""));
+        signatures.put(key,new CachedSignature(html,Instant.now().plus(SIGNATURE_TTL)));
+        return html;
+    }
     public JsonNode send(String raw,String threadId) {
         var payload=json.createObjectNode().put("raw",raw);
         if(threadId!=null&&!threadId.isBlank())payload.put("threadId",threadId);
