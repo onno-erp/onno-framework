@@ -1,7 +1,7 @@
 name: Docs
 
 # Build the VitePress docs site (hand-written guides + generated configuration reference +
-# aggregated Javadoc) and publish it to GitHub Pages. Reference content is generated from the code
+# aggregated Javadoc) and, when DOCS_PAGES_ENABLED is set, publish it to GitHub Pages. Reference content is generated from the code
 # at build time, so the site can never drift from the source of truth.
 
 on:
@@ -72,9 +72,15 @@ jobs:
         with:
           path: docs/.vitepress/dist
 
+  # Publishing is off while the repository is private: the organisation's plan has no GitHub Pages
+  # for private repositories, so the deployment 404s. The site is still built above, so a broken
+  # page or Javadoc link still fails this workflow. Set the repository variable
+  # DOCS_PAGES_ENABLED=true (Settings → Secrets and variables → Actions → Variables) once Pages is
+  # available again.
   deploy:
     name: Deploy to Pages
     needs: build
+    if: vars.DOCS_PAGES_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
