@@ -85,11 +85,11 @@ abstract class TimeTypesRoundTripContract {
     private DocumentCommandService documentCommands;
 
     /** A connection to an empty-or-reusable database of the dialect under test. */
-    abstract Jdbi jdbi();
+    abstract javax.sql.DataSource dataSource();
 
     @BeforeEach
     void setUp() {
-        jdbi = jdbi();
+        jdbi = Jdbi.create(dataSource());
 
         MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
         MetadataRegistry registry = new MetadataRegistry();
@@ -112,10 +112,9 @@ abstract class TimeTypesRoundTripContract {
         ApplicationEventPublisher events = event -> { };
         catalogQuery = new CatalogQueryService(registry, jdbi);
         documentQuery = new DocumentQueryService(registry, jdbi);
-        catalogCommands = new CatalogCommandService(registry, jdbi, props, numbers,
-                catalogQuery, access, events, cipher);
-        documentCommands = new DocumentCommandService(registry, jdbi, props, numbers,
-                null, documentQuery, access, events, cipher);
+        TestEntityStore.Stack stack = TestEntityStore.builder(dataSource(), registry).numbers(numbers).cipher(cipher).events(events::publishEvent).build();
+        catalogCommands = new CatalogCommandService(registry, stack.jdbi(), props, catalogQuery, access, stack.store());
+        documentCommands = new DocumentCommandService(registry, stack.jdbi(), props, null, documentQuery, access, stack.store());
     }
 
     @Test

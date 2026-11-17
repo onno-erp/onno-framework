@@ -84,8 +84,8 @@ class DocumentWidgetRefFilterPostgresIT {
         WebProperties props = new WebProperties();
         AccessService access = new AccessService(registry);
         ApplicationEventPublisher events = event -> { };
-        documentCommands = new DocumentCommandService(registry, jdbi, props, new SequentialNumbers(),
-                null, documentQuery, access, events, new SecretCipher(null));
+        TestEntityStore.Stack stack = TestEntityStore.builder(new org.springframework.jdbc.datasource.DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword()), registry).numbers(new SequentialNumbers()).cipher(new SecretCipher(null)).events(events::publishEvent).build();
+        documentCommands = new DocumentCommandService(registry, stack.jdbi(), props, null, documentQuery, access, stack.store());
 
         databaseId = database("Primary");
         UUID otherDatabase = database("Other");

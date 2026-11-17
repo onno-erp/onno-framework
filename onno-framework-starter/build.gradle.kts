@@ -1,5 +1,6 @@
 plugins {
     `java-library`
+    `java-test-fixtures`
 }
 
 dependencies {
@@ -41,6 +42,19 @@ dependencies {
     testImplementation(libs.spring.security.core)
     testImplementation(libs.jackson.datatype.jsr310)
     testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+// TestEntityStore (src/testFixtures): the real Spring Data JDBC write path on a test's own
+// DataSource, shared with the web/MCP starters' service tests. Not published.
+dependencies {
+    testFixturesImplementation(libs.spring.context)
+    testFixturesImplementation(libs.spring.jdbc)
+    testFixturesImplementation(libs.spring.data.jdbc)
+    testFixturesImplementation(libs.jdbi3.spring5)
+}
+(components["java"] as AdhocComponentWithVariants).apply {
+    withVariantsFromConfiguration(configurations["testFixturesApiElements"]) { skip() }
+    withVariantsFromConfiguration(configurations["testFixturesRuntimeElements"]) { skip() }
 }
 
 tasks.withType<Test> {

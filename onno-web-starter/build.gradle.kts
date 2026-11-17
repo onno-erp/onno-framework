@@ -114,6 +114,7 @@ dependencies {
     annotationProcessor(libs.spring.boot.configuration.processor)
 
     testImplementation(libs.junit.jupiter)
+    testImplementation(testFixtures(project(":onno-framework-starter")))
     testImplementation(libs.assertj.core)
     testImplementation(libs.mockito.core)
     testImplementation(libs.spring.security.core)

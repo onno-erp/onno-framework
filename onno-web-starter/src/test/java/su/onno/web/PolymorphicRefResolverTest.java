@@ -111,36 +111,4 @@ class PolymorphicRefResolverTest {
                 "javaType", Payment.class.getName(),
                 "display", "PAY-7"));
     }
-
-    @Test
-    void writeBindingAcceptsLogicalTargetObjectAndRejectsTargetsOutsideAllowlist() {
-        MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
-        AttributeDescriptor subject = scanner.scan(Link.class).attributes().getFirst();
-        JdbcDataSource dataSource = new JdbcDataSource();
-        dataSource.setURL("jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
-        Jdbi jdbi = Jdbi.create(dataSource);
-        jdbi.useHandle(handle -> handle.execute("CREATE TABLE poly_write (subject VARCHAR(512))"));
-        UUID accountId = UUID.randomUUID();
-
-        jdbi.useHandle(handle -> {
-            var update = handle.createUpdate("INSERT INTO poly_write (subject) VALUES (:subject)");
-            EntityWriteSupport.bindAttribute(update, subject,
-                    Map.of("type", "ResolverAccounts", "id", accountId.toString()),
-                    new SecretCipher(null));
-            update.execute();
-        });
-
-        String stored = jdbi.withHandle(handle ->
-                handle.createQuery("SELECT subject FROM poly_write").mapTo(String.class).one());
-        assertThat(stored)
-                .isEqualTo(Account.class.getName() + "|" + accountId);
-        assertThatThrownBy(() -> jdbi.useHandle(handle -> {
-            var update = handle.createUpdate("INSERT INTO poly_write (subject) VALUES (:subject)");
-            EntityWriteSupport.bindAttribute(
-                    update, subject, PolyRef.of(String.class, UUID.randomUUID()),
-                    new SecretCipher(null));
-            update.execute();
-        }))
-                .hasMessageContaining("is not allowed for subject");
-    }
 }

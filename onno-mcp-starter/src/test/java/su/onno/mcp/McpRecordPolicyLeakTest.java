@@ -1,5 +1,7 @@
 package su.onno.mcp;
 
+import su.onno.service.TestEntityStore;
+
 import su.onno.access.AccessSubject;
 import su.onno.access.RecordAccessPolicy;
 import su.onno.access.RecordPolicies;
@@ -105,8 +107,8 @@ class McpRecordPolicyLeakTest {
                 return "C" + seq.incrementAndGet();
             }
         };
-        CatalogCommandService catalogCommands = new CatalogCommandService(registry, jdbi, new WebProperties(),
-                numbers, catalogQuery, access, event -> { }, new SecretCipher(null));
+        TestEntityStore.Stack stack = TestEntityStore.builder(ds, registry).numbers(numbers).cipher(new SecretCipher(null)).events(event -> { }).build();
+        CatalogCommandService catalogCommands = new CatalogCommandService(registry, stack.jdbi(), new WebProperties(), catalogQuery, access, stack.store());
 
         AccessSubject system = AccessSubject.system();
         ownerA = id(catalogCommands.create(owners, body("description", "Owner Alpha", "email", "a@x"), system));

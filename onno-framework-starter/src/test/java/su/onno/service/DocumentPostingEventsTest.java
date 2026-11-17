@@ -75,17 +75,8 @@ class DocumentPostingEventsTest {
                 }
         );
 
-        var commands = new DocumentCommandService(
-                registry,
-                jdbi,
-                new WebProperties(),
-                null,
-                new PostingService(engine),
-                new DocumentQueryService(registry, jdbi),
-                new AccessService(registry),
-                events::add,
-                new SecretCipher(null)
-        );
+        TestEntityStore.Stack stack = TestEntityStore.builder(ds, registry).cipher(new SecretCipher(null)).events(events::add).build();
+        var commands = new DocumentCommandService(registry, stack.jdbi(), new WebProperties(), new PostingService(engine), new DocumentQueryService(registry, jdbi), new AccessService(registry), stack.store());
 
         var subject = AccessSubject.system();
         var created = commands.create(

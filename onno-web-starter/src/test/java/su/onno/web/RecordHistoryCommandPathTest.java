@@ -1,5 +1,7 @@
 package su.onno.web;
 
+import su.onno.service.TestEntityStore;
+
 import su.onno.service.AccessService;
 import su.onno.service.CatalogCommandService;
 import su.onno.service.CatalogQueryService;
@@ -161,12 +163,9 @@ class RecordHistoryCommandPathTest {
         DocumentQueryService documentQuery = new DocumentQueryService(registry, jdbi, scopes, access);
         WebProperties props = new WebProperties();
         NumberGenerator numbers = new Numbers();
-        catalogs = new CatalogCommandService(registry, jdbi, props, numbers, catalogQuery, access,
-                event -> { }, cipher);
-        catalogs.setHistory(history);
-        documents = new DocumentCommandService(registry, jdbi, props, numbers, null, documentQuery, access,
-                event -> { }, cipher);
-        documents.setHistory(history);
+        TestEntityStore.Stack stack = TestEntityStore.builder(ds, registry).numbers(numbers).cipher(cipher).events(event -> { }).history(history).build();
+        catalogs = new CatalogCommandService(registry, stack.jdbi(), props, catalogQuery, access, stack.store());
+        documents = new DocumentCommandService(registry, stack.jdbi(), props, null, documentQuery, access, stack.store());
         controller = new RecordHistoryController(history, access, catalogQuery, documentQuery,
                 UiMessages.defaults());
     }

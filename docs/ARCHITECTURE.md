@@ -369,7 +369,8 @@ dated on or before the latest applicable close date cannot be created, changed, 
 posted, reposted or unposted. The check is authoritative below controllers: `PostingEngine` runs it
 inside the posting transaction (and for every later document a chronological restoration would
 repost, so a backdated change cannot cascade into a closed period), `OnnoBeforeConvertCallback`
-runs it on repository saves, and `DocumentCommandService` on the generic UI/REST/import/MCP path.
+runs it on every catalog/document save — repository and generic UI/REST/import/MCP writes alike —
+and `DocumentCommandService` checks a delete before unposting a posted document.
 Rejections throw `PeriodClosedException` (HTTP 409 `period-closed`, including from
 `posting-preview`). Close/reopen (`ADMIN` + `onno.period-close.manage-roles`; reopen needs a
 reason) and overrides (`onno.period-close.override-roles`, or an explicit
@@ -482,13 +483,16 @@ cannot be used as a blind oracle for encrypted values.
 > requests, and paths outside the configured UI mount return their normal `404`/`405` responses.
 
 The catalog/document `POST`/`PUT` writes (`CatalogCommandService`/`DocumentCommandService`, shared by
-the REST API, the generated UI, CSV import, and the MCP tools) reconstruct the typed entity and run
-the same entity write lifecycle as `repository.save(...)` — `onFilling()` (create), `beforeWrite()`,
-and `Validated` business rules — before the JDBI write, then `afterWrite()` after a successful
-persist. A field a model derives in `beforeWrite()` is therefore persisted on every write path, not
-just on the repository path. Validation previews run only the pre-write phase and never call
-`afterWrite()`. Auto-numbering and secret
-encryption stay in the command services; posting still runs its own lifecycle in `PostingEngine`.
+the REST API, the generated UI, CSV import, and the MCP tools) map the request body onto the typed
+entity (`EntityBodyMapper`) and save it through `EntityStore` — Spring Data JDBC's aggregate
+template, the same persistence path and entity callbacks as `repository.save(...)`. Numbering,
+`onFilling()` (create), `beforeWrite()`, attribute and `Validated` rule validation, secret
+encryption, period close, record history, `afterWrite()`, domain events and the commit-deferred
+`EntityChangedEvent` are therefore one implementation for every write path. The command services
+add only the caller-facing checks around the save (read-only mode, entity and record access, the
+post-write scope check, all in one transaction). Validation previews run only the pre-write phase
+and never call `afterWrite()`; posting still runs its own lifecycle in `PostingEngine`.
+Tabular-section `lineNumber` in read payloads is the 1-based position in stored order.
 
 The same pipeline backs **live form validation**: `POST /api/{catalogs,documents}/{name}[/{id}]/validate`
 dry-runs it — constraints, hooks, `Validated` rules (a Java conflict check included) — against the
@@ -696,8 +700,7 @@ Recording is storage-level, so both write paths behave the same:
 
 | Path | Hook |
 | --- | --- |
-| Generic command path (`CatalogCommandService`, `DocumentCommandService`: REST, UI, import, MCP, actions) | capture/record inside the write transaction. Document header, lines and history now share one transaction. |
-| Typed repositories (`save`, soft `delete`) | `RecordHistoryCallback` (`BeforeSaveCallback` + `AfterSaveCallback`), on the handle bound to the repository's Spring transaction, so history rolls back with the save |
+| Catalog/document saves — typed repositories (`save`, soft `delete`) and the generic command path (`CatalogCommandService`/`DocumentCommandService` save through `EntityStore`) | `RecordHistoryCallback` (`BeforeSaveCallback` + `AfterSaveCallback`), on the handle bound to the repository's Spring transaction, so history rolls back with the save |
 | Post / unpost / repost (any caller of `PostingService`) | `PostingEngine` writes the `POSTED` / `UNPOSTED` entry right after it flips `_posted`, inside the posting transaction (a repost records `POSTED` again) |
 
 Events are `CREATED`, `UPDATED`, `DELETED` (deletion mark set), `RESTORED` (cleared), `POSTED`,

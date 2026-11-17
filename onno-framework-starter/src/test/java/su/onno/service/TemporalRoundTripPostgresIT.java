@@ -101,10 +101,9 @@ class TemporalRoundTripPostgresIT {
         ApplicationEventPublisher events = event -> { };
         catalogQuery = new CatalogQueryService(registry, jdbi);
         documentQuery = new DocumentQueryService(registry, jdbi);
-        catalogCommands = new CatalogCommandService(registry, jdbi, props, numbers,
-                catalogQuery, access, events, cipher);
-        documentCommands = new DocumentCommandService(registry, jdbi, props, numbers,
-                null, documentQuery, access, events, cipher);
+        TestEntityStore.Stack stack = TestEntityStore.builder(new org.springframework.jdbc.datasource.DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword()), registry).numbers(numbers).cipher(cipher).events(events::publishEvent).build();
+        catalogCommands = new CatalogCommandService(registry, stack.jdbi(), props, catalogQuery, access, stack.store());
+        documentCommands = new DocumentCommandService(registry, stack.jdbi(), props, null, documentQuery, access, stack.store());
     }
 
     @Test

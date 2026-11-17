@@ -80,8 +80,8 @@ class DocumentFilterExpressionPostgresIT {
         AccessService access = new AccessService(registry);
         ApplicationEventPublisher events = event -> { };
         documentQuery = new DocumentQueryService(registry, jdbi);
-        documentCommands = new DocumentCommandService(registry, jdbi, props, numbers,
-                null, documentQuery, access, events, cipher);
+        TestEntityStore.Stack stack = TestEntityStore.builder(new org.springframework.jdbc.datasource.DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword()), registry).numbers(numbers).cipher(cipher).events(events::publishEvent).build();
+        documentCommands = new DocumentCommandService(registry, stack.jdbi(), props, null, documentQuery, access, stack.store());
 
         stay("CONFIRMED", "2026");
         stay("CHECKED_OUT", "2026");

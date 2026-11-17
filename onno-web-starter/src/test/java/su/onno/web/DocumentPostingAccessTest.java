@@ -1,5 +1,7 @@
 package su.onno.web;
 
+import su.onno.service.TestEntityStore;
+
 import su.onno.service.AccessService;
 import su.onno.service.DocumentCommandService;
 import su.onno.service.DocumentQueryService;
@@ -90,10 +92,8 @@ class DocumentPostingAccessTest {
 
         access = new AccessService(registry);
         PostingService posting = new PostingService(new PostingEngine(jdbi, registry, Map.of()));
-        commands = new DocumentCommandService(registry, jdbi, new WebProperties(),
-                new WriteLifecycleCommandServiceTest.SequentialNumbers(),
-                posting, new DocumentQueryService(registry, jdbi), access, event -> { },
-                new SecretCipher(null));
+        TestEntityStore.Stack stack = TestEntityStore.builder(ds, registry).numbers(new WriteLifecycleCommandServiceTest.SequentialNumbers()).cipher(new SecretCipher(null)).events(event -> { }).build();
+        commands = new DocumentCommandService(registry, stack.jdbi(), new WebProperties(), posting, new DocumentQueryService(registry, jdbi), access, stack.store());
     }
 
     @Test

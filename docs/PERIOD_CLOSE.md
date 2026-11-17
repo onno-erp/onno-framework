@@ -71,9 +71,10 @@ and application services:
   restoration (`PostingOrder.CHRONOLOGICAL`) checks every later document it would repost, so a
   backdated change in an open context is rejected when its cascade would recalculate a document
   closed by another context or register. The whole restoration rolls back.
-- **Repository saves** — `OnnoBeforeConvertCallback`, including the soft delete.
-- **The generic command path** — `DocumentCommandService` create/update/delete, which serves the UI,
-  REST, CSV import and MCP.
+- **Saves** — `OnnoBeforeConvertCallback`, including the soft delete, on repository saves and on the
+  generic command path (`DocumentCommandService` create/update/delete serving the UI, REST, CSV
+  import and MCP saves through the same callbacks). A delete of a posted document is checked before
+  it is unposted.
 
 A rejection throws `PeriodClosedException`, naming the closed period and the remediation:
 

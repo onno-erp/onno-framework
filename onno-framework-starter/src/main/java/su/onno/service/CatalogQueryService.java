@@ -645,6 +645,7 @@ public class CatalogQueryService {
                             "SELECT * FROM " + section.tableName()
                                     + " WHERE _parent_id = :id ORDER BY _line_number")
                     .bind("id", id).mapToMap().list());
+            EntityQuerySupport.numberLines(lines);
             EntityQuerySupport.decorateRows(refResolver, section.attributes(), lines, subject);
             row.put(section.name(), lines);
         }

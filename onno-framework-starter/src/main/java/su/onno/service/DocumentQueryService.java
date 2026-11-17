@@ -481,6 +481,7 @@ public class DocumentQueryService {
                             .mapToMap()
                             .list()
             );
+            EntityQuerySupport.numberLines(rows);
             EntityQuerySupport.decorateRows(refResolver, ts.attributes(), rows, subject);
             doc.put(ts.name(), rows);
         }

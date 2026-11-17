@@ -1,5 +1,7 @@
 package su.onno.web;
 
+import su.onno.service.TestEntityStore;
+
 import su.onno.service.AccessService;
 import su.onno.service.CatalogCommandService;
 import su.onno.service.CatalogQueryService;
@@ -197,10 +199,9 @@ class WriteLifecycleCommandServiceTest {
         catalogQuery = new CatalogQueryService(registry, jdbi);
         // Posting is never reached by create/update, so a null PostingService is sufficient here.
         PostingService posting = null;
-        documentCommands = new DocumentCommandService(registry, jdbi, props, numbers,
-                posting, documentQuery, access, events, cipher);
-        catalogCommands = new CatalogCommandService(registry, jdbi, props, numbers,
-                catalogQuery, access, events, cipher);
+        TestEntityStore.Stack stack = TestEntityStore.builder(ds, registry).numbers(numbers).cipher(cipher).events(events::publishEvent).build();
+        documentCommands = new DocumentCommandService(registry, stack.jdbi(), props, posting, documentQuery, access, stack.store());
+        catalogCommands = new CatalogCommandService(registry, stack.jdbi(), props, catalogQuery, access, stack.store());
         // duplicate() only needs the catalog services and messages.
         catalogController = new GenericCatalogController(catalogQuery, access, catalogCommands,
                 new UiMessages(Map.of()), null);

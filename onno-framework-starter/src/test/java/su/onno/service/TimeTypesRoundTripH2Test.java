@@ -6,7 +6,7 @@ import org.jdbi.v3.core.Jdbi;
 class TimeTypesRoundTripH2Test extends TimeTypesRoundTripContract {
 
     @Override
-    Jdbi jdbi() {
-        return Jdbi.create("jdbc:h2:mem:time_types;DB_CLOSE_DELAY=-1");
+    javax.sql.DataSource dataSource() {
+        return new org.springframework.jdbc.datasource.DriverManagerDataSource("jdbc:h2:mem:time_types;DB_CLOSE_DELAY=-1");
     }
 }

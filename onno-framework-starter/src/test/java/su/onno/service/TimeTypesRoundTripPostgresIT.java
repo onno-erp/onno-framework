@@ -13,7 +13,8 @@ class TimeTypesRoundTripPostgresIT extends TimeTypesRoundTripContract {
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
 
     @Override
-    Jdbi jdbi() {
-        return Jdbi.create(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+    javax.sql.DataSource dataSource() {
+        return new org.springframework.jdbc.datasource.DriverManagerDataSource(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
     }
 }

@@ -23,6 +23,7 @@ dependencies {
     testImplementation(libs.spring.boot.starter.security)
     testImplementation("io.modelcontextprotocol.sdk:mcp-json-jackson2")
     testImplementation(libs.junit.jupiter)
+    testImplementation(testFixtures(project(":onno-framework-starter")))
     testImplementation(libs.assertj.core)
     testImplementation(libs.mockito.core)
     // The MCP record-policy leak test runs the real query/command services against H2.

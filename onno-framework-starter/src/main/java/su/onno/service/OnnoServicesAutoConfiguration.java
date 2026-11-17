@@ -107,36 +107,37 @@ public class OnnoServicesAutoConfiguration {
         return new InformationRegisterQueryService(registry, jdbi, recordScopeCompiler, access);
     }
 
+    /**
+     * The generic write path's persistence: Spring Data JDBC's aggregate template, so the command
+     * services save through the same callbacks as typed repositories.
+     */
+    @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+    public EntityStore entityStore(org.springframework.data.jdbc.core.JdbcAggregateOperations aggregates,
+                                   org.springframework.transaction.PlatformTransactionManager transactionManager) {
+        return new EntityStore(aggregates, transactionManager);
+    }
+
     @Bean
     public CatalogCommandService catalogCommandService(MetadataRegistry registry, Jdbi jdbi,
                                                        WebProperties properties,
-                                                       NumberGenerator numberGenerator,
                                                        CatalogQueryService catalogQueryService,
                                                        AccessService access,
-                                                       org.springframework.context.ApplicationEventPublisher events,
-                                                       su.onno.security.SecretCipher secretCipher,
-                                                       org.springframework.beans.factory.ObjectProvider<su.onno.history.RecordHistory> recordHistory) {
-        CatalogCommandService service = new CatalogCommandService(registry, jdbi, properties, numberGenerator,
-                catalogQueryService, access, events, secretCipher);
-        service.setHistory(recordHistory.getIfAvailable());
-        return service;
+                                                       EntityStore entityStore) {
+        return new CatalogCommandService(registry, jdbi, properties, catalogQueryService, access, entityStore);
     }
 
     @Bean
     public DocumentCommandService documentCommandService(MetadataRegistry registry, Jdbi jdbi,
                                                          WebProperties properties,
-                                                         NumberGenerator numberGenerator,
                                                          PostingService postingService,
                                                          DocumentQueryService documentQueryService,
                                                          AccessService access,
-                                                         org.springframework.context.ApplicationEventPublisher events,
-                                                         su.onno.security.SecretCipher secretCipher,
-                                                         org.springframework.beans.factory.ObjectProvider<su.onno.period.PeriodCloseService> periodClose,
-                                                         org.springframework.beans.factory.ObjectProvider<su.onno.history.RecordHistory> recordHistory) {
+                                                         EntityStore entityStore,
+                                                         org.springframework.beans.factory.ObjectProvider<su.onno.period.PeriodCloseService> periodClose) {
         DocumentCommandService service = new DocumentCommandService(registry, jdbi, properties,
-                numberGenerator, postingService, documentQueryService, access, events, secretCipher);
+                postingService, documentQueryService, access, entityStore);
         service.setPeriodCloseService(periodClose.getIfAvailable());
-        service.setHistory(recordHistory.getIfAvailable());
         return service;
     }
 

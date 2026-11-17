@@ -1,5 +1,7 @@
 package su.onno.web;
 
+import su.onno.service.TestEntityStore;
+
 import su.onno.service.AccessService;
 import su.onno.service.DocumentCommandService;
 import su.onno.service.DocumentQueryService;
@@ -90,9 +92,8 @@ class PeriodCloseUiTest {
         periods = new PeriodCloseService(jdbi, registry);
         periods.ensureSchema();
         access = new AccessService(registry);
-        commands = new DocumentCommandService(registry, jdbi, new WebProperties(),
-                new WriteLifecycleCommandServiceTest.SequentialNumbers(), null,
-                new DocumentQueryService(registry, jdbi), access, event -> { }, new SecretCipher(null));
+        TestEntityStore.Stack stack = TestEntityStore.builder(ds, registry).numbers(new WriteLifecycleCommandServiceTest.SequentialNumbers()).cipher(new SecretCipher(null)).events(event -> { }).periodClose(periods).build();
+        commands = new DocumentCommandService(registry, stack.jdbi(), new WebProperties(), null, new DocumentQueryService(registry, jdbi), access, stack.store());
         commands.setPeriodCloseService(periods);
     }
 

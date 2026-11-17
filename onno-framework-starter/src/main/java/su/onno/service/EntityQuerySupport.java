@@ -288,4 +288,15 @@ final class EntityQuerySupport {
             }
         }
     }
+
+    /**
+     * Number tabular-section lines 1..n in their stored order. The {@code _line_number} column is a
+     * sort key: Spring Data JDBC writes the list index (0-based), and rows written by older versions
+     * of the generic API start at 1, so the API reports the position rather than the raw value.
+     */
+    static void numberLines(List<Map<String, Object>> lines) {
+        for (int i = 0; i < lines.size(); i++) {
+            lines.get(i).put("_line_number", i + 1);
+        }
+    }
 }

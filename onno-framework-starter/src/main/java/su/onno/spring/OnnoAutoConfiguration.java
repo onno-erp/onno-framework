@@ -224,20 +224,7 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
     @Bean
     public su.onno.events.EntityChangePublisher entityChangePublisher(
             org.springframework.context.ApplicationEventPublisher applicationEventPublisher) {
-        return event -> {
-            if (TransactionSynchronizationManager.isActualTransactionActive()
-                    && TransactionSynchronizationManager.isSynchronizationActive()) {
-                TransactionSynchronizationManager.registerSynchronization(
-                        new TransactionSynchronization() {
-                            @Override
-                            public void afterCommit() {
-                                applicationEventPublisher.publishEvent(event);
-                            }
-                        });
-            } else {
-                applicationEventPublisher.publishEvent(event);
-            }
-        };
+        return new TransactionalEntityChangePublisher(applicationEventPublisher);
     }
 
     /** Bridges durable process mutations onto Spring after their database transaction commits. */
