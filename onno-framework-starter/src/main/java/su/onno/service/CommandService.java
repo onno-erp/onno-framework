@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Runs {@link su.onno.command.Commands commands} with the caller's {@link AccessSubject} — the one
- * execution path shared by the REST endpoint ({@link CommandController}), MCP tools and module
+ * execution path shared by the REST endpoint ({@code su.onno.web.CommandController}), MCP tools and module
  * endpoints, so every surface enforces the same rules:
  *
  * <ol>

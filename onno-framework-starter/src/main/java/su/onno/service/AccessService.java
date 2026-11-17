@@ -130,7 +130,7 @@ public class AccessService {
     /**
      * Read-access check against a <em>pre-resolved</em> role set, for callers that capture the
      * subscriber's authorities up front and evaluate access off the request thread. The live SSE
-     * stream ({@link EventPublisher}) fans events from the event-publishing / cluster-relay thread,
+     * stream ({@code su.onno.web.EventPublisher}) fans events from the event-publishing / cluster-relay thread,
      * where {@code SecurityContextHolder} no longer holds the subscriber's authentication — so the
      * {@link Principal} overloads (which resolve roles from the in-flight request) can't be used there.
      * Capture roles with {@link #roles(Principal)} at subscribe time, then gate each event with this.

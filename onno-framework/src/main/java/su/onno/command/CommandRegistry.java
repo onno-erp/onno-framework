@@ -20,7 +20,7 @@ import java.util.function.Predicate;
  * </pre>
  *
  * <p>Only the declarative behaviour is described; how a client presents a command is its own
- * business. Execution and access checks live in {@link CommandService}.</p>
+ * business. Execution and access checks live in {@code su.onno.service.CommandService} (onno-framework-starter).</p>
  */
 public class CommandRegistry {
 

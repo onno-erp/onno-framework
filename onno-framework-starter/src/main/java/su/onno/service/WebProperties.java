@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * How the web layer behaves: the REST API, the command path, the event stream and live reload.
  * Everything that configures what the UI looks like (mount path, branding, language, theme) lives in
- * {@link UiProperties} ({@code onno.ui.*}) instead.
+ * {@code su.onno.web.UiProperties} ({@code onno.ui.*}, onno-web-starter) instead.
  */
 @ConfigurationProperties(prefix = "onno.web")
 public class WebProperties {
