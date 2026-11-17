@@ -376,10 +376,13 @@ git tag v2.0.0
 git push origin v2.0.0
 ```
 
-Release candidates use tags such as `v2.1.0-rc1`. Maven Central versions are immutable, so publishing
-is intentionally CI-only. See
+Pre-releases use tags such as `v2.1.0-rc1` or `v5.0.0-alpha.2` (any version with a `-`). They are
+published only to the onno Maven repository, `https://repo.onno.su/releases`; full releases go to
+Maven Central and are copied there too. Published versions are immutable in both, so publishing is
+intentionally CI-only. See
 [`.github/workflows/publish-packages.yml`](.github/workflows/publish-packages.yml) for the required
-Central Portal and signing secrets.
+Central Portal, registry and signing secrets, and [Consuming releases](docs/CONSUMING.md) for the
+consumer side.
 
 ## Contributing
 

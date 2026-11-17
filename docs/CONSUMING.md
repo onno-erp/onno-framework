@@ -9,8 +9,11 @@ Maintainer-side release mechanics are in the root [README](../README.md#publishi
 
 ## Where artifacts live
 
-- **Open core (`su.onno:*`)** — Maven Central, published by tag-driven CI (Central Portal,
-  auto-release). Also mirrored to the cloud registry below.
+- **Open core (`su.onno:*`) releases** (`X.Y.Z`) — Maven Central, published by tag-driven CI
+  (Central Portal, auto-release), and copied to the onno Maven repository.
+- **Open core pre-releases** (`X.Y.Z-alpha.N`, `-rc1`, … — any version with a `-`) — **only** the
+  onno Maven repository `https://repo.onno.su/releases` (public read, no credentials). They are
+  never on Maven Central.
 - **Commercial modules (`su.onno.enterprise:*`)** — **only** the cloud registry
   `https://cloud.onno.su/modules`. They are not on Maven Central and never on GitHub Packages.
 - Publishing is CI-only in both repos: push a `vX.Y.Z` tag. Never `./gradlew publish` from a
@@ -26,7 +29,8 @@ onnoLicenseKey=ONNO-XXXX-XXXX-XXXX-XXXX
 
 ```kotlin
 repositories {
-    mavenCentral() // su.onno:* open-source core
+    mavenCentral() // su.onno:* open-source core releases
+    maven("https://repo.onno.su/releases") // su.onno:* pre-releases (and a copy of every release)
     maven {
         url = uri("https://cloud.onno.su/modules")
         credentials {

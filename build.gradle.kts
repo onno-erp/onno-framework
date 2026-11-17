@@ -107,16 +107,16 @@ configure(subprojects.filter { it.name in publishedModules.keys }) {
         }
     }
 
-    // Mirror the same open-source artifacts into the onno-cloud /modules registry, alongside Maven
-    // Central. Central stays the canonical public channel; /modules is an instant cache so onno's own
-    // builds (onno-enterprise, tenant builds) resolve a freshly released core right away instead of
-    // waiting for Central to sync. These are open-core coordinates (su.onno:*), which the registry
-    // serves without a license; the PUT is authenticated by the shared publish credential (CI secrets).
+    // The onno Maven repository (Reposilite at repo.onno.su, artifacts in S3). Pre-releases are
+    // published here only; full releases go to Maven Central and are copied here too, so a fresh core
+    // resolves right away instead of waiting for Central to sync. The repository name stays
+    // "onnoCloud" so the CI task names (publish…ToOnnoCloudRepository) are unchanged. The PUT is
+    // authenticated by the publish credential (CI secrets ONNO_REGISTRY_USER/ONNO_REGISTRY_TOKEN).
     // Defined unconditionally — it's only exercised by `publish…ToOnnoCloudRepository`, so a local
     // `publishToMavenLocal` (no token) is unaffected.
     val onnoRegistryUrl = providers.gradleProperty("onnoRegistryUrl")
         .orElse(providers.environmentVariable("ONNO_REGISTRY_URL"))
-        .orElse("https://cloud.onno.su/modules").get()
+        .orElse("https://repo.onno.su/releases").get()
     val onnoRegistryUser = providers.gradleProperty("onnoRegistryUser")
         .orElse(providers.environmentVariable("ONNO_REGISTRY_USER"))
         .orElse("publisher").get()
