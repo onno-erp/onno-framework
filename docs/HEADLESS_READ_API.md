@@ -577,6 +577,25 @@ PUT  /api/documents/{name}/{id}           partial update
 POST /api/documents/{name}/{id}/post      post, or atomically repost an already-posted document
 ```
 
+**Relations saved with the record.** A create or update body may carry `@relations`: the complete
+row set of one or more many-to-many join entities that reference the record. Each entry names the
+join catalog or document, the reference field pointing back at the record (`via`, which must be a
+single-target reference to the written entity) and its rows:
+
+```json
+{ "description": "North clinic",
+  "@relations": [{ "entity": "Clinic Doctors", "via": "clinic",
+                   "rows": [{ "id": "<existing link>", "doctor": "<uuid>", "role": "Chief" },
+                            { "doctor": "<uuid>" }] }] }
+```
+
+The server replaces the set in the record's transaction: a row with `id` updates that join record
+(partially, like `PUT`), a row without one creates a join record with `via` set to the record, and live
+join records of the record missing from `rows` are delete-marked. Only join records the caller can
+read count: a link a record policy hides from them is never offered and never removed. Every row goes through the ordinary
+write path (access, record policies, hooks, rules, history). A row `id` belonging to another record is
+`400`; any failure rolls back the record and every relation. The response is the record as usual.
+
 Two more contracts worth knowing:
 
 Business merging and any undo are host commands; see the [CRM composition guide](../onno-crm-starter/README.md).

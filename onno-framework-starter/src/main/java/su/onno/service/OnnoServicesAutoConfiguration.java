@@ -141,6 +141,25 @@ public class OnnoServicesAutoConfiguration {
     }
 
     /**
+     * Writes a record together with its join-entity relations in one Spring transaction (the Jdbi
+     * handles of the command services join it through {@code SpringConnectionFactory}).
+     */
+    @Bean
+    public RelationWriteService relationWriteService(MetadataRegistry registry, Jdbi jdbi,
+                                                     javax.sql.DataSource dataSource,
+                                                     org.springframework.beans.factory.ObjectProvider<org.springframework.transaction.PlatformTransactionManager> transactions,
+                                                     CatalogQueryService catalogQueryService,
+                                                     CatalogCommandService catalogCommandService,
+                                                     DocumentQueryService documentQueryService,
+                                                     DocumentCommandService documentCommandService,
+                                                     RecordAccess recordAccess) {
+        org.springframework.transaction.PlatformTransactionManager manager = transactions.getIfAvailable(
+                () -> new org.springframework.jdbc.datasource.DataSourceTransactionManager(dataSource));
+        return new RelationWriteService(registry, jdbi, new org.springframework.transaction.support.TransactionTemplate(manager),
+                catalogQueryService, catalogCommandService, documentQueryService, documentCommandService, recordAccess);
+    }
+
+    /**
      * Attributes record-history rows written outside a generic command (typed repository saves,
      * {@code PostingService} calls from application code) to the request's authenticated user and
      * their {@code Layout.identity(...)} record. Off a request thread it resolves nothing and the

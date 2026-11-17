@@ -247,7 +247,7 @@ How an entity presents is one `EntityCustomization<E>` per entity in `entities/`
 `export const books = { … } satisfies EntityCustomization<"Books">` — registered with
 `defineApp({ entities })`. It holds the `icon`, `list` (columns, filters, grouping, custom views),
 `form` (`fields`: the header fields shown, in order), `fields` (presentation only, keyed by field;
-its key order selects and orders nothing), `rowStyle`, `commands`, `recordPanels` and `comments`,
+its key order selects and orders nothing), `rowStyle`, `commands`, `recordPanels`, `comments` and `relations` (a join entity such as `Supplier Offers` edited inline from each side and saved with the record),
 and applies wherever the entity shows. Icons are imported components from `@onno/ui/icons`.
 
 Register a list or record component by logical name in `defineApp({ pages })` only when the layout

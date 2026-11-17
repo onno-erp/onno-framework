@@ -11,7 +11,7 @@ import type { AttributeMeta, EntityRecord, SystemColumnMeta, TabularSectionMeta 
 import { useEntityChanges } from "../../lib/query";
 import type { WhereClause } from "../../lib/measure";
 import { api, ApiError, type FormFeedback } from "../../lib/api";
-import { applyForm, type EntityCustomization, type FieldCustomization, type RecordPanel } from "../../lib/entity-customizations";
+import { applyForm, type EntityCustomization, type FieldCustomization, type RecordPanel, type RelationCustomization } from "../../lib/entity-customizations";
 import {
   commandIcon,
   presentCommands,
@@ -52,6 +52,7 @@ import { useQuickCreate } from "../../lib/quick-create";
 import { useFormDirty } from "../../lib/dirty-forms";
 import { RecordActions, type RecordAction } from "../actions/record-actions";
 import { ErrorBoundary } from "../../lib/error-boundary";
+import { useRecordRelations } from "./record-relations";
 
 // The form's action pill: a compact dark pill, icon + label, rounded-control, text-sm/medium.
 const actionBtn =
@@ -65,6 +66,8 @@ const NO_SELECTION_VALUE = "__onno_no_selection__";
 export type FormDescriptor = {
   /** Components shown under the saved record's form (the app's record panels). */
   panels?: RecordPanel[];
+  /** Many-to-many relations edited on the form (the entity's `relations` customization). */
+  relations?: Record<string, RelationCustomization>;
   /** The header fields the default layout shows, in order (the entity's `form.fields` customization). */
   fieldOrder?: string[];
   kind: "documents" | "catalogs";
@@ -416,6 +419,8 @@ export function useRecordForm(form: FormDescriptor): RecordFormState {
   const formPath = `/${kind}/${name}/${isDuplicate ? `${id}/duplicate` : isEdit ? id : "new"}`;
   const dirty = useFormDirty(formPath);
   const quickCreate = useQuickCreate();
+  // Many-to-many join rows edited on the form and saved with it (the `relations` customization).
+  const relationState = useRecordRelations(form.relations, isEdit ? id : null, dirty.mark);
 
   // Build the ordered field list: catalogs lead with code (unless auto-numbered) +
   // description; both then list the visible-in-form attributes by their order hint.
@@ -759,6 +764,8 @@ export function useRecordForm(form: FormDescriptor): RecordFormState {
     setSaving(true);
     try {
       const payload = buildPayload();
+      const related = relationState.payload();
+      if (related.length) payload["@relations"] = related;
       // Silent: the form owns a failed save's feedback — inline field errors, or one
       // "Couldn't save" toast in the catch below (#505).
       let saved: EntityRecord;
@@ -785,6 +792,7 @@ export function useRecordForm(form: FormDescriptor): RecordFormState {
         }
       }
       dirty.clear(); // saved — nothing left for the discard guard to protect
+      relationState.reset();
       if (isEdit) {
         // The record route is the form: keep it open and re-seed from the authoritative saved row.
         applyRecord(saved);
@@ -803,7 +811,9 @@ export function useRecordForm(form: FormDescriptor): RecordFormState {
       // A server-side validation error carries per-field messages — map them onto the inputs.
       // Anything else gets one "Couldn't save" toast; the save calls are silent, so the form
       // owns it.
-      if (e instanceof ApiError && e.fieldErrors) {
+      // A relation row's errors name the join entity's fields, not this form's: toast them.
+      const formKeys = new Set([...fields.map((f) => f.key), ...sections.map((ts) => ts.name)]);
+      if (e instanceof ApiError && e.fieldErrors && Object.keys(e.fieldErrors).some((field) => formKeys.has(field))) {
         const mapped: Record<string, string> = {};
         for (const [field, messages] of Object.entries(e.fieldErrors)) {
           mapped[field] = Array.isArray(messages) ? messages[0] : String(messages);
@@ -907,9 +917,21 @@ export function useRecordForm(form: FormDescriptor): RecordFormState {
           onRows={(rows) => replaceRows(ts.name, rows)}
           onCell={(idx, key, value) => setCell(ts.name, idx, key, value)}
         />
+      ))}{relationState.relations.filter((r) => r.section && (!section || r.key === section)).map((r) => (
+        <TabularSectionEditor
+          key={`relation:${r.key}`}
+          section={r.section!}
+          rows={r.rows}
+          readOnly={readOnly || r.readOnly || !r.loaded}
+          feedback={[]}
+          onRows={(rows) => relationState.setRows(r.key, rows)}
+          onCell={(idx, key, value) => relationState.setRows(r.key,
+            r.rows.map((row, i) => (i === idx ? { ...row, [key]: value } : row)))}
+        />
       ))}</>;
   };
   const defaultLayout = <>{renderFields()}{renderLines()}</>;
+  const grids = sections.length + relationState.relations.length;
   const renderPage = (children: ReactNode = defaultLayout, options: RecordPageOptions = {}) => {
     const actions = options.commands ? [
       ...presentRecordActions(refreshedHeader?.actions ?? form.actions, options.commands, (key) => t(`action.${key}`)),
@@ -917,8 +939,8 @@ export function useRecordForm(form: FormDescriptor): RecordFormState {
     ] : headerActions;
     const pagePanels = options.panels ?? panels;
     return (
-    <div className={cn("mx-auto flex w-full flex-wrap justify-center gap-5", sections.length === 0 && "max-w-5xl")}>
-      <div className={cn("w-full min-w-0 flex-1", sections.length === 0 && "max-w-2xl")}>
+    <div className={cn("mx-auto flex w-full flex-wrap justify-center gap-5", grids === 0 && "max-w-5xl")}>
+      <div className={cn("w-full min-w-0 flex-1", grids === 0 && "max-w-2xl")}>
       <div data-onno-page-header="" className="mb-5 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2.5">

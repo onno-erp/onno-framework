@@ -37,7 +37,10 @@ class RecordScopeArchitectureTest {
             "CurrentUserResolver.java", "CommentAuthorAvatars.java",
             // reads one record id from a committed change event as trusted code; the recipient's
             // feed is filtered by record scope when it is read (NotificationController)
-            "AssignmentNotificationSource.java");
+            "AssignmentNotificationSource.java",
+            // lists a record's join rows under the caller's READ scope (RecordAccess.clause) before
+            // replacing them through the command services
+            "RelationWriteService.java");
 
     @Test
     void onlyAuditedClassesQueryEntityTables() throws IOException {

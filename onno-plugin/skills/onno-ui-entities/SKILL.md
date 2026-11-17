@@ -182,6 +182,24 @@ commands: {
 Commands sharing a server `group("Change status")` appear as one submenu. Titles come from the
 server (per record when the command declares `title(row -> …)`); `title` here overrides them.
 
+## `relations` (many-to-many)
+
+Model a many-to-many as a **join catalog** with a reference to each side plus what the link carries
+(role, price, order). Each side's customization shows the join rows with the tabular-section editor:
+
+```ts
+// entities/Suppliers.ts
+relations: { offers: { entity: "Supplier Offers", via: "supplier", columns: ["book", "purchasePrice"], label: "Books offered" } },
+// entities/Books.ts — the same rows from the other side
+relations: { offers: { entity: "Supplier Offers", via: "book", columns: ["supplier", "purchasePrice"], label: "Offered by" } },
+```
+
+`entity`, `via` and `columns` are type-checked; `via` must reference this entity. Rows join the
+form's Save: the server replaces the record's join rows in the same transaction (create, partial
+update by row `id`, delete-mark the rest) through the normal write path, so rules and record access
+apply. Hidden join fields keep their stored values. Do not add denormalized `…Name` fields or a
+custom list to show the other side's name — reference cells render it. Up to 500 rows per relation.
+
 ## `recordPanels`
 
 Components rendered under a **saved** record's form (not on New/Duplicate):

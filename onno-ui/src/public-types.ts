@@ -395,7 +395,29 @@ export interface EntityCustomization<E extends EntityName = EntityName> {
   icon?: LucideIcon;
   /** Show the record's comments thread under its form (needs the comments module; default off). */
   comments?: boolean;
+  /**
+   * Many-to-many relations edited on the record form, keyed by a name of your choice: the rows of a
+   * join entity that reference this record through `via`, shown with the tabular-section editor and
+   * saved atomically with the record.
+   *
+   *   relations: { doctors: { entity: "Clinic Doctors", via: "clinic", columns: ["doctor", "role"] } }
+   */
+  relations?: Record<string, RelationCustomization>;
 }
+
+/** A many-to-many relation on a record form, checked against the join entity's fields. */
+export type RelationCustomization = { [J in EntityName]: {
+  /** The join entity, e.g. `"Clinic Doctors"`. */
+  entity: J;
+  /** The join entity's reference back to this record. */
+  via: TopField<J>;
+  /** The join fields shown as columns, in order (default: every field but `via`). */
+  columns?: TopField<J>[];
+  /** The section title (default: the join entity's title). */
+  label?: string;
+  /** Row order: a join field, `-` prefixed for descending. */
+  sort?: TopField<J> | `-${TopField<J>}`;
+} }[EntityName];
 
 // ---- typed data questions --------------------------------------------------------------------------
 
