@@ -107,7 +107,7 @@ configure(subprojects.filter { it.name in publishedModules.keys }) {
         }
     }
 
-    // The onno Maven repository (Reposilite at maven.onno.su, artifacts in S3). Pre-releases are
+    // The onno Maven repository (Reposilite at repo.onno.su, artifacts in S3). Pre-releases are
     // published here only; full releases go to Maven Central and are copied here too, so a fresh core
     // resolves right away instead of waiting for Central to sync. The repository name stays
     // "onnoCloud" so the CI task names (publish…ToOnnoCloudRepository) are unchanged. The PUT is
@@ -116,7 +116,7 @@ configure(subprojects.filter { it.name in publishedModules.keys }) {
     // `publishToMavenLocal` (no token) is unaffected.
     val onnoRegistryUrl = providers.gradleProperty("onnoRegistryUrl")
         .orElse(providers.environmentVariable("ONNO_REGISTRY_URL"))
-        .orElse("https://maven.onno.su/releases").get()
+        .orElse("https://repo.onno.su/releases").get()
     val onnoRegistryUser = providers.gradleProperty("onnoRegistryUser")
         .orElse(providers.environmentVariable("ONNO_REGISTRY_USER"))
         .orElse("publisher").get()

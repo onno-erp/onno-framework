@@ -71,7 +71,7 @@ gradlePlugin {
     }
 }
 
-// Publish the plugin jar + its plugin-marker to the onno Maven repository (maven.onno.su), the channel the
+// Publish the plugin jar + its plugin-marker to the onno Maven repository (repo.onno.su), the channel the
 // framework artifacts mirror to, so a containerized tenant build (Kaniko, no local checkout) can
 // resolve `id("su.onno.ui")` by version instead of via a local includeBuild. This build is a
 // pluginManagement includeBuild, so the root's publishAllPublicationsToOnnoCloudRepository never
@@ -83,7 +83,7 @@ publishing {
             name = "onnoCloud"
             val registryUrl = providers.gradleProperty("onnoRegistryUrl")
                 .orElse(providers.environmentVariable("ONNO_REGISTRY_URL"))
-                .orElse("https://maven.onno.su/releases").get()
+                .orElse("https://repo.onno.su/releases").get()
             setUrl(registryUrl)
             isAllowInsecureProtocol = registryUrl.startsWith("http://")
             credentials {
