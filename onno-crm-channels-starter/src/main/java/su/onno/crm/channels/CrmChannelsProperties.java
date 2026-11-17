@@ -72,6 +72,8 @@ public class CrmChannelsProperties {
         private int initialImportDays = 90;
         /** Each mailbox's older mail, imported once as history after its first import. */
         private HistoryImport historyImport = new HistoryImport();
+        /** The sending mailbox's own Gmail signature on outgoing mail. */
+        private Signature signature = new Signature();
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean value) { this.enabled = value; }
@@ -93,6 +95,24 @@ public class CrmChannelsProperties {
         }
         public HistoryImport getHistoryImport() { return historyImport; }
         public void setHistoryImport(HistoryImport value) { this.historyImport = value == null ? new HistoryImport() : value; }
+        public Signature getSignature() { return signature; }
+        public void setSignature(Signature value) { this.signature = value == null ? new Signature() : value; }
+    }
+
+    /**
+     * The signature a mailbox has set in Gmail (Settings, Signature), added under every email the CRM
+     * sends from it, as Gmail itself would: the From mailbox's own signature, read through the Gmail
+     * API ({@code users.settings.sendAs}, covered by the {@code gmail.readonly} access every connected
+     * mailbox already has) and cached for ten minutes. The email then carries an HTML part with the
+     * signature as written, logo included, and a plain-text part with the same signature as text.
+     * A mailbox without a signature, or one Gmail cannot be asked about, sends as before.
+     */
+    public static class Signature {
+        /** Add the sending mailbox's Gmail signature to outgoing CRM email (HTML and plain text). */
+        private boolean enabled = false;
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean value) { this.enabled = value; }
     }
 
     /**

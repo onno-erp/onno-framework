@@ -726,6 +726,20 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
         if(!from.active || !client(from).authorized())throw new IllegalStateException("The sending mailbox is paused or disconnected");
         return from;
     }
+    /**
+     * The sending mailbox's Gmail signature, when {@code onno.crm.channels.gmail.signature.enabled}
+     * asks for one. A signature Gmail cannot give right now never holds the reply back: it goes out
+     * without one and the reason is logged (status only, no content).
+     */
+    private String signature(Account from) {
+        if(!settings.getSignature().isEnabled())return null;
+        try { return client(from).signature(from.email); }
+        catch(RuntimeException error) {
+            log.warn("Gmail signature of {} unavailable ({}); sending without it",from.email,
+                error instanceof GmailClient.ApiFailure failure?failure.describe():error.getClass().getSimpleName());
+            return null;
+        }
+    }
     private void send(Account home,Account from,UUID id,ConversationMessage message,Conversation c) throws Exception {
         var row=jdbc.queryForMap("SELECT thread_id,reply_to,subject,reference_id FROM onno_crm_gmail_thread WHERE account=? AND thread_id=(SELECT thread_id FROM onno_crm_gmail_outbox WHERE message_id=?)",home.email,id);
         var files=attachments.of(message).stream().map(file->new GmailMail.Outgoing(
@@ -750,9 +764,10 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
             newThread=route==null || !Objects.equals(emailAddress(recipient),emailAddress(Objects.toString(route.get("reply_to"),"")))
                 || subject!=null&&!subject.equals(Objects.toString(route.get("subject"),""));
         }
+        String signature=signature(from);
         String raw=newThread
-            ? GmailMail.compose(from.email,recipient,outgoingSubject,"",body,files,id)
-            : GmailMail.reply(from.email,recipient,Objects.toString(route.get("subject"),""),Objects.toString(route.get("reference_id"),""),body,files,id);
+            ? GmailMail.compose(from.email,recipient,outgoingSubject,"",body,files,id,signature)
+            : GmailMail.reply(from.email,recipient,Objects.toString(route.get("subject"),""),Objects.toString(route.get("reference_id"),""),body,files,id,signature);
         var sent=client(from).send(raw,newThread?null:route.get("thread_id").toString());
         tx.executeWithoutResult(s->{
             if(newThread&&!sent.path("threadId").asText().isBlank()) {
