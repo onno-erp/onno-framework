@@ -8,7 +8,8 @@ package su.onno.ui.gradle
  *
  * The build writes the tree's file list to [INDEX] (a jar's resources cannot be listed). Two
  * substitutions apply on seeding: `{{onnoUiVersion}}` becomes the matching `@onno/ui` version, and a
- * top-level file named `gitignore` is written as `.gitignore` (resource processing drops dotfiles).
+ * top-level file named `gitignore` is written as `.gitignore`, and `npmrc` as `.npmrc` (resource
+ * processing drops dotfiles; the `.npmrc` points the `@onno` scope at the onno npm registry).
  */
 internal object UiTemplate {
 
@@ -27,5 +28,9 @@ internal object UiTemplate {
         }
     }
 
-    private fun target(path: String): String = if (path == "gitignore") ".gitignore" else path
+    private fun target(path: String): String = when (path) {
+        "gitignore" -> ".gitignore"
+        "npmrc" -> ".npmrc"
+        else -> path
+    }
 }
