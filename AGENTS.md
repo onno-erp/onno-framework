@@ -1114,7 +1114,7 @@ in one `EntityCustomization<E>` per entity**, its own file `entities/Orders.ts`
 `defineApp({ entities: { Orders: orders } })`. It applies wherever the entity shows — its default
 list and form, embedded `<EntityList entity="Orders" />`, custom pages: `icon`, `list` (columns,
 filters, grouping, calendar, timeline, …), `form`, `fields`, `rowStyle`, `commands`, `recordPanels`,
-`comments`. Selection and order are always explicit arrays (`list.columns`, `form.fields`); `fields`
+`comments`, `relations`. Selection and order are always explicit arrays (`list.columns`, `form.fields`); `fields`
 is presentation only, keyed by field (`"items.book"` for line columns) — its key order selects and
 orders nothing. Logical entity names are checked against the generated model.
 
@@ -1130,6 +1130,13 @@ orders nothing. Logical entity names are checked against the generated model.
   and `selection` the selected ids. The framework retains validation, posting, saving, dirty
   guards, picker cascades and live refresh. New and duplicate forms use the same record page.
   Use `{ path: "/ops", component: SalesOpsPage }` for ordinary pages. There is no `definePage`.
+- **Many-to-many** is a join catalog (a reference to each side plus what the link carries, e.g.
+  `ClinicDoctor { clinic, doctor, role }`) — not a denormalized name field or a bespoke endpoint.
+  Each side shows it with the entity's `relations` customization:
+  `relations: { doctors: { entity: "Clinic Doctors", via: "clinic", columns: ["doctor", "role"] } }`.
+  The rows render with the tabular-section editor and save with the record's Save: the form sends
+  `@relations` and the server replaces the join rows in the record's transaction, through the
+  ordinary write path. The example app's `Supplier Offers` is edited from both Suppliers and Books.
 - **Replaceable UI SDK.** Default components and replacements should share public controllers,
   bindings and types. `useRecordForm` is the default record host's controller; injected record
   pages already have it. `useRecordField`/`RecordField` expose typed editor bindings and resolved

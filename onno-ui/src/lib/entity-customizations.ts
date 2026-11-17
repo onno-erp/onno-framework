@@ -93,6 +93,29 @@ export type EntityCustomization = {
   icon?: IconSource;
   /** Show the record's comments thread under its form (needs the comments module; default off). */
   comments?: boolean;
+  /**
+   * Many-to-many relations shown on the record form, keyed by a name of your choice: the rows of a
+   * join entity that reference this record, edited like a tabular section and saved with it.
+   */
+  relations?: Record<string, RelationCustomization>;
+};
+
+/**
+ * A many-to-many relation on a record form. The join entity (e.g. `"Clinic Doctors"`) holds a
+ * reference back to this record (`via`) plus the other side and anything the link carries; its rows
+ * render with the tabular-section editor and save atomically with the record.
+ */
+export type RelationCustomization = {
+  /** The join entity's logical name. */
+  entity: string;
+  /** The join entity's reference field pointing at this record. */
+  via: string;
+  /** The join fields shown as columns, in order (default: every field but `via`). */
+  columns?: string[];
+  /** The section title (default: the join entity's title). */
+  label?: string;
+  /** Row order: a join field, `-` prefixed for descending (default: the server's order). */
+  sort?: string;
 };
 
 export type FormCustomization = {
@@ -387,6 +410,7 @@ export function applyForm(form: FormDescriptor, customizations: EntityCustomizat
     if (c.fields) d = applyFormFields(d, c.fields);
     if (c.commands) d = applyCommandPresentation(d, c.commands);
     if (c.recordPanels?.length) d = { ...d, panels: [...(d.panels ?? []), ...c.recordPanels] };
+    if (c.relations) d = { ...d, relations: { ...(d.relations ?? {}), ...c.relations } };
   }
   return d;
 }

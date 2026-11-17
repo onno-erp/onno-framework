@@ -28,6 +28,7 @@ public class GenericDocumentController {
     private final DocumentQueryService query;
     private final DocumentCommandService commands;
     private final BatchRunner batch;
+    private su.onno.service.RelationWriteService relations;
 
     public GenericDocumentController(DocumentQueryService query,
                                      AccessService access,
@@ -37,6 +38,26 @@ public class GenericDocumentController {
         this.access = access;
         this.commands = commands;
         this.batch = batch;
+    }
+
+    /**
+     * Saves join-entity relations sent with a create/update ({@code @relations}) in the record's
+     * transaction. Optional so the controller still constructs without it (tests, slim wiring).
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setRelations(su.onno.service.RelationWriteService relations) {
+        this.relations = relations;
+    }
+
+    private Map<String, Object> withRelations(DocumentDescriptor desc, Map<String, Object> body, AccessSubject subject,
+                                              java.util.function.Supplier<Map<String, Object>> write) {
+        var related = su.onno.service.RelationWriteService.extract(body);
+        if (related.isEmpty()) return write.get();
+        if (relations == null) {
+            throw new su.onno.service.ServiceException(su.onno.service.ServiceException.Status.BAD_REQUEST,
+                    "Relation writes are not available");
+        }
+        return relations.write(desc.javaClass(), related, subject, write);
     }
 
     @GetMapping("/{name}/{id}")
@@ -56,8 +77,8 @@ public class GenericDocumentController {
                                       AccessSubject subject) {
         DocumentDescriptor desc = query.require(name);
         EntityJsonRepresentation.Mode mode = EntityJsonRepresentation.parse(representation);
-        return EntityJsonRepresentation.document(desc, commands.create(desc, body, subject),
-                mode);
+        return EntityJsonRepresentation.document(desc,
+                withRelations(desc, body, subject, () -> commands.create(desc, body, subject)), mode);
     }
 
     /**
@@ -120,8 +141,8 @@ public class GenericDocumentController {
                                       AccessSubject subject) {
         DocumentDescriptor desc = query.require(name);
         EntityJsonRepresentation.Mode mode = EntityJsonRepresentation.parse(representation);
-        return EntityJsonRepresentation.document(desc, commands.update(desc, id, body, subject),
-                mode);
+        return EntityJsonRepresentation.document(desc,
+                withRelations(desc, body, subject, () -> commands.update(desc, id, body, subject)), mode);
     }
 
     /**

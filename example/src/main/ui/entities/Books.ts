@@ -24,4 +24,8 @@ export const books = {
     price: { format: { money: "USD" } },
     coverUrl: { label: "Cover", input: "image", hint: "Upload a cover image." },
   },
+  // The same join rows from the other side: who offers this book, and at what price.
+  relations: {
+    offers: { entity: "Supplier Offers", via: "book", columns: ["supplier", "purchasePrice"], label: "Offered by" },
+  },
 } satisfies EntityCustomization<"Books">;

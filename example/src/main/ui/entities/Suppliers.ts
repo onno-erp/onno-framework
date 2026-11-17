@@ -13,4 +13,8 @@ export const suppliers = {
     contacts: { label: "Contact people" },
     "contacts.email": { placeholder: "name@example.com" },
   },
+  // Many-to-many: the books this supplier offers, edited inline and saved with the supplier.
+  relations: {
+    offers: { entity: "Supplier Offers", via: "supplier", columns: ["book", "purchasePrice"], label: "Books offered" },
+  },
 } satisfies EntityCustomization<"Suppliers">;
