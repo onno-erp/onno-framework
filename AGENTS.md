@@ -1488,7 +1488,7 @@ Assignment, close/reopen, status-change and manual identity-linking HTTP actions
 Host `Commands<Conversation>` beans declare ordinary record commands; extension buttons receive
 their descriptors and call `context.execute(key, inputs)`. The scoped API is
 `/api/crm/inbox-workspaces/{workspace}/conversations/{id}/actions` (GET `[{id, title, visible,
-enabled}]`, POST `/{key}` with `{inputs:{...}}`). It checks workspace write access, application
+enabled, group, inputs}]`, POST `/{key}` with `{inputs:{...}}`). It checks workspace write access, application
 read-only mode, command roles and the commands' `availableWhen`/`enabledWhen` rules. CRM adds no business-field mutations or automatic history
 messages for these actions. Hosts own the handler and any desired history records. Connector code
 can still use the low-level identity-link service for provider routing.
@@ -1504,8 +1504,11 @@ policies while allowing these privacy boundaries. Keep docs, permission tests an
 tests aligned when extending providers.
 
 The CRM's presentation is the props of `@onno/crm`'s components (`CrmInbox`, `CrmConnections`,
-`CrmContactDetails`, `CrmConversationPage`); keep it apart from workspace authorization — the
-components neither register routes nor grant access.
+`CrmContactDetails`, `CrmConversationPage`, `CrmConversation`, `CrmContactPage`); keep it apart from
+workspace authorization — the components neither register routes nor grant access. To rebuild a
+CRM screen, compose the exported parts (`ConversationRow`, `ChatTimeline`, `CrmComposer`, …) over
+the hooks (`useCrmConversation`, `useCrmComposer`) or swap one part with `CrmInbox`'s `components`;
+add business entries to the chat with `timelineSources`, never by forking `CrmInbox.tsx`.
 
 Telegram business accounts use the `telegram-business` managed provider and personal/shared account
 ownership. Never infer CRM ownership from a Telegram connection event: require the expiring /start

@@ -1,25 +1,17 @@
-import { VoicePlayer } from "./VoicePlayer";
 import { InboxChannelNavigation } from "./InboxChannelNavigation";
-import { InboxSkeleton, ConversationListSkeleton, ConversationRowContent, type ConversationRowOptions, conversationCount, ConversationList, type ConversationPagination } from "./ConversationList";
-import { CallActivityCard, callActivity } from "./CallActivityCard";
-import { ContactAvatarImage } from "./ContactAvatarImage";
+import { InboxSkeleton, ConversationListSkeleton, type ConversationRowOptions, conversationCount, ConversationList, type ConversationPagination } from "./ConversationList";
 import { ScheduleCall } from "./ScheduleCall";
 import { LogActivity } from "./LogActivity";
-import { composerState } from "./composerState";
-import { useConversationStatuses } from "./ConversationStatuses";
 import { ExtensionSlot, openRoute, type ExtensionContext } from "@onno/ui";
 import { ChatGroupActions, NewChatGroup } from "./ChatGroupActions";
-import { composerDrafts, installDraftUnloadGuard, hasDraftText, EMPTY_DRAFT, type ComposerDraft, type ComposerMode } from "./composerDrafts";
-import { useAutoGrow } from "./useAutoGrow";
+import { composerDrafts, hasDraftText } from "./composerDrafts";
 import { MailboxSearch } from "./MailboxSearch";
 import { mailboxAccounts, type MailboxAccount } from "./mailboxApi";
-import { useChatGroups, type ChatGroup, type GroupChange } from "./chatGroups";
-import { NoteInput } from "./NoteInput";
+import { useChatGroups } from "./chatGroups";
 import { contactChats, replySelection, type ReplySelection } from "./contactChats";
-import { ContactRowMenu } from "./ContactRowMenu";
 import { useInboxEscape } from "./useInboxEscape";
 import { useConversationRead } from "./useConversationRead";
-import { locale, text as hostText, useLocale, useTranslate, useMobileDetail, usePageSlide, WorkspaceToolbar, type WorkspaceToolbarLayout } from "@onno/ui";
+import { text as hostText, useLocale, useTranslate, useMobileDetail, usePageSlide, WorkspaceToolbar, type WorkspaceToolbarLayout } from "@onno/ui";
 
 /**
  * Every label in this widget resolves through the app's chrome strings, so the inbox reads in the
@@ -28,54 +20,20 @@ import { locale, text as hostText, useLocale, useTranslate, useMobileDetail, use
  * tree re-renders when the server's `onno.ui.messages` overlay arrives.
  */
 const t = hostText;
-import { useId, type DragEvent } from "react";
+import { createContext, useContext, useId, type ComponentType } from "react";
 import { ChannelLogo } from "./ChannelLogo";
-import { LinkedText } from "./LinkedText";
-import { EmailHtmlBody } from "./EmailHtmlBody";
-import { MediaGrid } from "./MediaGrid";
-import { request, ContactPanel, useWorkspace, action, rowValue, resolveConfig, useCrmPresentation, CrmPresentationProvider, type ConversationFolder, type CrmIcon, type CrmPresentation, type ServerConfig, type Config } from "./CrmWorkspace";
-import { ChatMessageBody, ChatMessageRenderers, type ChatMessageRenderer } from "./chatMessageRenderers";
-import { ResponsiveActionPanel, FloatingWindow, Badge, Input, EntityListView, Button, Segmented, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Textarea, CommentBody, api, useUiEvents, applyListOptions, type EntityRecord, type ListRendererProps, type ListRendererComponent, type ListCustomization, type ListDescriptor, type ListFilter, type ListView } from "@onno/ui";
-import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Settings2, ContactRound, Plus, Activity, Folder, ChevronRight, ArrowLeft, X, Paperclip, MoreHorizontal, Send, RefreshCw, Maximize2, PenLine, MailSearch } from "@onno/ui/icons";
-
-type Message = {
-  id: string;
-  conversationId?: string;
-  accountLabel?: string;
-  subject?: string | null;
-  /** Address an outbound email was queued to; shown so history reflects a changed recipient. */
-  recipient?: string | null;
-  kind: "CUSTOMER_MESSAGE" | "AGENT_REPLY" | "SYSTEM_EVENT";
-  direction: "INBOUND" | "OUTBOUND" | "INTERNAL";
-  channel: string;
-  authorName: string;
-  authorAvatarUrl?: string | null;
-  body: string;
-  sentAt: string;
-  deliveryStatus: string;
-  attachments?: Attachment[];
-  /** Sanitized email HTML; rendered in a sandboxed frame instead of the plain-text body. */
-  bodyHtml?: string | null;
-};
-
-/** A file on a message. The url is a reference issued by `/api/media`, never the bytes themselves. */
-type Attachment = { url: string; filename: string; contentType: string; size: number; image: boolean };
-
-/**
- * `senders`/`sender`: the mailboxes a reply may go out from and the default one's id. Absent or a
- * single entry (an older backend, or a provider without a choice) shows no mailbox picker.
- */
-type DeliveryConnection = { connected: boolean; label: string; maxTextLength: number; replyCapability: "AVAILABLE" | "READ_ONLY" | "WINDOW_CLOSED"; replyReason: string; maxAttachments?: number; attachmentReason?: string; recipient?: string; recipients?: string[]; senders?: { id: string; label?: string | null }[]; sender?: string | null };
-
-type Comment = {
-  id: string;
-  authorName: string | null;
-  authorAvatarUrl: string | null;
-  body: string;
-  createdAt: string | null;
-  mine: boolean;
-};
+import { ContactPanel, useWorkspace, action, resolveConfig, useCrmPresentation, CrmPresentationProvider, type ConversationFolder, type CrmIcon, type CrmPresentation, type ServerConfig, type Config } from "./CrmWorkspace";
+import { ChatMessageRenderers, type ChatMessageRenderer } from "./chatMessageRenderers";
+import { EntityListView, Button, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, api, useUiEvents, applyListOptions, type EntityRecord, type ListRendererProps, type ListRendererComponent, type ListCustomization, type ListDescriptor, type ListFilter, type ListView } from "@onno/ui";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Settings2, ContactRound, Folder, ChevronRight, ArrowLeft, X, MoreHorizontal, MailSearch } from "@onno/ui/icons";
+import { string, workspaceCommand } from "./crmModel";
+import { ChatTimeline, CrmAvatar, type ChatTimelineProps } from "./ChatTimeline";
+import { ConversationRow, type ConversationRowComponent, type ConversationRowMenu } from "./ConversationRow";
+import { CrmComposer, FileDropOverlay, type CrmComposerProps } from "./CrmComposer";
+import { useConversationExtensionContext } from "./CrmConversation";
+import { useCrmComposer } from "./useCrmComposer";
+import { useCrmConversation, useTimelineWithSources, type CrmTimelineSource } from "./useCrmConversation";
 
 // One surface treatment for the header, composer, and contact-details island.
 const islandSurface = "rounded-panel bg-card border border-border/60";
@@ -88,295 +46,6 @@ function currentRoute(): string {
   const prefix = base && base !== "__ONNO_BASE_PATH__" ? base.replace(/\/+$/, "") : "";
   if (prefix && path.startsWith(`${prefix}/`)) path = path.slice(prefix.length);
   return path.replace(/^\/+/, "");
-}
-
-/** Puts the caret at the end of the composer field in `scope`, the way a returning writer expects. */
-function focusComposerField(scope: ParentNode | null | undefined, mode: ComposerMode) {
-  const field = scope?.querySelector<HTMLTextAreaElement>(mode === "note" ? "[data-composer-note] textarea" : "textarea[data-composer-reply]");
-  if (!field || field.disabled) return;
-  field.focus({ preventScroll: true });
-  field.setSelectionRange(field.value.length, field.value.length);
-}
-
-function string(row: EntityRecord | null, key: string, fallback = ""): string {
-  const value = row?.[key];
-  return value == null ? fallback : String(value);
-}
-
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
-}
-
-function compactTime(value: unknown): string {
-  if (!value) return "";
-  const date = new Date(String(value));
-  if (Number.isNaN(date.getTime())) return String(value);
-  const now = new Date();
-  const sameDay = date.toDateString() === now.toDateString();
-  return sameDay
-    ? new Intl.DateTimeFormat(locale(), { hour: "2-digit", minute: "2-digit" }).format(date)
-    : new Intl.DateTimeFormat(locale(), { month: "short", day: "numeric" }).format(date);
-}
-
-function fullTime(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : new Intl.DateTimeFormat(locale(), {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(date);
-}
-
-function csrfToken(): string | undefined {
-  const token = document.cookie
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith("XSRF-TOKEN="));
-  return token ? decodeURIComponent(token.slice("XSRF-TOKEN=".length)) : undefined;
-}
-
-async function checkedJson<T>(response: Response, message: string): Promise<T> {
-  if (!response.ok) throw new Error(message);
-  return response.json() as Promise<T>;
-}
-
-async function crmCommand<T>(path: string, body: unknown = {}): Promise<T> {
-  const csrf = csrfToken();
-  const response = await fetch(path, {
-    method: "POST",
-    credentials: "same-origin",
-    headers: {
-      "Content-Type": "application/json",
-      ...(csrf ? { "X-XSRF-TOKEN": csrf } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    let message = `${response.status} ${response.statusText}`;
-    try {
-      const error = await response.json();
-      if (error.message) message = String(error.message);
-    } catch {
-      // Keep the status fallback.
-    }
-    throw new Error(message);
-  }
-  return response.json() as Promise<T>;
-}
-
-function Avatar({
-  name,
-  url,
-  channel,
-  className = "size-8",
-}: {
-  name: string;
-  url?: string | null;
-  channel?: string | null;
-  className?: string;
-}) {
-  return (
-    <span className={`relative ${className} shrink-0`}>
-      <span className="relative flex size-full items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-[10px] font-semibold text-foreground">
-        {initials(name)}
-        <ContactAvatarImage name={name} url={url} />
-      </span>
-      {channel ? <ChannelIcon channel={channel} avatarBadge /> : null}
-    </span>
-  );
-}
-
-function ChannelIcon({ channel, comment = false, avatarBadge = false }: { channel: string; comment?: boolean; avatarBadge?: boolean }) {
-  return <span title={comment ? "Internal note" : channel} className={avatarBadge
-    ? "absolute -bottom-0.5 -right-0.5 z-10 flex size-[18px] items-center justify-center rounded-full bg-card ring-2 ring-card"
-    : "flex size-6 shrink-0 items-center justify-center"}>
-    <ChannelLogo channel={comment ? "internal" : channel} className={avatarBadge ? "size-3.5" : "size-4"} />
-  </span>;
-}
-
-function conversationChannel(row: EntityRecord | null): string {
-  return string(row,"channel",t("crm.chat.channel"));
-}
-
-function ConversationRow({
-  row,
-  selected,
-  onSelect,
-  config,
-  groups, groupKey, onGroupChange, workspaceKey, appearance = {},
-}: {
-  appearance?: ConversationRowOptions;
-  workspaceKey?: string;
-  groups?: ChatGroup[]; groupKey?: string; onGroupChange?: (change: GroupChange) => Promise<void>;
-  config?: Config;
-  row: EntityRecord;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  const customer = string(row, "customerDisplay", string(row, "description", t("crm.chat.unknownCustomer")));
-  const unread = Number(row.unreadCount ?? 0);
-  const channel = conversationChannel(row);
-  const badges = (appearance.badges ?? []).filter(badge => rowValue(row, badge.field) === badge.equals);
-  // Host facets that opt into showOnRows (for example contact tags) arrive resolved with their colours.
-  const facetBadges = Array.isArray(row.rowBadges) ? (row.rowBadges as {label?: unknown; color?: unknown}[])
-    .filter(b => typeof b?.label === "string").map(b => ({label: String(b.label), color: typeof b.color === "string" && /^#[0-9a-fA-F]{6}$/.test(b.color) ? b.color : ""})) : [];
-  const chipCount = badges.length + facetBadges.length;
-  return (
-    <ContactRowMenu record={row} workspaceKey={workspaceKey} groups={groups} groupKey={groupKey} conversationId={String(row.id)} onGroupChange={onGroupChange} id={String(row.customer ?? "")} canEdit={!!action(config, "edit")} onOpen={onSelect}>
-    <Button variant="ghost"
-      type="button"
-      onClick={onSelect}
-      aria-current={selected ? "true" : undefined}
-      className={`h-auto whitespace-normal font-normal relative block min-w-0 w-full max-w-full rounded-field px-2 ${chipCount ? "py-2" : "py-3"} text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected
-        ? "bg-primary/20"
-        : "bg-transparent hover:bg-muted/50 after:absolute after:bottom-0 after:left-[68px] after:right-3 after:h-px after:bg-border/40 last:after:hidden"}`}
-    >
-      <ConversationRowContent
-        avatar={config?.showAvatar !== false && <Avatar name={customer} url={string(row, "customerAvatar")} channel={appearance.showChannelBadge !== false ? channel : undefined} className="size-12" />}
-        title={config ? rowValue(row, config.listTitle) : customer}
-        timestamp={config?.showTimestamps !== false && <time>{compactTime(row.lastMessageAt)}</time>}
-        metadata={appearance.showAccount && string(row, "inboxDisplay", channel)}
-        preview={config ? rowValue(row, config.listPreview) : string(row, "lastMessagePreview", t("crm.chat.noMessages"))}
-        badges={chipCount > 0 ? <>
-          {/* Like Telegram folder labels: a tinted chip normally, inverted to a solid light chip on the highlighted row. */}
-          {facetBadges.map((badge,index)=><span key={`facet-${badge.label}-${index}`}
-            className={`max-w-full min-w-0 shrink-0 truncate rounded px-1 text-[9px] leading-4 font-semibold uppercase tracking-wide ${selected ? "bg-white shadow-sm" : "bg-primary/15"} text-primary`}
-            style={badge.color ? (selected ? {color:badge.color} : {backgroundColor:`${badge.color}26`, color:badge.color}) : undefined}>{badge.label}</span>)}
-          {badges.map((badge,index)=><span key={`${badge.label}-${index}`} className={`max-w-full min-w-0 truncate rounded px-1 text-[9px] leading-4 font-medium uppercase text-primary ${selected ? "bg-white shadow-sm" : "bg-primary/15"}`}>{badge.label}</span>)}
-        </> : null}
-        previewLines={appearance.previewLines}
-        trailing={unread > 0 && <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-xs font-medium text-primary-foreground">{unread > 99 ? "99+" : unread}</span>}
-      />
-    </Button>
-    </ContactRowMenu>
-  );
-}
-
-/** "2.4 MB" — a size a person can judge before clicking, not a byte count. */
-function fileSize(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ["KB", "MB", "GB"];
-  let value = bytes / 1024, unit = 0;
-  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++; }
-  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
-}
-
-/**
- * Non-image files on a message: a player for audio, a download chip for everything else. Images are
- * drawn separately, as one album above the caption ({@link MediaGrid}).
- */
-function Attachments({ files, outbound }: { files: Attachment[]; outbound: boolean }) {
-  if (!files.length) return null;
-  return (
-    <div className="mt-1.5 flex flex-col gap-1.5">
-      {files.map(file => /^audio\//i.test(file.contentType.trim()) ? (
-        <VoicePlayer key={file.url} src={file.url} label={file.filename} download={file.filename} outbound={outbound} />
-      ) : (
-        <a key={file.url} href={file.url} target="_blank" rel="noreferrer" download={file.filename}
-          className={outbound
-            ? "flex items-center gap-2 rounded-field bg-primary-foreground/15 px-2.5 py-2 text-[12px] hover:bg-primary-foreground/25"
-            : "flex items-center gap-2 rounded-field bg-muted px-2.5 py-2 text-[12px] hover:bg-muted/70"}>
-          <Paperclip className="size-3.5 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate font-medium">{file.filename}</span>
-          {file.size > 0 && <span className="shrink-0 tabular-nums opacity-70">{fileSize(file.size)}</span>}
-        </a>
-      ))}
-    </div>
-  );
-}
-
-function TimelineMessage({ message, avatarUrl, retry, busy, config, channel }: { channel?: string; config?: Config; message: Message; avatarUrl?: string | null; retry: () => void; busy: boolean }) {
-  const outbound = message.direction === "OUTBOUND";
-  const html = message.bodyHtml?.trim() ? message.bodyHtml : null;
-  // Inline email images already appear inside the HTML; list only the files it does not show.
-  const files = (message.attachments ?? []).filter(file => !html || !html.includes(file.url));
-  const images = files.filter(file => file.image);
-  const others = files.filter(file => !file.image);
-  return (
-    <div className={outbound ? "flex flex-row-reverse items-end gap-2" : "flex items-end gap-2"}>
-      {config?.showAvatar !== false && <Avatar name={message.authorName} url={avatarUrl} channel={channel || message.channel} />}
-      <div className={(outbound
-        ? "min-w-0 max-w-[85%] break-words rounded-panel rounded-br-field bg-primary px-3.5 py-2.5 text-primary-foreground"
-        : "min-w-0 max-w-[85%] break-words rounded-panel rounded-bl-field border border-border bg-card px-3.5 py-2.5 text-foreground")
-        + (html ? " w-full sm:w-[85%]" : "")}
-      >
-        <div className="flex items-center gap-1.5">
-          <span className={outbound
-            ? "text-[10px] font-semibold text-primary-foreground/75"
-            : "text-[10px] font-semibold text-muted-foreground"}
-          >
-            {message.authorName}
-          </span>
-        </div>
-        {outbound && (message.subject || message.recipient) ? <p className="mt-0.5 truncate text-[11px] text-primary-foreground/75">
-          {[message.recipient && `→ ${message.recipient}`, message.subject].filter(Boolean).join(" · ")}
-        </p> : null}
-        <MediaGrid images={images} />
-        <ChatMessageBody message={message} fallback={html ? <EmailHtmlBody html={html} /> : message.body?.trim()
-          ? <p className="mt-1 whitespace-pre-wrap text-sm leading-6"><LinkedText text={message.body} /></p> : null} />
-        <Attachments files={others} outbound={outbound} />
-        <div className={outbound
-          ? "mt-1 flex justify-end gap-1.5 text-[10px] text-primary-foreground/70"
-          : "mt-1 flex justify-end gap-1.5 text-[10px] text-muted-foreground"}
-        >
-          {config?.showTimestamps !== false && <time>{fullTime(message.sentAt)}</time>}
-          {outbound && config?.showDeliveryStatus !== false ? <span>{["SENT", "DELIVERED"].includes(message.deliveryStatus) ? "✓ " : ""}{message.deliveryStatus.toLowerCase()}</span> : null}
-          {outbound && message.deliveryStatus === "FAILED" && action(config, "retry") ? (
-            <Button variant="ghost" type="button" disabled={busy} onClick={retry} className="h-auto p-0 text-inherit underline disabled:opacity-50"
-              title={t("crm.chat.retryWarning")}>{action(config, "retry")?.label}</Button>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TimelineSystemEvent({ message, config }: { message: Message; config?: Config }) {
-  const activity = callActivity(message.body);
-  if (activity) return <CallActivityCard activity={activity} author={message.authorName} at={config?.showTimestamps !== false ? fullTime(message.sentAt) : undefined} />;
-  return (
-    <div className="flex items-center justify-center gap-2 px-6 py-1 text-center text-[10px] text-muted-foreground">
-      <span className="h-px min-w-5 flex-1 bg-border" />
-      <span className="inline-flex max-w-[78%] items-center gap-1.5 rounded-pill bg-muted px-2.5 py-1">
-        <Activity size={12} className="shrink-0 text-primary" aria-hidden="true" />
-        <span className="whitespace-pre-wrap break-words text-left"><CommentBody body={message.body} /></span>
-        {config?.showTimestamps !== false && <time className="shrink-0 text-muted-foreground/70">{fullTime(message.sentAt)}</time>}
-      </span>
-      <span className="h-px min-w-5 flex-1 bg-border" />
-    </div>
-  );
-}
-
-function TimelineComment({ comment, config }: { comment: Comment; config?: Config }) {
-  const author = comment.authorName || t("crm.chat.teamMember");
-  return (
-    <div className={comment.mine ? "flex flex-row-reverse items-end gap-2" : "flex items-end gap-2"}>
-      {config?.showAvatar !== false && <Avatar name={author} url={comment.authorAvatarUrl} />}
-      <div className={comment.mine
-        ? "min-w-0 max-w-[85%] break-words rounded-panel rounded-br-field border border-amber-400/45 bg-amber-400/10 px-3.5 py-2.5 text-foreground"
-        : "min-w-0 max-w-[85%] break-words rounded-panel rounded-bl-field border border-amber-400/45 bg-amber-400/10 px-3.5 py-2.5 text-foreground"}
-      >
-        <div className="flex items-center gap-1.5">
-          <ChannelIcon channel="" comment />
-          <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300">{author}</span>
-          <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">{t("crm.chat.internal")}</span>
-        </div>
-        <p className="mt-1 whitespace-pre-wrap text-sm leading-6"><CommentBody body={comment.body} /></p>
-        <time className="mt-1 block text-right text-[10px] text-muted-foreground">
-          {config?.showTimestamps !== false && comment.createdAt ? fullTime(comment.createdAt) : ""}
-        </time>
-      </div>
-    </div>
-  );
 }
 
 /**
@@ -408,6 +77,30 @@ function matchesFolder(row: EntityRecord, folder: ConversationFolder): boolean {
     && (!folder.unreadOnly || Number(row.unreadCount ?? 0) > 0);
 }
 
+/** The contact panel beside the chat, the built-in one or an app's own (`components.ContactPanel`). */
+export type InboxContactPanelProps = {
+  customerId: string; conversation: EntityRecord; customer: EntityRecord | null; config: Config; extensionContext: ExtensionContext;
+};
+function DefaultInboxContact({ customerId, conversation, customer, config }: InboxContactPanelProps) {
+  return <ContactPanel presentation="card" id={customerId} row={conversation} customer={customer} config={config} />;
+}
+
+/** The parts of the inbox an app may draw itself. Each gets the same state the built-in one does. */
+export type CrmInboxComponents = {
+  /** One conversation in the list. Wrap the exported `ConversationRow` to keep its menu and selection. */
+  ConversationRow?: ConversationRowComponent;
+  /** The composer under the chat (the exported `CrmComposer` and its parts). */
+  Composer?: ComponentType<CrmComposerProps>;
+  /** The contact panel beside the chat. */
+  ContactPanel?: ComponentType<InboxContactPanelProps>;
+  /** What the chat pane shows while no conversation is chosen. */
+  EmptyChat?: ComponentType;
+};
+type InboxExtrasValue = { components?: CrmInboxComponents; timelineSources?: readonly CrmTimelineSource[];
+  renderEntry?: ChatTimelineProps["renderEntry"]; rowMenu?: ConversationRowMenu };
+/** The inbox's app-supplied parts, handed to the list renderer without remounting it. */
+const InboxExtras = createContext<InboxExtrasValue>({});
+
 type InboxChrome = { conversationRow?: ConversationRowOptions; list?: WorkspaceToolbarLayout; mobileList?: WorkspaceToolbarLayout; chat?: WorkspaceToolbarLayout; narrowChat?: WorkspaceToolbarLayout; mobileChat?: WorkspaceToolbarLayout; composer?: WorkspaceToolbarLayout; mobileComposer?: WorkspaceToolbarLayout };
 type ConversationFocus = { id: string; nonce: number };
 function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, scopedConfig, workspaceKey, initialFolder, flat, focusConversation, onFocusHandled, onOpenElsewhere, scoped, onShowAll, ...pagination }: Pick<ListRendererProps, "rows" | "total" | "open"> & ConversationPagination & { scopedConfig?: ServerConfig; workspaceKey?: string; initialFolder?: string; flat?: boolean; toolbar?: React.ReactNode; loading?: boolean; chrome?: InboxChrome;
@@ -431,7 +124,6 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
   const boundFields = workspace?.fields;
   const config: Config | undefined = useMemo(() => serverConfig && resolveConfig(serverConfig, boundFields ?? [], presentation),
     [serverConfig, boundFields, presentation]);
-  const command = <T,>(path: string, body: unknown = {}) => crmCommand<T>(workspaceKey && path.startsWith("/api/crm/conversations/") ? `${path}?workspace=${encodeURIComponent(workspaceKey)}` : path, body);
   const [folderKey, setFolderKey] = useState<string | null>(null);
   const [lastFolderKey, setLastFolderKey] = useState<string | null>(null);
   const openFolder = (key: string) => { setLastFolderKey(key); setFolderKey(key); };
@@ -472,47 +164,11 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
     setFolderKey(initialFolder);
   }, [initialFolder, folders]);
   const [selectedId, setSelectedId] = useState<string | null>(rows.length ? String(rows[0].id) : null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loadedActivityId, setLoadedActivityId] = useState<string | null>(null);
-  const loadSequence = useRef(0);
-  const [loadedConversationId, setLoadedConversationId] = useState<string | null>(null);
-  const [deliveryFailed, setDeliveryFailed] = useState(false);
-  const [delivery, setDelivery] = useState<DeliveryConnection | null>(null);
+  const extras = useContext(InboxExtras);
   const selectionDismissedRef = useRef(false);
   const inboxRootRef = useRef<HTMLDivElement | null>(null);
   const selectionRef = useRef(selectedId);
   selectionRef.current = selectedId;
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [customer, setCustomer] = useState<EntityRecord | null>(null);
-
-  // The composer's draft belongs to the conversation, not to this mount (composerDrafts.ts): switching
-  // chats, contacts, inbox modes or tabs and coming back finds the text, subject, recipient, sending
-  // mailbox, mode and attached files as they were left. Only a send or an emptied field clears it.
-  useSyncExternalStore(composerDrafts.subscribe, composerDrafts.version, composerDrafts.version);
-  useEffect(() => { installDraftUnloadGuard(); }, []);
-  const draftKey = selectedId ? composerDrafts.key(workspaceKey, selectedId) : null;
-  const defaultMode: ComposerMode = !config || action(config, "reply") ? "reply" : "note";
-  const composed: ComposerDraft = (draftKey && composerDrafts.read(draftKey)) || { ...EMPTY_DRAFT, mode: defaultMode };
-  const { mode, body: draft, subject: subjectDraft, recipient: recipientDraft, note: noteDraft, noteBody } = composed;
-  // Files already uploaded and waiting to go with the next reply, and the ones still uploading.
-  const pending: Attachment[] = draftKey ? composerDrafts.files(draftKey) : [];
-  const updateDraft = (change: (current: ComposerDraft) => ComposerDraft, key: string | null = draftKey) => {
-    if (!key) return;
-    composerDrafts.write(key, change(composerDrafts.read(key) ?? { ...EMPTY_DRAFT, mode: key === draftKey ? mode : defaultMode }));
-  };
-  const setMode = (next: ComposerMode) => updateDraft(current => ({ ...current, mode: next }));
-  const setDraft = (next: string | ((previous: string) => string)) =>
-    updateDraft(current => ({ ...current, body: typeof next === "function" ? next(current.body) : next }));
-  const setSubjectDraft = (subject: string | null) => updateDraft(current => ({ ...current, subject }));
-  const setRecipientDraft = (recipient: string | null) => updateDraft(current => ({ ...current, recipient }));
-  const setPending = (update: Attachment[] | ((files: Attachment[]) => Attachment[]), key: string | null = draftKey) => {
-    if (key) composerDrafts.setFiles(key, update);
-  };
-  const subjectId = useId();
-  const [expanded, setExpanded] = useState(false);
-  const composerWindowRef = useRef<HTMLDivElement | null>(null);
-  const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
-  useAutoGrow(replyInputRef, draft, !expanded);
   // A conversation opened on purpose (from the mailbox search) stays open: the newest message of the
   // contact's other channels does not pull the selection away from it.
   const pinnedRef = useRef<string | null>(null);
@@ -523,14 +179,6 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
     void mailboxAccounts().then(items => { if (live) setMailboxes(items); }).catch(() => { if (live) setMailboxes([]); });
     return () => { live = false; };
   }, []);
-  const [uploading, setUploading] = useState(0);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [fileDragActive, setFileDragActive] = useState(false);
-  const fileDragDepth = useRef(0);
-  useEffect(() => { fileDragDepth.current = 0; setFileDragActive(false); }, [selectedId, mode]);
-  const [busy, setBusy] = useState(false);
-  const [historyPages, setHistoryPages] = useState(1);
-  const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [contactPanelOpen, setContactPanelOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [compact, setCompact] = useState(false);
@@ -544,16 +192,13 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
   useEffect(() => { if (contactPanelOpen && detailOverlay) contactPanelCloseRef.current?.focus({ preventScroll: true }); }, [contactPanelOpen, detailOverlay]);
   const contactPanelId = useId();
   const replySelectionRef = useRef<ReplySelection | null>(null);
-  const draftRef = useRef(draft); draftRef.current = draft || noteDraft || (subjectDraft !== null || (recipientDraft !== null && recipientDraft !== delivery?.recipient) ? "email draft" : "");
-  const [error, setError] = useState<string | null>(null);
   const timelineEndRef = useRef<HTMLDivElement | null>(null);
   // Respond to the allocated pane, including a narrow split pane on a wide screen.
   useEffect(() => {
     const root = inboxRootRef.current;
     if (!root) return;
     const measure = () => {
-      const nextCompact = root.clientWidth < 720;
-      setCompact(nextCompact);
+      setCompact(root.clientWidth < 720);
       setDetailOverlay(root.clientWidth < 1100);
     };
     measure();
@@ -589,23 +234,26 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
   usePageSlide(inboxRootRef, contactPanelOpen ? "contact" : mobileChatOpen ? "chat" : "list", compact);
   usePageSlide(folderSlideRef, activeFolder ? "folder" : "root");
 
+  // The open chat: its timeline, contact, delivery and commands (useCrmConversation), and its
+  // composer (useCrmComposer). The inbox follows the contact's latest channel as messages arrive,
+  // unless the reader is writing or opened this conversation on purpose.
+  const hasDraftRef = useRef(false);
+  const channelRowsRef = useRef(channelRows);
+  channelRowsRef.current = channelRows;
+  const followActivity = useCallback((entries: readonly { id: string; conversationId: string; direction: string }[], conversationId: string) => {
+    const customerId = String(channelRowsRef.current.find(row => String(row.id) === conversationId)?.customer ?? "");
+    const next = replySelection(customerId, [...entries], replySelectionRef.current, hasDraftRef.current || pinnedRef.current === conversationId);
+    replySelectionRef.current = next.state;
+    if (next.conversationId && channelRowsRef.current.some(row => String(row.id) === next.conversationId)) setSelectedId(next.conversationId);
+  }, []);
+  const chat = useCrmConversation({ conversation: selected, workspace: workspaceKey, onActivity: followActivity });
+  const composer = useCrmComposer(chat, config);
+  hasDraftRef.current = !!(composer.draft || composer.noteDraft).trim() || composer.subjectDraft !== null
+    || (composer.recipientDraft !== null && composer.recipientDraft !== chat.delivery?.recipient);
+  const extensionContext = useConversationExtensionContext(chat, composer, config);
+  const timeline = useTimelineWithSources(chat, extras.timelineSources);
+  const customer = chat.customer;
   const customerAvatarUrl = string(customer, "avatarUrl", string(selected, "customerAvatar"));
-
-  const timeline = useMemo(() => [
-    ...messages.map((message) => ({ id: `message:${message.id}`, at: message.sentAt, message, comment: null as Comment | null })),
-    ...comments.map((comment) => ({
-      id: `comment:${comment.id}`,
-      at: comment.createdAt || "",
-      message: null as Message | null,
-      comment,
-    })),
-  ].sort((left, right) => new Date(left.at).getTime() - new Date(right.at).getTime()), [comments, messages]);
-
-  useEffect(() => {
-    setDelivery(null);
-    setError(null);
-  }, [selectedId]);
-  useEffect(() => { setHistoryPages(1); }, [selected?.customer]);
 
   useEffect(() => {
     const history = timelineEndRef.current?.parentElement;
@@ -618,162 +266,15 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
     setSelectedId(rows.length ? String(rows[0].id) : null);
   }, [rows, channelRows, selectedId]);
 
-  useEffect(() => {
-
-  }, []);
-
-  const loadSelected = useCallback(async () => {
-    const sequence = ++loadSequence.current;
-    if (!selected) {
-      setMessages([]);
-      setComments([]);
-      setCustomer(null);
-      setLoadedActivityId(null);
-      return;
-    }
-    const id = String(selected.id);
-    const customerId = String(selected.customer ?? "");
-    const current = () => selectionRef.current === id && loadSequence.current === sequence;
-    setDeliveryFailed(false);
-    setError(null);
-    // History/read acknowledgement must not wait for contact decoration or transport availability.
-    await Promise.all([
-      (async () => {
-        try {
-          type ActivityEntry = {id:string;conversationId:string;kind:string;direction:string;channel:string;authorName:string;authorAvatarUrl:string|null;mine:boolean;body:string;at:string;deliveryStatus:string;attachments?:Attachment[];bodyHtml?:string|null;senderAccount?:string|null};
-          const entries:ActivityEntry[]=[];let hasMore=false;let cursor:string|null=null;
-          for(let page=0;page<historyPages;page++) {
-            const query=new URLSearchParams({limit:"100"});
-            if(cursor)query.set("cursor",cursor);
-            const response=await fetch(`/api/crm/contacts/${customerId}/activity?${query}`,{credentials:"same-origin"});
-            const result=await checkedJson<{rows?:ActivityEntry[];hasMore:boolean;nextCursor:string|null}>(response,t("crm.error.history"));
-            entries.push(...(result.rows??[]));hasMore=result.hasMore;cursor=result.nextCursor;
-            if(!hasMore)break;
-            if(!cursor) {
-              if(current()) setError(t("crm.error.history"));
-              return;
-            }
-          }
-          if (!current()) return;
-          setHasMoreHistory(hasMore);
-          const chronological = [...entries].reverse();
-          setMessages(chronological.filter(entry => entry.kind !== "NOTE").map(entry => ({ ...entry, id: entry.id.replace(/^message:/, ""), sentAt: entry.at })) as Message[]);
-          setComments(chronological.filter(entry => entry.kind === "NOTE").map(entry => ({id:entry.id, authorName:entry.authorName, authorAvatarUrl:entry.authorAvatarUrl, body:entry.body, createdAt:entry.at, mine:entry.mine})));
-          setLoadedActivityId(id);
-          const nextReply = replySelection(customerId, entries, replySelectionRef.current, !!draftRef.current.trim() || pinnedRef.current === id);
-          replySelectionRef.current = nextReply.state;
-          if (nextReply.conversationId && channelRows.some(row => String(row.id) === nextReply.conversationId)) setSelectedId(nextReply.conversationId);
-        } catch (loadError) {
-          if (current()) setError(loadError instanceof Error ? loadError.message : t("crm.error.history"));
-        }
-      })(),
-      (async () => {
-        try {
-          const nextCustomer = customerId ? await request<{fields: EntityRecord}>(`/contacts/${customerId}`) : null;
-          if (current()) setCustomer(nextCustomer?.fields ?? null);
-        } catch (loadError) {
-          if (current()) setError(loadError instanceof Error ? loadError.message : t("crm.error.conversation"));
-        }
-      })(),
-      (async () => {
-        try {
-          const response = await fetch(`/api/crm/conversations/${id}/delivery${workspaceKey ? `?workspace=${encodeURIComponent(workspaceKey)}` : ""}`, { credentials: "same-origin" });
-          const nextDelivery = await checkedJson<DeliveryConnection>(response, t("crm.error.connection"));
-          if (!current()) return;
-          setDelivery(nextDelivery);
-          setLoadedConversationId(id);
-        } catch (loadError) {
-          if (!current()) return;
-          setDelivery(null);
-          setDeliveryFailed(true);
-          setError(loadError instanceof Error ? loadError.message : t("crm.error.connection"));
-        }
-      })(),
-    ]);
-  }, [selected, workspaceKey, channelRows, historyPages]);
-
-  useEffect(() => { void loadSelected(); }, [loadSelected]);
-
-  useUiEvents(
-    () => { void loadSelected(); },
-    { types: ["created", "updated", "deleted"], entityType: "catalog", entityName: "CrmConversationMessages" }
-  );
-
-  useUiEvents(
-    () => { void loadSelected(); },
-    { types: ["created", "updated", "deleted"], entityType: "comment", entityName: "crm_conversations", id: selectedId || undefined }
-  );
-
-  useUiEvents(() => { void loadSelected(); }, { types: ["updated"], entityType: "page", entityName: "crm-inbox-workspaces" });
-
-  const replyState = composerState({canReply:!!action(config,"reply") && !!action(config,"sendReply"), busy,
-    loaded:loadedConversationId === selectedId, failed:deliveryFailed, delivery});
-  // The clip follows the channel: a full tray, a read-only channel and a channel that simply does
-  // not carry files are three different answers, and the button's title gives the right one.
-  const attachState = (() => {
-    if (replyState.disabled) return { disabled: true, reason: replyState.message || "Replies are unavailable" };
-    const limit = delivery?.maxAttachments ?? 0;
-    if (uploading > 0) return { disabled: true, reason: t("crm.chat.uploading", { count: uploading }) };
-    if (limit <= 0) return { disabled: true, reason: delivery?.attachmentReason || t("crm.chat.attachUnavailable") };
-    if (pending.length >= limit) return { disabled: true, reason: t("crm.chat.attachLimit", { count: limit }) };
-    return { disabled: false, reason: t("crm.chat.attach") };
-  })();
-  // Pin the recipient once writing starts, but only with this conversation's own connection loaded.
-  useEffect(() => {
-    if (loadedConversationId !== selectedId || recipientDraft !== null) return;
-    if (mode === "reply" && (draft.trim() || pending.length || subjectDraft !== null) && delivery?.recipient)
-      setRecipientDraft(delivery.recipient);
-  }, [mode, draft, pending.length, subjectDraft, delivery?.recipient, recipientDraft, loadedConversationId, selectedId]);
-  // The mailboxes a reply may leave from. A choice only exists with two or more; a stored choice the
-  // connection no longer offers falls back to its default.
-  const senders = (delivery?.senders ?? []).filter(sender => sender && typeof sender.id === "string" && sender.id);
-  const chooseSender = senders.length > 1;
-  const defaultSender = senders.find(sender => sender.id === delivery?.sender)?.id ?? senders[0]?.id ?? null;
-  const senderId = chooseSender ? senders.find(sender => sender.id === composed.from)?.id ?? defaultSender : null;
-  const showAttachments = mode === "reply" && !!action(config, "sendReply");
-  const chooseAttachment = () => {
-    if (attachState.disabled) return;
-    fileInputRef.current?.click();
-  };
-  const composerStatusId = useId();
-  const fileDropReason = mode !== "reply" ? t("crm.chat.dropReplyOnly") : attachState.disabled ? attachState.reason : null;
-  const isFileDrag = (event: DragEvent) => Array.from(event.dataTransfer.types).includes("Files");
-  const clearFileDrag = () => { fileDragDepth.current = 0; setFileDragActive(false); };
-  const fileDragEnter = (event: DragEvent) => {
-    if (!isFileDrag(event)) return;
-    event.preventDefault();
-    fileDragDepth.current += 1;
-    setFileDragActive(true);
-  };
-  const fileDragOver = (event: DragEvent) => {
-    if (!isFileDrag(event)) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = fileDropReason ? "none" : "copy";
-  };
-  const fileDragLeave = (event: DragEvent) => {
-    if (!isFileDrag(event)) return;
-    event.preventDefault();
-    fileDragDepth.current = Math.max(0, fileDragDepth.current - 1);
-    if (!fileDragDepth.current) setFileDragActive(false);
-  };
-  const filesDropped = (event: DragEvent) => {
-    if (!isFileDrag(event)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    clearFileDrag();
-    if (fileDropReason) { setError(fileDropReason); return; }
-    void attach(event.dataTransfer.files);
-  };
-
   const acknowledgeRead = useCallback(() => Promise.all(channelRows.filter(row =>
     String(row.customer) === String(selected?.customer) && Number(row.unreadCount || 0) > 0 && readRows.get(String(row.id)) !== row
   ).map(async row => {
-    await command(`/api/crm/conversations/${row.id}/read`);
+    await workspaceCommand(workspaceKey, `/api/crm/conversations/${row.id}/read`);
     setReadRows(previous => new Map(previous).set(String(row.id), row));
   })), [channelRows, selected?.customer, workspaceKey, readRows]);
-  const readRevision = selected && loadedActivityId === selectedId
+  const readRevision = selected && chat.activityLoaded
     ? JSON.stringify([workspaceKey, selectedId, selected.unreadCount,
-      messages.filter(message => message.direction === "INBOUND").map(message => message.id)])
+      chat.messages.filter(message => message.direction === "INBOUND").map(message => message.id)])
     : null;
   useConversationRead(timelineEndRef, readRevision, acknowledgeRead);
 
@@ -795,10 +296,7 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
     selectionDismissedRef.current = false;
     replySelectionRef.current = null;
     if (activeFolder && owner(target)?.key !== activeFolder.key) setFolderKey(owner(target)?.key ?? null);
-    const id = String(target.id);
-    setDelivery(null);
-    setError(null);
-    setSelectedId(id);
+    setSelectedId(String(target.id));
   };
   /** Opens a conversation by id: in place when this feed has it, otherwise through the workspace. */
   const openConversation = (conversationId: string) => {
@@ -808,118 +306,6 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
     if (onOpenElsewhere) { onOpenElsewhere(conversationId); return; }
     openRoute(`onno://${currentRoute()}?conversation=${encodeURIComponent(conversationId)}`);
   };
-
-  /**
-   * Upload what the agent picked, then keep it in the tray until the reply is sent. Uploading on
-   * pick rather than on send means the paperclip and the Send button never race, and a file that
-   * the server refuses says so while there is still a composer to say it in.
-   */
-  const attach = async (files: FileList | null) => {
-    if (!files?.length || attachState.disabled || !draftKey) return;
-    // Files belong to the draft they were picked for, even if the reader moves on while they upload.
-    const conversationId = selectedId;
-    const key = draftKey;
-    const here = () => selectionRef.current === conversationId;
-    let maxFileSize: number;
-    try {
-      const limits = await fetch("/api/media/limits", {credentials:"same-origin"});
-      const policy = await checkedJson<{maxFileSize: number}>(limits, t("crm.chat.uploadLimitsUnavailable"));
-      if (typeof policy.maxFileSize !== "number" || policy.maxFileSize <= 0) {
-        setError(t("crm.chat.uploadLimitsUnavailable"));
-        return;
-      }
-      maxFileSize = policy.maxFileSize;
-    } catch {
-      if (here()) setError(t("crm.chat.uploadLimitsUnavailable"));
-      return;
-    }
-    const room = (delivery?.maxAttachments ?? 0) - composerDrafts.files(key).length;
-    const chosen = Array.from(files).slice(0, Math.max(0, room));
-    if (here()) setError(chosen.length < files.length ? t("crm.chat.attachTooMany", { count: delivery?.maxAttachments ?? 0 }) : null);
-    for (const file of chosen) {
-      if (file.size > maxFileSize) {
-        if (here()) setError(t("crm.chat.uploadTooLarge", {name:file.name, limit:fileSize(maxFileSize)}));
-        continue;
-      }
-      setUploading(count => count + 1);
-      try {
-        const form = new FormData();
-        form.append("file", file);
-        const token = document.cookie.split(";").map(part => part.trim()).find(part => part.startsWith("XSRF-TOKEN="))?.slice(11);
-        const response = await fetch("/api/media", { method: "POST", credentials: "same-origin",
-          headers: token ? { "X-XSRF-TOKEN": decodeURIComponent(token) } : undefined, body: form });
-        if (!response.ok) {
-          const failure = await response.json().catch(() => ({}));
-          if (selectionRef.current === conversationId) {
-            setError(failure.message || failure.detail || t("crm.chat.uploadFailedFile", { name: file.name }));
-          }
-          continue;
-        }
-        const stored = await response.json();
-        setPending(current => current.some(item => item.url === stored.url) ? current : [...current, {
-          url: stored.url, filename: stored.filename || file.name,
-          contentType: stored.contentType || file.type || "application/octet-stream",
-          size: stored.size ?? file.size,
-          image: /^image\/(png|jpeg|gif|webp|avif)$/.test(stored.contentType || file.type || ""),
-        }], key);
-      } catch (uploadError) {
-        if (here()) setError(uploadError instanceof Error ? uploadError.message : t("crm.chat.uploadFailed"));
-      } finally {
-        setUploading(count => count - 1);
-      }
-    }
-  };
-
-  const submit = async () => {
-    const hasFiles = mode === "reply" && pending.length > 0;
-    if (!action(config, mode) || !action(config, mode === "reply" ? "sendReply" : "sendNote") || !selected || !draftKey
-      || (!(mode === "note" ? noteDraft : draft).trim() && !hasFiles) || busy || uploading > 0
-      || (mode === "reply" && replyState.disabled)) return;
-    // What goes out is this conversation's draft as it stands now; only that part is cleared after.
-    const sentKey = draftKey, sentMode = mode;
-    setBusy(true);
-    setError(null);
-    try {
-      if (mode === "note") {
-        await command(workspaceKey ? `/api/crm/inbox-workspaces/${workspaceKey}/conversations/${String(selected.id)}/comments` : `/api/comments/catalogs/crm_conversations/${String(selected.id)}`, {
-          body: noteBody,
-          parentId: null,
-        });
-      } else {
-        await command(`/api/crm/conversations/${String(selected.id)}/messages`, {
-          body: draft,
-          recipient: conversationChannel(selected) === "EMAIL" ? recipientDraft ?? delivery?.recipient : undefined,
-          subject: conversationChannel(selected) === "EMAIL" ? subjectDraft : undefined,
-          attachments: pending.map(file => file.url),
-          // Only offered with a real choice, so older backends never see the field.
-          ...(chooseSender && senderId ? { from: senderId } : {}),
-        });
-      }
-      composerDrafts.clearSent(sentKey, sentMode);
-      setExpanded(false);
-      await loadSelected();
-    } catch (sendError) {
-      setError(sendError instanceof Error ? sendError.message : t("crm.error.send"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const retry = async (messageId: string, conversationId?: string) => {
-    if (!action(config, "retry") || !selected || busy || !delivery?.connected) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await command(`/api/crm/conversations/${conversationId || String(selected.id)}/messages/${messageId}/retry`);
-      await loadSelected();
-    } catch (retryError) {
-      setError(retryError instanceof Error ? retryError.message : t("crm.error.retry"));
-    } finally { setBusy(false); }
-  };
-
-  useEffect(() => {
-    if (config && !action(config, mode)) { const next = config.actions.find(a => a.visible && ["reply", "note"].includes(a.key)); if (next) setMode(next.key as ComposerMode); }
-  }, [config, mode]);
 
   // A conversation the workspace was asked to open (it scopes the feed so the row arrives).
   const handledFocus = useRef(0);
@@ -932,39 +318,6 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
     onFocusHandled?.();
   }, [focusConversation, channelRows]);
 
-  // Writing moves with the window: into it when it opens, back to the inline field when it closes
-  // (the expand button that opened it is gone by then, so the dialog cannot hand focus back itself).
-  const wasExpanded = useRef(false);
-  useEffect(() => {
-    if (wasExpanded.current === expanded) return;
-    wasExpanded.current = expanded;
-    const frame = requestAnimationFrame(() => focusComposerField(expanded
-      ? composerWindowRef.current : inboxRootRef.current?.querySelector("[data-chat-composer]"), mode));
-    return () => cancelAnimationFrame(frame);
-  }, [expanded]);
-  useEffect(() => { if (!selectedId) setExpanded(false); }, [selectedId]);
-
-  const [hostActions,setHostActions]=useState<{id:string;title:string;enabled:boolean}[]>([]);
-  useEffect(()=>{
-    let live=true;setHostActions([]);
-    if(selectedId && workspaceKey)void request<{id:string;title:string;enabled:boolean}[]>(
-      `/inbox-workspaces/${encodeURIComponent(workspaceKey)}/conversations/${selectedId}/actions`)
-      .then(items=>{if(live)setHostActions(items);}).catch(()=>{});
-    return()=>{live=false;};
-  },[selectedId,workspaceKey,selected]);
-  const extensionContext: ExtensionContext = {
-    surface:"crm-chat", kind:"catalogs", name:"crm_conversations", recordId:selected ? String(selected.id) : undefined,
-    record:selected ?? undefined, workspaceKey, permissions:{canWrite:!!action(config,"edit"),canReply:!!action(config,"reply")},
-    actions:hostActions.map(a=>({...a,enabled:a.enabled&&!busy})),
-    refresh:loadSelected,
-    openRecord:(kind,name,id)=>openRoute(`onno://${kind}/${name}/${id}`),
-    insertDraft:text=>{if(replyState.disabled)throw new Error(t("crm.error.replyUnavailable"));const next=draft.trim()?`${draft}\n\n${text}`:text;if(next.length>(delivery?.maxTextLength??4096))throw new Error(t("crm.error.replyTooLong"));setMode("reply");setDraft(next);},
-    execute:async (name,input)=>{
-      if(!selected || !workspaceKey || busy || !hostActions.some(a=>a.id===name&&a.enabled))throw new Error(t("crm.error.action"));
-      const result=await command(`/api/crm/inbox-workspaces/${encodeURIComponent(workspaceKey)}/conversations/${selected.id}/actions/${encodeURIComponent(name)}`,{inputs:input});
-      await loadSelected();return result;
-    },
-  };
   if (!config) return configError ? <p role="alert" className="p-4 text-sm">{configError}</p> : <InboxSkeleton />;
 
   if (!loading && !toolbar && !rows.length && !folders.length) {
@@ -976,49 +329,9 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
     );
   }
 
+  // The contact's conversations a reply can switch to (another channel or mailbox thread).
   const senderOptions = channelRows.filter(row => String(row.id) === selectedId || (!!selected?.customer && String(row.customer) === String(selected.customer)));
-  const senderIdentity = selected && <span className="flex min-w-0 items-center gap-2"><ChannelLogo channel={conversationChannel(selected)} className="size-4" /><span className="truncate">{string(selected, "inboxDisplay", delivery?.label || conversationChannel(selected))}</span></span>;
-  const selectTriggerClass = "h-9 w-auto max-w-full min-w-0 gap-2 rounded-field border-0 bg-transparent px-1 text-xs shadow-none hover:bg-muted focus:ring-1";
-  // Switching to the contact's other conversation (another channel or mailbox thread).
-  const conversationSwitch = (label: string) => senderOptions.length === 1 ? <span className="flex h-9 min-w-0 items-center px-1">{senderIdentity}</span> : (<Select value={selectedId || ""} disabled={busy || !!draft.trim() || subjectDraft !== null || (recipientDraft !== null && recipientDraft !== delivery?.recipient) || mode === "note"}
-                onValueChange={(id: string) => { const target = channelRows.find(row => String(row.id) === id); if (target) setSelectedId(String(target.id)); }}>
-                <SelectTrigger aria-label={label} className={selectTriggerClass}
-                  title={draft.trim() ? t("crm.chat.switchLocked") : t("crm.chat.switchHint")}>
-                  <SelectValue>{senderIdentity}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {senderOptions.map(row => (
-                    <SelectItem key={String(row.id)} value={String(row.id)}>
-                      <span className="flex min-w-0 items-center gap-2">
-                        <ChannelLogo channel={conversationChannel(row)} className="size-4" />
-                        <span className="truncate">{string(row, "inboxDisplay", conversationChannel(row))}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>);
-  // The sending mailbox, when the connection offers more than one. It takes the From row; switching
-  // conversations then moves to a row of its own, labelled as the channel it is.
-  const senderLabel = (id: string | null) => { const sender = senders.find(item => item.id === id); return sender?.label || sender?.id || ""; };
-  const mailboxSelect = chooseSender && senderId ? <Select value={senderId} disabled={busy || replyState.disabled || mode === "note"}
-    onValueChange={(id: string) => updateDraft(current => ({ ...current, from: id === defaultSender ? null : id }))}>
-    <SelectTrigger aria-label={t("crm.chat.sendFrom")} className={selectTriggerClass}>
-      <SelectValue><span className="truncate">{senderLabel(senderId)}</span></SelectValue>
-    </SelectTrigger>
-    <SelectContent>{senders.map(sender => <SelectItem key={sender.id} value={sender.id}>{sender.label || sender.id}</SelectItem>)}</SelectContent>
-  </Select> : null;
-  const senderControls = (labels: boolean) => selected ? <div data-sender-account className={labels ? "flex min-w-0 max-w-full flex-col text-xs" : "flex min-w-0 max-w-full flex-wrap items-center gap-1 text-xs"}>
-    <div className="flex min-w-0 max-w-full items-center gap-2">
-      {labels && <span className="w-12 shrink-0 text-muted-foreground">{t("crm.chat.from")}</span>}
-      {mailboxSelect ?? conversationSwitch(t("crm.chat.sendFrom"))}
-    </div>
-    {mailboxSelect && senderOptions.length > 1 && <div className="flex min-w-0 max-w-full items-center gap-2">
-      {labels && <span className="w-12 shrink-0 text-muted-foreground">{t("crm.chat.channel")}</span>}
-      {conversationSwitch(t("crm.chat.switchConversation"))}
-    </div>}
-  </div> : null;
-  const sendingAccount = senderControls(!compact);
-
+  const switchConversation = (id: string) => { const target = channelRows.find(row => String(row.id) === id); if (target) setSelectedId(String(target.id)); };
   const contactName = string(selected, "customerDisplay", t("crm.chat.unknownCustomer"));
   // Visible list actions: what was only on a row's right-click (folders) and the mailbox search.
   const canCreateFolder = chatGroups.ready && !flat;
@@ -1030,137 +343,15 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
         <MailSearch className="size-4" aria-hidden="true" />{t("crm.mailbox.find")}
       </Button>}
     </div> : null;
-  const modeOptions = (config?.actions ?? []).filter(a => a.visible && ["reply", "note"].includes(a.key)).map(a => ({ value: a.key as ComposerMode, label: a.label }));
-  const sendAction = action(config, mode === "reply" ? "sendReply" : "sendNote");
-  const cannotSend = !action(config, mode) || busy || uploading > 0 || (!(mode === "note" ? noteDraft : draft).trim() && !(mode === "reply" && pending.length > 0)) || (mode === "reply" && replyState.disabled);
-  const canExpand = mode === "note" ? !!action(config, "note") : !replyState.disabled;
-  // Ctrl/Cmd+Enter sends; the window listens around its fields too, so a handled key is not sent twice.
-  const sendShortcut = (event: { key: string; metaKey: boolean; ctrlKey: boolean; defaultPrevented: boolean; preventDefault: () => void }) => {
-    if (event.defaultPrevented) return;
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-      event.preventDefault();
-      void submit();
-    }
-  };
-  const fileDropOverlay = fileDragActive && <div className="pointer-events-none absolute inset-2 z-50 flex items-center justify-center rounded-panel border-2 border-dashed border-primary bg-background/95 p-6 text-center" role="status">
-    <div className="flex flex-col items-center gap-3">
-      <Paperclip className="size-8 text-primary" aria-hidden="true" />
-      <p className="text-sm font-medium">{fileDropReason || t("crm.chat.dropFiles")}</p>
-      {!fileDropReason && <p className="text-xs text-muted-foreground">{t("crm.chat.dropFilesHint")}</p>}
-    </div>
-  </div>;
-  // One composer, drawn inline under the chat or in the large window: both edit the same draft.
-  const composerFields = (surface: "inline" | "window") => {
-    if (!selected) return null;
-    const inline = surface === "inline";
-    return <>
-      {inline ? <div className={`mb-2 flex items-center justify-between ${compact ? "gap-1" : "gap-3"}`}>
-        {compact && chrome?.mobileComposer?.center?.includes("channel") ? <Segmented value={mode} onChange={(value: ComposerMode) => { if (!busy) setMode(value); }} options={modeOptions} /> : sendingAccount}
-        <span className="flex shrink-0 items-center gap-1">
-          <span hidden={compact && mode === "reply"} title={mode === "reply" ? delivery?.label : undefined} className="text-[10px] text-muted-foreground">
-            {mode === "note" ? t("crm.composer.noteHint") : ""}
-          </span>
-          {canExpand && <Button type="button" variant="ghost" size="toolbar" className="size-8 shrink-0 p-0" aria-haspopup="dialog"
-            aria-label={t("crm.composer.expand")} title={t("crm.composer.expand")} onClick={() => setExpanded(true)}>
-            <Maximize2 className="size-4" aria-hidden="true" />
-          </Button>}
-        </span>
-      </div> : <div className="mb-2 flex min-w-0 flex-col gap-1">
-        {senderControls(true)}
-        {mode === "note" && <p className="text-xs text-muted-foreground">{t("crm.composer.noteHint")}</p>}
-      </div>}
-      {mode === "reply" && conversationChannel(selected) === "EMAIL" && !!delivery?.recipient && <div className="mb-1 flex min-w-0 items-center gap-2 text-xs">
-        <span className="w-12 shrink-0 text-muted-foreground">{t("crm.chat.to")}</span>
-        {(delivery.recipients?.length ?? 0) > 1 ? <Select value={recipientDraft ?? delivery.recipient} disabled={busy || replyState.disabled}
-          onValueChange={(value:string)=>setRecipientDraft(value===delivery.recipient?null:value)}>
-          <SelectTrigger aria-label={t("crm.chat.to")} className="h-9 w-auto max-w-full min-w-0 gap-2 border-0 bg-transparent px-1 text-xs shadow-none hover:bg-muted"><SelectValue /></SelectTrigger>
-          <SelectContent>{delivery.recipients?.map(address=><SelectItem key={address} value={address}>{address}</SelectItem>)}</SelectContent>
-        </Select> : <span className="flex h-9 min-w-0 items-center truncate px-1">{recipientDraft ?? delivery.recipient}</span>}
-      </div>}
-      {mode === "reply" && recipientDraft !== null && recipientDraft !== delivery?.recipient && <p className="mb-2 text-xs text-muted-foreground">{t("crm.chat.newRecipientThread")}</p>}
-      {mode === "reply" && conversationChannel(selected) === "EMAIL" && <div className="mb-2">
-        <div className="flex min-w-0 items-center gap-2 border-b border-border/60 pb-1 transition-colors focus-within:border-primary">
-          <label htmlFor={subjectId} className="w-12 shrink-0 text-xs text-muted-foreground">{t("crm.chat.subject")}</label>
-          <Input id={subjectId} value={subjectDraft ?? string(selected, "subject", "")}
-            maxLength={998} disabled={busy || replyState.disabled}
-            className="h-9 min-w-0 flex-1 rounded-none border-0 bg-transparent px-1 py-0 text-sm shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none"
-            onChange={(event: { target: { value: string } }) => setSubjectDraft(event.target.value === string(selected, "subject", "") ? null : event.target.value)} />
-        </div>
-        {subjectDraft !== null && <p className="mt-1 text-[10px] text-muted-foreground">{t("crm.chat.newSubjectThread")}</p>}
-      </div>}
-      <div hidden={mode !== "note"} className={!inline && mode === "note" ? "flex min-h-0 flex-1 flex-col" : undefined}>
-        <NoteInput key={draftKey ?? ""} draftKey={draftKey ?? undefined} value={noteDraft} autoGrow={inline} fill={!inline}
-          disabled={busy || !action(config, "note")} onChange={(text, body) => updateDraft(current => ({ ...current, note: text, noteBody: body }))}
-          onSubmit={() => void submit()} />
-      </div>
-      {mode === "reply" && !replyState.disabled && <Textarea
-        ref={inline ? replyInputRef : undefined}
-        data-composer-reply=""
-        value={draft}
-        disabled={replyState.disabled}
-        onChange={(event: { target: { value: string } }) => setDraft(event.target.value)}
-        onKeyDown={sendShortcut}
-        placeholder={replyState.placeholder}
-        aria-describedby={replyState.message ? composerStatusId : undefined}
-        maxLength={delivery?.maxTextLength ?? 4096}
-        aria-label={t("crm.composer.replyLabel")}
-        className={`${inline ? "min-h-16" : "min-h-48 flex-1"} resize-none border-0 bg-transparent dark:bg-transparent px-2 shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none`}
-      />}
-      {/* What is about to go with the reply. It sits under the text because that is the order
-          it will arrive in, and each chip can be taken back out before sending. */}
-      {mode === "reply" && (pending.length > 0 || uploading > 0) && <div className="mt-1 flex flex-wrap gap-1.5 px-2">
-        {pending.map(file => (
-          <span key={file.url} className="inline-flex max-w-full items-center gap-1.5 rounded-pill bg-muted px-2 py-1 text-[11px]">
-            <Paperclip className="size-3 shrink-0" aria-hidden="true" />
-            <span className="min-w-0 truncate font-medium">{file.filename}</span>
-            {file.size > 0 && <span className="shrink-0 tabular-nums text-muted-foreground">{fileSize(file.size)}</span>}
-            <Button variant="ghost" type="button" aria-label={t("crm.chat.removeFile", { name: file.filename })} disabled={busy}
-              className="h-auto p-0 text-inherit"
-              onClick={() => setPending(current => current.filter(item => item.url !== file.url))}>
-              <X className="size-3" />
-            </Button>
-          </span>
-        ))}
-        {uploading > 0 && <span role="status" className="inline-flex items-center gap-1.5 rounded-pill bg-muted px-2 py-1 text-[11px] text-muted-foreground">
-          {t("crm.chat.uploading", { count: uploading })}
-        </span>}
-      </div>}
-      {mode === "reply" && replyState.message && <div id={composerStatusId} role="status" className={`flex items-center gap-2 rounded-field bg-muted/50 text-xs text-muted-foreground ${compact && inline ? "px-2 py-1" : "px-3 py-2"}`}>
-        <span className="flex-1">{replyState.message}</span>
-        {replyState.retry && <Button variant="ghost" aria-label={t("crm.chat.checkAgain")} className={compact && inline ? "size-10 shrink-0 p-0" : undefined} onClick={() => void loadSelected()}>{compact && inline ? <RefreshCw className="size-4" /> : t("crm.chat.checkAgain")}</Button>}
-      </div>}
-      {error && <p role="alert" className="mt-2 text-xs text-destructive">{error}</p>}
-    </>;
-  };
-  // The large composer is a non-modal window: docked in the corner by default, so the rest of the
-  // inbox (other chats, the contact, the timeline) stays usable while writing. It can float, be
-  // resized, minimised to its title bar or maximised; it edits the same draft as the inline field.
-  const composerWindow = selected && expanded ? <FloatingWindow id={`crm-composer:${workspaceKey}`}
-    open onOpenChange={(open: boolean) => { if (!open) setExpanded(false); }}
-    initialState="docked" persist="crm.composer" width={620} height={580} minWidth={380} minHeight={320}
-    icon={<PenLine className="size-4" aria-hidden="true" />}
-    title={mode === "note" ? t("crm.composer.noteTitle", { name: contactName }) : t("crm.composer.replyTitle", { name: contactName })}
-    bodyClassName={mode === "note" ? "bg-amber-400/5" : undefined}
-    footer={<div className="flex w-full min-w-0 flex-wrap items-center gap-2">
-      {modeOptions.length > 0 && <Segmented value={mode} onChange={(value: ComposerMode) => { if (!busy) setMode(value); }} options={modeOptions} />}
-      {showAttachments && <span className="inline-flex" title={attachState.reason}>
-        <Button variant="ghost" type="button" aria-label={t("crm.chat.attach")} disabled={attachState.disabled}
-          aria-description={attachState.disabled ? attachState.reason : undefined} onClick={chooseAttachment}>
-          <Paperclip className="size-4" />
-        </Button>
-      </span>}
-      <ExtensionSlot name="crm.chat.composer" context={{ ...extensionContext, insertDraft: mode === "reply" ? extensionContext.insertDraft : undefined }} className="flex items-center gap-2" />
-      <span className="flex-1" />
-      {sendAction && <Button type="button" disabled={cannotSend} onClick={() => void submit()}>
-        {busy ? t("crm.composer.sending") : sendAction.label}
-      </Button>}
-    </div>}>
-    <div ref={composerWindowRef} data-crm-composer-window="" onKeyDown={sendShortcut}
-      className="relative flex min-h-0 flex-1 flex-col">
-      {composerFields("window")}
-      {fileDropOverlay}
-    </div>
-  </FloatingWindow> : null;
+  const Row = extras.components?.ConversationRow ?? ConversationRow;
+  const Composer = extras.components?.Composer ?? CrmComposer;
+  const Contact = extras.components?.ContactPanel ?? DefaultInboxContact;
+  const EmptyChat = extras.components?.EmptyChat;
+  const insertInvitation = (text: string) => { composer.setMode("reply"); composer.setDraft(previous => previous ? `${previous}\n\n${text}` : text); };
+  const rowFor = (row: EntityRecord) => <Row key={String(row.id)} appearance={chrome?.conversationRow} menu={extras.rowMenu} row={row} config={config} workspaceKey={workspaceKey}
+    groups={chatGroups.groups} groupKey={chatGroups.groups.find(group => group.customerIds.includes(String(row.customer)))?.key}
+    onGroupChange={chatGroups.ready ? chatGroups.change : undefined}
+    selected={(!compact || mobileChatOpen) && String(row.customer || row.id) === String(selected?.customer || selectedId)} onSelect={() => select(row)} />;
 
   return (
     <div
@@ -1249,7 +440,7 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
                 const shown = new Set<string>();
                 const entries = rows.map(row => {
                   const folder = owner(row);
-                  if (!folder) return <ConversationRow key={String(row.id)} appearance={chrome?.conversationRow} row={row} config={config} workspaceKey={workspaceKey} groups={chatGroups.groups} groupKey={chatGroups.groups.find(group => group.customerIds.includes(String(row.customer)))?.key} onGroupChange={chatGroups.ready ? chatGroups.change : undefined} selected={(!compact || mobileChatOpen) && String(row.customer || row.id) === String(selected?.customer || selectedId)} onSelect={() => select(row)} />;
+                  if (!folder) return rowFor(row);
                   if (shown.has(folder.key)) return null;
                   shown.add(folder.key);
                   const members = folderRows(folder.key);
@@ -1271,7 +462,7 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
               {chatGroups.groups.filter(group => group.key === displayedFolder?.key).map(group => <ChatGroupActions key={group.key} group={group} change={chatGroups.change} />)}
             </div>
             <ConversationList {...pagination} active={!!activeFolder}>
-              {displayedFolder && detailRows.map(row => <ConversationRow key={String(row.id)} appearance={chrome?.conversationRow} row={row} config={config} workspaceKey={workspaceKey} groups={chatGroups.groups} groupKey={chatGroups.groups.find(group => group.customerIds.includes(String(row.customer)))?.key} onGroupChange={chatGroups.ready ? chatGroups.change : undefined} selected={(!compact || mobileChatOpen) && String(row.customer || row.id) === String(selected?.customer || selectedId)} onSelect={() => select(row)} />)}
+              {displayedFolder && detailRows.map(rowFor)}
               {displayedFolder && !detailRows.length && <p className="px-3 py-8 text-center text-xs text-muted-foreground">{t("crm.inbox.emptyFolder")}</p>}
             </ConversationList>
           </div>
@@ -1279,7 +470,7 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
       </section>
 
       {selected ? (
-        <main onDragEnter={fileDragEnter} onDragOver={fileDragOver} onDragLeave={fileDragLeave} onDrop={filesDropped} onDragEnd={clearFileDrag} data-file-drop-zone data-slide-page="chat" className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border border-border/60" aria-hidden={compact && (!mobileChatOpen || contactPanelOpen)} inert={(compact && !mobileChatOpen) || (contactPanelOpen && detailOverlay)}>
+        <main {...composer.dropZone} data-file-drop-zone data-slide-page="chat" className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border border-border/60" aria-hidden={compact && (!mobileChatOpen || contactPanelOpen)} inert={(compact && !mobileChatOpen) || (contactPanelOpen && detailOverlay)}>
           <header className="crm-chat-header z-10 shrink-0 px-3 py-2">
             <WorkspaceToolbar compact={compact} balanced={compact} className="flex min-h-11 flex-col justify-center"
               layout={{start:["back"], center:["title"], end:["actions","contact"], ...chrome?.chat}}
@@ -1291,12 +482,12 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
                   const ref = selected.customerRef as {type:string;id:string};
                   openRoute(`onno://catalogs/${encodeURIComponent(ref.type)}/${encodeURIComponent(ref.id)}`);
                 }}>{t("crm.contact.open")}</Button>},
-                {id:"scheduleCall",content:action(config, "logActivity") && <ScheduleCall customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} onInvitation={text => { setMode("reply"); setDraft(previous => previous ? `${previous}\n\n${text}` : text); }} />},
-                {id:"logActivity",content:action(config, "logActivity") && <LogActivity customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} />},
+                {id:"scheduleCall",content:action(config, "logActivity") && <ScheduleCall customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={chat.reload} onInvitation={insertInvitation} />},
+                {id:"logActivity",content:action(config, "logActivity") && <LogActivity customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={chat.reload} />},
                 {id:"extensions",content:<ExtensionSlot name="crm.chat.header" context={extensionContext} className="flex flex-wrap items-center gap-2" />},
                 {id:"title",content:<div className="min-w-0 truncate text-sm font-semibold text-foreground">{string(selected, "customerDisplay", "Customer")}</div>},
-                {id:"avatar",content:!compact && <Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" />},
-                {id:"contact",content:<Button ref={contactPanelToggleRef} variant={compact ? "ghost" : "subtle"} size="toolbar" className={compact ? "size-11 shrink-0 rounded-full p-1" : "w-8 shrink-0 p-0"} aria-label={contactPanelOpen ? t("crm.contact.hide") : t("crm.contact.show")} title={t("crm.contact.details")} aria-expanded={contactPanelOpen} aria-controls={contactPanelId} onClick={() => setContactPanelOpen(value => !value)}>{compact ? <Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" /> : <ContactRound className="size-4" />}</Button>},
+                {id:"avatar",content:!compact && <CrmAvatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" />},
+                {id:"contact",content:<Button ref={contactPanelToggleRef} variant={compact ? "ghost" : "subtle"} size="toolbar" className={compact ? "size-11 shrink-0 rounded-full p-1" : "w-8 shrink-0 p-0"} aria-label={contactPanelOpen ? t("crm.contact.hide") : t("crm.contact.show")} title={t("crm.contact.details")} aria-expanded={contactPanelOpen} aria-controls={contactPanelId} onClick={() => setContactPanelOpen(value => !value)}>{compact ? <CrmAvatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" /> : <ContactRound className="size-4" />}</Button>},
               ]} />
           </header>
           {actionsOpen && <div id={actionsId} className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/50 px-4 py-2">
@@ -1304,81 +495,28 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
               const ref = selected.customerRef as {type:string;id:string};
               openRoute(`onno://catalogs/${encodeURIComponent(ref.type)}/${encodeURIComponent(ref.id)}`);
             }}>{t("crm.contact.open")}</Button>}
-            {action(config, "logActivity") && <ScheduleCall key={`call:${selected.customer}`} customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} onInvitation={text => { setMode("reply"); setDraft(previous => previous ? `${previous}\n\n${text}` : text); }} />}
-            {action(config, "logActivity") && <LogActivity key={String(selected.customer)} customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} />}
+            {action(config, "logActivity") && <ScheduleCall key={`call:${selected.customer}`} customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={chat.reload} onInvitation={insertInvitation} />}
+            {action(config, "logActivity") && <LogActivity key={String(selected.customer)} customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={chat.reload} />}
             <ExtensionSlot name="crm.chat.header" context={extensionContext} className="flex flex-wrap items-center gap-2" />
           </div>}
           <div data-chat-history className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-5">
-
-            {hasMoreHistory && <Button size="sm" variant="ghost" onClick={() => setHistoryPages(value => value+1)}>{t("crm.chat.loadEarlier")}</Button>}
-            {timeline.map((entry) => entry.message ? (
-              entry.message.kind === "SYSTEM_EVENT" ? (
-                (config?.showSystemEvents ?? true) ? <ChatMessageBody key={entry.id} message={entry.message} fallback={<TimelineSystemEvent message={entry.message} config={config} />} /> : null
-              ) : (
-                <TimelineMessage
-                  key={entry.id}
-                  config={config}
-                  message={entry.message}
-                  channel={entry.message.channel}
-                  retry={() => void retry(entry.message!.id, entry.message!.conversationId)}
-                  busy={busy || !delivery?.connected}
-                  avatarUrl={entry.message.direction === "INBOUND"
-                    ? customerAvatarUrl
-                    : entry.message.authorAvatarUrl}
-                />
-              )
-            ) : entry.comment ? <TimelineComment key={entry.id} comment={entry.comment} config={config} /> : null)}
-            {!timeline.length && !error ? (
+            {chat.hasMoreHistory && <Button size="sm" variant="ghost" onClick={chat.loadEarlier}>{t("crm.chat.loadEarlier")}</Button>}
+            <ExtensionSlot name="crm.chat.timeline.start" context={extensionContext} className="space-y-3" />
+            <ChatTimeline entries={timeline} config={config} customerAvatarUrl={customerAvatarUrl}
+              busy={composer.busy || !chat.delivery?.connected} onRetry={message => void composer.retry(message)}
+              renderEntry={extras.renderEntry} messageContext={extensionContext} />
+            {!timeline.length && !chat.error ? (
               <div className="py-16 text-center text-xs text-muted-foreground">{t("crm.chat.noMessages")}</div>
             ) : null}
             <div ref={timelineEndRef} />
           </div>
-
-                          <input ref={fileInputRef} type="file" multiple className="hidden"
-                  onChange={(event: { target: { files: FileList | null; value: string } }) => {
-                    void attach(event.target.files); event.target.value = "";
-                  }} />
-          <div data-chat-composer className="crm-chat-composer shrink-0 rounded-panel border border-border">
-            {expanded ? <p className={`${compact ? "p-2" : "p-3"} text-xs text-muted-foreground`}>{t("crm.composer.inWindow")}</p> : <div className={`${compact ? "p-2" : "p-3"} ${mode === "note" ? "bg-amber-400/5" : ""}`}>
-            {composerFields("inline")}
-            <WorkspaceToolbar compact={compact} className="mt-2"
-              layout={{start:["mode","attach"], end:["send"], secondary:["extensions"], ...chrome?.composer}}
-              compactLayout={chrome?.mobileComposer}
-              items={[
-                {id:"channel",content:sendingAccount},
-                {id:"tools",content:<ResponsiveActionPanel presentation="actions" label={t("crm.chat.actions")} align="start" trigger={<Button variant="ghost" className="size-10 shrink-0 p-0" aria-label={t("crm.chat.actions")}><Plus className="size-5" /></Button>}>
-                    {action(config, "logActivity") && <ScheduleCall customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} onInvitation={text => {setMode("reply");setDraft(previous => previous ? `${previous}\n\n${text}` : text);}} />}
-                    {action(config, "logActivity") && <LogActivity customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} />}
-                    {showAttachments && <span className="inline-flex" title={attachState.reason}><Button type="button" variant="ghost" size="toolbar" disabled={attachState.disabled} aria-description={attachState.disabled ? attachState.reason : undefined} onClick={chooseAttachment}><Paperclip className="size-4" />{t("crm.chat.attach")}</Button></span>}
-                    <ExtensionSlot name="crm.chat.header" context={extensionContext} className="flex flex-col gap-2" />
-                  </ResponsiveActionPanel>},
-                {id:"mode",content:(<Segmented
-                value={mode}
-                onChange={(value: ComposerMode) => { if (!busy) setMode(value); }}
-                options={(config?.actions ?? []).filter(a => a.visible && ["reply", "note"].includes(a.key)).map(a => ({ value: a.key as ComposerMode, label: a.label }))}
-              />)},
-                {id:"attach",content:(showAttachments && <span className="inline-flex" title={attachState.reason}>
-
-                <Button variant="ghost" type="button" aria-label={t("crm.chat.attach")}
-                  disabled={attachState.disabled}
-                  aria-description={attachState.disabled ? attachState.reason : undefined}
-                  onClick={chooseAttachment}>
-                  <Paperclip className="size-4" />
-                </Button>
-              </span>)},
-                {id:"extensions",content:(<ExtensionSlot name="crm.chat.composer" context={{ ...extensionContext,
-                insertDraft: mode === "reply" ? extensionContext.insertDraft : undefined,
-              }} className="flex items-center gap-2" />)},
-                {id:"send",content:(sendAction && <Button aria-label={busy ? t("crm.composer.sending") : sendAction.label} className={compact ? "size-10 shrink-0 p-0" : undefined} disabled={cannotSend} onClick={() => void submit()}>
-                {compact ? <Send className="size-4" /> : busy ? t("crm.composer.sending") : sendAction.label}
-              </Button>)},
-              ]} />
-            </div>}
-          </div>
-          {fileDropOverlay}
-          {composerWindow}
+          <Composer conversation={chat} composer={composer} config={config} compact={compact}
+            layouts={{ composer: chrome?.composer, mobileComposer: chrome?.mobileComposer }}
+            extensionContext={extensionContext} siblings={senderOptions} onSwitch={switchConversation} contactName={contactName} />
+          <FileDropOverlay composer={composer} />
         </main>
-      ) : <main className="flex items-center justify-center p-6 text-sm text-muted-foreground">{t("crm.chat.chooseConversation")}</main>}
+      ) : EmptyChat ? <main className="flex min-h-0 min-w-0 flex-col"><EmptyChat /></main>
+        : <main className="flex items-center justify-center p-6 text-sm text-muted-foreground">{t("crm.chat.chooseConversation")}</main>}
 
       <div data-slide-page="contact" className="crm-contact-slot" aria-hidden={!contactPanelOpen} {...(!contactPanelOpen ? {inert:true} : {})}>
         {selected && config ? <aside id={contactPanelId} aria-label={t("crm.contact.details")}
@@ -1390,7 +528,7 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
             {compact ? <span className="w-9" /> : <Button ref={contactPanelCloseRef} size="sm" variant="ghost" aria-label={t("crm.contact.close")} onClick={closeContactPanel}><X className="size-4" /></Button>}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            <ContactPanel presentation="card" key={String(selected.customer)} id={String(selected.customer)} row={selected} customer={customer} config={config} />
+            <Contact key={String(selected.customer)} customerId={String(selected.customer)} conversation={selected} customer={customer} config={config} extensionContext={extensionContext} />
             <ExtensionSlot name="crm.chat.aside" context={extensionContext} className="space-y-3 p-4" />
           </div>
         </aside> : null}
@@ -1481,6 +619,17 @@ export type CrmInboxProps = CrmPresentation & {
   channelLabels?: Record<string, string>;
   /** Components that draw some messages their own way. */
   messageRenderers?: ChatMessageRenderer[];
+  /** The parts of the inbox the app draws itself (the row, the composer, the contact panel, …). */
+  components?: CrmInboxComponents;
+  /**
+   * The app's own entries in the chat's timeline (orders, bookings, payments, a widget at a date).
+   * Keep the array stable (module-level): each source's `useEntries` is a hook.
+   */
+  timelineSources?: readonly CrmTimelineSource[];
+  /** Draws one timeline entry your own way, or wraps the default (`render()`). */
+  renderEntry?: ChatTimelineProps["renderEntry"];
+  /** What the row menu offers besides the conversation's commands and the app's items. */
+  rowMenu?: ConversationRowMenu;
 };
 
 function channelLabel(key: string, labels?: Record<string, string>): string {
@@ -1497,7 +646,8 @@ function channelLabel(key: string, labels?: Record<string, string>): string {
 export function CrmInbox({ workspace: configuredKey = "", modes = [], conversation: configuredConversation = "", title,
   list: listOptions, toolbar: toolbarProps = {}, row, layouts, grouping = true, connectionsRoute, channelLabels,
   messageRenderers, contactFields, actionLabels, folders, rowTitle, rowPreview, showAvatars, showIdentities, showEmptyFields,
-  showSystemEvents, showTimestamps, showDeliveryStatus }: CrmInboxProps) {
+  showSystemEvents, showTimestamps, showDeliveryStatus, components, timelineSources, renderEntry, rowMenu }: CrmInboxProps) {
+  const extras = useMemo<InboxExtrasValue>(() => ({ components, timelineSources, renderEntry, rowMenu }), [components, timelineSources, renderEntry, rowMenu]);
   // One presentation object per change of its parts, so the body's resolved config stays put.
   const look = useMemo<CrmPresentation>(() => ({ contactFields, actionLabels, folders, rowTitle, rowPreview, showAvatars,
     showIdentities, showEmptyFields, showSystemEvents, showTimestamps, showDeliveryStatus }),
@@ -1669,7 +819,7 @@ export function CrmInbox({ workspace: configuredKey = "", modes = [], conversati
         record: { folders: feed?.config.folders.length ?? 0 },
         view: viewState, refresh: () => setRefreshKey(key => key + 1) }} />
   </div>;
-  return list ? <CrmPresentationProvider value={look}><ChatMessageRenderers renderers={messageRenderers}>
+  return list ? <CrmPresentationProvider value={look}><ChatMessageRenderers renderers={messageRenderers}><InboxExtras.Provider value={extras}>
   <div data-toolbar-placement={toolbarProps.placement} className="crm-inbox-page flex h-full min-h-0 min-w-0 flex-col gap-3">
     <style>{`
       .crm-inbox-page { container-type:inline-size; }
@@ -1698,5 +848,5 @@ export function CrmInbox({ workspace: configuredKey = "", modes = [], conversati
       toolbarOptions={{filterSidebar:!!toolbarProps.filterSidebar, compactPresentation:toolbarProps.mobile === "sheet" ? "sheet" : "inline", controls:toolbarProps.controls,
         views:toolbarProps.views, filterKeys:toolbarProps.filters, actionKeys:toolbarProps.actions, title:toolbarProps.title !== false, count:toolbarProps.count !== false,
         viewSwitcher:toolbarProps.viewSwitcher !== false, search:toolbarProps.search !== false}} queryParams={queryParams} />
-  </div></ChatMessageRenderers></CrmPresentationProvider> : <InboxSkeleton />;
+  </div></InboxExtras.Provider></ChatMessageRenderers></CrmPresentationProvider> : <InboxSkeleton />;
 }

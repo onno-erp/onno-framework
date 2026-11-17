@@ -7,6 +7,7 @@ import com.example.domain.catalogs.Customer;
 import com.example.domain.catalogs.Employee;
 import com.example.repositories.CustomerRepository;
 import com.example.repositories.EmployeeRepository;
+import com.example.repositories.OrderRepository;
 import su.onno.crm.domain.*;
 import su.onno.crm.repository.*;
 import su.onno.crm.service.*;
@@ -47,8 +48,9 @@ public class InboxConfiguration {
         return new CrmInboxWorkspace("support", "Customer support", Set.of("MANAGER"), conversation -> true);
     }
     @Bean ApplicationRunner inboxSample(CustomerRepository customers, InboxRepository inboxes,
-            ConversationRepository conversations, ConversationMessageRepository messages) {
+            ConversationRepository conversations, ConversationMessageRepository messages, OrderRepository orders) {
         return args -> {
+            seedOrderChats(customers, inboxes, conversations, messages, orders);
             if(conversations.findAllActive().isEmpty()) {
                 var customer=new Customer();customer.setDescription("Book club coordinator");customer.setEmail("books@example.test");customers.save(customer);
                 var inbox=new Inbox();inbox.setDescription("Bookstore support");inbox.setChannel(Channel.EMAIL);inbox.setAddress("support@example.test");inboxes.save(inbox);
@@ -91,6 +93,40 @@ public class InboxConfiguration {
                 conversations.save(conversation);
             }
         };
+    }
+
+    private static final String ORDER_CHAT_SUBJECT="Question about my order";
+
+    /**
+     * Two chats with customers who already bought from the shop, so the support page's order cards
+     * (a timeline source in SupportPage.tsx) have orders to show beside the messages. Seeded once.
+     */
+    private static void seedOrderChats(CustomerRepository customers, InboxRepository inboxes, ConversationRepository conversations,
+            ConversationMessageRepository messages, OrderRepository orders) {
+        if(conversations.findAllActive().stream().anyMatch(c->ORDER_CHAT_SUBJECT.equals(c.getSubject())))return;
+        var chat=inboxes.findAllActive().stream().filter(i->WEB_CHAT_ADDRESS.equals(i.getAddress())).findFirst()
+            .orElseGet(()->inbox(inboxes,"Website chat",Channel.WEB_CHAT,WEB_CHAT_ADDRESS,"#6366F1"));
+        var buyers=orders.findAllActive().stream().map(order->order.getCustomer()).filter(Objects::nonNull)
+            .map(ref->ref.id()).distinct().limit(2).toList();
+        var now=java.time.LocalDateTime.now();
+        int index=0;
+        for(var buyerId:buyers) {
+            var customer=customers.findActiveById(buyerId).orElse(null);
+            if(customer==null)continue;
+            var conversation=new Conversation();conversation.setCustomer(customer.getId());conversation.setInbox(Ref.of(Inbox.class,chat.getId()));
+            conversation.setChannel(Channel.WEB_CHAT);conversation.setSubject(ORDER_CHAT_SUBJECT);conversation.setDescription(ORDER_CHAT_SUBJECT);
+            conversation.setUnreadCount(1);
+            conversations.save(conversation);
+            String text=index++==0?"Hi! Has my last order shipped yet? I need the books by Friday.":"Could I add one more book to my order before it ships?";
+            var message=new ConversationMessage();
+            message.setConversation(Ref.of(Conversation.class,conversation.getId()));
+            message.setChannel(Channel.WEB_CHAT);message.setKind(MessageKind.CUSTOMER_MESSAGE);message.setDirection(MessageDirection.INBOUND);
+            message.setAuthorName(customer.getDescription());message.setBody(text);message.setDescription(text);
+            message.setSentAt(now.minusMinutes(3+index));message.setDeliveryStatus(DeliveryStatus.RECEIVED);
+            messages.save(message);
+            conversation.setLastMessageAt(message.getSentAt());conversation.setLastMessagePreview(text);
+            conversations.save(conversation);
+        }
     }
 
     private static final String WEB_CHAT_ADDRESS="onnobooks.local/chat";

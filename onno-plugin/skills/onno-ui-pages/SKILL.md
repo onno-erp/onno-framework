@@ -217,7 +217,12 @@ All take `title` and `hint`.
 Starters ship their screens as packages next to their Java code; add the package to the app's
 `package.json` and render: `<PrintTemplates title="Print templates" />` from `@onno/print`;
 `<CrmInbox workspace="support" list={…} />`, `<CrmConnections setups={[channelSetups]} />`,
-`CrmConversationPage` from `@onno/crm` (+ `@onno/crm-channels`). See the `onno-crm-*` skills.
+`CrmConversationPage` from `@onno/crm` (+ `@onno/crm-channels`). The CRM is also exported in
+parts: `CrmConversation` (one chat anywhere), `openCrmConversation(...)` (a docked window across
+pages), `CrmContactPage`, the row/timeline/composer components and the `useCrmConversation` /
+`useCrmComposer` hooks; `CrmInbox` takes `components`, `timelineSources` (business entries in the
+chat) and `renderEntry`. See `onno-crm-starter/README.md` → "Building your own screens" and the
+`onno-crm-*` skills.
 
 ## Your own components: data hooks
 
