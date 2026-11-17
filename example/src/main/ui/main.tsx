@@ -34,8 +34,10 @@ import { StockReceiptPage } from "./pages/StockReceiptPage";
 import { SuppliersPage } from "./pages/SuppliersPage";
 import {
   ConnectionsPage,
+  ContactPage,
   ConversationPage,
   SupportPage,
+  supportExtensions,
 } from "./pages/SupportPage";
 import { TasksPage } from "./pages/TasksPage";
 import { TeamPage } from "./pages/TeamPage";
@@ -43,6 +45,8 @@ import { TeamPage } from "./pages/TeamPage";
 defineApp({
   login: LoginPage,
   entities,
+  // Contributions to the CRM chat's outlets (quote a message, open the contact's page).
+  extensions: supportExtensions,
   pages: [
     // Entity screens whose layout differs from the default (presentation lives in entities/).
     { list: "Suppliers", component: SuppliersPage },
@@ -88,6 +92,12 @@ defineApp({
     {
       path: "/catalogs/crm_conversations/:id",
       component: ConversationPage,
+      view: false,
+      when: crmInboxAvailable,
+    },
+    {
+      path: "/support/contacts/:id",
+      component: ContactPage,
       view: false,
       when: crmInboxAvailable,
     },
