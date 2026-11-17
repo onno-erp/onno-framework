@@ -231,7 +231,9 @@ exceptions. Keep component tests for every custom picker trigger.
   `ApiError` `notified`. A caller with its own wording passes `{ silent: true }`; a catch block that
   ends a user action reports through `notifyError` instead of calling `toast.error`, so it adds a
   toast only where none was shown — including what the api layer leaves to its caller (network
-  errors, field errors without an inline form, typed feedback, 401).
+  errors, field errors without an inline form, typed feedback, 401). Command surfaces (record
+  actions, list commands and batch actions, the shell's `onno://` actions) report through
+  `useCommandFeedback().notifyError` instead, so typed feedback keeps its dialog.
 - The shell logo's empty `onno://` action is a semantic home intent. Resolve it through
   `shell.home`; only apps that declare a `/` page land on `/`.
 - Esc closes the topmost layer only (overlay before page).

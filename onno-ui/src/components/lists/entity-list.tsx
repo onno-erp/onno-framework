@@ -46,6 +46,7 @@ import {
 import { Icon } from "../../lib/icons";
 import { api, ApiError, downloadSelection } from "../../lib/api";
 import { useCommandFeedback } from "../../lib/command-feedback";
+import { errorMessage } from "../../lib/notify-error";
 import { isInteractiveLayerOpen, matchesKey, shortcutLabel } from "../../lib/keybindings";
 import { withBasePath } from "../../lib/base-path";
 import { cn, copyToClipboard, enumPillStyle, rowStyleClass } from "../../lib/utils";
@@ -2424,8 +2425,8 @@ export function EntityListView({
   // Run a command: POST /api/commands and apply the CommandResult — toast, refresh. A command with
   // inputs first opens the dialog to collect them (formInputs arrive on the second, submitting
   // call). While the (possibly slow/async) handler runs, the button shows a spinner and is
-  // disabled, so there's feedback and no double-submit. (api.runCommand is CSRF-aware and toasts
-  // failures.)
+  // disabled, so there's feedback and no double-submit. (api.runCommand is CSRF-aware; a failure
+  // is reported once — here, or by the form dialog that asked for it.)
   const runCommand = useCallback(
     (command: ListCommand, id?: string, formInputs?: CommandFormValues, propagateError = false): Promise<void> | void => {
       if (command.form?.length && !formInputs) {
@@ -2446,7 +2447,7 @@ export function EntityListView({
         })
         .catch((error) => {
           if (propagateError) throw error;
-          feedback.fromError(error);
+          feedback.notifyError(error);
         })
         .finally(() =>
           setPending((s) => {
@@ -2640,9 +2641,11 @@ export function EntityListView({
         clearSelection();
         reload();
       } catch (error) {
-        // the api layer already toasted the failure — just retire the loading toast
+        // Retire the loading toast; a form-driven batch hands the failure to its dialog, any other
+        // is reported here once.
         toast.dismiss(toastId);
         if (propagateFeedback) throw error;
+        feedback.notifyError(error);
       } finally {
         batchBusyRef.current = false;
         setPending((s) => {
@@ -2670,8 +2673,9 @@ export function EntityListView({
         );
         clearSelection();
         reload();
-      } catch {
+      } catch (error) {
         toast.dismiss(toastId);
+        feedback.notifyError(error);
       } finally {
         batchBusyRef.current = false;
         setPending((s) => {
@@ -2681,7 +2685,7 @@ export function EntityListView({
         });
       }
     },
-    [kind, name, reload, clearSelection, t]
+    [kind, name, reload, clearSelection, t, feedback]
   );
 
   // Surgically refresh a single changed row in place: fetch just that id (same decorated shape as a
@@ -2887,20 +2891,31 @@ export function EntityListView({
         if (batchBusyRef.current) return;
         batchBusyRef.current = true;
         let ok = 0;
+        // Why copies failed, for the summary below: only what the api layer did not toast itself
+        // (a network error, field errors, typed feedback, a 401), each reason once.
+        const reasons = new Set<string>();
         try {
           for (const id of ids) {
             try {
               if (kind === "documents") await api.duplicateDocument(name, id);
               else await api.duplicateCatalogItem(name, id);
               ok++;
-            } catch {
-              // already toasted by the api layer
+            } catch (error) {
+              if (!(error instanceof ApiError && error.notified)) reasons.add(errorMessage(error));
             }
           }
         } finally {
           batchBusyRef.current = false;
         }
-        (ok === ids.length ? toast.success : toast.error)(t("clipboard.pasted", { ok, n: ids.length }));
+        // A summary, not a report: name the first few reasons and elide the rest.
+        const SHOWN_REASONS = 3;
+        const description = reasons.size ? (
+          <div className="onno-toast__body">
+            {[...reasons].slice(0, SHOWN_REASONS).map((reason) => <p key={reason} className="onno-toast__message">{reason}</p>)}
+            {reasons.size > SHOWN_REASONS ? <p className="onno-toast__message">…</p> : null}
+          </div>
+        ) : undefined;
+        (ok === ids.length ? toast.success : toast.error)(t("clipboard.pasted", { ok, n: ids.length }), { description });
         reload();
       })();
     };

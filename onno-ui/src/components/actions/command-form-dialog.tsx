@@ -219,9 +219,11 @@ export function CommandFormDialog({
       }
       onClose();
     } catch (error) {
-      // A rejection is shown here, in the still-open form, with the user's values kept.
+      // A rejection is shown here, in the still-open form, with the user's values kept. Any other
+      // failure is reported once, and the form stays open for a retry.
       const rejected = commandFeedback.fromError(error, true);
       if (rejected) setFeedback(rejected);
+      else commandFeedback.notifyError(error);
     } finally {
       if (pending) setSubmitting(false);
     }

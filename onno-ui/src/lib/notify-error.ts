@@ -8,6 +8,11 @@ export interface NotifyErrorOptions {
   format?: (message: string) => string;
 }
 
+/** The text a caught failure shows: its own message, else `fallback`, else the value itself. */
+export function errorMessage(error: unknown, fallback?: string): string {
+  return error instanceof Error && error.message ? error.message : fallback ?? String(error);
+}
+
 /**
  * Show a failed user action to the user exactly once (#505). Call it from a catch block that ends a
  * user action, instead of calling `toast.error` there yourself:
@@ -25,7 +30,6 @@ export function notifyError(error: unknown, options: NotifyErrorOptions = {}): v
     if (error.notified) return;
     error.notified = true;
   }
-  const message =
-    error instanceof Error && error.message ? error.message : options.fallback ?? String(error);
+  const message = errorMessage(error, options.fallback);
   toast.error(options.format ? options.format(message) : message);
 }

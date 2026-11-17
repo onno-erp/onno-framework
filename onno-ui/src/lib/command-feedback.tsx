@@ -3,6 +3,7 @@ import { toast } from "../components/ui/toast";
 import { DialogShell } from "../components/ui/dialog-shell";
 import { Button } from "../components/ui/button";
 import { ApiError } from "./api";
+import { notifyError as notifyFailure } from "./notify-error";
 import type { CommandFeedback, CommandResult } from "./types";
 import { isNavigationTarget, openRoute } from "./navigation";
 import { useMessages } from "../providers/messages-provider";
@@ -50,6 +51,12 @@ export type CommandFeedbackHandlers = {
    * presented here.
    */
   fromError: (error: unknown, inForm?: boolean) => CommandFeedback | undefined;
+  /**
+   * Report a failed command, post or delete exactly once: typed feedback is presented the way a
+   * result's is (an error opens the dialog), anything else becomes one error toast through
+   * `notifyError`, and nothing is added when the api layer has shown the failure already.
+   */
+  notifyError: (error: unknown) => void;
 };
 
 function handlers(present: (feedback: CommandFeedback) => void): CommandFeedbackHandlers {
@@ -67,6 +74,16 @@ function handlers(present: (feedback: CommandFeedback) => void): CommandFeedback
         return error.feedback;
       }
       return undefined;
+    },
+    notifyError: (error) => {
+      if (error instanceof ApiError && error.feedback) {
+        if (!error.notified) {
+          error.notified = true;
+          present(error.feedback);
+        }
+        return;
+      }
+      notifyFailure(error);
     },
   };
 }

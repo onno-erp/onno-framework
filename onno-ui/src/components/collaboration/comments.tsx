@@ -2,17 +2,16 @@ import { useRequestScope } from "../../hooks/use-request-scope";
 import { useUiEvents } from "../../hooks/use-ui-events";
 import { openRoute } from "../../lib/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "../ui/toast";
 import { Send, Trash2, MessageSquare, AtSign, Hash, Reply, X, Plus, SmilePlus } from "lucide-react";
 import {
   api,
-  ApiError,
   type CommentView,
   type CommentMention,
   type CommentReaction,
   type MentionSuggestion,
 } from "../../lib/api";
 import { cn } from "../../lib/utils";
+import { notifyError } from "../../lib/notify-error";
 import { linkify } from "../../lib/linkify";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { glassAvatar, tint } from "./presence-avatars";
@@ -263,7 +262,7 @@ export function CommentThread({ target, composerOnly = false, onPosted, onDraftC
         return [...(previous ?? []), ...page.rows.filter(row => !have.has(row.id))];
       });
       setNextCursor(page.nextCursor);
-    } catch (failure) { if (current()) toast.error(String(failure)); }
+    } catch (failure) { if (current()) notifyError(failure); }
     finally { if (current()) setLoadingMore(false); }
   };
 
@@ -408,9 +407,9 @@ export function CommentThread({ target, composerOnly = false, onPosted, onDraftC
       setMq(null);
       taRef.current?.focus();
     } catch (e) {
-      // 422 (empty/too long) and other failures already surface a toast from the api layer;
-      // re-toast only if it somehow didn't carry a message.
-      if (!(e instanceof ApiError)) toast.error("Couldn't post comment");
+      // The api layer toasts a rejected comment (422 empty/too long); what it leaves to us (a
+      // network error, a 401) is reported here once, with this context.
+      notifyError(e, { format: (message) => `Couldn't post comment: ${message}` });
     } finally {
       setBusy(false);
     }
@@ -422,8 +421,9 @@ export function CommentThread({ target, composerOnly = false, onPosted, onDraftC
     setComments((cur) => (cur ?? []).filter((c) => c.id !== commentId));
     try {
       await api.deleteComment(commentId);
-    } catch {
+    } catch (e) {
       setComments(prev);
+      notifyError(e);
     }
   };
 
@@ -432,8 +432,9 @@ export function CommentThread({ target, composerOnly = false, onPosted, onDraftC
       const reactions = await api.toggleCommentReaction(commentId, emoji);
       setComments((cur) => (cur ?? []).map((c) => (c.id === commentId ? { ...c, reactions } : c)));
       setOpenReactionFor(null);
-    } catch {
-      // The request failed before local state changed; keep the current comments.
+    } catch (e) {
+      // The request failed before local state changed; keep the current comments and say why.
+      notifyError(e);
     }
   };
 
