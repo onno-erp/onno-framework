@@ -35,9 +35,9 @@ import { EmailHtmlBody } from "./EmailHtmlBody";
 import { MediaGrid } from "./MediaGrid";
 import { request, ContactPanel, useWorkspace, action, rowValue, resolveConfig, useCrmPresentation, CrmPresentationProvider, type ConversationFolder, type CrmIcon, type CrmPresentation, type ServerConfig, type Config } from "./CrmWorkspace";
 import { ChatMessageBody, ChatMessageRenderers, type ChatMessageRenderer } from "./chatMessageRenderers";
-import { ResponsiveActionPanel, DialogShell, Badge, Input, EntityListView, Button, Segmented, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Textarea, CommentBody, api, useUiEvents, applyListOptions, type EntityRecord, type ListRendererProps, type ListRendererComponent, type ListCustomization, type ListDescriptor, type ListFilter, type ListView } from "@onno/ui";
+import { ResponsiveActionPanel, FloatingWindow, Badge, Input, EntityListView, Button, Segmented, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Textarea, CommentBody, api, useUiEvents, applyListOptions, type EntityRecord, type ListRendererProps, type ListRendererComponent, type ListCustomization, type ListDescriptor, type ListFilter, type ListView } from "@onno/ui";
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Settings2, ContactRound, Plus, Activity, Folder, ChevronRight, ArrowLeft, X, Paperclip, MoreHorizontal, Send, RefreshCw, Maximize2, Minimize2, PenLine, MailSearch } from "@onno/ui/icons";
+import { Settings2, ContactRound, Plus, Activity, Folder, ChevronRight, ArrowLeft, X, Paperclip, MoreHorizontal, Send, RefreshCw, Maximize2, PenLine, MailSearch } from "@onno/ui/icons";
 
 type Message = {
   id: string;
@@ -80,25 +80,6 @@ type Comment = {
 // One surface treatment for the header, composer, and contact-details island.
 const islandSurface = "rounded-panel bg-card border border-border/60";
 
-/**
- * The large composer window is the shared DialogShell, sized from inside: about 90% of the viewport,
- * the whole screen when maximised, and always the whole screen on a phone. The shell's own size
- * steps stop at a comparison dialog, so these rules reach its modal, overlay and panel through the
- * window's marker rather than restyling every dialog.
- */
-const COMPOSER_WINDOW_CSS = `
-  div:has(> section[role="dialog"] > div > [data-crm-composer-window]) { width:90vw; max-width:90vw; height:85vh; height:85dvh; max-height:none; }
-  section[role="dialog"] > div:has(> [data-crm-composer-window]) { display:flex; flex-direction:column; }
-  div:has(> section[role="dialog"] > div > [data-crm-composer-window][data-maximized="true"]) { width:100vw; max-width:100vw; height:100vh; height:100dvh; }
-  div:has(> div > section[role="dialog"] > div > [data-crm-composer-window][data-maximized="true"]) { padding:0; }
-  section[role="dialog"]:has(> div > [data-crm-composer-window][data-maximized="true"]) { border-radius:0; border-width:0; }
-  @media (max-width: 639.98px) {
-    div:has(> section[role="dialog"] > div > [data-crm-composer-window]) { width:100vw; max-width:100vw; height:100vh; height:100dvh; }
-    div:has(> div > section[role="dialog"] > div > [data-crm-composer-window]) { padding:0; }
-    section[role="dialog"]:has(> div > [data-crm-composer-window]) { border-radius:0; border-width:0; }
-    section[role="dialog"] [data-composer-maximize] { display:none; }
-  }
-`;
 
 /** The app route this inbox is on, without the SPA's mount prefix, for an `onno://` hand-off. */
 function currentRoute(): string {
@@ -529,7 +510,6 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
   };
   const subjectId = useId();
   const [expanded, setExpanded] = useState(false);
-  const [maximized, setMaximized] = useState(false);
   const composerWindowRef = useRef<HTMLDivElement | null>(null);
   const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
   useAutoGrow(replyInputRef, draft, !expanded);
@@ -1085,13 +1065,9 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
             <Maximize2 className="size-4" aria-hidden="true" />
           </Button>}
         </span>
-      </div> : <div className="mb-2 flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">{senderControls(true)}</div>
-        <Button type="button" variant="ghost" size="toolbar" data-composer-maximize className="size-8 shrink-0 p-0"
-          aria-label={maximized ? t("crm.composer.restoreSize") : t("crm.composer.maximize")}
-          title={maximized ? t("crm.composer.restoreSize") : t("crm.composer.maximize")} onClick={() => setMaximized(value => !value)}>
-          {maximized ? <Minimize2 className="size-4" aria-hidden="true" /> : <Maximize2 className="size-4" aria-hidden="true" />}
-        </Button>
+      </div> : <div className="mb-2 flex min-w-0 flex-col gap-1">
+        {senderControls(true)}
+        {mode === "note" && <p className="text-xs text-muted-foreground">{t("crm.composer.noteHint")}</p>}
       </div>}
       {mode === "reply" && conversationChannel(selected) === "EMAIL" && !!delivery?.recipient && <div className="mb-1 flex min-w-0 items-center gap-2 text-xs">
         <span className="w-12 shrink-0 text-muted-foreground">{t("crm.chat.to")}</span>
@@ -1156,10 +1132,15 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
       {error && <p role="alert" className="mt-2 text-xs text-destructive">{error}</p>}
     </>;
   };
-  const composerWindow = selected && expanded ? <DialogShell open onOpenChange={(open: boolean) => { if (!open) setExpanded(false); }}
-    size="lg" tone={mode === "note" ? "warning" : "info"} icon={<PenLine className="size-5" aria-hidden="true" />}
+  // The large composer is a non-modal window: docked in the corner by default, so the rest of the
+  // inbox (other chats, the contact, the timeline) stays usable while writing. It can float, be
+  // resized, minimised to its title bar or maximised; it edits the same draft as the inline field.
+  const composerWindow = selected && expanded ? <FloatingWindow id={`crm-composer:${workspaceKey}`}
+    open onOpenChange={(open: boolean) => { if (!open) setExpanded(false); }}
+    initialState="docked" persist="crm.composer" width={620} height={580} minWidth={380} minHeight={320}
+    icon={<PenLine className="size-4" aria-hidden="true" />}
     title={mode === "note" ? t("crm.composer.noteTitle", { name: contactName }) : t("crm.composer.replyTitle", { name: contactName })}
-    description={mode === "note" ? t("crm.composer.noteHint") : null}
+    bodyClassName={mode === "note" ? "bg-amber-400/5" : undefined}
     footer={<div className="flex w-full min-w-0 flex-wrap items-center gap-2">
       {modeOptions.length > 0 && <Segmented value={mode} onChange={(value: ComposerMode) => { if (!busy) setMode(value); }} options={modeOptions} />}
       {showAttachments && <span className="inline-flex" title={attachState.reason}>
@@ -1174,13 +1155,12 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
         {busy ? t("crm.composer.sending") : sendAction.label}
       </Button>}
     </div>}>
-    <div ref={composerWindowRef} data-crm-composer-window="" data-maximized={maximized} onKeyDown={sendShortcut}
+    <div ref={composerWindowRef} data-crm-composer-window="" onKeyDown={sendShortcut}
       className="relative flex min-h-0 flex-1 flex-col">
-      <style>{COMPOSER_WINDOW_CSS}</style>
       {composerFields("window")}
       {fileDropOverlay}
     </div>
-  </DialogShell> : null;
+  </FloatingWindow> : null;
 
   return (
     <div

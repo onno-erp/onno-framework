@@ -358,6 +358,11 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "history.value.empty": "empty",
 
   "action.close": "Close",
+  "window.minimize": "Minimize",
+  "window.restore": "Restore",
+  "window.maximize": "Maximize",
+  "window.dock": "Dock to the corner",
+  "window.float": "Float freely",
   "action.ok": "OK",
   "action.feedback.blocked": "Action blocked",
   "action.feedback.completed": "Action completed",

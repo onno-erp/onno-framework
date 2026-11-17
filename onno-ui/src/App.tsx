@@ -17,6 +17,7 @@ import { DirtyFormsProvider } from "./lib/dirty-forms";
 import { QuickCreateProvider } from "./lib/quick-create";
 import { UpdateNotice } from "./components/shell/update-notice";
 import { Toaster } from "./components/ui/toast";
+import { WindowLayer } from "./components/ui/window-manager";
 import { BASE_PATH } from "./lib/base-path";
 import { CommandFeedbackProvider } from "./lib/command-feedback";
 import { AppConfigProvider, type AppDefinition } from "./lib/app-config";
@@ -61,6 +62,8 @@ function ProtectedApp() {
             <DirtyFormsProvider>
               <QuickCreateProvider>
                 <AppShell />
+                {/* Non-modal windows (docked composers, floating panels) stay open across pages. */}
+                <WindowLayer />
               </QuickCreateProvider>
             </DirtyFormsProvider>
           </CommandFeedbackProvider>

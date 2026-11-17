@@ -438,8 +438,12 @@ while text or files written in this session are unsent. `insertDraft` contributi
 open conversation's draft as before.
 
 The inline reply grows with its text up to `min(240px, 40vh)`. **Open in a larger window** edits the
-same draft in a `DialogShell` sized to about 90vw × 85vh, with a toggle that fills the screen; on
-phones (under 640px) it always fills the screen. Closing it returns focus to the inline field.
+same draft in a non-modal `@onno/ui` window (`FloatingWindow`), docked in the bottom-right corner
+like a mail compose box. The inbox behind it stays usable: switch chats, open the contact, scroll the
+history, copy dates and numbers. The window can be minimized to its title bar, dragged out into a
+freely floating and resizable window, or maximized. Its state, position and size are remembered in
+the browser (`persist="crm.composer"`). On phones (under 640px) it always fills the screen. Closing it
+returns focus to the inline field.
 
 When the delivery connection lists two or more `senders` (`{id, label}`), the From row becomes a
 mailbox picker defaulting to `sender`, and the send command carries `from: <sender id>`. Switching to

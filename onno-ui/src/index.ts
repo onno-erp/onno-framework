@@ -145,6 +145,8 @@ export { Popover, PopoverAnchor, PopoverTrigger, PopoverContent } from "./compon
 export { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 export { ContextMenuContent, ContextMenuItem, ContextMenuSub } from "./components/ui/context-menu";
 export { DialogShell } from "./components/ui/dialog-shell";
+export { FloatingWindow, windows, useWindow, useOpenWindows } from "./components/ui/window-manager";
+export type { WindowSpec, WindowState, WindowOptions, WindowHandle, WindowControls, WindowInfo } from "./components/ui/window-manager";
 export { ResponsiveActionPanel } from "./components/ui/responsive-action-panel";
 export { WorkspaceToolbar } from "./components/ui/workspace-toolbar";
 export type { WorkspaceToolbarLayout, WorkspaceToolbarProps } from "./components/ui/workspace-toolbar";

@@ -383,6 +383,11 @@ public final class UiMessages {
         d.put("history.value.empty", "empty");
 
         d.put("action.close", "Close");
+        d.put("window.minimize", "Minimize");
+        d.put("window.restore", "Restore");
+        d.put("window.maximize", "Maximize");
+        d.put("window.dock", "Dock to the corner");
+        d.put("window.float", "Float freely");
         d.put("action.ok", "OK");
         d.put("action.feedback.blocked", "Action blocked");
         d.put("action.feedback.completed", "Action completed");
