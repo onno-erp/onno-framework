@@ -4,7 +4,8 @@ import { nearestScrollAncestor, trailingPaddingTo } from "../../lib/fill-height"
 import { ExtensionSlot } from "../../lib/ui-extensions";
 import { Button, buttonVariants } from "../ui/button";
 import { ListSelectionCheckbox, selectLoaded } from "./list-selection-checkbox";
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { PageGutterContext } from "../../lib/page-gutter";
 import { ArrowDown, ArrowLeftRight, ArrowUp, CalendarDays, Check, ChevronsUpDown, Copy, ExternalLink, GanttChart, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
 import { CalendarDate, getLocalTimeZone, parseDate, startOfMonth, startOfYear, today } from "@internationalized/date";
 import { toast } from "../ui/toast";
@@ -1824,7 +1825,10 @@ export function EntityListView({
   // Route surface (own page) vs embedded in an authored dashboard page. Only the route surface takes
   // over the viewport height and scrolls internally; embedded flows with the host page.
   const surfaceMode = !list.embedded || list.fill === true;
-  const ownsSurfacePadding = !list.embedded;
+  // A full-height list that is a route's whole content (an inbox, a scheduler) gets the same gutter
+  // as a default list page, unless a <Page> around it already provides one.
+  const inPage = useContext(PageGutterContext);
+  const ownsSurfacePadding = !list.embedded || (list.fill === true && !inPage);
 
   // Last successfully resolved late-bound descriptors. A failed menu-open refresh deliberately
   // keeps this snapshot (or the startup static descriptors before the first success).

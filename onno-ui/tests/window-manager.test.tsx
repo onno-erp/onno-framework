@@ -85,6 +85,12 @@ it("docks, minimises with its content still mounted, maximises and restores", ()
   expect(compose).toHaveAttribute("data-window-state", "docked");
 });
 
+it("leaves most of a short screen to the page beside a docked window", () => {
+  Object.assign(window, { innerWidth: 1280, innerHeight: 600 });
+  render(<FloatingWindow title="Compose" initialState="docked" height={580}>x</FloatingWindow>);
+  expect(box(frame("Compose"))).toMatchObject({ height: 420, top: 180 });
+});
+
 it("lines docked and minimised windows up along the bottom, right to left", () => {
   render(<>
     <FloatingWindow title="First" initialState="docked" width={400}>a</FloatingWindow>

@@ -133,6 +133,8 @@ const DEFAULT_MIN_WIDTH = 320;
 const DEFAULT_MIN_HEIGHT = 200;
 const TITLE_BAR = 44;
 const MINIMIZED_WIDTH = 280;
+/** The most of the screen height a docked window takes. */
+const DOCKED_MAX_SHARE = 0.7;
 const EDGE = 16;
 const GAP = 12;
 const STORAGE_PREFIX = "onno.window.";
@@ -349,7 +351,9 @@ function layout(entry: Entry, spec: WindowSpec, all: Entry[], view: { width: num
       const eachWidth = phone ? view.width : each.state === "minimized"
         ? MINIMIZED_WIDTH : Math.min(widthOf(each, spec, entry), view.width - EDGE * 2);
       if (each.id === entry.id) {
-        const boxHeight = entry.state === "minimized" ? TITLE_BAR : Math.min(height, view.height - EDGE * 2);
+        // A docked window leaves most of a short screen to the page it sits beside.
+        const boxHeight = entry.state === "minimized" ? TITLE_BAR
+          : Math.min(height, Math.round(view.height * DOCKED_MAX_SHARE), view.height - EDGE * 2);
         const bottom = phone ? row.filter(e => e.state === "minimized").indexOf(entry) * TITLE_BAR : 0;
         return {
           left: Math.max(phone ? 0 : GAP, view.width - right - eachWidth),

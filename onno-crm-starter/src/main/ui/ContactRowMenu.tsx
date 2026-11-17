@@ -61,8 +61,8 @@ export function ContactRowMenu({ id, canEdit, onOpen, groups, groupKey, conversa
       event.preventDefault(); const box = event.currentTarget.getBoundingClientRect(); show(box.left + 20, box.top + 20);
     } }}>
     {children}
-    {id && <Button ref={triggerRef} type="button" variant="subtle" size="toolbar" data-row-menu-trigger
-      className="size-7 shrink-0 rounded-pill p-0" aria-haspopup="menu" aria-expanded={!!position}
+    {id && <Button ref={triggerRef} type="button" variant="ghost" size="toolbar" data-row-menu-trigger
+      className="size-7 shrink-0 rounded-pill p-0 text-muted-foreground hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground" aria-haspopup="menu" aria-expanded={!!position}
       aria-label={t("crm.chat.rowMenu")} title={t("crm.chat.rowMenu")}
       onClick={(event: { stopPropagation: () => void; currentTarget: HTMLElement }) => {
         event.stopPropagation();

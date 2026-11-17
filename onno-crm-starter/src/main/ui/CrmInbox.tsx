@@ -1184,13 +1184,18 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
           .crm-chat-composer textarea { min-height:64px; max-height:min(240px, 40vh); }
           /* A row's "⋯" menu button: shown on hover or keyboard focus, always on touch screens (no right-click there). */
           [data-row-menu-host] { position:relative; }
-          [data-row-menu-host] > [data-row-menu-trigger] { position:absolute; top:6px; right:6px; z-index:1; opacity:0; transition:opacity 120ms ease; }
+          /* It takes the timestamp's place on the title line (as in a mail list), so the two never overlap. */
+          [data-row-menu-host] > [data-row-menu-trigger] { position:absolute; top:50%; right:8px; transform:translateY(-50%); z-index:1; opacity:0; transition:opacity 120ms ease; }
+          [data-row-menu-host]:has([data-row-preview]) > [data-row-menu-trigger] { top:calc(50% - 11px); }
           [data-row-menu-host]:hover > [data-row-menu-trigger], [data-row-menu-host]:focus-within > [data-row-menu-trigger], [data-row-menu-trigger][aria-expanded="true"] { opacity:1; }
+          [data-row-menu-host] [data-row-timestamp] { transition:opacity 120ms ease; }
+          [data-row-menu-host]:is(:hover, :focus-within) [data-row-timestamp], [data-row-menu-host]:has([data-row-menu-trigger][aria-expanded="true"]) [data-row-timestamp] { opacity:0; }
           @media (hover:none) {
             [data-row-menu-host] { padding-right:34px; }
-            [data-row-menu-host] > [data-row-menu-trigger] { top:50%; right:2px; transform:translateY(-50%); opacity:1; }
+            [data-row-menu-host] > [data-row-menu-trigger], [data-row-menu-host]:has([data-row-preview]) > [data-row-menu-trigger] { top:50%; right:2px; opacity:1; }
+            [data-row-menu-host]:is(:hover, :focus-within) [data-row-timestamp] { opacity:1; }
           }
-          @media (prefers-reduced-motion: reduce) { [data-row-menu-trigger] { transition:none; } }
+          @media (prefers-reduced-motion: reduce) { [data-row-menu-trigger], [data-row-timestamp] { transition:none; } }
           /* Like the inbox navigation rail: the slot's width animates while the island keeps its size and fades. */
           .crm-contact-slot { grid-column:3; grid-row:1; min-width:0; min-height:0; overflow:hidden; width:0;
             transition:width var(--resize-dur, 300ms) var(--resize-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
