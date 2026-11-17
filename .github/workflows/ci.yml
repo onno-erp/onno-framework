@@ -36,6 +36,11 @@ jobs:
       - name: Verify Maven local publication
         run: ./gradlew publishToMavenLocal
 
+      # The Docs and Publish workflows build the aggregated Javadoc; a broken {@link} fails them
+      # after merge or after a release tag, so check it on every PR too.
+      - name: Verify aggregated Javadoc
+        run: ./gradlew aggregateJavadoc
+
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
