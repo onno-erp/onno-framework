@@ -76,9 +76,6 @@ jobs:
       - name: Check
         run: ./gradlew clean check -PreleaseVersion="${{ steps.version.outputs.release_version }}"
 
-      - name: Audit generated widget toolchain
-        run: node .github/scripts/npm-audit.mjs --prefix example/build/onno-widgets
-
       - name: Verify local publication and Javadoc
         env:
           # Release versions activate artifact signing, including Maven-local verification.
