@@ -13,6 +13,9 @@ const ALLOWED = new Map([
   // postcss-selector-parser <7.1.6: pinned to 6.x by Tailwind 3 / postcss-nested; build-time CSS
   // processing of our own sources only.
   ["GHSA-rj75-hqrm-r3gf", "postcss-selector-parser — no compatible fix; Tailwind 3 build tooling only"],
+  // picomatch <=4.0.7 (ReDoS on repeated extglobs): no patched version yet. Reached only through
+  // build tooling (Tailwind 3, Vite/tinyglobby, VitePress) matching globs from our own config.
+  ["GHSA-fc5q-39xc-vjpf", "picomatch — no patched version; build-time globbing only"],
 ]);
 
 const args = ["audit", "--json", ...process.argv.slice(2)];
