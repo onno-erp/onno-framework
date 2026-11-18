@@ -1,0 +1,1 @@
+su.onno.print.PrintController.forms(java.lang.String, java.lang.String, java.util.UUID, su.onno.access.AccessSubject) returns a bare collection (java.util.List<su.onno.print.PrintController$PrintFormInfo>) in (PrintController.java:121)

@@ -17,5 +17,7 @@ dependencies {
     testImplementation(libs.assertj.core)
     testImplementation(libs.mockito.core)
     testImplementation(libs.h2)
+    // Architecture guardrails (su.onno.archunit.OnnoRules) over this module's main classes.
+    testImplementation(project(":onno-archunit"))
     testRuntimeOnly(libs.junit.platform.launcher)
 }
