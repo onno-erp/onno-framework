@@ -18,6 +18,8 @@ dependencies {
     testImplementation(libs.slf4j.simple)
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
+    // Property-based tests (jqwik runs as its own JUnit Platform engine beside Jupiter).
+    testImplementation(libs.jqwik)
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.testcontainers.junit.jupiter)
     testRuntimeOnly(libs.postgresql)
