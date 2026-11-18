@@ -191,6 +191,7 @@ public final class UiMessages {
         d.put("crm.chat.channel", "Channel");
         d.put("crm.chat.checkAgain", "Check again");
         d.put("crm.chat.chooseConversation", "Choose a conversation to start.");
+        d.put("crm.chat.conversation", "Conversation");
         d.put("crm.chat.internal", "Internal");
         d.put("crm.chat.loadEarlier", "Load earlier activity");
         d.put("crm.chat.noMessages", "No messages yet");
@@ -383,6 +384,11 @@ public final class UiMessages {
         d.put("history.value.empty", "empty");
 
         d.put("action.close", "Close");
+        d.put("window.minimize", "Minimize");
+        d.put("window.restore", "Restore");
+        d.put("window.maximize", "Maximize");
+        d.put("window.dock", "Dock to the corner");
+        d.put("window.float", "Float freely");
         d.put("action.ok", "OK");
         d.put("action.feedback.blocked", "Action blocked");
         d.put("action.feedback.completed", "Action completed");

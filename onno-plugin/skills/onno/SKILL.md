@@ -44,6 +44,7 @@ skill that owns the surface:
 | Commands (buttons, bulk actions, MCP tools), live checks, picker options, `IdentityLink` | `onno-commands` |
 | Posting, rules, lifecycle hooks, register movements | `onno-posting` |
 | Auth, REST/MCP/runtime verification, testing | `onno-auth-rbac`, `onno-runtime-api`, `onno-mcp`, `onno-testing-release` |
+| Driving a running app to verify a change (feature map, `onno-drive` CLI, PR verification artifacts) | `onno-verify` |
 | Community integrations, starters, connectors, plugins | `onno-extensions`, `onno-connectors` |
 
 ## First principle: model the business before writing code

@@ -125,7 +125,7 @@ it("sends from the mailbox chosen in From and keeps the conversation switch apar
   expect(document.querySelector("[data-sender-account]")).toHaveTextContent("Gmail · office@studio.test");
 });
 
-it("opens the composer in a large window that edits the same draft and sends it", async () => {
+it("opens the composer in a non-modal window that edits the same draft and sends it", async () => {
   const { sent } = mount({ "chat-anna": mailboxes });
   const inline = await openChat("Anna");
   fireEvent.change(inline, { target: { value: "Started inline" } });
@@ -136,10 +136,19 @@ it("opens the composer in a large window that edits the same draft and sends it"
   expect(field).toHaveValue("Started inline");
   expect(within(dialog).getByRole("combobox", { name: "Send from" })).toHaveTextContent("office@studio.test");
   fireEvent.change(field, { target: { value: "Started inline, finished in the window" } });
-  const window_ = dialog.querySelector("[data-crm-composer-window]")!;
-  fireEvent.click(within(dialog).getByRole("button", { name: "Fill the screen" }));
-  expect(window_).toHaveAttribute("data-maximized", "true");
-  expect(within(dialog).getByRole("button", { name: "Restore the window size" })).toBeInTheDocument();
+  // A window, not a modal: it opens docked in the corner and the inbox behind it stays usable.
+  expect(dialog).toHaveAttribute("aria-modal", "false");
+  expect(dialog).toHaveAttribute("data-window-state", "docked");
+  expect(screen.getByTestId("crm-inbox-workspace")).not.toHaveAttribute("aria-hidden");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Maximize" }));
+  expect(dialog).toHaveAttribute("data-window-state", "maximized");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Restore" }));
+  expect(dialog).toHaveAttribute("data-window-state", "docked");
+  // Minimised, the draft stays mounted and comes back intact.
+  fireEvent.click(within(dialog).getByRole("button", { name: "Minimize" }));
+  expect(dialog).toHaveAttribute("data-window-state", "minimized");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Restore" }));
+  expect(within(dialog).getByRole("textbox", { name: "Write a reply" })).toHaveValue("Started inline, finished in the window");
 
   fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());

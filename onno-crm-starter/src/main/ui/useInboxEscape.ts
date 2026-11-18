@@ -16,8 +16,9 @@ export function useInboxEscape(root: RefObject<HTMLElement | null>, closeChat: (
       if (getComputedStyle(element).visibility === "hidden" || !element.getClientRects().length) return;
       const target = event.target;
       if (!(target instanceof Node) || (!scope.contains(target) && !(target === document.body && lastInteractionInside))) return;
-      // Portalled menus/dialogs own Escape even when focus remains on their trigger.
-      const layers = document.querySelectorAll('[role="menu"], [role="dialog"], [role="alertdialog"], [data-radix-popper-content-wrapper]');
+      // Portalled menus/dialogs own Escape even when focus remains on their trigger. Non-modal
+      // windows (a docked composer) do not: the page beside them keeps its own Escape.
+      const layers = document.querySelectorAll('[role="menu"], [role="dialog"]:not([data-onno-window]), [role="alertdialog"], [data-radix-popper-content-wrapper]');
       if (Array.from(layers).some(layer => layer.getAttribute("data-state") !== "closed"
         && getComputedStyle(layer).visibility !== "hidden" && layer.getClientRects().length > 0)) return;
       event.preventDefault();

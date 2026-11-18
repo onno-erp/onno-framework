@@ -54,11 +54,14 @@ jobs:
       # published against a transitive dependency at any time; catching it here blocks a merge and
       # gets fixed on its own schedule, instead of first surfacing on a release tag that then has
       # to be re-cut (what happened to v2.2.0). Tolerated advisories live in npm-audit.mjs.
+      - name: Test the onno-drive verification CLI
+        run: node --test onno-plugin/skills/onno-verify/onno-drive.test.mjs
+
       - name: Audit frontend dependencies
         run: npm ci && node ../.github/scripts/npm-audit.mjs
         working-directory: onno-ui
 
       - name: Audit documentation dependencies
-        run: npm ci && npm audit
+        run: npm ci && node ../.github/scripts/npm-audit.mjs
         working-directory: docs
 

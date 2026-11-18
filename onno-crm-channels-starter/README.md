@@ -379,6 +379,25 @@ of the deployment mailbox's conversations leaves conversations of other inboxes 
 that answers to a reply sent from their **personal** mailbox on a shared conversation are imported
 into that shared conversation, where the team reads them.
 
+## Gmail: signatures
+
+With `onno.crm.channels.gmail.signature.enabled=true`, every email the CRM sends ends with the
+signature the **sending** mailbox (From) has set in Gmail, as Gmail itself would sign it. A reply sent
+from `wedding@` carries wedding@'s signature, and one from `office@` carries office@'s. The email then
+has two versions:
+- an HTML version with the typed text and the signature exactly as written in Gmail, logo included;
+- a plain-text version with the text, the `-- ` separator, and the signature as text.
+
+The signature is read through the Gmail API (`users.settings.sendAs`). That needs only the
+`gmail.readonly` access every connected mailbox already has, so no mailbox has to reconnect. It is
+sanitized like received email HTML and cached for ten minutes, so an edit in Gmail takes effect
+within minutes. A mailbox without a signature sends plain text as before. If Gmail cannot return
+the signature, the reply still goes out without it, and the failure status is logged.
+
+The composer shows only the typed text: the signature is added when the email is sent. Application
+code that sends its own mail through a mailbox can sign it the same way with
+`GmailClient.signature(address)`. The setting is off by default.
+
 ## Gmail: read state
 
 When the CRM marks an email conversation read (`POST /api/crm/conversations/{id}/read` with unread

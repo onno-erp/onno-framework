@@ -10,6 +10,9 @@ description: >-
 
 # onno Runtime API
 
+To drive a running app without writing curl, use the `onno-verify` skill. Its `onno-drive` CLI
+handles login, cookies and CSRF, prints the feature map, and wraps the endpoints below.
+
 Generated APIs are authenticated. Browser page routes are not a substitute for API checks.
 
 ## Rules

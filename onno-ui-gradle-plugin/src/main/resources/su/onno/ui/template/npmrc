@@ -1,0 +1,2 @@
+# The @onno packages come from the onno npm registry; everything else from npmjs.org.
+@onno:registry=https://npm.onno.su/

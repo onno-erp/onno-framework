@@ -18,8 +18,12 @@ dependencies {
     testImplementation(libs.slf4j.simple)
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
+    // Property-based tests (jqwik runs as its own JUnit Platform engine beside Jupiter).
+    testImplementation(libs.jqwik)
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.testcontainers.junit.jupiter)
     testRuntimeOnly(libs.postgresql)
+    // Architecture guardrails (su.onno.archunit.OnnoRules) over this module's main classes.
+    testImplementation(project(":onno-archunit"))
     testRuntimeOnly(libs.junit.platform.launcher)
 }

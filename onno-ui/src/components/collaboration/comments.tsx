@@ -2,6 +2,7 @@ import { useRequestScope } from "../../hooks/use-request-scope";
 import { useUiEvents } from "../../hooks/use-ui-events";
 import { openRoute } from "../../lib/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { notifyError } from "../../lib/notify-error";
 import { Send, Trash2, MessageSquare, AtSign, Hash, Reply, X, Plus, SmilePlus } from "lucide-react";
 import {
   api,
@@ -11,7 +12,6 @@ import {
   type MentionSuggestion,
 } from "../../lib/api";
 import { cn } from "../../lib/utils";
-import { notifyError } from "../../lib/notify-error";
 import { linkify } from "../../lib/linkify";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { glassAvatar, tint } from "./presence-avatars";

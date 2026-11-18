@@ -57,7 +57,8 @@ class ActionRowCrmMetadataTest {
         var controller = new CrmActionController(scopes, new CommandRegistry(List.of(view)),
                 mock(AccessService.class), catalogs, new WebProperties());
         assertThat((List<?>) controller.list("support", id, principal))
-                .singleElement().isEqualTo(Map.of("id", "review", "title", "Review me", "visible", true, "enabled", true));
+                .singleElement().isEqualTo(Map.of("id", "review", "title", "Review me", "visible", true, "enabled", true,
+                        "group", "", "inputs", false));
         controller.run("support", id, "review", Map.of(), principal, AccessSubject.user("reader", Set.of()));
         assertThat(handled).hasValue(1);
         when(catalogs.get(AccessSubject.system(), descriptor, id))

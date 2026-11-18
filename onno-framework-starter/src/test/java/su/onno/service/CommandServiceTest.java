@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import su.onno.access.AccessMode;
 import su.onno.access.AccessSubject;
 import su.onno.command.CommandDefaults;
+import su.onno.command.CommandRejectedException;
 import su.onno.command.CommandResult;
 import su.onno.command.CommandSpec;
 import su.onno.command.Commands;
@@ -62,6 +63,11 @@ class CommandServiceTest {
                             handled.add("approve:" + ctx.id() + ":" + ctx.input("note") + ":" + ctx.user());
                             return CommandResult.reload();
                         });
+                c.collectionCommand("receive")
+                        .input("supplier", i -> i.title("Supplier").required())
+                        .inputRows("lines", g -> g.title("Lines").required()
+                                .column("qty", col -> col.title("Qty").number().required()))
+                        .run(ctx -> { handled.add("receive:" + ctx.input("supplier")); return CommandResult.ok(); });
                 c.collectionCommand("report").run(ctx -> {
                     handled.add("report:" + ctx.id());
                     return null;
@@ -89,16 +95,16 @@ class CommandServiceTest {
         CommandService service = service();
         Map<String, Object> asOperator = service.listing("catalogs", "orders", first, OPERATOR);
         assertThat((List<Map<String, Object>>) asOperator.get("commands")).extracting(m -> m.get("key"))
-                .containsExactly("approve", "report", "set_new");
+                .containsExactly("approve", "receive", "report", "set_new");
         assertThat((Map<String, Object>) asOperator.get("state")).containsOnlyKeys("approve");
 
         Map<String, Object> asClerk = service.listing("catalogs", "orders", null, CLERK);
         assertThat((List<Map<String, Object>>) asClerk.get("commands")).extracting(m -> m.get("key"))
-                .containsExactly("report", "set_new");
+                .containsExactly("receive", "report", "set_new");
 
         choices.set(0, "done");
         assertThat((List<Map<String, Object>>) service.listing("catalogs", "orders", null, OPERATOR).get("commands"))
-                .extracting(m -> m.get("key")).containsExactly("approve", "report", "set_done");
+                .extracting(m -> m.get("key")).containsExactly("approve", "receive", "report", "set_done");
     }
 
     @Test
@@ -154,5 +160,22 @@ class CommandServiceTest {
         assertThat(handled).containsExactly("approve:" + first + ":n:alice");
         assertThatThrownBy(() -> service.runBatch("catalogs", "orders", "report", List.of(first), Map.of(), OPERATOR))
                 .satisfies(e -> assertThat(status(e)).isEqualTo(ServiceException.Status.BAD_REQUEST));
+    }
+    @Test
+    void rejectsMissingRequiredInputsBeforeTheHandlerRuns() {
+        CommandService service = service();
+        assertThatThrownBy(() -> service.run("catalogs", "orders", "receive", null, Map.of(), OPERATOR))
+                .isInstanceOfSatisfying(CommandRejectedException.class, e -> assertThat(e.feedback().fieldErrors())
+                        .containsOnlyKeys("supplier", "lines"));
+        assertThatThrownBy(() -> service.run("catalogs", "orders", "receive", null,
+                Map.of("inputs", Map.of("supplier", " ", "lines", List.of(Map.of("qty", "")))), OPERATOR))
+                .isInstanceOfSatisfying(CommandRejectedException.class, e -> assertThat(e.feedback().fieldErrors())
+                        .containsEntry("supplier", List.of("Supplier is required"))
+                        .containsEntry("lines", List.of("Row 1: Qty is required")));
+        assertThat(handled).isEmpty();
+
+        service.run("catalogs", "orders", "receive", null,
+                Map.of("inputs", Map.of("supplier", "acme", "lines", List.of(Map.of("qty", "2")))), OPERATOR);
+        assertThat(handled).containsExactly("receive:acme");
     }
 }

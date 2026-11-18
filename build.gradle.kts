@@ -73,6 +73,7 @@ val publishedModules = mapOf(
     "onno-import-starter" to "Data import starter for onno: xlsx / csv ingestion into catalogs and documents.",
     "onno-print-starter" to "Print forms for onno: fill Word (.docx) and Excel (.xlsx) templates from catalog and document records.",
     "onno-crm-channels-starter" to "Opt-in Telegram, Gmail, Instagram and WhatsApp adapters for the onno CRM inbox.",
+    "onno-archunit" to "ArchUnit rules for applications built on onno: posting outside Spring transactions, record-scoped controllers, framework-neutral domain classes and paged collection endpoints.",
     "onno-crm-starter" to "Reusable CRM module for onno with customers, opportunities, unified inboxes, comments, activity timelines, and a packaged workspace UI.",
 )
 
@@ -477,6 +478,18 @@ tasks.register("checkConfigDocs") {
 
 // Make the drift guard part of the standard verification lifecycle.
 tasks.named("check") { dependsOn("checkConfigDocs", "checkCommunityRegistry") }
+
+// ---------------------------------------------------------------------------
+// Formal models (docs/formal) — TLA+ checked by TLC
+// ---------------------------------------------------------------------------
+// Deliberately NOT part of `check`: the first run downloads the pinned tla2tools.jar from GitHub
+// (into build/tla), so offline builds stay green. Run it when touching the process engine.
+tasks.register<Exec>("checkFormalModels") {
+    group = "verification"
+    description = "Model-check docs/formal/*.tla with TLC (downloads the pinned tla2tools.jar on first run)."
+    commandLine("bash", file("docs/formal/check.sh").absolutePath, "--counterexamples")
+    inputs.files(fileTree("docs/formal"))
+}
 
 // ---------------------------------------------------------------------------
 // Aggregated Javadoc  (build/docs/javadoc) — the API reference for the docs site

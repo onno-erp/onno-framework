@@ -25,7 +25,9 @@ export function InboxPage() {
 
 
 `Page` without a `title` already drops the header. `fill` is what allocates height; a `Row` or a
-card does not. For a non-list surface, `Calendar` also takes `fill`; otherwise inspect the host's
+card does not. A `fill` list rendered straight as the route's content (no `Page` around it, as
+`<CrmInbox>` usually is) takes the same gutter as a default list page itself; inside a `Page` it
+leaves the gutter to the page, so the two never double up. For a non-list surface, `Calendar` also takes `fill`; otherwise inspect the host's
 allocation contract first — do not add a fake entity merely to obtain height.
 
 ## Bound the renderer and its panes

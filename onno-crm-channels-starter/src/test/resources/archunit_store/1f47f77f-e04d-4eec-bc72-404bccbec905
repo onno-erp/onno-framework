@@ -1,0 +1,1 @@
+su.onno.crm.channels.gmail.GmailMailboxController.accounts(java.security.Principal) returns a bare collection (java.util.List<su.onno.crm.channels.gmail.GmailMailboxController$Mailbox>) in (GmailMailboxController.java:53)

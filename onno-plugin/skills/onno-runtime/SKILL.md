@@ -11,6 +11,9 @@ description: >-
 
 # onno Runtime Verification
 
+To drive a running app without writing curl, use the `onno-verify` skill. Its `onno-drive` CLI
+handles login, cookies and CSRF, prints the feature map, and wraps the endpoints below.
+
 Most `/api/**` routes are authenticated; the configured bootstrap allowlist is public. Cookie-mode
 mutations are CSRF-protected. Resource-server mode uses bearer tokens and disables CSRF.
 

@@ -69,8 +69,26 @@ val testFrontend by tasks.registering(com.github.gradle.node.npm.task.NpmTask::c
     inputs.file("$frontend/vite.config.ts")
 }
 
+// ESLint over the package (eslint.config.js): typescript-eslint, the rules of hooks, and the onno
+// rules in eslint-plugin/ (also exported to apps as @onno/ui/eslint). Warnings report, errors fail.
+val lintFrontend by tasks.registering(com.github.gradle.node.npm.task.NpmTask::class) {
+    dependsOn(tasks.named("npmInstall"))
+    args.set(listOf("run", "lint"))
+    workingDir.set(file(frontend))
+    inputs.dir("$frontend/src")
+    inputs.dir("$frontend/tests")
+    inputs.dir("$frontend/eslint-plugin")
+    inputs.file("$frontend/eslint.config.js")
+    inputs.file("$frontend/vite.config.ts")
+    inputs.file("$frontend/vite-preset.js")
+    inputs.file("$frontend/tailwind.config.js")
+    inputs.file("$frontend/package.json")
+    inputs.file("../package-lock.json")
+}
+
 tasks.named("check") {
     dependsOn(testFrontend)
+    dependsOn(lintFrontend)
 }
 
 tasks.named<Test>("test") {
@@ -135,6 +153,8 @@ dependencies {
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.testcontainers.junit.jupiter)
     testRuntimeOnly(libs.postgresql)
+    // Architecture guardrails (su.onno.archunit.OnnoRules) over this module's main classes.
+    testImplementation(project(":onno-archunit"))
     testRuntimeOnly(libs.junit.platform.launcher)
     testRuntimeOnly(libs.slf4j.simple)
 }

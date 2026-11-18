@@ -11,7 +11,8 @@ description: >-
   with typed measures (count/sum/avg/min/max), where predicates, groupings and render functions,
   the data hooks (useRecords, useRecord, useAggregate, useBalance, useTurnover, useMovements,
   useInformationRegister, useConstant, useCreateRecord, useCommand, …), live updates, onno:// links
-  (links, openRoute, openRecord, RouteLink, command-result navigation), extension outlets (defineApp extensions, ExtensionSlot), the
+  (links, openRoute, openRecord, RouteLink, command-result navigation), non-modal windows
+  (FloatingWindow, windows.open: docked/floating/resizable/minimized/maximized), extension outlets (defineApp extensions, ExtensionSlot), the
   starters' screens (@onno/print PrintTemplates, @onno/crm CrmInbox), and full-height workspaces.
 ---
 
@@ -216,7 +217,12 @@ All take `title` and `hint`.
 Starters ship their screens as packages next to their Java code; add the package to the app's
 `package.json` and render: `<PrintTemplates title="Print templates" />` from `@onno/print`;
 `<CrmInbox workspace="support" list={…} />`, `<CrmConnections setups={[channelSetups]} />`,
-`CrmConversationPage` from `@onno/crm` (+ `@onno/crm-channels`). See the `onno-crm-*` skills.
+`CrmConversationPage` from `@onno/crm` (+ `@onno/crm-channels`). The CRM is also exported in
+parts: `CrmConversation` (one chat anywhere), `openCrmConversation(...)` (a docked window across
+pages), `CrmContactPage`, the row/timeline/composer components and the `useCrmConversation` /
+`useCrmComposer` hooks; `CrmInbox` takes `components`, `timelineSources` (business entries in the
+chat) and `renderEntry`. See `onno-crm-starter/README.md` → "Building your own screens" and the
+`onno-crm-*` skills.
 
 ## Your own components: data hooks
 
@@ -274,6 +280,52 @@ copy work) that opens in the workspace on a plain click. A Java command can send
 `CommandResult.open(ref)` / `.navigate(route)`; the client applies the result's `navigateTo` after
 its feedback and refresh, through the same dispatcher, and ignores external or command URLs. Build links in handlers and
 components, not at module scope — they resolve routes through the loaded model.
+
+## Windows: docked, floating, resizable
+
+Non-modal windows that sit above the page without blocking it: a Gmail-style compose box docked in
+the corner, a calculator or notes panel the user drags and resizes while working, a record preview
+beside a list. Each window can be minimized to a title bar, docked bottom-right (docked and minimized
+windows line up right to left), floated (drag the title bar, resize from any edge), or maximized. On
+phones a window always fills the screen. Escape inside a window never reaches the page beneath it.
+For a blocking question or form, use a command's input dialog instead.
+
+Owned by a component, with children in the owner's state and context. It closes with its owner:
+
+```tsx
+import { FloatingWindow } from "@onno/ui";
+
+<FloatingWindow open={open} onOpenChange={setOpen} title="Price calculator"
+  initialState="docked" width={420} height={520} persist="acme.calculator"
+  footer={<Button onClick={apply}>Apply</Button>}>
+  <Calculator />
+</FloatingWindow>
+```
+
+Owned by the app, opened from anywhere (a command result, a list row, a page button). It stays open
+while the user navigates and is closed on sign-out:
+
+```tsx
+import { windows, useWindow } from "@onno/ui";
+
+windows.open(`order-preview:${id}`, {          // same id again = bring it forward, no duplicate
+  title: `Order ${number}`, initialState: "floating", width: 640,
+  content: <OrderPreview id={id} />,             // or (w) => … with the window's controls
+  onClose: () => confirm("Discard changes?"),    // return false to keep it open
+});
+
+function OrderPreview({ id }: { id: string }) {
+  const w = useWindow();                         // { id, state, setState, close, focus }
+  return <Button onClick={() => w.setState("minimized")}>Later</Button>;
+}
+```
+
+Spec fields: `title`, `icon`, `initialState` (`floating` | `docked` | `maximized`), `width`/`height`,
+`minWidth`/`minHeight`, `x`/`y`, `resizable`, `minimizable`/`dockable`/`maximizable`/`closable`,
+`persist` (localStorage key for state + geometry), `headerActions`, `footer`, `padded`,
+`bodyClassName`. `useOpenWindows()` lists open windows live (for a task bar or badge);
+`windows.close/focus/setState/update/isOpen/list` control them by id. Windows sit above the page and
+below popovers and modal dialogs, so pickers and command dialogs opened from inside one work.
 
 ## Extension outlets
 

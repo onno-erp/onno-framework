@@ -9,6 +9,7 @@ import { cn } from "../../lib/utils";
 import { columnFor, fieldFor, type EntityCustomization, type ListCustomization } from "../../lib/entity-customizations";
 import { useCustomizedList } from "../../lib/app-config";
 import type { WhereClause } from "../../lib/measure";
+import { PageGutterContext } from "../../lib/page-gutter";
 
 /**
  * The page-level building blocks an app composes its own pages from. Every
@@ -64,7 +65,7 @@ export function Page({ title, subtitle, actions, children, className }: {
   return (
     <div className={cn("flex w-full flex-col gap-2 p-4", className)}>
       {title ? <PageHeader title={title} subtitle={subtitle} actions={actions} /> : null}
-      {children}
+      <PageGutterContext.Provider value={true}>{children}</PageGutterContext.Provider>
     </div>
   );
 }

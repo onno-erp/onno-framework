@@ -1,0 +1,91 @@
+# Exploratory testing of each release by an AI agent: build the example app, drive it like a user
+# through the onno-verify skill (feature map first, then every entity and command), and open one
+# fix PR per reproducible bug. PRs go through normal review and CI; nothing is merged automatically.
+#
+# Requires the ANTHROPIC_API_KEY repository secret; without it the job is skipped.
+name: Release fuzz
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: release-fuzz
+  cancel-in-progress: false
+
+jobs:
+  fuzz:
+    name: Drive the example app and open fix PRs
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    steps:
+      - name: Skip without an API key
+        if: env.HAS_KEY != 'true'
+        run: echo "ANTHROPIC_API_KEY is not set; skipping release fuzzing."
+
+      - uses: actions/checkout@v6
+        if: env.HAS_KEY == 'true'
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v5
+        if: env.HAS_KEY == 'true'
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - uses: actions/setup-node@v6
+        if: env.HAS_KEY == 'true'
+        with:
+          node-version: "22.22.0"
+
+      - name: Build and start the example app on a scratch database
+        if: env.HAS_KEY == 'true'
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :example:bootJar
+          mkdir -p build/fuzz-run
+          cd build/fuzz-run
+          nohup java -jar ../../example/build/libs/example-*.jar --server.port=18091 > server.log 2>&1 &
+          # Any HTTP status (401 included) means the server is up.
+          for i in $(seq 1 90); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:18091/api/auth/me || true)
+            [ "$code" != "000" ] && exit 0
+            sleep 2
+          done
+          cat server.log; exit 1
+
+      - name: Explore and fix
+        if: env.HAS_KEY == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: --max-turns 200
+          prompt: |
+            You are fuzzing the onno-framework release ${{ github.ref_name }} through its example app,
+            which is running at http://localhost:18091 (logs: build/fuzz-run/server.log).
+            Read AGENTS.md and onno-plugin/skills/onno-verify/SKILL.md first.
+
+            1. Log in with onno-drive as admin@onnobooks.local / admin, then manager@onnobooks.local / manager,
+               and print the feature map with `features`.
+            2. Exercise every entity and command like a real user: create, update, validate, post, unpost,
+               preview-posting, run each command with valid, missing and malformed inputs, page lists with
+               --all, read register balances. Compare each result with AGENTS.md and the docs. Look for
+               500s, wrong statuses, data that disagrees with the posting preview, access leaks between
+               the two users, and rules that are documented but not enforced.
+            3. For each reproducible bug: write a failing test in the owning module, fix it with the smallest
+               correct change, run that module's tests, and open one pull request per bug against main on a
+               branch named fuzz/<short-name>. Fill the PR template's "Verification artifacts" section with
+               the onno-drive commands and outputs that reproduce the bug before and after the fix.
+            4. If a bug needs a design decision, open an issue with the reproduction instead of a PR.
+            Never push to main, never merge, and never change the example app's seed data to hide a bug.

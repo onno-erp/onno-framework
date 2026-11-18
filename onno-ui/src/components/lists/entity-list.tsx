@@ -4,7 +4,8 @@ import { nearestScrollAncestor, trailingPaddingTo } from "../../lib/fill-height"
 import { ExtensionSlot } from "../../lib/ui-extensions";
 import { Button, buttonVariants } from "../ui/button";
 import { ListSelectionCheckbox, selectLoaded } from "./list-selection-checkbox";
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { PageGutterContext } from "../../lib/page-gutter";
 import { ArrowDown, ArrowLeftRight, ArrowUp, CalendarDays, Check, ChevronsUpDown, Copy, ExternalLink, GanttChart, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
 import { CalendarDate, getLocalTimeZone, parseDate, startOfMonth, startOfYear, today } from "@internationalized/date";
 import { toast } from "../ui/toast";
@@ -1825,7 +1826,10 @@ export function EntityListView({
   // Route surface (own page) vs embedded in an authored dashboard page. Only the route surface takes
   // over the viewport height and scrolls internally; embedded flows with the host page.
   const surfaceMode = !list.embedded || list.fill === true;
-  const ownsSurfacePadding = !list.embedded;
+  // A full-height list that is a route's whole content (an inbox, a scheduler) gets the same gutter
+  // as a default list page, unless a <Page> around it already provides one.
+  const inPage = useContext(PageGutterContext);
+  const ownsSurfacePadding = !list.embedded || (list.fill === true && !inPage);
 
   // Last successfully resolved late-bound descriptors. A failed menu-open refresh deliberately
   // keeps this snapshot (or the startup static descriptors before the first success).
@@ -2597,6 +2601,8 @@ export function EntityListView({
       await downloadSelection(download.url, ids, `${download.key}.zip`);
       toast.dismiss(toastId);
     } catch (error) {
+      // Turns the loading toast into the error; downloadSelection never toasts, so this is the only one.
+      // eslint-disable-next-line onno/notify-caught-error
       toast.error(error instanceof Error && error.message ? error.message : t("list.download.failed", { label: download.title }),
         { id: toastId });
     } finally {

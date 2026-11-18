@@ -23,7 +23,7 @@ const config = {folders:[], actions:["reply","sendReply"]};
 const activity = {rows:[{id:"message:one",conversationId:"chat",kind:"CUSTOMER_MESSAGE",direction:"INBOUND",channel:"EMAIL",authorName:"Person",body:"Hello from the customer",at:"2026-10-05T10:00:00",attachments:[]}],hasMore:false,nextCursor:null};
 const connected = {connected:true,label:"Email",replyCapability:"AVAILABLE",maxAttachments:2,maxTextLength:8000};
 function mount(options: {sidebar?: boolean; activity?: Promise<Response>; contact?: Promise<Response>; delivery?: Promise<Response>; read?: Promise<Response>} = {}) {
-  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+  const fetcher = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const path = new URL(String(input), "http://localhost").pathname;
     if (path === "/api/crm/inbox-workspaces") return response([{key:"support"}]);
     if (path === "/api/crm/inbox-workspaces/support") return response({key:"support",config,

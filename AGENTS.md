@@ -43,6 +43,7 @@ to future agents that may not have the full conversation context.
 | `onno-import-starter` | CSV import (preview, mapping, upsert, dry-run) through the UI command path. |
 | `onno-print-starter` | Print forms: typed `PrintForm<T>` beans fill Word/Excel templates; record ⋯ menu, list batch zip, admin template uploads, optional PDF. |
 | `onno-ui-gradle-plugin` | Gradle plugin (`su.onno.ui`) that builds an app's own React UI (`src/main/ui`, a Vite app on `@onno/ui`) into its jar, generates `model.gen.ts` from the Java model, and seeds a starter UI (`onnoUiInit`). |
+| `onno-archunit` | Published ArchUnit rules for onno apps (`su.onno.archunit.OnnoRules.all()`): posting outside `@Transactional`, controllers through the scoped service layer, framework-neutral domain classes, `Ref<T>` references, drained keyset lists. The framework's own `*ArchitectureTest`s use the same rules. |
 | `example` | Local example app and smoke-test consumer inside the multi-module build. Do not publish it. |
 | `community/` | Community integrations registry: `registry.json` (source of truth) + `registry.schema.json`. `INTEGRATIONS.md` is generated from it by the `generateIntegrationsDoc` Gradle task. |
 
@@ -83,6 +84,10 @@ see, that module's `META-INF/additional-spring-configuration-metadata.json` — 
 | auth modes/endpoints, RBAC | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/CONFIGURATION.md](docs/CONFIGURATION.md), `onno-auth-starter/README.md`, `onno-web-starter/README.md` |
 | schema/migration or posting behaviour | this file, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | a feature that was on the roadmap | move it from "next work" to "current state" in [ROADMAP.md](ROADMAP.md) |
+| an `OnnoRules` rule or a module `*ArchitectureTest` | [`onno-archunit/README.md`](onno-archunit/README.md), the section of this file the rule enforces |
+| an onno ESLint rule (`onno-ui/eslint-plugin/`) | [onno-ui/README.md](onno-ui/README.md#linting), the "UI" section of this file |
+| a REST endpoint `onno-drive` calls | [`onno-plugin/skills/onno-verify/onno-drive.mjs`](onno-plugin/skills/onno-verify/onno-drive.mjs) and its test |
+| `JdbcProcessEngine` token, join, cancel or migration logic | [docs/formal/](docs/formal/README.md): re-run `./gradlew checkFormalModels`, keep the variable mapping in sync |
 
 The deepest hands-on guidance for modeling and editing the framework lives in the
 [`onno` skills](onno-plugin/skills/onno/SKILL.md); keep the focused skills aligned with these docs too.
@@ -110,8 +115,17 @@ For targeted iteration:
 ./gradlew :onno-web-starter:buildFrontend
 # tsc over onno-ui/src, its tests, and the type-level tests of the public API
 ./gradlew :onno-web-starter:typecheckFrontend
+# ESLint over onno-ui (typescript-eslint, rules of hooks, onno rules); part of `check`
+./gradlew :onno-web-starter:lintFrontend
 ./gradlew :onno-web-starter:compileJava
+# TLA+ model of process tokens (downloads tla2tools once; not part of `check`)
+./gradlew checkFormalModels
 ```
+
+Property-based tests (jqwik, `*Properties` classes) run in the normal `test`/`check`. When one
+fails, jqwik prints a shrunk sample and replays it first on the next run. Turn a real counterexample
+into an example-based regression test, or keep the property `@Disabled("bug: …")` with the minimal
+case when the fix is not small.
 
 `publishToMavenLocal` is important: a build can pass with project dependencies but still fail while producing
 sources, javadocs, POM metadata, or binary artifacts.
@@ -190,6 +204,25 @@ When adding a starter, include:
 - Name business concepts clearly. The UI model and generated APIs should read like the business domain, not
   like database plumbing.
 - Keep generated framework behavior inspectable. Avoid magic string conventions when typed Java APIs already exist.
+
+### Guardrails: Turn Corrections Into Checks
+
+Prose is the weakest layer. When a review corrects an agent and the mistake is mechanically
+detectable, add a check instead of another line here:
+
+1. **Make it impossible** through API design (a typed builder, a sealed type, a startup check).
+2. **Else make it a rule**: an ArchUnit rule in `onno-archunit` (`OnnoRules`, used by every module's
+   `*ArchitectureTest` and by consumer apps) or a module-local architecture test; an ESLint rule in
+   `onno-ui/eslint-plugin/` for the UI. The failure message must name the fix, because agents act
+   on it.
+3. **Verify behaviour** with properties (jqwik) for invariants and the TLA+ model in `docs/formal`
+   for process-token semantics.
+4. Only then write prose.
+
+Accepted rule exceptions are frozen in a module's `src/test/resources/archunit_store`. Never
+regenerate a store to make a new violation pass. Fix a lint error instead of disabling it; a
+disable needs a `-- reason`. A store entry is keyed by the rule text, so editing a rule's
+`because(...)` re-freezes its current violations — review the store diff when you do.
 
 ## First Principle
 
@@ -350,7 +383,11 @@ public class InventoryCostRegister extends AccumulationRecord {
 ```
 
 A backdated post/repost/unpost reverses later affected documents and reposts them in date order in one
-serializable transaction. Keep `handlePosting` deterministic and free of external side effects.
+serializable transaction. The backdated document's own movements are computed against the register
+as of its date: later documents are reversed first, then its `handlePosting` runs again inside the
+restoring transaction. Documents with identical timestamps are not re-sequenced among themselves
+(known gap, see `ChronologicalPostingProperties`). Keep `handlePosting` deterministic and free of
+external side effects.
 Posting atomically claims an existing live, unposted document before writing movements. Core
 `post(...)` rejects an already-posted document; use the atomic `repost(...)` operation when an
 intentional recalculation is required. A posting `@DomainEvent` outbox row is written on the same
@@ -1204,6 +1241,8 @@ Behaviour stays in Java, as Spring beans in `onno-framework` packages:
   send the client on (`navigateTo`: app paths and `onno://` links only; command/external URLs are
   rejected), after feedback and refresh. Throw
   `CommandRejectedException` for a purposeful 422 rejection (an open input form shows it inline).
+  `required()` inputs and row groups are enforced on the server before the handler runs, on every
+  surface (a 422 whose `fieldErrors` name the missing inputs), so handlers need not re-check them.
   `c.dynamic(live -> …)` declares commands from live data. The server enforces write access, roles,
   `onno.web.read-only`, record scope and availability on every surface.
 - **Live checks** are `Checks<E>` beans (`su.onno.validation`):
@@ -1215,6 +1254,13 @@ Behaviour stays in Java, as Spring beans in `onno-framework` packages:
   from the live form values.
 - **Identity**: an `IdentityLink.of(Employee.class, "email")` bean (`su.onno.identity`) links a login
   to its catalog record — greeting, avatar, comment author, task routing, `Subject.recordId()`.
+
+- **Lint** enforces the UI conventions: `onno/no-private-imports` (only `@onno/ui`, `@onno/ui/icons`
+  and starter package roots, never `@onno/ui/src/...` or `lucide-react`), `onno/icon-component`
+  (icons are imported Lucide components, never name strings), `onno/no-raw-api-fetch` (typed hooks
+  or `api`, not `fetch("/api/...")`) and, inside the package, `onno/notify-caught-error` (a caught
+  failure goes through `notifyError`, which the api layer has not already toasted). Apps enable
+  them with `onno.configs.app` from `@onno/ui/eslint`.
 
 Keep UI concerns out of domain classes; keep business rules out of React. The web layer's endpoints
 and settings are in [onno-web-starter/README.md](onno-web-starter/README.md). Hands-on playbooks:
@@ -1341,6 +1387,17 @@ up every agent:
    the model at runtime, hit the real generated endpoints below.
 2. **The SPA fallback is navigation-only.** Unknown `/api/**` routes and missing assets return
    `404`; only HTML `GET` navigation under `onno.ui.path` falls back to the SPA shell.
+
+**Prefer the driver over hand-rolled curl.** The [`onno-verify`](onno-plugin/skills/onno-verify/SKILL.md)
+skill ships `onno-drive`, a dependency-free Node CLI:
+`node onno-plugin/skills/onno-verify/onno-drive.mjs login --base http://localhost:8091 --user … --password …`
+stores the session cookie and CSRF token. Run `onno-drive features` first: it prints the **feature
+map** — every entity, command, register, process and setting under a route-shaped id such as
+`documents/orders#cancel` — from `/api/ui/model`. Use those ids with the user and in PRs. Then drive
+the change with `list/get/create/update/validate/post/unpost/preview-posting/command/balance/raw`,
+and attach the outputs (feature id, before/after JSON, posting preview) to the PR's "Verification
+artifacts" section. Custom React pages are not in the map; read the app's `src/main/ui/main.tsx`.
+The curl recipe below documents what the driver does.
 
 **Authenticate first (session cookie + CSRF), then call the API.** Login is a JSON POST that sets a
 `JSESSIONID` session cookie — *not* HTTP Basic. Mutations (`POST`/`PUT`/`DELETE`) require the CSRF
@@ -1488,7 +1545,7 @@ Assignment, close/reopen, status-change and manual identity-linking HTTP actions
 Host `Commands<Conversation>` beans declare ordinary record commands; extension buttons receive
 their descriptors and call `context.execute(key, inputs)`. The scoped API is
 `/api/crm/inbox-workspaces/{workspace}/conversations/{id}/actions` (GET `[{id, title, visible,
-enabled}]`, POST `/{key}` with `{inputs:{...}}`). It checks workspace write access, application
+enabled, group, inputs}]`, POST `/{key}` with `{inputs:{...}}`). It checks workspace write access, application
 read-only mode, command roles and the commands' `availableWhen`/`enabledWhen` rules. CRM adds no business-field mutations or automatic history
 messages for these actions. Hosts own the handler and any desired history records. Connector code
 can still use the low-level identity-link service for provider routing.
@@ -1504,8 +1561,11 @@ policies while allowing these privacy boundaries. Keep docs, permission tests an
 tests aligned when extending providers.
 
 The CRM's presentation is the props of `@onno/crm`'s components (`CrmInbox`, `CrmConnections`,
-`CrmContactDetails`, `CrmConversationPage`); keep it apart from workspace authorization — the
-components neither register routes nor grant access.
+`CrmContactDetails`, `CrmConversationPage`, `CrmConversation`, `CrmContactPage`); keep it apart from
+workspace authorization — the components neither register routes nor grant access. To rebuild a
+CRM screen, compose the exported parts (`ConversationRow`, `ChatTimeline`, `CrmComposer`, …) over
+the hooks (`useCrmConversation`, `useCrmComposer`) or swap one part with `CrmInbox`'s `components`;
+add business entries to the chat with `timelineSources`, never by forking `CrmInbox.tsx`.
 
 Telegram business accounts use the `telegram-business` managed provider and personal/shared account
 ownership. Never infer CRM ownership from a Telegram connection event: require the expiring /start

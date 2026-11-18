@@ -1,0 +1,1 @@
+su.onno.auth.users.UserAccountsController.list(org.springframework.security.core.Authentication) returns a bare collection (java.util.List<su.onno.auth.users.UserAccountsController$AccountView>) in (UserAccountsController.java:107)

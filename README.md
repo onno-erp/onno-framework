@@ -234,6 +234,7 @@ domain classes.
 | Data and integration | [`onno-import-starter`](onno-import-starter), [`onno-print-starter`](onno-print-starter) |
 | AI | [`onno-mcp-starter`](onno-mcp-starter) |
 | Custom UI | [`onno-ui-gradle-plugin`](onno-ui-gradle-plugin), [`@onno/ui`](onno-ui) |
+| Guardrails | [`onno-archunit`](onno-archunit) (ArchUnit rules), [`@onno/ui/eslint`](onno-ui#linting) (lint rules) |
 | Consumer examples | [`example`](example) |
 
 Spring Boot starters expose auto-configuration through
@@ -260,6 +261,22 @@ The same typed model that drives the application also gives agents a safe, inspe
   business, author UI, implement posting, evolve schemas, and verify a running application.
 - [Building ERPs with onno and AI agents](BUILDING_ERPS_WITH_AGENTS.md) is the end-to-end handoff
   guide for a separate application repository.
+
+Agents produce good code when the codebase makes the wrong thing hard. onno encodes its rules as
+types and checks rather than prose:
+
+- **Typed by construction**: `Ref<T>` references, posting as typed Java, getter references instead of
+  field-name strings, and startup rejection of invalid models (shared row classes, invalid record
+  policies, unsound process graphs).
+- **Rules as tests**: add `testImplementation("su.onno:onno-archunit:$onnoVersion")` and
+  `OnnoRules.all()` checks your app's architecture (posting outside `@Transactional`, controllers
+  through the record-scoped service layer, framework-neutral domain classes); `@onno/ui/eslint`
+  does the same for the React side. Every failure message names the fix.
+- **Verification an agent can run**: the [`onno-verify`](onno-plugin/skills/onno-verify/SKILL.md)
+  skill's `onno-drive` CLI prints the app's feature map and drives it (records, commands, posting
+  previews, balances), so pull requests carry evidence instead of claims. Inside the framework,
+  jqwik properties check core invariants and a TLA+ model ([docs/formal](docs/formal/README.md))
+  checks the process engine's fork/join, cancellation and migration.
 
 Claude Code users can install the skills directly from this repository:
 
@@ -378,8 +395,12 @@ git push origin v2.0.0
 
 Pre-releases use tags such as `v2.1.0-rc1` or `v5.0.0-alpha.2` (any version with a `-`). They are
 published only to the onno Maven repository, `https://repo.onno.su/releases`; full releases go to
-Maven Central and are copied there too. Published versions are immutable in both, so publishing is
-intentionally CI-only. See
+Maven Central and are copied there too. The npm packages (`@onno/ui`, `@onno/crm`,
+`@onno/crm-channels`, `@onno/print`) are published in the same run at the same version, to the onno
+npm registry `https://npm.onno.su/` (and npmjs.org for full releases, when `NPM_TOKEN` is set).
+At most `CENTRAL_MONTHLY_RELEASES` (default 4) full releases a month go to Central — its free tier
+counts files per month — so test a release as `-rc1` first. Published versions are immutable, so
+publishing is intentionally CI-only. See
 [`.github/workflows/publish-packages.yml`](.github/workflows/publish-packages.yml) for the required
 Central Portal, registry and signing secrets, and [Consuming releases](docs/CONSUMING.md) for the
 consumer side.

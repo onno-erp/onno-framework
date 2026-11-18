@@ -29,6 +29,7 @@
         "./skills/onno-posting",
         "./skills/onno-runtime",
         "./skills/onno-runtime-api",
+        "./skills/onno-verify",
         "./skills/onno-auth-rbac",
         "./skills/onno-mcp",
         "./skills/onno-testing-release",
