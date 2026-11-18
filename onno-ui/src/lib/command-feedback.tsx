@@ -1,27 +1,12 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { toast } from "../components/ui/toast";
 import { DialogShell } from "../components/ui/dialog-shell";
 import { Button } from "../components/ui/button";
-import { ApiError } from "./api";
+import { ApiError, isSessionLapse } from "./api";
+import { claimFeedback, toastFeedback } from "./feedback-toast";
 import { notifyError as notifyFailure } from "./notify-error";
 import type { CommandFeedback, CommandResult } from "./types";
 import { isNavigationTarget, openRoute } from "./navigation";
 import { useMessages } from "../providers/messages-provider";
-
-/** A short outcome as a toast: the title (else the message) over the message. */
-function toastFor(feedback: CommandFeedback) {
-  const title = feedback.title || feedback.message || "Done";
-  const description = feedback.title && feedback.message ? (
-    <div className="onno-toast__body">
-      <p className="onno-toast__message">{feedback.message}</p>
-    </div>
-  ) : undefined;
-  const options = { description };
-  if (feedback.severity === "success") toast.success(title, options);
-  else if (feedback.severity === "warning") toast.warning(title, options);
-  else if (feedback.severity === "error") toast.error(title, options);
-  else toast.info(title, options);
-}
 
 /**
  * Whether feedback needs acknowledging in a dialog rather than a passing toast: an error, or
@@ -41,6 +26,7 @@ export type CommandFeedbackHandlers = {
   /**
    * Show a command's feedback. The server sends meaning (severity, message, details); the client
    * decides display: short success/info/warning → a toast; errors and detailed feedback → a dialog.
+   * The same feedback object is shown once, however many times it is presented.
    */
   present: (feedback: CommandFeedback) => void;
   /** Apply a {@link CommandResult}: present its feedback, call `refresh` when the server asks, and open its `navigateTo`. */
@@ -48,18 +34,23 @@ export type CommandFeedbackHandlers = {
   /**
    * Handle an expected command rejection (HTTP 422 with feedback) and return it. With `inForm` the
    * caller's open input form shows it (and stays open with the user's values); otherwise it is
-   * presented here.
+   * presented here. Either way the error counts as shown, so a later `notifyError` adds nothing.
    */
   fromError: (error: unknown, inForm?: boolean) => CommandFeedback | undefined;
   /**
    * Report a failed command, post or delete exactly once: typed feedback is presented the way a
    * result's is (an error opens the dialog), anything else becomes one error toast through
-   * `notifyError`, and nothing is added when the api layer has shown the failure already.
+   * `notifyError`, and nothing is added when the api layer has shown the failure already or the
+   * session has lapsed (401, left to the auth recovery).
    */
   notifyError: (error: unknown) => void;
 };
 
-function handlers(present: (feedback: CommandFeedback) => void): CommandFeedbackHandlers {
+/** `show` displays feedback; the returned handlers show each feedback object at most once. */
+function handlers(show: (feedback: CommandFeedback) => void): CommandFeedbackHandlers {
+  const present = (feedback: CommandFeedback) => {
+    if (claimFeedback(feedback)) show(feedback);
+  };
   return {
     present,
     applyResult: (result, callbacks = {}) => {
@@ -69,14 +60,19 @@ function handlers(present: (feedback: CommandFeedback) => void): CommandFeedback
       if (result.navigateTo && isNavigationTarget(result.navigateTo)) openRoute(result.navigateTo);
     },
     fromError: (error, inForm = false) => {
-      if (error instanceof ApiError && error.feedback) {
-        if (!inForm) present(error.feedback);
+      if (error instanceof ApiError && error.feedback && !isSessionLapse(error)) {
+        if (!error.notified) {
+          error.notified = true;
+          // The open form shows it inline; claim it so nothing presents it a second time.
+          if (inForm) claimFeedback(error.feedback);
+          else present(error.feedback);
+        }
         return error.feedback;
       }
       return undefined;
     },
     notifyError: (error) => {
-      if (error instanceof ApiError && error.feedback) {
+      if (error instanceof ApiError && error.feedback && !isSessionLapse(error)) {
         if (!error.notified) {
           error.notified = true;
           present(error.feedback);
@@ -89,7 +85,7 @@ function handlers(present: (feedback: CommandFeedback) => void): CommandFeedback
 }
 
 /** Outside a provider (a component rendered on its own): every outcome is a toast. */
-const CommandFeedbackContext = createContext<CommandFeedbackHandlers>(handlers(toastFor));
+const CommandFeedbackContext = createContext<CommandFeedbackHandlers>(handlers(toastFeedback));
 
 /** How this component shows command outcomes: toasts, and the provider's dialog for errors and details. */
 export function useCommandFeedback(): CommandFeedbackHandlers {
@@ -100,11 +96,11 @@ export function useCommandFeedback(): CommandFeedbackHandlers {
 export function CommandFeedbackProvider({ children }: { children: ReactNode }) {
   const t = useMessages();
   const [feedback, setFeedback] = useState<CommandFeedback | null>(null);
-  const present = useCallback((next: CommandFeedback) => {
+  const show = useCallback((next: CommandFeedback) => {
     if (feedbackNeedsDialog(next)) setFeedback(next);
-    else toastFor(next);
+    else toastFeedback(next);
   }, []);
-  const value = useMemo(() => handlers(present), [present]);
+  const value = useMemo(() => handlers(show), [show]);
   const details = feedback?.details ?? [];
 
   return (

@@ -153,7 +153,8 @@ of the row keeps the full context menu. Flat table view only.
 Utilities to reach for instead of reinventing: `lib/time-range.ts`, `lib/aggregate-data.ts` (bucket
 shaping/labels), `lib/chart-colors.ts`, `lib/format.ts` + `lib/cell-format.ts`, `lib/utils.ts`
 (`cn`), `lib/messages.ts` (chrome strings — mirror of `UiMessages.DEFAULTS`, change both in one PR),
-`lib/notify-error.ts` (`notifyError`: report a caught request failure exactly once).
+`lib/notify-error.ts` (`notifyError`: report a caught request failure exactly once),
+`lib/feedback-toast.tsx` (`toastFeedback`: typed feedback as a toast; `claimFeedback`: show it once).
 
 List selection actions appear inline in the scrolling facet rail, using shared `Button`
 `size="toolbar"` (32px, compact text) and `variant="subtle"`: a solid neutral pill shared with filter triggers.
@@ -229,12 +230,19 @@ exceptions. Keep component tests for every custom picker trigger.
   `CommandResult` with `.title(...)`/`.detail(...)` over a bare message when an outcome benefits from a
   title, explanation, or details.
 - One failed request, one toast (#505). `fetchJson` toasts a failure by default and marks the
-  `ApiError` `notified`. A caller with its own wording passes `{ silent: true }`; a catch block that
-  ends a user action reports through `notifyError` instead of calling `toast.error`, so it adds a
-  toast only where none was shown — including what the api layer leaves to its caller (network
-  errors, field errors without an inline form, typed feedback, 401). Command surfaces (record
-  actions, list commands and batch actions, the shell's `onno://` actions) report through
-  `useCommandFeedback().notifyError` instead, so typed feedback keeps its dialog.
+  `ApiError` `notified`; the decision is each call's own, so callers sharing one in-flight GET get
+  a toast if any of them is not silent, and only one. A caller with its own wording passes
+  `{ silent: true }`; a catch block that ends a user action reports through `notifyError` instead
+  of calling `toast.error`, so it adds a toast only where none was shown — including what the api
+  layer leaves to its caller (network errors, field errors without an inline form, typed feedback).
+  Typed feedback becomes a toast of its kind under its own title (input errors and details listed
+  below it), not a bare message. Command surfaces (record actions, list commands and batch actions,
+  the shell's `onno://` actions) report through `useCommandFeedback().notifyError` instead, so typed
+  feedback keeps its dialog. The same feedback object is shown once, wherever it is presented
+  (`claimFeedback` in `lib/feedback-toast.tsx`).
+- A lapsed session (401) is never toasted in this package: the api layer hands it to the auth
+  recovery, every catch skips it with `isSessionLapse`, and a raw `fetch` passes its 401 to
+  `handleUnauthorized()` (both in `lib/api.ts`).
 - The shell logo's empty `onno://` action is a semantic home intent. Resolve it through
   `shell.home`; only apps that declare a `/` page land on `/`.
 - Esc closes the topmost layer only (overlay before page).

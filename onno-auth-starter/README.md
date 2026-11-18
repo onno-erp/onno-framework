@@ -150,7 +150,7 @@ mechanisms keep a signed-in tab working:
 
 The SPA's `AuthProvider` drives the client side: a 4-minute `/api/auth/me` heartbeat plus a 401 hook on
 every data call route a lapsed session into recovery (remember-me re-auth, or the OIDC redirect)
-instead of a dead panel.
+instead of a dead panel. The UI shows no error toast for the 401 itself; the recovery is the answer.
 
 ### CSRF model
 

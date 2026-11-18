@@ -11,7 +11,7 @@ const toast = vi.hoisted(() => ({
 }));
 vi.mock("@/components/ui/toast", () => ({ toast }));
 
-import { api, ApiError, setUnauthorizedHandler } from "@/lib/api";
+import { api, ApiError, setUnauthorizedHandler, uploadMedia } from "@/lib/api";
 import { notifyError } from "@/lib/notify-error";
 
 const response = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
@@ -73,14 +73,43 @@ describe("api layer error toast", () => {
       api.getJson("/api/catalogs/tags/t-1")
         .catch((e) => notifyError(e, { format: (m) => `Couldn't load Tags: ${m}` }));
     const byDefault = () => api.getCatalogItem("tags", "t-1").catch(() => undefined);
+    // A background read that never reports its failure (an extension's best-effort read).
+    const silentQuiet = () => api.getJson("/api/catalogs/tags/t-1").catch(() => undefined);
 
-    it("silent caller first: one fetch, one toast — the caller's own", async () => {
+    it("silent caller first: the default caller still gets its toast", async () => {
+      const fetchMock = failWith(500, { message: "list unavailable" });
+
+      await Promise.all([silentQuiet(), byDefault()]);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(toast.error.mock.calls).toEqual([["list unavailable"]]);
+    });
+
+    it("default caller first: the silent caller adds no toast of its own", async () => {
+      const fetchMock = failWith(500, { message: "list unavailable" });
+
+      await Promise.all([byDefault(), silentQuiet()]);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(toast.error.mock.calls).toEqual([["list unavailable"]]);
+    });
+
+    it("only silent callers: no toast from the api layer", async () => {
+      const fetchMock = failWith(500, { message: "list unavailable" });
+
+      await Promise.all([silentQuiet(), silentQuiet()]);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(toast.error).not.toHaveBeenCalled();
+    });
+
+    it("silent caller with its own wording first: one toast — the api layer's, which the default caller asked for", async () => {
       const fetchMock = failWith(500, { message: "list unavailable" });
 
       await Promise.all([silentWithContext(), byDefault()]);
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(toast.error.mock.calls).toEqual([["Couldn't load Tags: list unavailable"]]);
+      expect(toast.error.mock.calls).toEqual([["list unavailable"]]);
     });
 
     it("default caller first: one fetch, one toast — the api layer's", async () => {
@@ -130,7 +159,7 @@ describe("api layer error toast", () => {
     beforeEach(() => setUnauthorizedHandler(onUnauthorized));
     afterEach(() => setUnauthorizedHandler(null));
 
-    it("hands a lapsed session to the recovery handler without a toast of its own; the caller reports it once", async () => {
+    it("hands a lapsed session to the recovery handler; neither the api layer nor the caller toasts it", async () => {
       // JsonAuthenticationEntryPoint's body.
       failWith(401, { error: "unauthenticated" });
 
@@ -139,7 +168,29 @@ describe("api layer error toast", () => {
       expect(onUnauthorized).toHaveBeenCalledOnce();
       expect(toast.error).not.toHaveBeenCalled();
       notifyError(error, { fallback: "Could not claim task" });
-      expect(toast.error.mock.calls).toEqual([["unauthenticated"]]);
+      expect(toast.error).not.toHaveBeenCalled();
+    });
+
+    it("does not toast a lapsed session on a shared read either", async () => {
+      const fetchMock = failWith(401, { error: "unauthenticated" });
+
+      await Promise.all([
+        api.getCatalogItem("tags", "t-1").catch((e) => notifyError(e)),
+        api.getJson("/api/catalogs/tags/t-1").catch((e) => notifyError(e)),
+      ]);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(onUnauthorized).toHaveBeenCalledOnce();
+      expect(toast.error).not.toHaveBeenCalled();
+    });
+
+    it("an upload hands a lapsed session to the recovery handler", async () => {
+      failWith(401, { error: "unauthenticated" });
+
+      const error = await rejection(uploadMedia(new File(["x"], "a.txt")));
+
+      expect((error as ApiError).status).toBe(401);
+      expect(onUnauthorized).toHaveBeenCalledOnce();
     });
 
     it("keeps the login endpoint's bad-credentials 401 away from the recovery handler", async () => {
@@ -164,7 +215,9 @@ describe("api layer error toast", () => {
     expect(toast.error).not.toHaveBeenCalled();
     notifyError(error, { fallback: "Could not claim task" });
     notifyError(error, { fallback: "Could not claim task" });
-    expect(toast.error.mock.calls).toEqual([["Someone else picked it up."]]);
+    // Its title heads the toast; the message goes under it (see notify-error.feedback.test).
+    expect(toast.error).toHaveBeenCalledOnce();
+    expect(toast.error.mock.calls[0][0]).toBe("Task already claimed");
   });
 
   it("toasts a non-ApiError failure with the caller's context", () => {

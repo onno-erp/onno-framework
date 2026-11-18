@@ -215,6 +215,7 @@ Opening `/ui/ops` instead stops at step 3: the app's pages (in context) have `Sa
 | add a command, a live check or picker options | a `Commands` / `Checks` / `PickerOptions` bean in the app |
 | place or icon a command (or a built-in like `delete`, or `print-invoice`) | the entity's `commands` customization: `{ advance: { placement: "row", icon: ArrowRight } }` |
 | change how command feedback shows (toast vs dialog) | `feedbackNeedsDialog` in `lib/command-feedback.tsx` |
+| change how typed feedback looks as a toast, or the show-once rule | `lib/feedback-toast.tsx` |
 | change the calendar/timeline list views | `components/lists/list-schedule-view.tsx`, `lib/schedule.ts` |
 | change the record history panel | `components/collaboration/record-history.tsx` |
 | change the period-close admin screen | `components/widgets/period-close.tsx` |
