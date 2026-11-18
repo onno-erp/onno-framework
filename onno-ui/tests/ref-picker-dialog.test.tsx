@@ -162,11 +162,14 @@ describe("reference picker dialog (#411)", () => {
     fireEvent.click(within(crumbs).getByText("Items"));
     await waitFor(() => expect(pickRow("Loose")).toBeTruthy());
 
+    const beforeSearch = feedCalls(fetchMock).length;
     fireEvent.change(screen.getByLabelText("Search"), { target: { value: "saw" } });
     await waitFor(() => expect(pickRow("Saw")).toBeTruthy());
     const searched = feedCalls(fetchMock).at(-1)!;
     expect(whereOf(searched)).toEqual({ active: true });
     expect(searched.searchParams.get("q")).toBe("saw");
+    // Removing the folder scope must not briefly load every record before applying the query.
+    expect(feedCalls(fetchMock).slice(beforeSearch).every((u) => u.searchParams.get("q") === "saw")).toBe(true);
   });
 
   it("draws an expand arrow only on folders that hold sub-folders", async () => {
