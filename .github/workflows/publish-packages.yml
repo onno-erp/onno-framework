@@ -71,7 +71,7 @@ jobs:
         working-directory: onno-ui
 
       - name: Build and audit documentation
-        run: npm ci && npm audit && npm run docs:build
+        run: npm ci && node ../.github/scripts/npm-audit.mjs && npm run docs:build
         working-directory: docs
 
       - name: Check
