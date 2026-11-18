@@ -10,6 +10,19 @@
 - [ ] Docs only
 - [ ] Community integration listing
 
+## Verification artifacts
+
+<!--
+Show that the change works in a running app, not only that it compiles. Delete lines that don't apply.
+AI agents: use the onno-verify skill (onno-plugin/skills/onno-verify) — run `onno-drive features`
+first and name what you exercised by its feature id (e.g. `documents/orders#cancel`).
+-->
+
+- **Commands run:** <!-- e.g. ./gradlew :onno-framework:test, ./gradlew clean check -->
+- **UI changes:** <!-- screenshots or a short video (before/after) -->
+- **Behaviour changes:** <!-- `onno-drive` output: feature id, before/after JSON (trimmed), and for
+  posting/register changes the `preview-posting` output plus balance/movements before and after -->
+
 ## Checklist
 
 - [ ] `./gradlew clean check` passes locally.
