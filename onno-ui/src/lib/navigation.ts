@@ -33,6 +33,7 @@ export function isNavigationTarget(route: string): boolean {
 export function isSafeRoute(route: string): boolean {
   if (route.startsWith("onno://")) return isNavigationTarget(route.split("?", 1)[0]) || /^onno:\/\/(catalogs|documents)\/[^/?#\\]+\/new(\?.*)?$/.test(route);
   return isAppRoute(route)
+    // eslint-disable-next-line no-control-regex -- rejects control characters on purpose
     && !/[\x00-\x1f\x7f]/.test(route)
     && !/(?:^|\/)(?:\.|%2e){1,2}(?:\/|$)/i.test(route.split(/[?#]/, 1)[0]);
 }

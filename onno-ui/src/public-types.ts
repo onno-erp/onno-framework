@@ -46,15 +46,15 @@ export type ListSelectionProps = { ids: string[]; complete: () => void };
  * plugin writes it from the Java model on each build). With it, entity names autocomplete and the
  * hooks/components below are typed per entity; without it everything degrades to plain strings.
  */
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- augmented by model.gen.ts
 export interface OnnoEntities {}
 
 /** Every information register, augmented by `model.gen.ts`: `{ record; field; periodic }` by logical name. */
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- augmented by model.gen.ts
 export interface OnnoInformationRegisters {}
 
 /** Every `@Constant` setting, augmented by `model.gen.ts`: `{ value }` (its value type) by name. */
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- augmented by model.gen.ts
 export interface OnnoConstants {}
 
 /**
@@ -63,7 +63,7 @@ export interface OnnoConstants {}
  * `roles(...)` or the configured users — is added by the app:
  * `declare module "@onno/ui" { interface OnnoRoles { SUPPORT: true } }`.
  */
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- augmented by model.gen.ts
 export interface OnnoRoles {}
 
 /** A role name, checked against `OnnoRoles` when generated. */
@@ -518,15 +518,18 @@ type Retyped<P, T> = Omit<P, keyof T> & T;
 /** Typed per entity: measures, groupings, `where` and render functions over the entity's records. */
 export type StatProps<E extends EntityName = EntityName> = Retyped<StatImpl, {
   measure: Measure<E>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the ratio may measure any entity
   ratioTo?: Measure<any>;
   sparkline?: boolean | By<E>;
 }>;
 export type SparklineProps<E extends EntityName = EntityName> = Retyped<SparklineImpl, { measure: Measure<E>; by?: By<E> }>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the target may measure any entity
 export type GaugeProps<E extends EntityName = EntityName> = Retyped<GaugeImpl, { measure: Measure<E>; target?: number | Measure<any> }>;
 /** One series of a chart; each may measure a different entity. */
 export type ChartSeries<E extends EntityName = EntityName> = Retyped<ChartSeriesImpl, { measure: Measure<E> }>;
 export type ChartProps<E extends EntityName = EntityName> = Retyped<ChartImpl, {
   measure?: Measure<E>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a series may measure any entity
   series?: ChartSeries<any>[];
   by?: By<E>;
   splitBy?: TopField<E>;

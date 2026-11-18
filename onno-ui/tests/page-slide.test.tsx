@@ -1,4 +1,4 @@
-import { act, cleanup, render } from "@testing-library/react";
+import { cleanup, render } from "@testing-library/react";
 import { useRef } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { usePageSlide } from "@/lib/use-page-slide";

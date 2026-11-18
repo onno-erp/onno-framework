@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
 
 const { updateCatalogItem, validateRecord } = vi.hoisted(() => ({
   updateCatalogItem: vi.fn(),
@@ -20,7 +20,7 @@ vi.mock("@/components/fields/image-picker", () => ({ ImagePicker: () => null, Ga
 vi.mock("@/components/fields/file-picker", () => ({ FilePicker: () => null }));
 vi.mock("@/components/actions/record-actions", () => ({ RecordActions: () => null }));
 
-import { RecordForm, type FormDescriptor } from "@/components/entities/record-form";
+import { RecordForm } from "@/components/entities/record-form";
 
 afterEach(() => {
   cleanup();

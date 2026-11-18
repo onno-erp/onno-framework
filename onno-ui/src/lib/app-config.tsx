@@ -36,6 +36,7 @@ export type PageDefinition = {
   path?: string;
   list?: string;
   record?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a page receives props for its kind of route
   component: ComponentType<any>;
   /** Navigation label and icon, used wherever the navigation lists this page. */
   label?: string;

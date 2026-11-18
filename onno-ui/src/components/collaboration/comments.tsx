@@ -3,6 +3,7 @@ import { useUiEvents } from "../../hooks/use-ui-events";
 import { openRoute } from "../../lib/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "../ui/toast";
+import { notifyError } from "../../lib/notify-error";
 import { Send, Trash2, MessageSquare, AtSign, Hash, Reply, X, Plus, SmilePlus } from "lucide-react";
 import {
   api,
@@ -263,7 +264,7 @@ export function CommentThread({ target, composerOnly = false, onPosted, onDraftC
         return [...(previous ?? []), ...page.rows.filter(row => !have.has(row.id))];
       });
       setNextCursor(page.nextCursor);
-    } catch (failure) { if (current()) toast.error(String(failure)); }
+    } catch (failure) { if (current()) notifyError(failure); }
     finally { if (current()) setLoadingMore(false); }
   };
 

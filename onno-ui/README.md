@@ -263,10 +263,11 @@ Run package checks from the repository root:
 ```bash
 npm run typecheck --workspace=@onno/ui
 npm run test:run --workspace=@onno/ui
+npm run lint --workspace=@onno/ui
 ```
 
-Gradle runs the same through `onno-web-starter`: `typecheckFrontend`, `testFrontend` (part of
-`check`) and `buildFrontend`, which builds the default shell into that starter's jar. These are
+Gradle runs the same through `onno-web-starter`: `typecheckFrontend`, `testFrontend` and
+`lintFrontend` (all part of `check`) and `buildFrontend`, which builds the default shell into that starter's jar. These are
 verification and packaging steps, separate from the normal Vite edit loop.
 
 Where things live is walked through in [docs/UI_TOUR.md](../docs/UI_TOUR.md); the visual rules
@@ -274,6 +275,31 @@ Where things live is walked through in [docs/UI_TOUR.md](../docs/UI_TOUR.md); th
 means implementing it here, then one line in `src/index.ts` (and its types in `public-types.ts`).
 
 List selection: the header checkbox and ⌘A/Ctrl+A select every record matching the current search, filters and workspace constraints, including unloaded rows and collapsed groups. Selection loads through the scoped feed without changing the visible window. A failed request preserves the previous selection; changing the query or clearing the selection cancels a pending select-all. Shift-range selection follows loaded rows.
+
+## Linting
+
+`eslint.config.js` lints this package with `@eslint/js` and `typescript-eslint` recommended,
+`react-hooks/rules-of-hooks` (error) and `react-hooks/exhaustive-deps` (warning), plus the onno
+rules in `eslint-plugin/`. Each onno rule's message states the fix:
+
+| Rule | Catches |
+| --- | --- |
+| `onno/no-private-imports` | `@onno/ui/src/...` and other deep `@onno/*` paths, relative paths into `onno-ui/src`, and `lucide-react` (use `@onno/ui/icons`). |
+| `onno/icon-component` | `icon: "truck"` or `icon="truck"`: icons are imported Lucide components. |
+| `onno/no-raw-api-fetch` | `fetch("/api/...")`: use the typed hooks or `api` from `@onno/ui`. |
+| `onno/notify-caught-error` | `toast.error(caught)` in a `catch`: report it with `notifyError` (one failed request, one toast). Package-internal. |
+
+An app on `@onno/ui` gets the app-facing rules from `@onno/ui/eslint`. ESLint is an optional peer
+dependency; the export imports nothing, and it does not configure a parser, so pair it with
+`typescript-eslint`:
+
+```js
+// src/main/ui/eslint.config.js (npm i -D eslint typescript-eslint)
+import tseslint from "typescript-eslint";
+import onno from "@onno/ui/eslint";
+
+export default tseslint.config(...tseslint.configs.recommended, onno.configs.app);
+```
 
 ## Navigation composition
 

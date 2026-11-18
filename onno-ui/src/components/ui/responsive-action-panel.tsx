@@ -6,6 +6,7 @@ import { useMessages } from "../../providers/messages-provider";
 /** One action surface: anchored on desktop, modal on tablet, sheet on phone. */
 export function ResponsiveActionPanel({label, trigger, children, open: controlledOpen, onOpenChange, align = "end", presentation = "controls"}: {
   presentation?: "controls" | "actions";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- any element that accepts trigger props
   label: string; trigger: ReactElement<any>; children: ReactNode;
   open?: boolean; onOpenChange?: (open: boolean) => void; align?: "start" | "center" | "end";
 }) {
