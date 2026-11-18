@@ -181,6 +181,9 @@ The Java beans (a `CrmInboxWorkspace`) say what exists and who may use it; the p
   app. About 150 lines.
 - The starter's own build (`onno-web-starter/build.gradle.kts`) builds the default shell with the
   same preset and runs the frontend tests.
+- `onno-ui/eslint-plugin/` holds the onno lint rules (exported as `@onno/ui/eslint`, with
+  `configs.app` for applications); `onno-ui/eslint.config.js` wires them, with `typescript-eslint`
+  and the rules of hooks, into `npm run lint` and the Gradle `lintFrontend` task that `check` runs.
 
 ## 6. Follow one request
 

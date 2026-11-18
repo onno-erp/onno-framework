@@ -115,5 +115,5 @@ Error bodies leave out the server's Java `trace` unless you pass `--trace`.
 - Commands require write access, so `features` lists commands only for entities you can write.
 - Dynamic commands (`c.dynamic(...)`) appear with their live keys, for example
   `#assign-<employeeId>`.
-- Tests: `node --test onno-plugin/skills/onno-verify/`. They run against an in-process fake server
+- Tests: `node --test onno-plugin/skills/onno-verify/onno-drive.test.mjs`. They run against an in-process fake server
   and need no app or network.

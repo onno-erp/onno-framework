@@ -1,4 +1,4 @@
-// node --test onno-plugin/skills/onno-verify/
+// node --test onno-plugin/skills/onno-verify/onno-drive.test.mjs
 // Drives onno-drive in-process against a tiny fake onno server that mimics session login,
 // cookie-bound CSRF, the UI model, commands and register reads.
 import { after, before, beforeEach, describe, test } from "node:test";

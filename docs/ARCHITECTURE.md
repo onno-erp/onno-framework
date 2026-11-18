@@ -42,6 +42,7 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The UI Gradle plug
 | `onno-import-starter` | `su.onno` | CSV import (preview, mapping, upsert, dry-run, document grouping) through the same command path as the UI. |
 | `onno-print-starter` | `su.onno` | Print forms: `PrintForm<T>` beans fill Word (`.docx`) / Excel (`.xlsx`) templates via Apache POI; record-menu actions, list batch printing (zip), admin-uploaded template overrides (`onno_print_templates`), optional PDF via a `PdfConverter` (Gotenberg / LibreOffice). |
 | `onno-ui-gradle-plugin` | (`su.onno.ui` plugin) | Builds an app's own React UI (`src/main/ui`, a Vite app on `@onno/ui`) into its jar and generates `model.gen.ts` from the Java model. |
+| `onno-archunit` | `su.onno` | Test-scope ArchUnit rules encoding onno's invariants (`OnnoRules`): posting runs outside Spring transactions, request handlers use the record-scoped service layer, domain classes stay plain Java and reference records by `Ref<T>`, `List` methods drain keyset windows. The framework's modules check themselves with the same rules plus core-specific ones (core uses only Spring Data's mapping and repository contracts; service-layer operations take an `AccessSubject`). |
 | `example` | (not published) | The Onno Books retailer app: a compact end-to-end consumer and smoke-test fixture. |
 | `onno-tochka-starter`, `onno-yookassa-starter`, `onno-ozon-starter`, … | `su.onno.enterprise` | Commercial connectors in the separate [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo. |
 
@@ -171,7 +172,11 @@ what can advance.
 Definition evolution is explicit. Keep old and new `ProcessDefinition` beans registered under the
 same key with different versions, register a forward `ProcessDefinitionMigration`, then invoke
 `ProcessEngine.migrate`. Each migration maps every active token id to a typed target step and may
-transform the payload; missing mappings roll the transaction back. Cancellation similarly closes
+transform the payload; missing mappings roll the transaction back. `migrate()` resets every live token
+of the instance before re-entering any, so a parallel join only counts branches that arrived under
+the new version. A migration must map a branch token to a step inside its own branch or to the
+join; the engine does not yet enforce this. The token, join, cancellation and migration semantics
+are model-checked in [docs/formal](formal/README.md). Cancellation similarly closes
 all live tokens, work items, timers, and descendants in one audited operation. Documents still
 record business events and posting still writes register movements; a process coordinates work
 across them. Authenticated MCP `describe_metadata` includes the latest safe process graph
@@ -344,7 +349,10 @@ For a register declared with `postingOrder = PostingOrder.CHRONOLOGICAL`, postin
 backdated document discovers later active documents through that register (including documents
 linked through other chronological registers), reverses them newest-first, applies the requested
 change, and reposts them oldest-first. The restoration uses one serializable JDBI transaction, and
-register balance reads made by `handlePosting` see that same transaction. Restored documents do not
+register balance reads made by `handlePosting` see that same transaction. The requested document's own
+movements are computed after the later documents are reversed (its `handlePosting` runs again
+inside the restoring transaction), so a backdated issue is costed at the balance as of its own
+date. Documents with identical timestamps are not re-sequenced among themselves. Restored documents do not
 emit duplicate external post events; only the requested command does.
 
 Two semantics that bite every integration:
