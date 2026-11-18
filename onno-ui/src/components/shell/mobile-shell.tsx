@@ -1,7 +1,7 @@
 import { navigationLinks } from "../../lib/navigation-tree";
 import { NavigationHost, DefaultNavigation } from "./navigation";
 import { createContext, useContext } from "react";
-import { Bell, ChevronRight, LogOut, Moon, Sun } from "lucide-react";
+import { Bell, LogOut, Moon, Sun } from "lucide-react";
 import { Icon } from "../../lib/icons";
 import { UnreadBadge, UnreadDot } from "../collaboration/notification-indicators";
 import { cn } from "../../lib/utils";

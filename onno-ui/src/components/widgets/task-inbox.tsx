@@ -142,7 +142,7 @@ function TaskInboxBody({ title, hint }: TaskInboxProps) {
         return [...previous, ...page.rows.filter(row => !have.has(row.id))];
       });
       setNextCursor(page.nextCursor);
-    } catch (failure) { if (current()) toast.error(String(failure)); }
+    } catch (failure) { if (current()) notifyError(failure); }
     finally { if (current()) setLoadingMore(false); }
   };
 
@@ -156,7 +156,7 @@ function TaskInboxBody({ title, hint }: TaskInboxProps) {
       if (!current()) return;
       setHistoryEvents(previous => [...previous, ...page.rows]);
       setHistoryCursor(page.nextCursor);
-    } catch (failure) { if (current()) toast.error(String(failure)); }
+    } catch (failure) { if (current()) notifyError(failure); }
     finally { if (current()) setHistoryLoading(false); }
   };
 

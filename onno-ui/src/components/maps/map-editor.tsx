@@ -302,7 +302,6 @@ export function MapEditor({
     lastEmitted.current = serialize(next);
     setFeatures(next);
     setDraft(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   const pick = (t: Tool) => {

@@ -127,6 +127,7 @@ const AttachmentActions = React.forwardRef<
 ));
 AttachmentActions.displayName = "AttachmentActions";
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- named public props type
 export interface AttachmentActionProps extends ButtonProps {}
 
 const AttachmentAction = React.forwardRef<HTMLButtonElement, AttachmentActionProps>(
