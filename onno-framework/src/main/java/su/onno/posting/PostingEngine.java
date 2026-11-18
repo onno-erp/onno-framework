@@ -391,7 +391,14 @@ public class PostingEngine {
                                 if (mutation == PostingMutation.REPOST) {
                                     unpostMovements(handle, requested.getId());
                                 }
-                                persistPosting(handle, requestedDescriptor, requested, requestedContext);
+                                // The caller staged these movements before this transaction, from
+                                // balances that still included every later-dated document. With
+                                // those reversed the register now stands exactly as of the
+                                // requested date, so recompute: a backdated post must see what a
+                                // date-ordered post would have seen.
+                                clearPending(requestedContext);
+                                PostingContext asOfDate = buildPostingContext(requested);
+                                persistPosting(handle, requestedDescriptor, requested, asOfDate);
                             }
 
                             for (DocumentObject later : laterDocuments) {

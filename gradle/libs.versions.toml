@@ -15,6 +15,7 @@ jdbi = "3.45.4"
 micrometer = "1.14.5"
 jackson = "2.18.3"
 testcontainers = "1.20.4"
+jqwik = "1.9.3"
 postgresql = "42.7.5"
 jobrunr = "7.3.2"
 commons-csv = "1.12.0"
@@ -81,4 +82,5 @@ junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
 testcontainers-postgresql = { module = "org.testcontainers:postgresql", version.ref = "testcontainers" }
+jqwik = { module = "net.jqwik:jqwik", version.ref = "jqwik" }
 testcontainers-junit-jupiter = { module = "org.testcontainers:junit-jupiter", version.ref = "testcontainers" }

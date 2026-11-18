@@ -56,3 +56,6 @@ docs/public/api/
 
 # onno-drive session state (cookies + CSRF token; never commit)
 .onno-drive/
+
+# jqwik property-test failure database (configured into build/, this catches stray runs)
+.jqwik-database

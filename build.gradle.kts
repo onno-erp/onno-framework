@@ -480,6 +480,18 @@ tasks.register("checkConfigDocs") {
 tasks.named("check") { dependsOn("checkConfigDocs", "checkCommunityRegistry") }
 
 // ---------------------------------------------------------------------------
+// Formal models (docs/formal) — TLA+ checked by TLC
+// ---------------------------------------------------------------------------
+// Deliberately NOT part of `check`: the first run downloads the pinned tla2tools.jar from GitHub
+// (into build/tla), so offline builds stay green. Run it when touching the process engine.
+tasks.register<Exec>("checkFormalModels") {
+    group = "verification"
+    description = "Model-check docs/formal/*.tla with TLC (downloads the pinned tla2tools.jar on first run)."
+    commandLine("bash", file("docs/formal/check.sh").absolutePath, "--counterexamples")
+    inputs.files(fileTree("docs/formal"))
+}
+
+// ---------------------------------------------------------------------------
 // Aggregated Javadoc  (build/docs/javadoc) — the API reference for the docs site
 // ---------------------------------------------------------------------------
 // One combined Javadoc tree across the published modules. The docs workflow copies the output under
