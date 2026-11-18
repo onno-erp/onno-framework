@@ -334,7 +334,6 @@ type Box = { left: number; top: number; width: number; height: number };
 /** Where a window sits on screen, from its state and the windows sharing the bottom row. */
 function layout(entry: Entry, spec: WindowSpec, all: Entry[], view: { width: number; height: number }): Box {
   const phone = view.width < PHONE_MAX_WIDTH;
-  const width = spec.width ?? DEFAULT_WIDTH;
   const height = spec.height ?? DEFAULT_HEIGHT;
 
   if (entry.state === "maximized" || (phone && entry.state !== "minimized")) {

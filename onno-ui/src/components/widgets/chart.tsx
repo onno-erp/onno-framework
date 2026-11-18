@@ -1012,6 +1012,7 @@ function ResponsiveChart({
   children,
 }: {
   height: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cloneElement of any Recharts chart
   children: ReactElement<any>;
 }) {
   const ref = useRef<HTMLDivElement>(null);

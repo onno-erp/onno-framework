@@ -28,6 +28,8 @@ dependencies {
     testImplementation(libs.mockito.core)
     // The MCP record-policy leak test runs the real query/command services against H2.
     testImplementation(libs.h2)
+    // Architecture guardrails (su.onno.archunit.OnnoRules) over this module's main classes.
+    testImplementation(project(":onno-archunit"))
     testRuntimeOnly(libs.junit.platform.launcher)
     testRuntimeOnly(libs.slf4j.simple)
 }

@@ -259,6 +259,75 @@ class JdbcExtendedProcessEngineTest {
                 .isEqualTo(ProcessStatus.COMPLETED);
     }
 
+    /**
+     * Regression for the counterexample TLC found in docs/formal/ProcessTokens.tla
+     * (ProcessTokensSequentialMigration.cfg). LEFT has already arrived at the join; the migration
+     * sends LEFT back to review and lets RIGHT skip straight to the join. RIGHT was entered first,
+     * so it is migrated first; the old loop re-entered it while LEFT's row still said "waiting at
+     * the join", fired the join, completed the coordinator, and then resurrected LEFT behind it:
+     * an ACTIVE instance that could never complete.
+     */
+    @Test
+    void migrationThatMovesABranchIntoTheJoinDoesNotCountSiblingsThatAreLeavingIt() {
+        MutableClock clock = new MutableClock(NOW);
+        ParallelVersionOne v1 = new ParallelVersionOne();
+        Harness harness = harness(clock, List.of(v1), List.of());
+        ProcessSnapshot started = harness.engine.start(v1, "payload", WORKER);
+        clock.advance(Duration.ofMinutes(5));
+        ProcessWorkItem left = harness.engine.inbox(WORKER).stream()
+                .filter(task -> task.stepKey().equals(ParallelMigrationStep.LEFT_V1.key()))
+                .findFirst().orElseThrow();
+        harness.engine.complete(left.id(), Done.DONE, WORKER); // LEFT now waits at the join
+        clock.advance(Duration.ofMinutes(5));
+
+        ParallelVersionTwo v2 = new ParallelVersionTwo();
+        ProcessDefinitionMigration<String, ParallelMigrationStep, String, ParallelMigrationStep> migration =
+                new ProcessDefinitionMigration<>() {
+                    @Override
+                    public ProcessDefinition<String, ParallelMigrationStep> from() {
+                        return v1;
+                    }
+
+                    @Override
+                    public ProcessDefinition<String, ParallelMigrationStep> to() {
+                        return v2;
+                    }
+
+                    @Override
+                    public ProcessMigrationResult<String, ParallelMigrationStep> migrate(
+                            ProcessMigrationState<String, ParallelMigrationStep> state) {
+                        Map<UUID, ParallelMigrationStep> targets = new LinkedHashMap<>();
+                        state.tokens().forEach(token -> targets.put(token.tokenId(),
+                                token.parentTokenId() == null ? ParallelMigrationStep.FORK
+                                        : Branch.LEFT.name().equals(token.branchKey())
+                                                ? ParallelMigrationStep.LEFT_V2   // re-review
+                                                : ParallelMigrationStep.JOIN));   // skip review
+                        return new ProcessMigrationResult<>(state.payload(), targets);
+                    }
+                };
+        harness.reopen(List.of(v1, v2), List.of(migration));
+
+        ProcessSnapshot migrated = harness.engine.migrate(started.id(), WORKER);
+
+        assertThat(migrated.status()).isEqualTo(ProcessStatus.ACTIVE);
+        assertThat(migrated.activeSteps()).containsExactlyInAnyOrder(
+                ParallelMigrationStep.LEFT_V2.key(), ParallelMigrationStep.JOIN.key());
+        assertThat(harness.engine.history(started.id()))
+                .extracting(ProcessTransitionSnapshot::type)
+                .doesNotContain(ProcessTransitionType.JOIN);
+        List<ProcessWorkItem> review = harness.engine.inbox(WORKER);
+        assertThat(review).singleElement()
+                .extracting(ProcessWorkItem::stepKey).isEqualTo(ParallelMigrationStep.LEFT_V2.key());
+
+        harness.engine.complete(review.getFirst().id(), Done.DONE, WORKER);
+
+        assertThat(harness.engine.find(started.id()).orElseThrow().status())
+                .isEqualTo(ProcessStatus.COMPLETED);
+        assertThat(harness.engine.tokens(started.id()))
+                .extracting(ProcessTokenSnapshot::status)
+                .containsOnly(ProcessTokenStatus.COMPLETED);
+    }
+
     private static Harness harness(
             MutableClock clock,
             List<ProcessDefinition<?, ?>> definitions,

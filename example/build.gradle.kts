@@ -28,6 +28,11 @@ dependencies {
 
     compileOnly(libs.lombok)
     annotationProcessor(libs.lombok)
+
+    // Dogfoods the consumer-facing ArchUnit rules (src/test/java/com/example/OnnoArchitectureTest.java).
+    testImplementation(project(":onno-archunit"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 application {

@@ -436,6 +436,45 @@ class PostingTest {
         assertThat(storedCost).isEqualByComparingTo("100.00");
     }
 
+    /**
+     * Regression (found by ChronologicalPostingProperties): a backdated document's own movements
+     * were computed from the balance that still included later-dated documents, so a backdated
+     * issue was costed at the average of stock that did not exist yet on its date.
+     */
+    @Test
+    void post_backdatedChronologicalIssue_isCostedAtTheBalanceAsOfItsOwnDate() {
+        UUID product = UUID.randomUUID();
+        Map<UUID, DocumentObject> persisted = new HashMap<>();
+        PostingEngine chronologicalEngine = new PostingEngine(
+                jdbi, registry, repositoryMapFor(), null, null,
+                ids -> ids.stream().map(persisted::get).filter(Objects::nonNull).toList());
+
+        TestCostReceipt opening = createCostReceipt(
+                "CR-OPEN", LocalDateTime.of(2026, 1, 1, 10, 0),
+                product, new BigDecimal("10"), new BigDecimal("100"));
+        chronologicalEngine.post(opening);
+        TestCostReceipt later = createCostReceipt(
+                "CR-LATER", LocalDateTime.of(2026, 1, 3, 10, 0),
+                product, new BigDecimal("10"), new BigDecimal("300"));
+        chronologicalEngine.post(later);
+        persisted.put(later.getId(), later);
+
+        TestCostIssue backdated = createCostIssue(
+                "CI-BACK", LocalDateTime.of(2026, 1, 2, 10, 0),
+                product, new BigDecimal("5"));
+        chronologicalEngine.post(backdated);
+
+        // On Jan 2 only the opening receipt exists: 5 x 10.00, not 5 x the Jan-3 average of 20.00.
+        assertThat(backdated.getCost()).isEqualByComparingTo("50.00");
+        assertCostBalance(product, "15", "350.00");
+        BigDecimal storedCost = jdbi.withHandle(handle -> handle.createQuery(
+                        "SELECT cost FROM document_test_cost_issues WHERE _id = :id")
+                .bind("id", backdated.getId())
+                .mapTo(BigDecimal.class)
+                .one());
+        assertThat(storedCost).isEqualByComparingTo("50.00");
+    }
+
     @Test
     void unpost_backdatedChronologicalRegister_restoresLaterDocumentsWithoutRemovedMovement() {
         UUID product = UUID.randomUUID();

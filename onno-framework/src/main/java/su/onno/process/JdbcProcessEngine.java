@@ -573,7 +573,13 @@ public final class JdbcProcessEngine implements ProcessEngine {
             InstanceRow updated = requireInstance(handle, instance.id, false);
             RuntimeState state = new RuntimeState(
                     updated, latest, migrated.payload, actor.identity(), now, audience);
-            for (TokenRow old : parentFirst(live)) {
+            // Reset every live token before re-entering any. Entering one token can arrive at a
+            // parallel join, and the join counts its siblings' rows: a sibling not yet reset would
+            // still count as waiting there from the old version, fire the join early, and then be
+            // re-entered behind the advanced coordinator (see docs/formal/ProcessTokens.tla).
+            List<TokenRow> ordered = parentFirst(live);
+            Map<UUID, TokenRow> reset = new LinkedHashMap<>();
+            for (TokenRow old : ordered) {
                 ProcessNode<?, ?> target = migrated.targets.get(old.id);
                 if (target == null) {
                     throw new IllegalArgumentException(
@@ -586,7 +592,11 @@ public final class JdbcProcessEngine implements ProcessEngine {
                                     handle, child, "Parent definition migrated",
                                     actor.identity(), now, audience));
                 }
-                TokenRow ready = resetTokenForMigration(handle, old, target, now);
+                reset.put(old.id, resetTokenForMigration(handle, old, target, now));
+            }
+            for (TokenRow old : ordered) {
+                ProcessNode<?, ?> target = migrated.targets.get(old.id);
+                TokenRow ready = reset.get(old.id);
                 if (live.stream().anyMatch(
                         token -> old.id.equals(token.parentTokenId))) {
                     preserveParallelCoordinator(

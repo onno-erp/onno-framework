@@ -1,0 +1,2 @@
+su.onno.crm.web.CrmChannelController.types(java.security.Principal) returns a bare collection (java.util.List<su.onno.crm.service.CrmChannelDefinition>) in (CrmChannelController.java:32)
+su.onno.crm.web.CrmInboxController.messages(java.util.UUID, java.lang.String, java.security.Principal) returns a bare collection (java.util.List<su.onno.crm.web.CrmInboxController$MessageView>) in (CrmInboxController.java:64)

@@ -7,6 +7,9 @@ import su.onno.command.Command;
 import su.onno.command.CommandContext;
 import su.onno.command.CommandDefaults;
 import su.onno.command.CommandFeedback;
+import su.onno.command.CommandInput;
+import su.onno.command.CommandInputGroup;
+import su.onno.command.CommandRejectedException;
 import su.onno.command.CommandResult;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
@@ -171,8 +174,9 @@ public class CommandService {
             throw new ServiceException(ServiceException.Status.BAD_REQUEST,
                     "Collection command takes no record id: " + key);
         }
-        CommandResult result = command.handler().apply(
-                CommandContext.from(target.kind(), target.name(), id, username(subject), body, subject));
+        CommandContext context = CommandContext.from(target.kind(), target.name(), id, username(subject), body, subject);
+        requireInputs(command, context);
+        CommandResult result = command.handler().apply(context);
         return result != null ? result : CommandResult.ok();
     }
 
@@ -196,6 +200,7 @@ public class CommandService {
             throw new ServiceException(ServiceException.Status.BAD_REQUEST, "Batch limited to " + BATCH_LIMIT + " ids");
         }
         CommandContext shared = CommandContext.from(target.kind(), target.name(), null, username(subject), body, subject);
+        requireInputs(command, shared);
         AtomicReference<CommandFeedback> firstFeedback = new AtomicReference<>();
         Map<String, Object> result = batch.run(ids, id -> {
             requireRunnableOn(subject, target, id, command);
@@ -305,5 +310,40 @@ public class CommandService {
 
     private static String username(AccessSubject subject) {
         return subject instanceof AccessSubject.User user ? user.username() : null;
+    }
+
+    /**
+     * Reject a run whose {@code required()} inputs are missing or blank, before the handler sees
+     * it. The form validates this client-side, but REST and MCP callers reach the handler directly,
+     * so the server is the authority. Throws a {@link CommandRejectedException} (422) whose
+     * {@code fieldErrors} name each missing input, so an open input form shows them inline.
+     */
+    static void requireInputs(Command<?> command, CommandContext context) {
+        CommandRejectedException.Builder rejection = null;
+        for (CommandInput input : command.inputs()) {
+            if (input.required() && context.input(input.key()).isBlank()) {
+                rejection = (rejection == null ? CommandRejectedException.builder() : rejection)
+                        .fieldError(input.key(), input.title() + " is required");
+            }
+        }
+        for (CommandInputGroup group : command.inputGroups()) {
+            List<Map<String, String>> rows = context.inputRows(group.key());
+            if (group.required() && rows.isEmpty()) {
+                rejection = (rejection == null ? CommandRejectedException.builder() : rejection)
+                        .fieldError(group.key(), group.title() + " needs at least one row");
+            }
+            for (int i = 0; i < rows.size(); i++) {
+                for (CommandInput column : group.columns()) {
+                    String value = rows.get(i).get(column.key());
+                    if (column.required() && (value == null || value.isBlank())) {
+                        rejection = (rejection == null ? CommandRejectedException.builder() : rejection)
+                                .fieldError(group.key(), "Row " + (i + 1) + ": " + column.title() + " is required");
+                    }
+                }
+            }
+        }
+        if (rejection != null) {
+            throw rejection.message("Fill in the required inputs").build();
+        }
     }
 }

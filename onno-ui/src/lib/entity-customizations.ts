@@ -8,6 +8,7 @@ import type { FieldInput, FieldWidth, ValueFormat } from "./cell-format";
 import {
   mergePresentations,
   type CommandCustomization,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- referenced by {@link CommandPresentation}
   type CommandPresentation,
 } from "./commands";
 

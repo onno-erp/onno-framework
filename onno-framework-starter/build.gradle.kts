@@ -41,6 +41,8 @@ dependencies {
     // Service-layer tests: AccessService reads roles from the Spring Security context.
     testImplementation(libs.spring.security.core)
     testImplementation(libs.jackson.datatype.jsr310)
+    // Architecture guardrails (su.onno.archunit.OnnoRules) over this module's main classes.
+    testImplementation(project(":onno-archunit"))
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 

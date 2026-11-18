@@ -1,0 +1,3 @@
+#
+#Wed Nov 18 03:59:26 MSK 2026
+methods\ that\ are\ HTTP\ GET\ handlers\ of\ controllers\ should\ not\ return\ a\ bare\ collection,\ because\ collection\ endpoints\ return\ one\ keyset\ window\ {rows,\ nextCursor,\ hasMore}\:\ page\ with\ su.onno.query.KeysetWindow\ and\ return\ the\ Page\ or\ su.onno.service.KeysetWindow.envelope(page),\ never\ a\ bare\ List\ or\ a\ bespoke\ entries/items/before\ shape.\ A\ truly\ bounded\ selector\ (it\ enforces\ its\ own\ maximum)\ is\ the\ only\ exception\ \u2014\ freeze\ it\ explicitly=3b3b9178-1250-4cde-a076-0ef7bef80074

@@ -35,6 +35,9 @@ public class TestCostIssue extends DocumentObject implements Postable {
                 .stream()
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("No stock for " + product));
+        if (balance.getQuantity().signum() <= 0) {
+            throw new IllegalStateException("No stock for " + product);
+        }
         BigDecimal unitCost = balance.getAmount().divide(
                 balance.getQuantity(), 8, RoundingMode.HALF_UP);
         cost = unitCost.multiply(quantity).setScale(2, RoundingMode.HALF_UP);

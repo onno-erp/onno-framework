@@ -2600,6 +2600,8 @@ export function EntityListView({
       await downloadSelection(download.url, ids, `${download.key}.zip`);
       toast.dismiss(toastId);
     } catch (error) {
+      // Turns the loading toast into the error; downloadSelection never toasts, so this is the only one.
+      // eslint-disable-next-line onno/notify-caught-error
       toast.error(error instanceof Error && error.message ? error.message : t("list.download.failed", { label: download.title }),
         { id: toastId });
     } finally {

@@ -21,6 +21,8 @@ dependencies {
     testImplementation(libs.mockito.core)
     testImplementation(libs.h2)
     testImplementation(libs.spring.boot.test)
+    // Architecture guardrails (su.onno.archunit.OnnoRules) over this module's main classes.
+    testImplementation(project(":onno-archunit"))
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 
