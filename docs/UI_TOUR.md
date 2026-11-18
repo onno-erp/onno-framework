@@ -253,6 +253,12 @@ How an entity presents is one `EntityCustomization<E>` per entity in `entities/`
 its key order selects and orders nothing), `rowStyle`, `commands`, `recordPanels`, `comments` and `relations` (a join entity such as `Supplier Offers` edited inline from each side and saved with the record),
 and applies wherever the entity shows. Icons are imported components from `@onno/ui/icons`.
 
+Relation editors read the complete join-row set through cursor pagination before enabling edits.
+They preserve the owner filter and configured sort on every page. A failed or invalid continuation
+keeps the editor unavailable for replacement writes: saving a partial set would delete unseen links.
+The lower-level `api.listCatalogPage` and `api.listDocumentsPage` accept `sort` alongside `cursor`
+and `limit`; bounded `listCatalog`/`listDocuments` reads still return a single window.
+
 Register a list or record component by logical name in `defineApp({ pages })` only when the layout
 differs from the default: `{ list: "Suppliers", component: SuppliersPage }` puts a stat above
 `<EntityList list={list} />`; `{ record: "Stock Receipts", component: StockReceiptPage }` composes
