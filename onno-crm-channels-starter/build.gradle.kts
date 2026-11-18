@@ -9,6 +9,8 @@ dependencies {
     annotationProcessor(libs.spring.boot.configuration.processor)
     testImplementation(libs.h2)
     testImplementation(libs.spring.boot.starter.test)
+    // Architecture guardrails (su.onno.archunit.OnnoRules) over this module's main classes.
+    testImplementation(project(":onno-archunit"))
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 

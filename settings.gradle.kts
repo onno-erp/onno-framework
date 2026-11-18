@@ -20,5 +20,6 @@ include(
     "onno-print-starter",
     "onno-crm-starter",
     "onno-crm-channels-starter",
+    "onno-archunit",
     "example"
 )
