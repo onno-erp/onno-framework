@@ -1207,7 +1207,9 @@ orders nothing. Logical entity names are checked against the generated model.
   entity route replaces its default screen; `roles` and `when` gate a page and its nav link.
 - **Data** is typed per entity: `useRecords("Orders", { where, sort, limit })`, `useRecord`,
   `useAggregate`, `useBalance`, `useTurnover`, `useMovements`, `useInformationRegister`,
-  `useConstant`, the write hooks, `useCommand("Orders", "cancel")`, and the measures
+  `useConstant`, the write hooks, `useCommand("Orders", "cancel")`,
+  `useCommandPresentations(kind, name)` (a surface that lists an entity's commands itself, like the
+  CRM row menu, reads their icons and placements from it), and the measures
   `count`/`sum`/`avg`/`min`/`max` (`sum("Orders", "total", { posted: true })`). Which records is
   always a typed `where` object (`{ status: { in: [OrderStatus.NEW] }, total: { gte: 100 } }`),
   sent to the server as JSON. Everything refreshes from the server's live events.
