@@ -96,8 +96,10 @@ export function ConversationListSkeleton() {
 }
 
 /** Keep the list geometry visible while the workspace descriptor is arriving. */
+// Shown while the inbox loads, before EntityListView exists: it owns the route surface's padding
+// once loaded (p-4 sm:p-6), so the skeleton carries the same bounds and the page doesn't jump.
 export function InboxSkeleton() {
-  return <div className="h-full min-h-0 w-full" style={{containerType:"inline-size"}}>
+  return <div className="h-full min-h-0 w-full p-4 sm:p-6" style={{containerType:"inline-size"}}>
     <style>{`.crm-inbox-skeleton { grid-template-columns:300px minmax(0,1fr); }
       @container (max-width:720px) { .crm-inbox-skeleton { grid-template-columns:minmax(0,1fr); } .crm-inbox-skeleton-detail { display:none; } }`}</style>
     <div className="crm-inbox-skeleton grid h-full min-h-0 gap-3 overflow-hidden">
