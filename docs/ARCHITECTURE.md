@@ -113,6 +113,9 @@ In brief:
   (`cron`) / `@Scheduled` background jobs, **`@DomainEvent`** (outbox), **`@AccessControl`**
   (`readRoles`/`writeRoles`, plus `postRoles`/`unpostRoles` on documents), **`@Attribute`** (`required`, `length`, `precision`/`scale`, `secret`,
   validation `min`/`max`/`pattern`/`email`, `previousNames`).
+- **Scheduled task validation:** a `@ScheduledJob` class must implement `BackgroundTask` and be a
+  Spring bean (`@Component` or `@Bean`). The starter rejects active declarations in its scan
+  packages without a bean, and task beans without a JobRunr `JobScheduler`, at startup.
 - **`Ref<T>`** (`su.onno.types.Ref`) — a typed `(Class<T>, UUID)` reference, stored as a UUID
   column; resolved with `RefResolver`.
 - **`PolyRef` + `@RefTargets`** — an explicitly allowlisted reference to one of several catalog or

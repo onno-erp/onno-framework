@@ -99,7 +99,10 @@ compatibility reads retain `{col}_display` and `{col}_color`.
 `name` (required).
 
 ### `@ScheduledJob` / `@Scheduled`
-`@ScheduledJob`: `name` (required), `cron` (required). Plain Spring `@Scheduled` jobs also work
+`@ScheduledJob`: `name` (required), `cron` (required). Implement `BackgroundTask` and register
+as a Spring bean (`@Component` or `@Bean`); a JobRunr `JobScheduler` bean is required.
+The starter fails at startup for active declarations in its scan packages without a bean,
+or task beans without a scheduler. Plain Spring `@Scheduled` jobs also work
 (the example uses `@Scheduled(initialDelay=…, fixedDelay=…)`).
 
 ## Durable typed business processes (package `su.onno.process`)
