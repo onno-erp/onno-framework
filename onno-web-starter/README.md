@@ -300,6 +300,27 @@ Besides `where`, the feeds accept the list toolbar's facet parameters (`eq`, `in
 - `@Attribute(secret = true)` fields are write-only and never valid filter, sort, group or aggregate
   columns.
 
+### List export — `/api/list/export/{kind}/{name}`
+
+The standard list toolbar downloads CSV or XLSX with its current filters, search, sort, grouping
+and displayed column order. It exports every matching authorized row, including rows beyond the
+loaded window. Embedded lists retain their authored `where` predicate. Custom data feeds must
+provide their own export; the standard button is withheld for them.
+
+Export is a CSRF-protected `POST`. In addition to the entity grant and record policies, the caller
+must have one of `onno.web.list.export-roles` (default `ADMIN`; an empty list disables export).
+`onno.web.list.export-row-limit` defaults to 10000 (maximum 500000). An oversized result returns
+413 without an attachment; it is never silently truncated. See the request example in
+[the headless contract](../docs/HEADLESS_READ_API.md#list-export).
+
+References and enums export their readable labels; inaccessible references are masked and secrets
+cannot be selected. XLSX preserves numeric/date cells, except numbers that exceed Excel's precision
+(written as text). Cells above Excel's 32767-character limit return 422; CSV preserves long text.
+CSV escapes spreadsheet formula prefixes. Files are built on disk from bounded query windows in
+one repeatable-read transaction, then streamed to the caller. Temporary files are removed on
+success and failure. `onno_list_export_journal` records the actor, entity, format, view and preparation
+time; it stores no exported values or filters. A prepared entry does not prove the download finished.
+
 ## The UI model and default screens — `/api/ui`
 
 The server describes what exists and what the caller may do; it never describes screens.

@@ -1,4 +1,5 @@
 import { openRoute } from "../../lib/navigation";
+import { notifyError } from "../../lib/notify-error";
 import { ResponsiveActionPanel } from "../ui/responsive-action-panel";
 import { nearestScrollAncestor, trailingPaddingTo } from "../../lib/fill-height";
 import { ExtensionSlot } from "../../lib/ui-extensions";
@@ -45,7 +46,8 @@ import {
   ContextMenuSub,
 } from "../ui/context-menu";
 import { Icon } from "../../lib/icons";
-import { api, ApiError, downloadSelection } from "../../lib/api";
+import { api, ApiError, downloadJson, downloadSelection } from "../../lib/api";
+import { useAuthUser } from "../../providers/auth-provider";
 import { useCommandFeedback } from "../../lib/command-feedback";
 import { isInteractiveLayerOpen, matchesKey, shortcutLabel } from "../../lib/keybindings";
 import { withBasePath } from "../../lib/base-path";
@@ -61,7 +63,7 @@ import {
 } from "../../lib/cell-format";
 import { linkify } from "../../lib/linkify";
 import type { EntityRecord } from "../../lib/types";
-import { useMessages } from "../../providers/messages-provider";
+import { useListExportRoles, useMessages } from "../../providers/messages-provider";
 import { RestrictedRef, isRestrictedRef } from "../fields/restricted-ref";
 import type { Translate } from "../../lib/messages";
 import { localeOutsideReact } from "../../lib/messages-outside-react";
@@ -1605,6 +1607,10 @@ export function EntityListView({
 }) {
   const bootstrapPage = useRef(initialPage);
   const { kind, name, columns, pageSize } = list;
+  const listExportRoles = useListExportRoles();
+  const user = useAuthUser();
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const touchToolbar = useTouchLayout();
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -2040,7 +2046,7 @@ export function EntityListView({
   // Build the shared query params (sort + search + declarative filters). The keyset cursor/limit
   // parameters are added by the caller.
   const baseWhereSig = list.baseWhere ? JSON.stringify(list.baseWhere) : "";
-  const buildParams = useCallback(() => {
+  const buildParams = useCallback((search = debounced) => {
     const params = new URLSearchParams();
     for (const [key, values] of Object.entries(queryParams ?? {})) for (const value of values) params.append(key, value);
     // A default-view base filter (PageBuilder.list) is a server-side constraint applied on top of the
@@ -2050,7 +2056,7 @@ export function EntityListView({
       params.set("sort", sort.column);
       params.set("dir", sort.descending ? "desc" : "asc");
     }
-    if (debounced) params.set("q", debounced);
+    if (search) params.set("q", search);
     // Declarative filters → eq/in/like/prefix/ge/le params (column,value); the server re-validates
     // the column. Several filters AND together; a multi-select sends one `in` per picked value.
     for (const f of filters) {
@@ -2072,6 +2078,41 @@ export function EntityListView({
     return params;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryParamSig, baseWhereSig, sort.column, sort.descending, debounced, filters, filterSig]);
+
+  const standardFeed = `/api/list/${kind}/${name}`;
+  const encodedFeed = `/api/list/${kind}/${encodeURIComponent(name)}`;
+  const registerView = kind === "registers" ? (["movements", "balance"] as const).find(view =>
+    list.feed === `${standardFeed}/${view}` || list.feed === `${encodedFeed}/${view}`) : undefined;
+  const exportableFeed = kind === "registers" ? !!registerView
+    : !list.feed || list.feed === standardFeed || list.feed === encodedFeed;
+  const canExport = exportableFeed && columns.length > 0
+    && user?.roles.some(role => listExportRoles.includes(role.trim().toUpperCase().replace(/^ROLE_/, "")));
+
+  async function exportList(format: "csv" | "xlsx") {
+    setExportOpen(false);
+    setExportBusy(true);
+    const params = buildParams(query.trim());
+    const queryValues: Record<string, string[]> = Object.fromEntries(
+      [...new Set(params.keys())].map(key => [key, params.getAll(key)]),
+    );
+    try {
+      await downloadJson(`/api/list/export/${kind}/${encodeURIComponent(name)}`, {
+        format,
+        view: registerView,
+        columns: columns.map(column => ({ key: column.columnName, label: column.label })),
+        query: queryValues,
+        groupBy: grouped ? groupBy : undefined,
+        granularity: grouped ? granularity : undefined,
+      }, `${name}.${format}`);
+    } catch (error) {
+      notifyError(error, { format: () => error instanceof ApiError && error.status === 413
+        ? t("list.export.tooManyRows")
+        : error instanceof ApiError && error.status === 422
+          ? t("list.export.textTooLong") : t("list.export.failed") });
+    } finally {
+      setExportBusy(false);
+    }
+  }
 
   // The shared query (sort + search + filters) the grouped view fetches groups/rows with, as a
   // string so its effects can depend on it.
@@ -3399,6 +3440,21 @@ export function EntityListView({
               <Plus className="size-4" aria-hidden="true" />
               {compact ? null : t("action.new")}
             </button>
+          ) : null}
+          {canExport && !picking && !mapMode && !scheduleMode ? (
+            <Popover open={exportOpen} onOpenChange={setExportOpen}>
+              <PopoverTrigger asChild>
+                <Button type="button" size="toolbar" variant="subtle" disabled={exportBusy}
+                  title={t("list.export")} aria-label={t("list.export")}>
+                  {exportBusy ? <Loader2 className="animate-spin" /> : <Icon name="download" size={16} />}
+                  {!compact && t("list.export")}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="flex min-w-24 flex-col gap-1 p-1">
+                <Button type="button" size="toolbar" variant="subtle" onClick={() => void exportList("xlsx")}>XLSX</Button>
+                <Button type="button" size="toolbar" variant="subtle" onClick={() => void exportList("csv")}>CSV</Button>
+              </PopoverContent>
+            </Popover>
           ) : null}
         </div>
       </div>

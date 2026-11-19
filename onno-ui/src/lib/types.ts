@@ -175,6 +175,7 @@ export interface RegisterMeta {
 }
 
 export interface AppConfig {
+  listExportRoles?: string[];
   // onno.web.read-only: the application accepts no writes.
   readOnly: boolean;
   // BCP-47 locale configured by onno.ui.locale. The client uses it for date inputs, calendars, and

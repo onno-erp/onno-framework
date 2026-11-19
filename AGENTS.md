@@ -1579,6 +1579,12 @@ provider download URLs. Filesystem media metadata lives under an unservable .met
 
 ## Collection pagination implementation
 
+List export uses the audited `EntityListExport` helper: grouped catalog/document windows must reuse
+the query services' scoped predicates, and register exports must pass the same `where` as their feed.
+Keep the export role gate, row cap, secret exclusion and prepared-file journal in place. The web
+controller writes bounded windows in one repeatable-read snapshot before sending an attachment;
+`RecordPolicyConformanceTest` covers the download path as well as ordinary JSON reads.
+
 Forward collection windows use `su.onno.query.KeysetWindow` with typed tuples issued by
 `su.onno.query.Cursor`. Keep access predicates in SQL before LIMIT. Register balances seek by
 the dimension primary key; do not invent an `_id` for totals. Numeric offset pagination and legacy response aliases are removed. Process assignment JSON has a transactional `onno_process_work_candidates`

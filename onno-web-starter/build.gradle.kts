@@ -119,6 +119,8 @@ dependencies {
     implementation(libs.spring.boot.autoconfigure)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.jdbi3.core)
+    implementation(libs.commons.csv)
+    implementation(libs.poi.ooxml)
     // @TransactionalEventListener (assignment notifications fire AFTER_COMMIT so the producer's
     // read-back sees the committed row). Present at runtime via onno-framework-starter's data-jdbc,
     // but that's an `implementation` dep so it isn't on this module's compile classpath. Pin an
@@ -146,6 +148,7 @@ dependencies {
     // In-memory engine for the read-path query-service tests (e.g. information-register
     // related-list rows) — same lightweight pattern the framework module uses.
     testImplementation(libs.spring.jdbc) // Verify SSE observes only committed JDBC changes.
+    testImplementation(libs.jdbi3.spring5) // Export reads share the repeatable-read Spring transaction.
     testImplementation(libs.h2)
     // Postgres-portability checks: the date-bound register/document queries can only be
     // verified against a real PostgreSQL (H2 silently casts varchar↔timestamp, so it never

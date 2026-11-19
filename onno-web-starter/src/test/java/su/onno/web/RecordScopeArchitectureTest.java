@@ -40,7 +40,9 @@ class RecordScopeArchitectureTest {
             "AssignmentNotificationSource.java",
             // lists a record's join rows under the caller's READ scope (RecordAccess.clause) before
             // replacing them through the command services
-            "RelationWriteService.java");
+            "RelationWriteService.java",
+            // Groups and streams only predicates prepared by the scoped query services.
+            "EntityListExport.java");
 
     @Test
     void onlyAuditedClassesQueryEntityTables() throws IOException {

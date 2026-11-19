@@ -153,6 +153,23 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
+    ListExportJournal listExportJournal(Jdbi jdbi) {
+        var journal = new ListExportJournal(jdbi);
+        journal.initialize();
+        return journal;
+    }
+
+    @Bean
+    ListExportController listExportController(CatalogQueryService catalogs, DocumentQueryService documents,
+                                              RegisterQueryService registers, InformationRegisterQueryService informationRegisters,
+                                              AccessService access, UiMessages messages, WebProperties properties,
+                                              ListExportJournal journal,
+                                              org.springframework.transaction.PlatformTransactionManager transactionManager) {
+        return new ListExportController(catalogs, documents, registers, informationRegisters,
+                access, messages, properties, journal, transactionManager);
+    }
+
+    @Bean
     public ProcessController processController(
             su.onno.process.ProcessEngine processEngine,
             su.onno.process.ProcessDefinitions processDefinitions,

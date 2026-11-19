@@ -47,6 +47,11 @@ Opt-in, not part of `all()`:
 The rules name onno types by their class names, so this module adds only ArchUnit to your test
 classpath. A rule whose subject does not occur (an app with no controllers) passes.
 
+The framework also maintains a source-level `RecordScopeArchitectureTest` allowlist for direct
+entity-table queries. Its audited `EntityListExport` helper shares the query services' scoped SQL
+predicates for grouped windows; it does not grant an independent read path. Export downloads are
+included in `RecordPolicyConformanceTest` to check row scope and reference masking end to end.
+
 ## Accepting existing violations
 
 To adopt a rule in an app that already breaks it, freeze the current violations and fail only on

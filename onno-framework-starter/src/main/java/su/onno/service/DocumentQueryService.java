@@ -189,6 +189,15 @@ public class DocumentQueryService {
                                  List<String> eq, List<String> in, List<String> like,
                                  List<String> prefix, List<String> ge, List<String> le,
                                  String whereJson) {
+        return keysetPage(subject, desc, cursorToken, beforeToken, focus, limit, sortColumn, descending, search,
+                from, to, eq, in, like, prefix, ge, le, whereJson, null);
+    }
+
+    KeysetPage keysetPage(AccessSubject subject, DocumentDescriptor desc, String cursorToken,
+                          String beforeToken, UUID focus, int limit, String sortColumn, boolean descending,
+                          String search, String from, String to, List<String> eq, List<String> in, List<String> like,
+                          List<String> prefix, List<String> ge, List<String> le, String whereJson,
+                          EntityListExport.Group group) {
         EntitySurfaceDescriptor surface = surface(desc);
         String fingerprint = su.onno.query.Cursor.context(EntityQuerySupport.cursorSubject(subject),
                 scopes.policies().fingerprint(subject), search, eq, in, like, prefix, ge, le, whereJson, from, to);
@@ -208,7 +217,7 @@ public class DocumentQueryService {
         if (!wf.isEmpty()) where.append(" AND (").append(wf.sql()).append(")");
         where.append(scope.and());
 
-        KeysetWindow.Raw window = KeysetWindow.fetch(jdbi, desc.tableName(), where.toString(), q -> {
+        java.util.function.Consumer<org.jdbi.v3.core.statement.Query> bind = q -> {
                     EntityQuerySupport.bindSearch(q, search);
                     searchClause.bind(q);
                     if (from != null) q.bind("from", from);
@@ -216,7 +225,15 @@ public class DocumentQueryService {
                     filter.bindings().forEach(q::bind);
                     wf.bindings().forEach(q::bind);
                     scope.bind(q);
-                }, col, dirDesc, !surface.isNonNullableSort(col),
+                };
+        if (group != null) {
+            KeysetPage grouped = group.page(jdbi, desc.tableName(), where.toString(), bind, col, dirDesc,
+                    surface.isNonNullableSort(col), cursorToken, limit, fingerprint);
+            EntityQuerySupport.decorateRows(refResolver, desc.attributes(), grouped.rows(), subject);
+            return grouped;
+        }
+        KeysetWindow.Raw window = KeysetWindow.fetch(jdbi, desc.tableName(), where.toString(), bind, col,
+                dirDesc, !surface.isNonNullableSort(col),
                 new KeysetWindow.Position(cursorToken, beforeToken, focus), limit, fingerprint);
 
         EntityQuerySupport.decorateRows(refResolver, desc.attributes(), window.rows(), subject);

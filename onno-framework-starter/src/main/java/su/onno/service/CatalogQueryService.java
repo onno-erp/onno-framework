@@ -202,6 +202,15 @@ public class CatalogQueryService {
                                  List<String> eq, List<String> in, List<String> like,
                                  List<String> prefix, List<String> ge, List<String> le,
                                  String whereJson) {
+        return keysetPage(subject, desc, cursorToken, beforeToken, focus, limit, sortColumn, descending, search,
+                eq, in, like, prefix, ge, le, whereJson, null);
+    }
+
+    KeysetPage keysetPage(AccessSubject subject, CatalogDescriptor desc, String cursorToken,
+                          String beforeToken, UUID focus, int limit, String sortColumn, boolean descending,
+                          String search, List<String> eq, List<String> in, List<String> like,
+                          List<String> prefix, List<String> ge, List<String> le, String whereJson,
+                          EntityListExport.Group group) {
         EntitySurfaceDescriptor surface = surface(desc);
         String fingerprint = su.onno.query.Cursor.context(EntityQuerySupport.cursorSubject(subject),
                 scopes.policies().fingerprint(subject), search, eq, in, like, prefix, ge, le, whereJson);
@@ -215,13 +224,22 @@ public class CatalogQueryService {
         String where = "_deletion_mark = false" + searchClause.and()
                 + filterClause(filter) + filterClause(wf) + scope.and();
 
-        KeysetWindow.Raw window = KeysetWindow.fetch(jdbi, desc.tableName(), where, q -> {
+        java.util.function.Consumer<org.jdbi.v3.core.statement.Query> bind = q -> {
                     EntityQuerySupport.bindSearch(q, search);
                     searchClause.bind(q);
                     filter.bindings().forEach(q::bind);
                     wf.bindings().forEach(q::bind);
                     scope.bind(q);
-                }, col, descending, !surface.isNonNullableSort(col),
+                };
+        if (group != null) {
+            KeysetPage grouped = group.page(jdbi, desc.tableName(), where, bind, col, descending,
+                    surface.isNonNullableSort(col), cursorToken, limit, fingerprint);
+            if (desc.hierarchical()) EntityQuerySupport.maskParents(jdbi, desc.tableName(), grouped.rows(), scope);
+            EntityQuerySupport.decorateRows(refResolver, desc.attributes(), grouped.rows(), subject);
+            return grouped;
+        }
+        KeysetWindow.Raw window = KeysetWindow.fetch(jdbi, desc.tableName(), where, bind, col,
+                descending, !surface.isNonNullableSort(col),
                 new KeysetWindow.Position(cursorToken, beforeToken, focus), limit, fingerprint);
 
         // Cursors were minted from the raw rows; ref-resolution/redaction reshape the maps after.
