@@ -1171,6 +1171,8 @@ orders nothing. Logical entity names are checked against the generated model.
   `ClinicDoctor { clinic, doctor, role }`) — not a denormalized name field or a bespoke endpoint.
   Each side shows it with the entity's `relations` customization:
   `relations: { doctors: { entity: "Clinic Doctors", via: "clinic", columns: ["doctor", "role"] } }`.
+  Relation editors must finish every cursor window before enabling replacement writes; a partial
+  or failed read must never be submitted as the complete relation set.
   The rows render with the tabular-section editor and save with the record's Save: the form sends
   `@relations` and the server replaces the join rows in the record's transaction, through the
   ordinary write path. The example app's `Supplier Offers` is edited from both Suppliers and Books.

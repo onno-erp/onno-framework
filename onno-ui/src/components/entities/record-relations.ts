@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
-import { api } from "../../lib/api";
+import { api, type CollectionPage } from "../../lib/api";
 import type { ModelEntity } from "../../lib/app-model";
 import type { RelationCustomization } from "../../lib/entity-customizations";
 import { findEntity, useModel } from "../../lib/model-store";
@@ -30,6 +30,27 @@ export type RecordRelation = {
 export type RelationWrite = { entity: string; via: string; rows: EntityRecord[] };
 
 type JoinForm = { form?: { meta?: { attributes?: AttributeMeta[] } } };
+
+// A relation write replaces the complete set. Publish rows only after every window succeeds:
+// treating a preview or a failed continuation as a complete set would delete unseen links.
+async function readRelationRows(entity: ModelEntity, spec: RelationCustomization, ownerId: string): Promise<EntityRecord[]> {
+  const where = { [spec.via]: { eq: ownerId } };
+  const rows: EntityRecord[] = [];
+  const seen = new Set<string>();
+  let cursor: string | null = null;
+  do {
+    const request = { limit: 500, sort: spec.sort, cursor };
+    const page: CollectionPage<EntityRecord> = entity.kind === "documents"
+      ? await api.listDocumentsPage(entity.name, undefined, undefined, where, request)
+      : await api.listCatalogPage(entity.name, where, request);
+    rows.push(...page.rows);
+    if (!page.hasMore) return rows;
+    cursor = page.nextCursor;
+    if (!cursor || seen.has(cursor)) throw new Error("Relation feed returned an invalid continuation");
+    seen.add(cursor);
+  } while (cursor);
+  return rows;
+}
 
 async function fetchJoinAttributes(route: string): Promise<AttributeMeta[]> {
   const r = await fetch(`/api/ui/view${route}/new`, { credentials: "include" });
@@ -96,13 +117,7 @@ export function useRecordRelations(
   const stored = useQueries({
     queries: entries.map(({ spec, entity }) => ({
       queryKey: ["onno", entity?.logicalName ?? "", "relation-rows", spec.via, ownerId, spec.sort ?? null],
-      queryFn: () => {
-        const where = { [spec.via]: { eq: ownerId } } as never;
-        const page = { limit: 500, sort: spec.sort };
-        return entity!.kind === "documents"
-          ? api.listDocuments(entity!.name, undefined, undefined, where, page)
-          : api.listCatalog(entity!.name, where, page);
-      },
+      queryFn: () => readRelationRows(entity!, spec, ownerId!),
       enabled: !!entity && !!ownerId,
     })),
   }, queryClient);

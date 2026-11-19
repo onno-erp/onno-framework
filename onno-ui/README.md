@@ -169,7 +169,7 @@ too): label, hidden/hideInList/hideInForm, group,
 width, input, format, `render`, placeholder, hint, `refSecondary`, `filterBy` for a cascading
 picker, openButton/clearButton, `commandGroup` for a cell's right-click menu), `rowStyle`, `commands` (placement `"primary" | "menu" | "row" |
 "hidden"`, icon — also for the built-ins `post`, `unpost`, `duplicate`, `delete`, `openInList` and
-modules' `print-*`), `recordPanels`, `icon`, `comments`, `relations` (a many-to-many join entity's rows edited like a tabular section and saved with the record: `{ entity: "Supplier Offers", via: "supplier", columns: ["book", "purchasePrice"] }`). The commands themselves, their inputs and
+modules' `print-*`), `recordPanels`, `icon`, `comments`, `relations` (a many-to-many join entity's rows edited like a tabular section and saved with the record: `{ entity: "Supplier Offers", via: "supplier", columns: ["book", "purchasePrice"] }`). Relation editors load every cursor window before enabling edits; saving therefore preserves links beyond the first 500 rows. Failed or invalid continuations never produce a partial replacement payload. The commands themselves, their inputs and
 who may run them are the server's (`Commands` beans).
 
 **Time.** `LocalTime` fields use `TimePicker`; `Instant` fields use `InstantPicker` and display in
