@@ -323,7 +323,10 @@ An application may own a Templates catalog, picker, and button, registering `exa
 contains no template catalog or picker. Replace that contribution
 ID to customize it, or register additional IDs to add neighboring buttons. The
 composer supplies `insertDraft` only in reply mode; the host preserves the existing
-draft, enforces the channel length limit, and never sends on insertion. Empty
+draft, enforces the channel length limit, and never sends on insertion. Its optional second argument
+puts files already stored through `/api/media` (a generated PDF, as `DraftFile`s) in the reply's
+attachment tray; a channel that takes no files, or a full tray, refuses them with the composer's
+own reason before the draft changes. Empty
 template catalogs remain hidden.
 
 Applications optionally define conversation-status choices and transitions with a `CrmStateConfiguration` Java bean.

@@ -508,7 +508,7 @@ entry, at most 100 entries, dropped after 30 days); files already uploaded for t
 in memory only. A draft is cleared after a successful send or when its author empties it. Clicking
 a contact opens the conversation that holds its unsent draft, and the page asks before unloading
 while text or files written in this session are unsent. `insertDraft` contributions append to the
-open conversation's draft as before.
+open conversation's draft as before; `insertDraft(text, files)` also puts stored files in its tray.
 
 The inline reply grows with its text up to `min(240px, 40vh)`. **Open in a larger window** edits the
 same draft in a non-modal `@onno/ui` window (`FloatingWindow`), docked in the bottom-right corner
