@@ -290,7 +290,10 @@ windows line up right to left), floated (drag the title bar, resize from any edg
 phones a window always fills the screen. Escape inside a window never reaches the page beneath it.
 For a blocking question or form, use a command's input dialog instead.
 
-Owned by a component, with children in the owner's state and context. It closes with its owner:
+Owned by a component, with children in the owner's state and context. It closes with its owner, unless
+another component renders a `FloatingWindow` with the same `id` in the same commit: then that one takes the
+window over as it is (minimised, docked, moved, resized). The inbox uses this to keep a composer window on its
+conversation while the planner opens other chats.
 
 ```tsx
 import { FloatingWindow } from "@onno/ui";

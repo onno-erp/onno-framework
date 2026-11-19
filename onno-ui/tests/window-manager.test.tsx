@@ -146,6 +146,22 @@ it("closes through onOpenChange and leaves the decision to the owner", () => {
   expect(screen.queryByRole("dialog", { name: "Notes" })).not.toBeInTheDocument();
 });
 
+it("hands an open window to another owner of the same id as it is, and closes it once no owner is left", async () => {
+  function Draft({ owner }: { owner: string }) {
+    return <FloatingWindow id="draft" title="Draft" initialState="docked"><p>{owner}</p></FloatingWindow>;
+  }
+  const view = render(<Draft key="a" owner="first" />);
+  fireEvent.click(within(frame("Draft")).getByRole("button", { name: "Minimize" }));
+  // A remount (another component taking the window over in the same commit) keeps it minimised.
+  view.rerender(<Draft key="b" owner="second" />);
+  expect(frame("Draft")).toHaveAttribute("data-window-state", "minimized");
+  expect(within(frame("Draft")).getByText("second", { selector: "p" })).toBeInTheDocument();
+  expect(windows.isOpen("draft")).toBe(true);
+  view.rerender(<></>);
+  await act(async () => { await Promise.resolve(); });
+  expect(windows.isOpen("draft")).toBe(false);
+});
+
 it("keeps Escape inside the window", () => {
   const pageEscape = vi.fn();
   document.addEventListener("keydown", pageEscape);

@@ -8,7 +8,8 @@ import { NoteInput } from "./NoteInput";
 import { ScheduleCall } from "./ScheduleCall";
 import { action, type Config } from "./CrmWorkspace";
 import { conversationChannel, fileSize, string } from "./crmModel";
-import type { ComposerMode } from "./composerDrafts";
+import { composerDrafts, type ComposerMode } from "./composerDrafts";
+import { useComposerWindowHost, useComposerWindows } from "./composerWindows";
 import { useAutoGrow } from "./useAutoGrow";
 import type { CrmComposerState } from "./useCrmComposer";
 import type { CrmConversationState } from "./useCrmConversation";
@@ -214,8 +215,13 @@ export type CrmComposerProps = CrmComposerPartProps & {
   contactName: string;
   /** Offer the "Open in a larger window" button (default true). */
   expandable?: boolean;
-  /** The id that keeps the composer window's place (default: one per workspace). */
+  /** The id that keeps the composer window's place (default: one per conversation in an inbox, else one per workspace). */
   windowId?: string;
+  /**
+   * Draw only the larger window, not the inline composer. The inbox uses it for the windows of conversations it
+   * is not showing (see `composerWindows`); an app's own `Composer` should pass it through to `CrmComposer`.
+   */
+  windowOnly?: boolean;
 };
 
 /**
@@ -223,9 +229,20 @@ export type CrmComposerProps = CrmComposerPartProps & {
  * outlet, send), with an "Open in a larger window" button that moves the same draft into a docked,
  * non-modal window.
  */
-export function CrmComposer({ conversation, composer, config, compact = false, layouts, extensionContext, siblings, onSwitch, contactName, expandable = true, windowId }: CrmComposerProps) {
+export function CrmComposer({ conversation, composer, config, compact = false, layouts, extensionContext, siblings, onSwitch, contactName, expandable = true, windowId, windowOnly = false }: CrmComposerProps) {
   const selected = conversation.conversation;
-  const [expanded, setExpanded] = useState(false);
+  // In an inbox the window belongs to the conversation (composerWindows), so it outlives this composer when
+  // another chat is chosen; elsewhere it is this composer's own.
+  const host = useComposerWindowHost();
+  const windows = useComposerWindows();
+  const key = host && conversation.id ? composerDrafts.key(conversation.workspace, conversation.id) : null;
+  const [ownExpanded, setOwnExpanded] = useState(false);
+  const expanded = key ? windows.isOpen(key) : ownExpanded;
+  const setExpanded = (open: boolean) => {
+    if (!key) { setOwnExpanded(open); return; }
+    if (!open) windows.close(key);
+    else if (selected) windows.open({ key, workspace: host!.workspace, conversation: selected, contactName });
+  };
   const rootRef = useRef<HTMLDivElement | null>(null);
   const windowRef = useRef<HTMLDivElement | null>(null);
   const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -233,7 +250,8 @@ export function CrmComposer({ conversation, composer, config, compact = false, l
   useAutoGrow(replyInputRef, composer.draft, !expanded);
   // Writing moves with the window: into it when it opens, back to the inline field when it closes
   // (the expand button that opened it is gone by then, so the window cannot hand focus back itself).
-  const wasExpanded = useRef(false);
+  // A window already open when this composer mounts (taken over from another chat's view) keeps the focus where it is.
+  const wasExpanded = useRef(expanded);
   useEffect(() => {
     if (wasExpanded.current === expanded) return;
     wasExpanded.current = expanded;
@@ -249,6 +267,15 @@ export function CrmComposer({ conversation, composer, config, compact = false, l
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void send(); }
   };
   const composerContext = { ...extensionContext, insertDraft: mode === "reply" ? composer.insertDraft : undefined };
+  // Switching to another of the contact's chats from the window takes the window along.
+  const switchInWindow = onSwitch && ((conversationId: string) => {
+    const target = siblings?.find(row => String(row.id) === conversationId);
+    if (key && target) {
+      windows.close(key);
+      windows.open({ key: composerDrafts.key(conversation.workspace, conversationId), workspace: host!.workspace, conversation: target, contactName });
+    }
+    onSwitch(conversationId);
+  });
   const sending = <SenderControls conversation={conversation} composer={composer} siblings={siblings} onSwitch={onSwitch} labels={!compact} />;
   const modeSwitch = <Segmented value={mode} onChange={(value: ComposerMode) => { if (!busy) composer.setMode(value); }} options={composer.modeOptions} />;
   const insertInvitation = (text: string) => { composer.setMode("reply"); composer.setDraft(previous => previous ? `${previous}\n\n${text}` : text); };
@@ -267,7 +294,7 @@ export function CrmComposer({ conversation, composer, config, compact = false, l
   // The large composer is a non-modal window: docked in the corner by default, so the rest of the
   // screen (other chats, the contact, the timeline) stays usable while writing. It can float, be
   // resized, minimised to its title bar or maximised; it edits the same draft as the inline field.
-  const window = expanded ? <FloatingWindow id={windowId ?? `crm-composer:${conversation.workspace ?? ""}`}
+  const window = expanded ? <FloatingWindow id={windowId ?? (key ? `crm-composer:${key}` : `crm-composer:${conversation.workspace ?? ""}`)}
     open onOpenChange={(open: boolean) => { if (!open) setExpanded(false); }}
     initialState="docked" persist="crm.composer" width={620} height={580} minWidth={380} minHeight={320}
     icon={<PenLine className="size-4" aria-hidden="true" />}
@@ -285,15 +312,17 @@ export function CrmComposer({ conversation, composer, config, compact = false, l
     <div ref={windowRef} data-crm-composer-window="" onKeyDown={sendShortcut} className="relative flex min-h-0 flex-1 flex-col">
       <CrmComposerFields conversation={conversation} composer={composer} config={config} surface="window" onSubmit={() => void send()}
         header={<div className="mb-2 flex min-w-0 flex-col gap-1">
-          <SenderControls conversation={conversation} composer={composer} siblings={siblings} onSwitch={onSwitch} labels />
+          <SenderControls conversation={conversation} composer={composer} siblings={siblings} onSwitch={switchInWindow} labels />
           {mode === "note" && <p className="text-xs text-muted-foreground">{t("crm.composer.noteHint")}</p>}
         </div>} />
       <FileDropOverlay composer={composer} />
     </div>
   </FloatingWindow> : null;
+  const fileInput = <input ref={fileInputRef} type="file" multiple className="hidden"
+    onChange={(event: { target: { files: FileList | null; value: string } }) => { void composer.attach(event.target.files); event.target.value = ""; }} />;
+  if (windowOnly) return <>{fileInput}{window}</>;
   return <>
-    <input ref={fileInputRef} type="file" multiple className="hidden"
-      onChange={(event: { target: { files: FileList | null; value: string } }) => { void composer.attach(event.target.files); event.target.value = ""; }} />
+    {fileInput}
     <div ref={rootRef} data-chat-composer className="crm-chat-composer shrink-0 rounded-panel border border-border">
       {expanded ? <p className={`${compact ? "p-2" : "p-3"} text-xs text-muted-foreground`}>{t("crm.composer.inWindow")}</p> : <div className={`${compact ? "p-2" : "p-3"} ${mode === "note" ? "bg-amber-400/5" : ""}`}>
         <CrmComposerFields conversation={conversation} composer={composer} config={config} surface="inline" compact={compact} onSubmit={() => void send()}
