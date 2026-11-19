@@ -17,6 +17,11 @@ export type ComposerDraft = {
   mode: ComposerMode;
   /** The reply as typed. */
   body: string;
+  /**
+   * The same reply as formatted HTML, when a reply editor that formats (`CrmReplyInputProps.formatting`) wrote it;
+   * `null` for plain text. It belongs to `body`: any change of `body` without new HTML drops it.
+   */
+  html: string | null;
   /** An edited email subject; `null` keeps the conversation's own. */
   subject: string | null;
   /** The email recipient the reply is pinned to; `null` follows the connection's default. */
@@ -28,7 +33,7 @@ export type ComposerDraft = {
   noteBody: string;
 };
 
-export const EMPTY_DRAFT: ComposerDraft = Object.freeze({ mode: "reply", body: "", subject: null, recipient: null, from: null, note: "", noteBody: "" });
+export const EMPTY_DRAFT: ComposerDraft = Object.freeze({ mode: "reply", body: "", html: null, subject: null, recipient: null, from: null, note: "", noteBody: "" });
 const STORAGE_PREFIX = "onno.crm.draft.v1|";
 /** Drafts untouched for this long are dropped from storage. */
 export const DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -53,6 +58,7 @@ function normalise(value: unknown): ComposerDraft | null {
   return {
     mode: raw.mode === "note" ? "note" : "reply",
     body: typeof raw.body === "string" ? raw.body : "",
+    html: nullableString(raw.html),
     subject: nullableString(raw.subject),
     recipient: nullableString(raw.recipient),
     from: nullableString(raw.from),
@@ -186,7 +192,7 @@ export function createDraftStore({ storage = defaultStorage, now = Date.now, deb
       const target = entry(key);
       const draft = target.draft ?? { ...EMPTY_DRAFT, mode };
       if (mode === "note") target.draft = { ...draft, note: "", noteBody: "" };
-      else { target.draft = { ...draft, body: "", subject: null, recipient: null, from: null }; target.files = []; }
+      else { target.draft = { ...draft, body: "", html: null, subject: null, recipient: null, from: null }; target.files = []; }
       if (isBlank(target.draft)) target.draft = null;
       dirty.delete(key);
       persist(key);

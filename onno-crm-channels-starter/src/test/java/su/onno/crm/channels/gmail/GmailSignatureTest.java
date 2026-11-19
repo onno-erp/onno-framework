@@ -61,6 +61,26 @@ class GmailSignatureTest {
         assertThat(mixed.getBodyPart(1).getFileName()).isEqualTo("contract.pdf");
     }
 
+    @Test void aFormattedReplyIsTheHtmlPartAboveTheSignatureAndTheTextIsThePlainPart() throws Exception {
+        var sent = parse(GmailMail.compose("wedding@studio.test", "client@example.com", "Booking", "",
+                "Hello Anna,\nsee you Monday.", "<p>Hello <b>Anna</b>,</p><p>see you <i>Monday</i>.</p>", List.of(), UUID.randomUUID(), SIGNATURE));
+        var alternatives = (Multipart) sent.getContent();
+        assertThat(alternative(alternatives, "text/plain").getContent().toString())
+                .startsWith("Hello Anna,\nsee you Monday.\n\n-- \n").doesNotContain("<b>");
+        assertThat(alternative(alternatives, "text/html").getContent().toString())
+                .isEqualTo("<div dir=\"auto\"><p>Hello <b>Anna</b>,</p><p>see you <i>Monday</i>.</p></div><br>"
+                        + "<div class=\"gmail_signature\" data-smartmail=\"gmail_signature\">" + SIGNATURE + "</div>");
+    }
+
+    @Test void aFormattedReplyWithoutASignatureStillHasBothParts() throws Exception {
+        var sent = parse(GmailMail.reply("office@studio.test", "client@example.com", "Booking", "<original@example.com>",
+                "Plain", "<b>Plain</b>", List.of(), UUID.randomUUID(), null));
+        assertThat(sent.isMimeType("multipart/alternative")).isTrue();
+        var alternatives = (Multipart) sent.getContent();
+        assertThat(alternative(alternatives, "text/plain").getContent().toString()).isEqualTo("Plain");
+        assertThat(alternative(alternatives, "text/html").getContent().toString()).isEqualTo("<div dir=\"auto\"><b>Plain</b></div>");
+    }
+
     @Test void withoutASignatureTheEmailIsPlainTextAsBefore() throws Exception {
         for (String none : new String[]{null, "", "  "}) {
             var sent = parse(GmailMail.compose("office@studio.test", "client@example.com", "Booking", "", "Plain",
@@ -143,8 +163,30 @@ class GmailSignatureTest {
         }
     }
 
+    @Test void theBridgeSendsAQueuedReplysFormattedHtml() throws Exception {
+        try (var f = new GmailFixture()) {
+            var info = f.mailbox("info@studio.test", Scope.SHARED, null, "Info");
+            when(info.send(anyString(), nullable(String.class)))
+                    .thenReturn(f.json.createObjectNode().put("id", "sent-1").put("threadId", "info-thread"));
+            var conversation = f.conversation("info@studio.test", "info-thread", "client@example.com");
+
+            send(f, conversation, null, "See you Monday", "See you <b>Monday</b>");
+
+            var raw = ArgumentCaptor.forClass(String.class);
+            verify(info).send(raw.capture(), any());
+            var alternatives = (Multipart) parse(raw.getValue()).getContent();
+            assertThat(alternative(alternatives, "text/html").getContent().toString()).contains("See you <b>Monday</b>");
+            assertThat(alternative(alternatives, "text/plain").getContent().toString()).isEqualTo("See you Monday");
+        }
+    }
+
     private static ConversationMessage send(GmailFixture f, Conversation conversation, String senderAccount, String body) {
+        return send(f, conversation, senderAccount, body, null);
+    }
+
+    private static ConversationMessage send(GmailFixture f, Conversation conversation, String senderAccount, String body, String html) {
         var reply = new ConversationMessage();
+        reply.setBodyHtml(html);
         reply.setId(UUID.randomUUID());
         reply.setConversation(Ref.of(Conversation.class, conversation.getId()));
         reply.setBody(body);

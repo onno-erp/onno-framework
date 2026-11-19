@@ -765,9 +765,11 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
                 || subject!=null&&!subject.equals(Objects.toString(route.get("subject"),""));
         }
         String signature=signature(from);
+        // A formatted reply (sanitized when it was queued) goes out as the email's HTML; its text stays the plain part.
+        String html=message.getBodyHtml();
         String raw=newThread
-            ? GmailMail.compose(from.email,recipient,outgoingSubject,"",body,files,id,signature)
-            : GmailMail.reply(from.email,recipient,Objects.toString(route.get("subject"),""),Objects.toString(route.get("reference_id"),""),body,files,id,signature);
+            ? GmailMail.compose(from.email,recipient,outgoingSubject,"",body,html,files,id,signature)
+            : GmailMail.reply(from.email,recipient,Objects.toString(route.get("subject"),""),Objects.toString(route.get("reference_id"),""),body,html,files,id,signature);
         var sent=client(from).send(raw,newThread?null:route.get("thread_id").toString());
         tx.executeWithoutResult(s->{
             if(newThread&&!sent.path("threadId").asText().isBlank()) {

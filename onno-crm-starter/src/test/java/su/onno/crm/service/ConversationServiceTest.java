@@ -130,6 +130,37 @@ class ConversationServiceTest {
     }
 
     @Test
+    void aFormattedEmailReplyKeepsItsSanitizedHtmlBesideTheText() {
+        var saved = service.addMessage(conversationId, new ConversationService.Reply("Hello Anna, see you", java.util.List.of(), "Agent", null, null, null, null,
+                "<p dir=\"auto\" class=\"x\" style=\"color:red\">Hello <b>Anna</b>,</p><p onclick=\"steal()\">see <a href=\"javascript:alert(1)\">you</a> <a href=\"https://studio.test\">here</a></p><script>alert(1)</script><img src=\"https://t.test/p.gif\">"));
+        assertThat(saved.getBody()).isEqualTo("Hello Anna, see you");
+        assertThat(saved.getBodyHtml()).isEqualTo(
+                "<p dir=\"auto\">Hello <b>Anna</b>,</p><p>see <a rel=\"noopener noreferrer\" target=\"_blank\">you</a> "
+                + "<a href=\"https://studio.test\" rel=\"noopener noreferrer\" target=\"_blank\">here</a></p>");
+        verify(transport).enqueue(conversation, saved);
+    }
+
+    @Test
+    void aReplyWithoutFormattingOrWithEmptyFormattingStaysPlain() {
+        assertThat(service.addMessage(conversationId, new ConversationService.Reply("Hi", "Agent")).getBodyHtml()).isNull();
+        var empty = service.addMessage(conversationId, new ConversationService.Reply("Hi", java.util.List.of(), "Agent", null, null, null, null, "<p><br></p><script>x</script>"));
+        assertThat(empty.getBodyHtml()).isNull();
+    }
+
+    @Test
+    void onlyEmailRepliesCanBeFormatted() {
+        conversation.setChannel(Channel.TELEGRAM);
+        assertThatThrownBy(() -> service.addMessage(conversationId, new ConversationService.Reply("Hi", java.util.List.of(), "Agent", null, null, null, null, "<b>Hi</b>")))
+                .hasMessage("Only email messages can be formatted");
+        assertThatThrownBy(() -> service.addMessage(conversationId, new ConversationService.Reply("Hi", java.util.List.of(), "Agent", null, null, null, null, "<b>" + "x".repeat(ReplyHtml.MAX_LENGTH) + "</b>")))
+                .hasMessage("Only email messages can be formatted");
+        conversation.setChannel(Channel.EMAIL);
+        assertThatThrownBy(() -> service.addMessage(conversationId, new ConversationService.Reply("Hi", java.util.List.of(), "Agent", null, null, null, null, "<b>" + "x".repeat(ReplyHtml.MAX_LENGTH) + "</b>")))
+                .hasMessage("The formatted message is too long");
+        verify(messages, never()).save(any());
+    }
+
+    @Test
     void invalidEmailSubjectIsRejectedBeforeWriting() {
         org.mockito.Mockito.lenient().when(statuses.reply()).thenReturn(statusRef(ConversationStatus.WAITING_CUSTOMER));
         for(String subject:java.util.List.of("hello\r\nBcc: someone@example.com","x".repeat(999)))
