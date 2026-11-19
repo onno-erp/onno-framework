@@ -93,7 +93,8 @@ public class CrmInboxController {
                 request == null ? null : request.body(),
                 request == null ? java.util.List.of() : request.attachments(),
                 user.displayName(),
-                user.recordId(), request == null ? null : request.subject(), recipient, from), principal), user.avatarUrl());
+                user.recordId(), request == null ? null : request.subject(), recipient, from,
+                request == null ? null : request.html()), principal), user.avatarUrl());
     }
 
     /**
@@ -193,12 +194,14 @@ public class CrmInboxController {
     /**
      * {@code attachments} are media URLs from {@code POST /api/media}, never raw bytes or links.
      * {@code from} is the id of one of the delivery connection's {@code senders}; omit it to send
-     * from the default {@code sender}.
+     * from the default {@code sender}. {@code html} is an email's formatted version of {@code body} (sanitized on
+     * receipt; a 400 on other channels).
      */
-    public record SendMessage(String body, List<String> attachments, String subject, String recipient, String from) {
+    public record SendMessage(String body, List<String> attachments, String subject, String recipient, String from, String html) {
         public SendMessage {
             attachments = attachments == null ? List.of() : List.copyOf(attachments);
         }
+        public SendMessage(String body, List<String> attachments, String subject, String recipient, String from) { this(body,attachments,subject,recipient,from,null); }
         public SendMessage(String body, List<String> attachments, String subject, String recipient) { this(body,attachments,subject,recipient,null); }
         public SendMessage(String body, List<String> attachments, String subject) { this(body,attachments,subject,null); }
         public SendMessage(String body, List<String> attachments) { this(body, attachments, null); }

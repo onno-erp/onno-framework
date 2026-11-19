@@ -919,6 +919,9 @@ connected/label/maxTextLength plus `maxAttachments` and `attachmentReason`;
 `POST /api/crm/conversations/{id}/messages/{messageId}/retry` requeues a failed reply after checking
 conversation membership and host customer permissions. See [the read/API contract](HEADLESS_READ_API.md).
 
+An email reply may also be formatted: `html` beside `body` is sanitized to formatting tags
+(`ReplyHtml`), kept as the message's `bodyHtml`, and sent by Gmail as the HTML part, `body` as the plain one.
+
 Outbound replies may carry files. `POST /api/crm/conversations/{id}/messages` accepts
 `{body,attachments}`, where `attachments` are media URLs previously returned by `POST /api/media`
 ([media uploads](MEDIA_UPLOADS.md)) — references, never bytes, and only ones this application issued,

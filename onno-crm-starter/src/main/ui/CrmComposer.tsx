@@ -86,9 +86,16 @@ export function SenderControls({ conversation, composer, siblings = [], onSwitch
   </div>;
 }
 
-/** An app-supplied reply field; draft storage, delivery and all other fields stay with the composer. */
+/**
+ * An app-supplied reply field; draft storage, delivery and all other fields stay with the composer.
+ * `formatting` says the channel carries formatted text (email): the field may then report HTML with the text,
+ * `onChange(text, html)`, which is sent as the email's HTML while `text` stays its plain part. `html` is the
+ * draft's current HTML (null when plain, or after something else changed the text). `onChange(text)` alone
+ * keeps the reply plain.
+ */
 export type CrmReplyInputProps = {
-  value: string; onChange: (value: string) => void; onSubmit: () => void;
+  value: string; html: string | null; formatting: boolean;
+  onChange: (value: string, html?: string | null) => void; onSubmit: () => void;
   disabled: boolean; maxLength: number; label: string; placeholder: string;
   describedBy?: string; surface: "inline" | "window";
 };
@@ -151,7 +158,9 @@ export function CrmComposerFields({ conversation, composer, config, surface = "i
         onSubmit={submit} />
     </div>
     {mode === "reply" && !replyState.disabled && (renderReplyInput ? renderReplyInput({
-      value: composer.draft, onChange: composer.setDraft, onSubmit: submit,
+      value: composer.draft, html: composer.draftHtml, formatting: composer.formatting,
+      onChange: (text: string, html?: string | null) => html === undefined || !composer.formatting ? composer.setDraft(text) : composer.setFormattedDraft(text, html),
+      onSubmit: submit,
       disabled: composer.busy || replyState.disabled, maxLength: delivery?.maxTextLength ?? 4096,
       label: t("crm.composer.replyLabel"), placeholder: replyState.placeholder,
       describedBy: replyState.message ? statusId : undefined, surface,

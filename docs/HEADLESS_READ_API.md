@@ -103,7 +103,7 @@ The optional `onno-crm-starter` adds a focused command surface for its inbox (`@
 GET  /api/crm/conversations/{id}/delivery       response: {"connected":true,"label":"Telegram @bot","maxTextLength":4096}
 POST /api/crm/conversations/{id}/messages/{messageId}/retry
 GET  /api/crm/conversations/{id}/messages
-POST /api/crm/conversations/{id}/messages       body: {"body":"…"}
+POST /api/crm/conversations/{id}/messages       body: {"body":"…"}  (email may add "html":"…", its formatted version)
 POST /api/crm/conversations/{id}/read
 ```
 

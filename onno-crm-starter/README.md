@@ -243,7 +243,7 @@ authorization precedes it. `canAccess` remains for single-conversation checks.
 | `GET /inbox-workspaces/{key}` | `{key,label,canWrite,config,list,channelAccounts,rows,total,hasMore,nextCursor}`: authorized rows (filters, `sort`/`dir`, cursor/limit) and the conversation list's default descriptor |
 | `GET /inbox-workspaces/{key}/conversation/{id}` | Authorized conversations for the same customer |
 | `GET/POST /inbox-workspaces/{key}/conversations/{id}/comments` | Internal notes. POST validates `body` against the shared `onno.comments.max-length` (4000 characters by default) and the CRM request cap of 8000 characters. Invalid text returns `422`. |
-| `GET/POST /conversations/{id}/messages` | History / enqueue `{body,attachments,subject?,recipient?,from?}`; each message returns `attachments:[{url,filename,contentType,size,image}]` and the stored `subject`/`recipient`/`senderAccount` (null when not set), so history shows overrides. A `from` the delivery connection does not offer is `400` |
+| `GET/POST /conversations/{id}/messages` | History / enqueue `{body,attachments,subject?,recipient?,from?,html?}` (`html`: an email's formatted version of `body`, sanitized to formatting tags into the message's `bodyHtml` and sent as its HTML part; `400` on other channels); each message returns `attachments:[{url,filename,contentType,size,image}]` and the stored `subject`/`recipient`/`senderAccount` (null when not set), so history shows overrides. A `from` the delivery connection does not offer is `400` |
 | `GET /conversations/{id}/delivery` | `{connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients,senders,sender}`; `recipient` is the default address and `recipients` the choices (null/empty when the transport offers no selection); `senders` (`[{id,label}]`) are the accounts the reply may come from and `sender` the default id (empty/null when there is no choice), as offered to the caller. Addresses known only through another user's personal account are left out |
 | `POST /conversations/{id}/status` | `{status}` (a configured status id) → the updated conversation state; a missing body or `status` is `400` |
 | `POST /conversations/{id}/messages/{messageId}/retry` | Retry a failed reply |
@@ -290,9 +290,11 @@ There is no backward-compatibility layer for the former CRM-owned business model
 
 Each part takes the hook state as props, so an app replaces one piece and keeps the rest.
 `CrmComposer`'s `renderReplyInput` replaces only the reply editor (a rich-text field, say) in both the
-inline composer and its larger window; it gets `CrmReplyInputProps` (`value`, `onChange`, `onSubmit`,
-`disabled`, `maxLength`, `label`, `placeholder`, `describedBy`, `surface`), while drafts, files, sending
-and the other fields stay the composer's. Mark the editable element `data-composer-reply` so the
+inline composer and its larger window; it gets `CrmReplyInputProps` (`value`, `html`, `formatting`, `onChange`,
+`onSubmit`, `disabled`, `maxLength`, `label`, `placeholder`, `describedBy`, `surface`), while drafts, files, sending
+and the other fields stay the composer's. When `formatting` is true (email), the field may report
+`onChange(text, html)`: the HTML is kept in the draft beside the text and sent as the email's HTML part, the text as
+its plain part; `onChange(text)` alone, or any other change of the text, makes the reply plain again. Mark the editable element `data-composer-reply` so the
 composer can put the caret back in it; Ctrl/Cmd+Enter is ignored while an IME is composing.
 `CrmInbox`'s `components` swaps a part in place. Every replacement gets the same props the built-in
 part does: `ConversationRowProps`, `CrmComposerProps`, `InboxContactPanelProps`.

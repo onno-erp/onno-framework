@@ -11,6 +11,8 @@ dependencies {
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.tx)
     implementation(libs.spring.jdbc)
+    // Sanitizes the HTML of formatted email replies (ReplyHtml).
+    implementation("org.jsoup:jsoup:1.18.3")
 
     compileOnly(libs.spring.boot.configuration.processor)
     annotationProcessor(libs.spring.boot.configuration.processor)

@@ -42,6 +42,17 @@ it("forgets a draft the writer empties, and only the sent part after a send", ()
   expect(stored()).toHaveLength(0);
 });
 
+it("keeps a reply's formatting with its text across a reload, and drops it with the sent reply", () => {
+  const drafts = store();
+  const key = drafts.key("", "chat");
+  drafts.write(key, draft({ body: "See you", html: "<b>See you</b>" }));
+  expect(store().read(key)).toMatchObject({ body: "See you", html: "<b>See you</b>" });
+  drafts.clearSent(key, "reply");
+  expect(drafts.read(key)).toBeNull();
+  window.localStorage.setItem(PREFIX + key, JSON.stringify({ savedAt: clock, draft: { body: "Older draft" } }));
+  expect(store().read(key)).toMatchObject({ body: "Older draft", html: null });
+});
+
 it("keeps attached files in memory only and reports unsent work from this session", () => {
   const drafts = store();
   const key = drafts.key("", "chat");
