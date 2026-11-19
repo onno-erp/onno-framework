@@ -6,6 +6,7 @@ vi.mock("@/lib/presence-store", () => ({ useViewersById: () => new Map() }));
 vi.mock("@/components/maps/list-map-view", () => ({ ListMapView: () => null }));
 import { CrmInbox } from "../../onno-crm-starter/src/main/ui/CrmInbox";
 import { composerDrafts } from "../../onno-crm-starter/src/main/ui/composerDrafts";
+import { composerWindows } from "../../onno-crm-starter/src/main/ui/composerWindows";
 
 class Observer { observe() {} unobserve() {} disconnect() {} }
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
@@ -58,7 +59,7 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([{}] as unknown as DOMRectList);
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); composerDrafts.reset(); window.localStorage.clear(); delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView; });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); composerDrafts.reset(); composerWindows.reset(); window.localStorage.clear(); delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView; });
 
 it("keeps each conversation's draft when switching chats, remounting and reloading", async () => {
   mount();
@@ -163,6 +164,53 @@ it("opens the composer in a non-modal window that edits the same draft and sends
   expect(sent()[0].body).toMatchObject({ body: "Started inline, finished in the window", from: "office" });
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   expect(await replyBox()).toHaveValue("");
+});
+
+it("keeps a composer window on its own conversation, minimised, while another chat is open", async () => {
+  const { sent } = mount();
+  await openChat("Anna");
+  fireEvent.click(screen.getByRole("button", { name: "Open in a larger window" }));
+  const window = await screen.findByRole("dialog", { name: "Reply to Anna" });
+  fireEvent.change(within(window).getByRole("textbox", { name: "Write a reply" }), { target: { value: "Dear Anna, the villa is free" } });
+  fireEvent.click(within(window).getByRole("button", { name: "Minimize" }));
+
+  // Another chat: its own empty composer inline, Anna's window still there, minimised, with her draft.
+  const ben = await openChat("Ben");
+  expect(ben).toHaveValue("");
+  const parked = await screen.findByRole("dialog", { name: "Reply to Anna" });
+  expect(parked).toHaveAttribute("data-window-state", "minimized");
+  fireEvent.change(ben, { target: { value: "Ben's own reply" } });
+  fireEvent.click(within(parked).getByRole("button", { name: "Restore" }));
+  expect(within(parked).getByRole("textbox", { name: "Write a reply" })).toHaveValue("Dear Anna, the villa is free");
+
+  // Sent from the window, the reply goes to Anna's conversation and the window closes; Ben's draft stays.
+  fireEvent.click(within(parked).getByRole("button", { name: "Send reply" }));
+  await waitFor(() => expect(sent()).toHaveLength(1));
+  expect(sent()[0]).toMatchObject({ url: expect.stringContaining("chat-anna"), body: { body: "Dear Anna, the villa is free" } });
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(await replyBox()).toHaveValue("Ben's own reply");
+
+  // Back on Anna: her composer is inline again and empty.
+  expect(await openChat("Anna")).toHaveValue("");
+});
+
+it("hands the window back to the chat's own composer when that chat is chosen again", async () => {
+  mount();
+  await openChat("Anna");
+  fireEvent.click(screen.getByRole("button", { name: "Open in a larger window" }));
+  const window = await screen.findByRole("dialog", { name: "Reply to Anna" });
+  fireEvent.change(within(window).getByRole("textbox", { name: "Write a reply" }), { target: { value: "Still writing" } });
+  fireEvent.click(within(window).getByRole("button", { name: "Minimize" }));
+  await openChat("Ben");
+  fireEvent.click(await screen.findByRole("button", { name: /^Anna/ }));
+  await screen.findByText("Hello from anna");
+  // One window, the same one, still minimised; the inline composer says the draft is in the window.
+  const dialogs = await screen.findAllByRole("dialog", { name: "Reply to Anna" });
+  expect(dialogs).toHaveLength(1);
+  expect(dialogs[0]).toHaveAttribute("data-window-state", "minimized");
+  expect(screen.queryByRole("textbox", { name: "Write a reply" })).not.toBeInTheDocument();
+  fireEvent.click(within(dialogs[0]).getByRole("button", { name: "Close" }));
+  expect(await replyBox()).toHaveValue("Still writing");
 });
 
 it("keeps insertDraft adding to the open conversation's draft", async () => {

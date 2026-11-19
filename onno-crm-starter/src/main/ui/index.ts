@@ -41,6 +41,7 @@ export { ChatTimeline, TimelineMessage, TimelineSystemEvent, TimelineComment, Me
   type ChatTimelineProps, type MessageActionsContext } from "./ChatTimeline";
 export { CrmComposer, CrmComposerFields, SenderControls, AttachButton, FileDropOverlay,
   type CrmComposerProps, type CrmComposerPartProps, type CrmComposerLayouts } from "./CrmComposer";
+export { composerWindows, type ComposerWindow } from "./composerWindows";
 export { ContactPanel as CrmContactPanel, CrmPresentationProvider, useCrmPresentation, type Config as CrmConfig } from "./CrmWorkspace";
 export { ChannelLogo } from "./ChannelLogo";
 export { ChatMessageBody, ChatMessageRenderers } from "./chatMessageRenderers";

@@ -11,6 +11,7 @@ import { useChatGroups } from "./chatGroups";
 import { contactChats, replySelection, type ReplySelection } from "./contactChats";
 import { useInboxEscape } from "./useInboxEscape";
 import { useConversationRead } from "./useConversationRead";
+import { ComposerWindowHost, useComposerWindows, type ComposerWindow } from "./composerWindows";
 import { text as hostText, useLocale, useTranslate, useMobileDetail, usePageSlide, WorkspaceToolbar, type WorkspaceToolbarLayout } from "@onno/ui";
 
 /**
@@ -89,7 +90,10 @@ function DefaultInboxContact({ customerId, conversation, customer, config }: Inb
 export type CrmInboxComponents = {
   /** One conversation in the list. Wrap the exported `ConversationRow` to keep its menu and selection. */
   ConversationRow?: ConversationRowComponent;
-  /** The composer under the chat (the exported `CrmComposer` and its parts). */
+  /**
+   * The composer under the chat (the exported `CrmComposer` and its parts). It also draws the windows of chats
+   * not on screen, with `windowOnly` set: pass the props through to `CrmComposer`.
+   */
   Composer?: ComponentType<CrmComposerProps>;
   /** The contact panel beside the chat. */
   ContactPanel?: ComponentType<InboxContactPanelProps>;
@@ -318,6 +322,7 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
     onFocusHandled?.();
   }, [focusConversation, channelRows]);
 
+  const windowHost = useMemo(() => ({ workspace: workspaceKey ?? "" }), [workspaceKey]);
   if (!config) return configError ? <p role="alert" className="p-4 text-sm">{configError}</p> : <InboxSkeleton />;
 
   if (!loading && !toolbar && !rows.length && !folders.length) {
@@ -354,6 +359,7 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
     selected={(!compact || mobileChatOpen) && String(row.customer || row.id) === String(selected?.customer || selectedId)} onSelect={() => select(row)} />;
 
   return (
+    <ComposerWindowHost.Provider value={windowHost}>
     <div
       ref={inboxRootRef}
       tabIndex={-1}
@@ -534,8 +540,29 @@ function InboxBody({ toolbar, chrome, loading, rows: channelRows, total, open, s
         </aside> : null}
       </div>
       {mailboxOpen && mailboxes.length > 0 && <MailboxSearch open accounts={mailboxes} onOpenChange={setMailboxOpen} onOpenConversation={openConversation} />}
+      {config && <ComposerWindows workspace={windowHost.workspace} shown={selected && chat.id ? composerDrafts.key(chat.workspace, chat.id) : null}
+        config={config} Composer={Composer} />}
     </div>
+    </ComposerWindowHost.Provider>
   );
+}
+
+/**
+ * The composer windows of the conversations the inbox is not showing. Each keeps writing to its own chat (its own
+ * conversation and composer state; the draft is shared through `composerDrafts`), drawn by the inbox's `Composer`
+ * so an app's own composer applies to these windows too. The shown chat's window is drawn by its composer.
+ */
+function ComposerWindows({ workspace, shown, config, Composer }: { workspace: string; shown: string | null; config: Config; Composer: ComponentType<CrmComposerProps> }) {
+  const windows = useComposerWindows();
+  return <>{windows.list(workspace).filter(window => window.key !== shown).map(window =>
+    <ParkedComposer key={window.key} window={window} config={config} Composer={Composer} />)}</>;
+}
+
+function ParkedComposer({ window, config, Composer }: { window: ComposerWindow; config: Config; Composer: ComponentType<CrmComposerProps> }) {
+  const chat = useCrmConversation({ conversation: window.conversation, workspace: window.workspace });
+  const composer = useCrmComposer(chat, config);
+  const extensionContext = useConversationExtensionContext(chat, composer, config);
+  return <Composer conversation={chat} composer={composer} config={config} extensionContext={extensionContext} contactName={window.contactName} windowOnly />;
 }
 
 

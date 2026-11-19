@@ -507,6 +507,15 @@ freely floating and resizable window, or maximized. Its state, position and size
 the browser (`persist="crm.composer"`). On phones (under 640px) it always fills the screen. Closing it
 returns focus to the inline field.
 
+In the inbox the window belongs to its conversation, like a mail draft (`src/main/ui/composerWindows.ts`):
+choosing another chat leaves it open, docked or minimized where it was, still writing to and sending
+from the chat it was opened for, while the newly chosen chat gets its own inline composer. Each chat
+has at most one window (`crm-composer:<draft key>`), so several drafts can sit side by side; choosing a
+chat whose window is open hands that same window back to the chat's composer. The inbox draws the
+windows of chats it is not showing with its `Composer` component and `windowOnly`, so an app's own
+composer must pass its props through to `CrmComposer`. Outside an inbox (`CrmConversation`, an app's
+screen) a composer's window is its own and closes with it.
+
 When the delivery connection lists two or more `senders` (`{id, label}`), the From row becomes a
 mailbox picker defaulting to `sender`, and the send command carries `from: <sender id>`. Switching to
 the contact's other conversations then moves to a Channel row of its own. Without `senders` (or with
