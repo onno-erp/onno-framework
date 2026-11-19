@@ -1713,7 +1713,10 @@ export function EntityListView({
     return col ? { column: col, descending: initialParams.get("dir") === "desc" } : list.sort;
   });
   const [query, setQuery] = useControllable(state?.search, state?.onSearchChange, () => (urlSynced ? initialParams.get("q") ?? "" : ""));
-  const [debounced, setDebounced] = useState(() => (urlSynced ? initialParams.get("q") ?? "" : ""));
+  const [debouncedSearch, setDebounced] = useState(() => (urlSynced ? initialParams.get("q") ?? "" : ""));
+  // The picker already debounces its search together with its folder constraint. Read both
+  // from the same render, rather than fetching a new scope with the previous search text.
+  const debounced = selectMode?.query?.trim() ?? debouncedSearch;
   // The toolbar's facet rail: it scrolls horizontally when the chips don't fit, and the
   // left/right fades are the "there's more" signal. Re-measured on every render (chips appear and
   // resize with filter state) plus on rail scroll — the setter's referential guard keeps the
@@ -2275,14 +2278,14 @@ export function EntityListView({
       });
   }, [feedBase, pageSize, buildParams, finishWindow]);
 
-  // Load the initial window on first mount or query change. Reset the cursor so the query re-seeks
-  // from the top rather than an old position.
+  // Load the initial window on first mount or query change, including a host page's `where` prop.
+  // Reset the cursor so the query re-seeks from the top rather than an old position.
   useEffect(() => {
     cursorRef.current = null;
     setHasMore(true);
     loadInitial(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedBase, pageSize, sort.column, sort.descending, debounced, filterSig, queryParamSig]);
+  }, [feedBase, pageSize, sort.column, sort.descending, debounced, filterSig, queryParamSig, baseWhereSig]);
 
   useEffect(() => { if (refreshKey) loadInitial(true); }, [refreshKey, loadInitial]);
   useEffect(() => { if (queuedRefresh) loadInitial(true); }, [queuedRefresh]); // eslint-disable-line react-hooks/exhaustive-deps

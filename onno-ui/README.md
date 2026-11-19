@@ -91,6 +91,12 @@ calendar, timeline, custom view) for this list only. `sort` and `groupBy` set in
 pair them with their `on…Change` callback for controlled state. `selectionToolbar` is a component;
 `selection` is the controlled array of selected ids.
 
+`where` follows the page's current state: changing or removing it reloads the first matching
+window and clears the previous selection. For example,
+`<EntityList entity="Orders" where={onlyOpen ? { open: true } : undefined} />` switches between
+open orders and all orders when `onlyOpen` changes. Recreating an equivalent filter object during
+a render does not reload the list; no changing React `key` or manual refresh is needed.
+
 `RecordPageProps<E>` injects the live form: `values`, typed `set(field, value)`, `save(post?)`,
 `isNew`, `readOnly`, `saving`, `errors`, `feedback`, and `defaultLayout`. Custom editors can display
 `form.errors.note` and the field-scoped `form.feedback` messages. `RecordPage` retains the header, actions,
