@@ -289,6 +289,11 @@ There is no backward-compatibility layer for the former CRM-owned business model
    - `useCrmContact(id)`.
 
 Each part takes the hook state as props, so an app replaces one piece and keeps the rest.
+`CrmComposer`'s `renderReplyInput` replaces only the reply editor (a rich-text field, say) in both the
+inline composer and its larger window; it gets `CrmReplyInputProps` (`value`, `onChange`, `onSubmit`,
+`disabled`, `maxLength`, `label`, `placeholder`, `describedBy`, `surface`), while drafts, files, sending
+and the other fields stay the composer's. Mark the editable element `data-composer-reply` so the
+composer can put the caret back in it; Ctrl/Cmd+Enter is ignored while an IME is composing.
 `CrmInbox`'s `components` swaps a part in place. Every replacement gets the same props the built-in
 part does: `ConversationRowProps`, `CrmComposerProps`, `InboxContactPanelProps`.
 
