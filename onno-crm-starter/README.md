@@ -289,6 +289,10 @@ There is no backward-compatibility layer for the former CRM-owned business model
    - `useCrmContact(id)`.
 
 Each part takes the hook state as props, so an app replaces one piece and keeps the rest.
+`CrmComposer`'s `defaultExpanded` and `onExpandedChange` let an app keep the larger composer window
+with its conversation, like a mail draft: remember the state per conversation from
+`onExpandedChange` and pass it back as `defaultExpanded` when that chat's composer mounts again (keyed
+by the conversation). A window restored this way opens without taking focus.
 `CrmInbox`'s `components` swaps a part in place. Every replacement gets the same props the built-in
 part does: `ConversationRowProps`, `CrmComposerProps`, `InboxContactPanelProps`.
 

@@ -216,6 +216,10 @@ export type CrmComposerProps = CrmComposerPartProps & {
   expandable?: boolean;
   /** The id that keeps the composer window's place (default: one per workspace). */
   windowId?: string;
+  /** Open with the larger window already open (a window that outlives a remount), without moving focus into it. */
+  defaultExpanded?: boolean;
+  /** Told when the larger window opens or closes (not when the composer unmounts). */
+  onExpandedChange?: (expanded: boolean) => void;
 };
 
 /**
@@ -223,9 +227,17 @@ export type CrmComposerProps = CrmComposerPartProps & {
  * outlet, send), with an "Open in a larger window" button that moves the same draft into a docked,
  * non-modal window.
  */
-export function CrmComposer({ conversation, composer, config, compact = false, layouts, extensionContext, siblings, onSwitch, contactName, expandable = true, windowId }: CrmComposerProps) {
+export function CrmComposer({ conversation, composer, config, compact = false, layouts, extensionContext, siblings, onSwitch, contactName, expandable = true, windowId, defaultExpanded = false, onExpandedChange }: CrmComposerProps) {
   const selected = conversation.conversation;
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const expandedListener = useRef(onExpandedChange);
+  expandedListener.current = onExpandedChange;
+  const reported = useRef(defaultExpanded);
+  useEffect(() => {
+    if (reported.current === expanded) return;
+    reported.current = expanded;
+    expandedListener.current?.(expanded);
+  }, [expanded]);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const windowRef = useRef<HTMLDivElement | null>(null);
   const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -233,7 +245,7 @@ export function CrmComposer({ conversation, composer, config, compact = false, l
   useAutoGrow(replyInputRef, composer.draft, !expanded);
   // Writing moves with the window: into it when it opens, back to the inline field when it closes
   // (the expand button that opened it is gone by then, so the window cannot hand focus back itself).
-  const wasExpanded = useRef(false);
+  const wasExpanded = useRef(defaultExpanded);
   useEffect(() => {
     if (wasExpanded.current === expanded) return;
     wasExpanded.current = expanded;
