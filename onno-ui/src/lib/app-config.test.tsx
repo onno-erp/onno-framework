@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { act, render, screen } from "@testing-library/react";
-import { AppConfigProvider, buildNavigation, useAppConfig, useEntityCustomizations, type AppDefinition, type PageDefinition } from "./app-config";
+import { AppConfigProvider, buildNavigation, useAppConfig, useCommandPresentations, useEntityCustomizations, type AppDefinition, type PageDefinition } from "./app-config";
 import type { AppModel } from "./app-model";
 import { matchRoute } from "./routes";
 import { setModel } from "./model-store";
@@ -109,5 +109,28 @@ describe("entity page registration", () => {
     const app: AppDefinition = { pages: [{ list: "Orders", component: Page, roles: ["ADMIN"] }],
       navigation: [{ items: ["Orders"] }] };
     expect(buildNavigation(app, model([]), allowAll)).toEqual([]);
+  });
+});
+
+function CommandsProbe() {
+  const presentations = useCommandPresentations("catalogs", "CrmConversations");
+  return <p data-testid="commands">{JSON.stringify(presentations)}</p>;
+}
+
+describe("useCommandPresentations", () => {
+  it("merges an entity's command customizations, a bare placement included, by the name a surface passes", () => {
+    act(() => setModel(model(["MANAGER"])));
+    render(
+      <AppConfigProvider app={{ entities: {
+        CrmConversations: { commands: { "assign-to-me": { icon: "user-check" }, "state-closed": "hidden" } },
+        "catalogs/CrmConversations": { commands: { "assign-to-me": { title: "Take it" } } },
+      } }}>
+        <CommandsProbe />
+      </AppConfigProvider>,
+    );
+    expect(JSON.parse(screen.getByTestId("commands").textContent ?? "{}")).toEqual({
+      "assign-to-me": { icon: "user-check", title: "Take it" },
+      "state-closed": { placement: "hidden" },
+    });
   });
 });

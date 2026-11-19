@@ -18,7 +18,7 @@ import * as blocks from "./components/pages/page-blocks";
 import * as data from "./lib/query";
 import * as measures from "./lib/measure";
 import { defineApp as defineAppImpl } from "./start";
-import { openRecord as openRecordImpl } from "./lib/app-config";
+import { openRecord as openRecordImpl, useCommandPresentations as useCommandPresentationsImpl } from "./lib/app-config";
 import { openRoute as openRouteImpl } from "./lib/navigation";
 import { links as linksImpl, type OnnoLink } from "./lib/links";
 import { useModel } from "./lib/model-store";
@@ -168,6 +168,12 @@ export { RouteLink, type RouteLinkProps } from "./components/pages/route-link";
 export { EntityListView, OptionsFacet, type ListDescriptor } from "./components/lists/entity-list";
 /** Apply list options (an entity's `list` customization) to a list descriptor, for a component that composes `EntityListView` over its own feed. */
 export { applyListOptions } from "./lib/entity-customizations";
+/**
+ * How the app presents an entity's commands (the `commands` of its customizations, merged): for a
+ * surface that lists commands itself, so it shows the icons and placements the entity's own menus do.
+ */
+export const useCommandPresentations = useCommandPresentationsImpl as unknown as
+  (kind: string, name: string) => Record<string, import("./public-types").CommandPresentation>;
 export { toast } from "./components/ui/toast";
 export { HintIcon } from "./components/ui/hint-icon";
 export { Icon, type IconProps } from "./icons";

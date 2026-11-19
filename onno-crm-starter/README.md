@@ -318,7 +318,11 @@ input. Commands with a `.group("Change status")` appear under that submenu. A co
 input stays with the conversation's own actions, through `crm.chat.header` contributions and
 `context.execute`. The actions endpoint returns `group` and `inputs: boolean` for this.
 `rowMenu={{ open: false }}` drops "Open conversation"; `rowMenu={{ groups: false }}` drops the
-chat-group items.
+chat-group items. A command's icon, and `"hidden"` to leave it out of the menu, come from the app's
+customization of the conversation entity, as for any entity's list menu:
+`entities: { CrmConversations: { commands: { "assign-to-me": { icon: UserCheck }, "state-closed": { icon: CircleCheck } } } }`.
+Commands without an icon show none. Offer a command only in some states with `availableWhen`: the
+menu lists only the ones the actions endpoint marks visible.
 
 ## UI extensions and verification
 

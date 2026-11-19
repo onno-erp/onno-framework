@@ -34,7 +34,8 @@ Server behaviour stays in Java, as ordinary beans in `example/src/main/java/com/
 `checks/ScheduleEventChecks` (live form checks), `pickers/EmployeeAvailability` (picker options).
 How a command is offered (row button, header button, menu, icon) is the entity's `commands`
 customization in `entities/*.ts`; so are the built-in record actions and the print starter's
-`print-*` actions. The same file supplies the entity's imported Lucide `icon`, and `comments: true`
+`print-*` actions. The CRM inbox's conversation row menu reads the same customization of
+`CrmConversations` (`useCommandPresentations`). The same file supplies the entity's imported Lucide `icon`, and `comments: true`
 enables the record discussion.
 
 ## 2. The contract between server and browser
