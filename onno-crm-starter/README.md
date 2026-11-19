@@ -513,7 +513,7 @@ same draft in a non-modal `@onno/ui` window (`FloatingWindow`), docked in the bo
 like a mail compose box. The inbox behind it stays usable: switch chats, open the contact, scroll the
 history, copy dates and numbers. The window can be minimized to its title bar, dragged out into a
 freely floating and resizable window, or maximized. Its state, position and size are remembered in
-the browser (`persist="crm.composer"`). On phones (under 640px) it always fills the screen. Closing it
+the browser (`persist="crm.composer"`). On phones (under 768px) it always fills the screen. Closing it
 returns focus to the inline field.
 
 In the inbox the window belongs to its conversation, like a mail draft (`src/main/ui/composerWindows.ts`):

@@ -1,8 +1,9 @@
 import { DialogPortalContext } from "./dialog-portal";
-import { createContext, useContext, useRef, useState, useCallback, useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useContext, useRef, useState, useCallback, useEffect, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Drawer } from "vaul";
 import { useMessages } from "../../providers/messages-provider";
+import { useViewport, type Viewport } from "../../lib/viewport";
 
 /**
  * Responsive overlay primitives shared by every faceted control (list filter bar, dashboard time
@@ -14,26 +15,10 @@ export type FacetOverlay = "sheet" | "modal" | "popover";
 
 const FacetSheetContext = createContext(false);
 
-const MOBILE_QUERY = "(max-width: 767px)";
-const TABLET_QUERY = "(min-width: 768px) and (max-width: 1023px)";
-const OVERLAY_QUERIES = [MOBILE_QUERY, TABLET_QUERY];
-
-function subscribeOverlay(cb: () => void) {
-  if (typeof window === "undefined" || !window.matchMedia) return () => {};
-  const mqs = OVERLAY_QUERIES.map((query) => window.matchMedia(query));
-  mqs.forEach((mq) => mq.addEventListener("change", cb));
-  return () => mqs.forEach((mq) => mq.removeEventListener("change", cb));
-}
-
-function overlaySnapshot(): FacetOverlay {
-  if (typeof window === "undefined" || !window.matchMedia) return "popover";
-  if (window.matchMedia(MOBILE_QUERY).matches) return "sheet";
-  if (window.matchMedia(TABLET_QUERY).matches) return "modal";
-  return "popover";
-}
+const OVERLAY_BY_VIEWPORT: Record<Viewport, FacetOverlay> = { mobile: "sheet", tablet: "modal", desktop: "popover" };
 
 export function useFacetOverlay(): FacetOverlay {
-  return useSyncExternalStore(subscribeOverlay, overlaySnapshot, () => "popover");
+  return OVERLAY_BY_VIEWPORT[useViewport()];
 }
 
 export function useTouchLayout(): boolean {

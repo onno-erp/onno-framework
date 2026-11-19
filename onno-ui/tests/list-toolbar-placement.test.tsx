@@ -1,6 +1,7 @@
 import {act, cleanup, fireEvent, render, screen, waitFor, within} from "@testing-library/react";
 import {afterEach, expect, it, vi} from "vitest";
 import {EntityListView, type ListDescriptor, type ListRendererProps} from "@/components/lists/entity-list";
+import {stubScreenWidth} from "./viewport-fixtures";
 vi.mock("@/lib/presence-store",()=>({useViewersById:()=>new Map()}));
 vi.mock("@/components/maps/list-map-view",()=>({ListMapView:()=>null}));
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
@@ -20,7 +21,7 @@ it("keeps controls reachable for empty custom feeds and restores them when switc
 });
 it("uses a persistent mobile search and a filter sheet without losing query state", async()=>{
   vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});
-  vi.stubGlobal("matchMedia",(query:string)=>({matches:query.includes("max-width: 767px"),addEventListener(){},removeEventListener(){}}));
+  stubScreenWidth(390);
   vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify({rows:[],hasMore:false,total:0}))));
   const list: ListDescriptor = {kind:"catalogs",name:"orders",title:"Orders",columns:[],searchable:true,sort:{column:null,descending:false},newUrl:null,canWrite:false,pageSize:20,embedded:true,custom:{label:"Workspace",defaultView:true}};
   const Renderer=(props:ListRendererProps)=><section>{props.toolbar}</section>;

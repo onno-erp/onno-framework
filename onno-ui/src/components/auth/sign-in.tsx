@@ -143,13 +143,6 @@ export function useSignIn(): SignIn {
   return useMemo(() => ({ from, password, method, challenge, redirect }), [from, password, method, challenge, redirect]);
 }
 
-/** The resolved light/dark theme (for the logo variant). */
-function useResolvedTheme(): "light" | "dark" {
-  const { theme } = useTheme();
-  if (theme === "dark" || theme === "light") return theme;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
 /**
  * The login screen's frame: the branded hero on the left (logo, headline, footer) and the sign-in
  * card on the right, holding `children`. Compose a custom login page inside it to keep the app's
@@ -168,7 +161,7 @@ export function LoginLayout({ children, title, subtitle, footer, error }: {
 }) {
   const branding = useBranding();
   const t = useMessages();
-  const resolved = useResolvedTheme();
+  const { resolvedTheme: resolved } = useTheme();
   // The login mark: a configured logo (dark variant in dark mode), else the app name, else "onno".
   const logo = (resolved === "dark" && branding.logoUrlDark) || branding.logoUrl;
   return (

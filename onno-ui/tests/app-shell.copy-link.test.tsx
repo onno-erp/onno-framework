@@ -18,7 +18,7 @@ vi.mock("@/providers/auth-provider", () => ({
 }));
 
 vi.mock("@/providers/theme-provider", () => ({
-  useTheme: () => ({ theme: "light", setTheme: vi.fn() }),
+  useTheme: () => ({ theme: "light", resolvedTheme: "light", setTheme: vi.fn() }),
 }));
 
 vi.mock("@/providers/branding-provider", () => ({

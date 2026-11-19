@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { FacetSheet, SheetDoneButton } from "@/components/ui/facet-sheet";
+import { stubScreenWidth } from "./viewport-fixtures";
 
 // Keep the drawer visible in both states to inspect the lifecycle handed to Vaul.
 // Vaul owns CSS presence and swipe motion; the framework must not unmount its root.
@@ -17,9 +18,7 @@ vi.mock("vaul", () => ({ Drawer: {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 it("keeps the drawer mounted for Done, close, and Escape, and can reopen", () => {
-  vi.stubGlobal("matchMedia", (query: string) => ({
-    matches: query === "(max-width: 767px)", addEventListener() {}, removeEventListener() {},
-  }));
+  stubScreenWidth(390);
   function Example() {
     const [open, setOpen] = useState(true);
     return <>

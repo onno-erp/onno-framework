@@ -15,6 +15,7 @@ import {
 import { createPortal } from "react-dom";
 import { ArrowDownRight, Maximize2, Minimize2, Minus, PictureInPicture2, X } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { useViewport } from "../../lib/viewport";
 import { useMessages } from "../../providers/messages-provider";
 import { Button } from "./button";
 
@@ -306,28 +307,32 @@ export function useWindow(): WindowControls {
 
 // ---- layout -----------------------------------------------------------------------------------
 
-const viewportListeners = new Set<() => void>();
-let viewport = { width: 1280, height: 800 };
-function readViewport() {
-  if (typeof window === "undefined") return viewport;
+// The screen's size in pixels, which window geometry is fitted to. Whether it is a phone comes from
+// the shared device class (`useViewport`), not from this size.
+const screenListeners = new Set<() => void>();
+let screenSize = { width: 1280, height: 800 };
+function readScreen() {
+  if (typeof window === "undefined") return screenSize;
   const next = { width: window.innerWidth, height: window.innerHeight };
-  if (next.width !== viewport.width || next.height !== viewport.height) viewport = next;
-  return viewport;
+  if (next.width !== screenSize.width || next.height !== screenSize.height) screenSize = next;
+  return screenSize;
 }
-function subscribeViewport(listener: () => void) {
-  viewportListeners.add(listener);
-  const onResize = () => { for (const each of viewportListeners) each(); };
-  if (viewportListeners.size === 1) window.addEventListener("resize", onResize);
+// One resize listener for every subscriber: it is added with the first and removed with the last,
+// by the same function reference.
+function notifyScreen() {
+  for (const each of screenListeners) each();
+}
+function subscribeScreen(listener: () => void) {
+  screenListeners.add(listener);
+  if (screenListeners.size === 1) window.addEventListener("resize", notifyScreen);
   return () => {
-    viewportListeners.delete(listener);
-    if (!viewportListeners.size) window.removeEventListener("resize", onResize);
+    screenListeners.delete(listener);
+    if (!screenListeners.size) window.removeEventListener("resize", notifyScreen);
   };
 }
-function useViewport() {
-  return useSyncExternalStore(subscribeViewport, readViewport, readViewport);
+function useScreenSize() {
+  return useSyncExternalStore(subscribeScreen, readScreen, readScreen);
 }
-
-const PHONE_MAX_WIDTH = 640;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), Math.max(min, max));
@@ -347,9 +352,11 @@ function fit(geometry: Geometry, view: { width: number; height: number }, min: {
 
 type Box = { left: number; top: number; width: number; height: number };
 
-/** Where a window sits on screen, from its state and the windows sharing the bottom row. */
-function layout(entry: Entry, spec: WindowSpec, all: Entry[], view: { width: number; height: number }): Box {
-  const phone = view.width < PHONE_MAX_WIDTH;
+/**
+ * Where a window sits on screen, from its state and the windows sharing the bottom row. On a
+ * `phone` every window fills the screen width.
+ */
+function layout(entry: Entry, spec: WindowSpec, all: Entry[], view: { width: number; height: number }, phone: boolean): Box {
   const height = spec.height ?? DEFAULT_HEIGHT;
 
   if (entry.state === "maximized" || (phone && entry.state !== "minimized")) {
@@ -430,7 +437,8 @@ function WindowFrame({ id, spec, onClose, children }: {
   const t = useMessages();
   const titleId = useId();
   const all = useSyncExternalStore(subscribe, snapshot, snapshot);
-  const view = useViewport();
+  const view = useScreenSize();
+  const phone = useViewport() === "mobile";
   const entry = all.find(each => each.id === id);
   const frameRef = useRef<HTMLElement | null>(null);
 
@@ -449,7 +457,7 @@ function WindowFrame({ id, spec, onClose, children }: {
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  const box = entry ? layout(entry, spec, all, view) : null;
+  const box = entry ? layout(entry, spec, all, view, phone) : null;
   const controls: WindowControls = {
     id,
     state: entry?.state ?? "floating",
@@ -462,7 +470,7 @@ function WindowFrame({ id, spec, onClose, children }: {
   const min = { width: spec.minWidth ?? DEFAULT_MIN_WIDTH, height: spec.minHeight ?? DEFAULT_MIN_HEIGHT };
 
   const beginDrag = (edge: Edge | "move") => (event: ReactPointerEvent<HTMLElement>) => {
-    if (!entry || !box || event.button !== 0 || view.width < PHONE_MAX_WIDTH) return;
+    if (!entry || !box || event.button !== 0 || phone) return;
     if (edge === "move" && (event.target as HTMLElement).closest("button, a, input, select, textarea, [role='combobox']")) return;
     if (entry.state === "maximized" || entry.state === "minimized") return;
     event.preventDefault();
@@ -503,7 +511,6 @@ function WindowFrame({ id, spec, onClose, children }: {
 
   if (!entry || !box) return null;
   const { state } = entry;
-  const phone = view.width < PHONE_MAX_WIDTH;
   const minimized = state === "minimized";
   const resizable = spec.resizable !== false && state === "floating" && !phone;
   const toggleMaximize = () => setWindowState(id, state === "maximized" ? entry.restore : "maximized");

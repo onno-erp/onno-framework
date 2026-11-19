@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { MemoryRouter, useLocation } from "react-router";
 import { AppShell, clearModelCache, workspaceTabState } from "@/views/app-shell";
 import { appModel, entity, mockModelFetch } from "./app-shell-fixtures";
+import { stubScreenWidth } from "./viewport-fixtures";
 import { openRoute } from "@/lib/navigation";
 import { useCommandFeedback } from "@/lib/command-feedback";
 
@@ -25,12 +26,14 @@ vi.mock("@/providers/auth-provider", () => ({
 }));
 
 vi.mock("@/providers/theme-provider", () => ({
-  useTheme: () => ({ theme: "light", setTheme: vi.fn() }),
+  useTheme: () => ({ theme: "light", resolvedTheme: "light", setTheme: vi.fn() }),
 }));
 
-// The brand comes from /api/branding (BrandingProvider), not from the model.
+// The brand comes from /api/branding (BrandingProvider), not from the model. One object, as the
+// provider's state is: a fresh one per render re-derives the shell on every render.
+const branding = vi.hoisted(() => ({ appName: "Acme" }));
 vi.mock("@/providers/branding-provider", () => ({
-  useBranding: () => ({ appName: "Acme" }),
+  useBranding: () => branding,
 }));
 
 vi.mock("@/hooks/use-ui-events", () => ({
@@ -249,13 +252,31 @@ describe("AppShell tab titles", () => {
   });
 
   it("opens application paths on mobile", async () => {
-    Object.defineProperty(window, "innerWidth", { configurable: true, value: 500 });
+    stubScreenWidth(500);
     vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
     vi.stubGlobal("scrollTo", vi.fn());
     render(<MemoryRouter initialEntries={["/catalogs/customers"]}><AppShell /></MemoryRouter>);
     await screen.findByTestId("content-/catalogs/customers");
     act(() => openRoute("/documentation"));
     expect(await screen.findByTestId("content-/documentation")).toBeInTheDocument();
+  });
+
+  it("lays a 700px screen out as a phone and follows the screen across breakpoints", async () => {
+    const screenWidth = stubScreenWidth(700);
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+    vi.stubGlobal("scrollTo", vi.fn());
+    // A navigation root, where the bottom bar shows once the model has loaded.
+    render(<MemoryRouter initialEntries={["/catalogs/customers"]}><AppShell /></MemoryRouter>);
+    // Phone: the stretched bottom bar, not the compact tablet one pinned to a corner.
+    const bar = () => screen.getByRole("button", { name: "More" }).parentElement!;
+    await screen.findByRole("button", { name: "More" });
+    expect(bar()).not.toHaveClass("w-fit");
+
+    screenWidth.resize(900);
+    expect(bar()).toHaveClass("w-fit");
+
+    screenWidth.resize(1280);
+    expect(screen.queryByRole("button", { name: "More" })).not.toBeInTheDocument();
   });
 
   it("opens the record a command result navigates to without discarding another tab's draft", async () => {

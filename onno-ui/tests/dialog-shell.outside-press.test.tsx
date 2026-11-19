@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 
 import { DialogShell } from "@/components/ui/dialog-shell";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { stubScreenWidth } from "./viewport-fixtures";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 beforeEach(() => { Element.prototype.scrollIntoView = vi.fn(); });
@@ -64,10 +65,7 @@ describe("DialogShell outside presses", () => {
   });
 
   it("opens a select inside a dialog at tablet width", async () => {
-    vi.stubGlobal("matchMedia", (query: string) => ({
-      matches: query === "(min-width: 768px) and (max-width: 1023px)",
-      addEventListener() {}, removeEventListener() {},
-    }));
+    stubScreenWidth(900);
     // The dialog's own close button, plus the select's backdrop while the select is open.
     const closeButtons = () => screen.queryAllByRole("button", { name: "Close", hidden: true }).length;
     const onOpenChange = vi.fn();

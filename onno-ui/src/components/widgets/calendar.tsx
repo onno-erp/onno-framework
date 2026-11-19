@@ -34,6 +34,7 @@ import { useEntitySource } from "../../lib/entity-source";
 import { findEntity, useModel } from "../../lib/model-store";
 import { Boundary } from "../pages/boundary";
 import { useFillHeight } from "../../lib/fill-height";
+import { useViewport } from "../../lib/viewport";
 import "./calendar.css";
 
 /**
@@ -100,26 +101,6 @@ interface EventExtendedProps {
 
 type CalendarView = "year" | "dayGridMonth" | "timeGridWeek" | "agenda";
 type Range = { from: Date; to: Date };
-
-// The 7-column month grid is unusable on a phone — each day is ~50px wide and
-// every booking renders as a full bar, so the widget falls back to a tap-to-open
-// agenda list below this width. Matches the app's server-side MOBILE_MAX so the
-// agenda shows exactly where the mobile dashboard does.
-const MOBILE_MAX = 600;
-
-function useIsMobile(maxWidth = MOBILE_MAX): boolean {
-  const [isMobile, setIsMobile] = useState(
-    () => typeof window !== "undefined" && window.matchMedia(`(max-width: ${maxWidth}px)`).matches
-  );
-  useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${maxWidth}px)`);
-    const onChange = () => setIsMobile(mql.matches);
-    onChange();
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, [maxWidth]);
-  return isMobile;
-}
 
 /** Per-viewer view and filter choices; storage can be unavailable (private mode), so never throw. */
 function remembered(key: string): string | null {
@@ -435,7 +416,9 @@ function EntityCalendar(props: CalendarProps) {
 }
 
 function useCalendarState(storageKey: string) {
-  const isMobile = useIsMobile();
+  // The 7-column month grid is unusable on a phone — each day is ~50px wide and every booking
+  // renders as a full bar, so the widget falls back to a tap-to-open agenda list there.
+  const isMobile = useViewport() === "mobile";
   const [view, setViewState] = useState<CalendarView>(() => {
     const saved = remembered(`${storageKey}.view`);
     return saved === "timeGridWeek" || saved === "agenda" || saved === "year" ? saved : "dayGridMonth";

@@ -10,23 +10,13 @@ import { columnFor, fieldFor, type EntityCustomization, type ListCustomization }
 import { useCustomizedList } from "../../lib/app-config";
 import type { WhereClause } from "../../lib/measure";
 import { PageGutterContext } from "../../lib/page-gutter";
+import { useViewport } from "../../lib/viewport";
 
 /**
  * The page-level building blocks an app composes its own pages from. Every
  * component defaults from the business model — an `EntityList` needs only the entity — and takes
  * props only for what differs.
  */
-
-function useViewport(): "mobile" | "desktop" {
-  const get = () => (window.innerWidth < 600 ? "mobile" : "desktop");
-  const [vp, setVp] = useState<"mobile" | "desktop">(get);
-  useEffect(() => {
-    const on = () => setVp(get());
-    window.addEventListener("resize", on);
-    return () => window.removeEventListener("resize", on);
-  }, []);
-  return vp;
-}
 
 /** Fetch the server's default view for a route (`/documents/orders`, `/catalogs/books/<id>`, …). */
 export function useDefaultView(path: string | null): { view: ViewModel | null; error: number | null } {

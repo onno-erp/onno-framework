@@ -9,6 +9,7 @@ import {
   useWindow,
   windows,
 } from "../src/components/ui/window-manager";
+import { stubScreenWidth } from "./viewport-fixtures";
 
 beforeAll(() => {
   // jsdom has no PointerEvent; without one, fireEvent drops clientX/clientY.
@@ -32,6 +33,8 @@ afterEach(() => {
   cleanup();
   act(() => resetWindowsForTests());
   window.localStorage.clear();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 const frame = (name: string) => screen.getByRole("dialog", { name });
@@ -212,11 +215,38 @@ it("brings the window the user touches to the front", () => {
 });
 
 it("fills a phone screen and drops the desktop-only controls", () => {
-  Object.assign(window, { innerWidth: 390, innerHeight: 844 });
+  stubScreenWidth(390);
+  Object.assign(window, { innerHeight: 844 });
   render(<FloatingWindow title="Compose" initialState="docked">x</FloatingWindow>);
   const compose = frame("Compose");
   expect(box(compose)).toMatchObject({ left: 0, top: 0, width: 390, height: 844 });
   expect(within(compose).queryByRole("button", { name: "Maximize" })).not.toBeInTheDocument();
   expect(within(compose).queryByRole("button", { name: "Dock to the corner" })).not.toBeInTheDocument();
   expect(compose.querySelector("[data-window-resize]")).toBeNull();
+});
+
+it("treats a 700px screen as a phone, like the rest of the shell", () => {
+  stubScreenWidth(700);
+  render(<FloatingWindow title="Compose" initialState="docked">x</FloatingWindow>);
+  expect(box(frame("Compose"))).toMatchObject({ left: 0, top: 0, width: 700 });
+});
+
+it("removes its resize listener once the last window unmounts, whichever unmounts last", () => {
+  const added = new Set<EventListenerOrEventListenerObject>();
+  const add = window.addEventListener.bind(window);
+  const remove = window.removeEventListener.bind(window);
+  vi.spyOn(window, "addEventListener").mockImplementation((type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) => {
+    if (type === "resize") added.add(listener);
+    add(type, listener, options);
+  });
+  vi.spyOn(window, "removeEventListener").mockImplementation((type: string, listener: EventListenerOrEventListenerObject, options?: boolean | EventListenerOptions) => {
+    if (type === "resize") added.delete(listener);
+    remove(type, listener, options);
+  });
+  const first = render(<FloatingWindow title="First">a</FloatingWindow>);
+  const second = render(<FloatingWindow title="Second">b</FloatingWindow>);
+  expect(added.size).toBeGreaterThan(0);
+  first.unmount();
+  second.unmount();
+  expect(added.size).toBe(0);
 });
