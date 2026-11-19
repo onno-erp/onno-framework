@@ -40,7 +40,7 @@ export { ConversationList, ConversationRowContent, ConversationListSkeleton } fr
 export { ChatTimeline, TimelineMessage, TimelineSystemEvent, TimelineComment, MessageAttachments, CrmAvatar, ChannelIcon,
   type ChatTimelineProps, type MessageActionsContext } from "./ChatTimeline";
 export { CrmComposer, CrmComposerFields, SenderControls, AttachButton, FileDropOverlay,
-  type CrmComposerProps, type CrmComposerPartProps, type CrmComposerLayouts } from "./CrmComposer";
+  type CrmReplyInputProps, type CrmComposerProps, type CrmComposerPartProps, type CrmComposerLayouts } from "./CrmComposer";
 export { composerWindows, type ComposerWindow } from "./composerWindows";
 export { ContactPanel as CrmContactPanel, CrmPresentationProvider, useCrmPresentation, type Config as CrmConfig } from "./CrmWorkspace";
 export { ChannelLogo } from "./ChannelLogo";
