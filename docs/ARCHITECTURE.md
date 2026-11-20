@@ -596,6 +596,13 @@ header/footer. Custom links share model/page gates and the shell dispatcher. See
 In every mode, framework bootstrap paths (including `/api/config` and `/api/auth/login`) remain
 public. `onno.auth.additional-public-paths` adds public Ant patterns; legacy `onno.auth.public-paths`
 entries are combined with them and can no longer remove mandatory framework paths.
+The password-login CSRF exemption (`/api/auth/login`) is also mandatory. Cookie-based chains
+combine it with legacy `onno.auth.csrf-ignored-paths` and
+`onno.auth.additional-csrf-ignored-paths`. Public access and CSRF exemption are independent;
+custom login-method endpoints remain CSRF-protected by default. Starters can add public paths and
+CSRF exclusions separately through `su.onno.auth.spi.AuthPathsContributor` beans without depending
+on the auth implementation. These additive contributions apply to all default chains (public paths
+also to the database account-session guard); resource-server mode still disables CSRF.
 
 - **`database`** (recommended) — accounts in the framework-managed table `onno_auth_user`, managed at
   runtime through `UserAccounts`, `/api/auth/users` (ADMIN) and `@onno/ui`'s `UserAccounts` /

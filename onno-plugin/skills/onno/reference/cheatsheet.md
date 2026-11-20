@@ -522,3 +522,10 @@ a silently capped preview. A plain-`List` Java method drains the cursor
 `getMovements`/`getBalance`/`getTurnover` return pages and `allRegisterRows` follows the cursor.
 See docs/HEADLESS_READ_API.md, Collection pagination, for the cursor-only contract, bounded
 selectors and CRM callback limits.
+
+### Auth endpoint contributions
+
+`AuthPathsContributor` (`su.onno.auth.spi`, Spring bean) additively declares `publicPaths()` and
+`csrfIgnoredPaths()` separately. Public access does not imply a CSRF exemption or vice versa.
+Use `onno.auth.additional-csrf-ignored-paths` for app configuration; the legacy CSRF list is merged
+and cannot remove the mandatory `/api/auth/login` exemption. Custom login methods remain protected.

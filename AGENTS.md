@@ -1381,6 +1381,12 @@ For UI frontend-only changes, at minimum run:
 ./gradlew :onno-web-starter:processResources
 ```
 
+Auth endpoint contributions use `su.onno.auth.spi.AuthPathsContributor` beans: public access and
+CSRF exemption are separate lists. Default cookie-based auth chains always exempt `/api/auth/login`
+and merge legacy `csrf-ignored-paths`, `additional-csrf-ignored-paths`, and contributor exemptions.
+Never replace the mandatory login exemption when adding paths. Custom login methods remain
+CSRF-protected unless explicitly exempted.
+
 ### Inspecting a running app (read this before you curl)
 
 Everything under `/api/**` is **authenticated** and most of it is **CSRF-protected**. Two things trip
