@@ -228,6 +228,33 @@ it("keeps insertDraft adding to the open conversation's draft", async () => {
   } finally { extensions = []; }
 });
 
+it("puts stored files from insertDraft in the tray, sends them with the reply, and refuses them where files can't go", async () => {
+  const pdf = { url: "/media/estimate.pdf", filename: "Estimate.pdf", contentType: "application/pdf", size: 2048 };
+  const problems: string[] = [];
+  extensions = [{ id: "test.insert-files", slot: "crm.chat.composer",
+    component: ({ context }) => <button type="button" onClick={() => {
+      try { context.insertDraft?.("Your estimate is attached.", [pdf]); } catch (e) { problems.push((e as Error).message); }
+    }}>Prepare</button> }];
+  try {
+    const { sent } = mount({ "chat-ben": { maxAttachments: 0, attachmentReason: "This channel can't carry files" } });
+    const body = await openChat("Anna");
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Prepare" })); });
+    expect(body).toHaveValue("Your estimate is attached.");
+    expect(screen.getByText("Estimate.pdf")).toBeInTheDocument();
+    // Inserting the same file again adds the text but not a second copy.
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Prepare" })); });
+    expect(screen.getAllByText("Estimate.pdf")).toHaveLength(1);
+    await act(async () => { fireEvent.keyDown(body, { key: "Enter", ctrlKey: true }); });
+    await waitFor(() => expect(sent()).toHaveLength(1));
+    expect(sent()[0].body.attachments).toEqual(["/media/estimate.pdf"]);
+
+    const ben = await openChat("Ben");
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Prepare" })); });
+    expect(problems).toEqual(["This channel can't carry files"]);
+    expect(ben).toHaveValue("");
+  } finally { extensions = []; }
+});
+
 /** A stand-in for an app's formatting editor: "Bold" reports the text with its HTML. */
 function FormattingInput({ value, html, formatting, onChange, onSubmit, label }: CrmReplyInputProps) {
   return <div>

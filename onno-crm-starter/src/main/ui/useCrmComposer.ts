@@ -1,4 +1,4 @@
-import { text as t } from "@onno/ui";
+import { text as t, type DraftFile } from "@onno/ui";
 import { useEffect, useRef, useState, useSyncExternalStore, type DragEvent } from "react";
 import { composerState } from "./composerState";
 import { composerDrafts, installDraftUnloadGuard, EMPTY_DRAFT, type ComposerDraft, type ComposerMode } from "./composerDrafts";
@@ -194,13 +194,27 @@ export function useCrmComposer(conversation: CrmConversationState, config: Confi
     } finally { setBusy(false); }
   };
 
-  /** Adds text to the reply (a template, a quoted date); it is never sent by this call. */
-  const insertDraft = (text: string) => {
+  /**
+   * Adds text to the reply (a template, a quoted date) and files already stored through `/api/media`
+   * (a generated PDF) to its tray; it is never sent by this call. Files the channel can't carry, or
+   * more than its limit, are refused with the composer's own reason, before anything changes.
+   */
+  const insertDraft = (text: string, files: readonly DraftFile[] = []) => {
     if (replyState.disabled) throw new Error(t("crm.error.replyUnavailable"));
-    const next = draft.trim() ? `${draft}\n\n${text}` : text;
+    const next = !text.trim() ? draft : draft.trim() ? `${draft}\n\n${text}` : text;
     if (next.length > (delivery?.maxTextLength ?? 4096)) throw new Error(t("crm.error.replyTooLong"));
+    const added = files.filter(file => file?.url && !pending.some(item => item.url === file.url));
+    if (added.length) {
+      const limit = delivery?.maxAttachments ?? 0;
+      if (limit <= 0) throw new Error(delivery?.attachmentReason || t("crm.chat.attachUnavailable"));
+      if (pending.length + added.length > limit) throw new Error(t("crm.chat.attachLimit", { count: limit }));
+    }
     setMode("reply");
-    setDraft(next);
+    if (next !== draft) setDraft(next);
+    if (added.length) setPending(current => [...current, ...added.map(file => {
+      const contentType = file.contentType || "application/octet-stream";
+      return { url: file.url, filename: file.filename, contentType, size: file.size ?? 0, image: /^image\/(png|jpeg|gif|webp|avif)$/.test(contentType) };
+    })]);
   };
 
   // Files dragged onto the chat: accepted for a reply that can carry them, explained otherwise.

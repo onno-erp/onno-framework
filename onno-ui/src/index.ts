@@ -47,7 +47,7 @@ export type { CommandFeedback, CommandInputs, CommandResult, EntityRecord } from
 export type { ListRendererProps, ListRendererComponent } from "./components/lists/entity-list";
 export type { RouteProps, RouteOptions } from "./lib/routes";
 export type {
-  ExtensionContext, ExtensionProps, ExtensionSlotName, ExtensionSlotProps, UiExtension,
+  DraftFile, ExtensionContext, ExtensionProps, ExtensionSlotName, ExtensionSlotProps, UiExtension,
 } from "./lib/extension-types";
 export type { Translate } from "./lib/messages";
 
