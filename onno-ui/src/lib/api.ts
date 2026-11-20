@@ -682,8 +682,8 @@ export const api = {
       body: JSON.stringify({ outcome }),
     }),
 
-  // Catalog CRUD. Row-shaped components use the bounded keyset list feed; the old unbounded
-  // GET /api/catalogs/{name} collection route no longer exists.
+  // Catalog CRUD. These array-only convenience reads are bounded; widgets use the Page variants
+  // below to retain continuation metadata. The old unbounded collection route no longer exists.
   listCatalog: (name: string, where?: WhereClause, page?: RecordsPage) => {
     // Normalize the entity name (PascalCase → snake_case) so every caller — the built-in components
     // (which pre-snake) and app code (which may pass the logical `entityName`) — hits the
@@ -698,6 +698,9 @@ export const api = {
   listCatalogWindow: (name: string, params: URLSearchParams) =>
     fetchJson<{ rows?: EntityRecord[] }>(`${BASE}/list/catalogs/${toSnakeCase(name)}?${params.toString()}`)
       .then((page) => page.rows ?? []),
+  /** Calendar window with continuation metadata; row-shaped widgets must retain `hasMore`. */
+  listCatalogWindowPage: (name: string, params: URLSearchParams) =>
+    fetchJson<CollectionPage<EntityRecord>>(`${BASE}/list/catalogs/${toSnakeCase(name)}?${params.toString()}`),
   searchRefOptions: (request: RefOptionSearch) =>
     fetchJson<EntityRecord[]>(`${BASE}/ref-options/search`, {
       method: "POST",

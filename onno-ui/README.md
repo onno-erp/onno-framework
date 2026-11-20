@@ -153,6 +153,17 @@ Everything an app can import is in [`src/index.ts`](src/index.ts); the types are
 | Text | `useTranslate`, `useLocale`, `text`, `locale`, `formatMoney`, `formatDate`, `displayOf`. |
 | Mobile, outlets | `useMobileDetail`, `usePageSlide`, `ExtensionSlot`. |
 
+**Record widgets.** `Calendar`, `Kanban` and `RecentRecords` use the framework's record identity
+(`description`, `number`, `code`) for their default headline. Secondary text and reference photos
+follow the entity list descriptor's declared columns, without guessing application field names.
+Use `itemTitle`/`subtitle` (calendar) or `primary`/`secondary` (board/recent records) for an app-specific
+presentation. Bounded widgets retain `hasMore` and show a notice when more records match; boards,
+recent lists and maps also report rows hidden by their display limit. The notice is localized with
+`onno.ui.messages.widget.records.truncated` (`{count}` is the number of loaded/displayed records,
+not a total). `api.listCatalogPage`, `listDocumentsPage` and `listCatalogWindowPage` preserve the
+`{ rows, nextCursor, hasMore }` envelope; array-only reads (`listCatalog`, `listDocuments`,
+`useRecords`) remain bounded convenience reads and do not represent a complete collection.
+
 **Typed vocabulary.** Everything an app hands the package is a typed value, never a string it
 parses: entities by logical name (`"Orders"`); which records as a `where` object
 (`{ posted: true, total: { gte: 100 }, status: { in: [OrderStatus.NEW] } }`, sent to the server as

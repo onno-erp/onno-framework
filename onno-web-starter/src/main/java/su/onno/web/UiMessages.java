@@ -671,6 +671,7 @@ public final class UiMessages {
         // period-over-period caption; a widget can override it per tile with
         // .config("comparisonLabel", ...).
         d.put("widget.stat.comparison", "vs previous period");
+        d.put("widget.records.truncated", "Showing the first {count} records. More records match this query.");
 
         d.put("validation.required", "{field} is required");
         d.put("validation.maxLength", "{field} must be at most {n} characters");
