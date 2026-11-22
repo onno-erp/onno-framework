@@ -55,7 +55,7 @@ class ActionRowCrmMetadataTest {
                 .thenReturn(Map.of("last_message_preview", "Review me"));
         when(scopes.permitted(isNull(), eq(principal), eq(true))).thenReturn(true);
         var controller = new CrmActionController(scopes, new CommandRegistry(List.of(view)),
-                mock(AccessService.class), catalogs, new WebProperties());
+                su.onno.crm.TestBindings.withGrants(mock(AccessService.class)), catalogs, new WebProperties());
         assertThat((List<?>) controller.list("support", id, principal))
                 .singleElement().isEqualTo(Map.of("id", "review", "title", "Review me", "visible", true, "enabled", true,
                         "group", "", "inputs", false));

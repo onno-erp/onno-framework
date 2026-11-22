@@ -15,8 +15,6 @@ public record AccumulationRegisterDescriptor(
         boolean allowNegative,
         PostingOrder postingOrder,
         String context,
-        List<String> readRoles,
-        List<String> writeRoles,
         List<AttributeDescriptor> dimensions,
         List<AttributeDescriptor> resources
 ) {

@@ -112,6 +112,17 @@ public class PrintService {
                 .toList();
     }
 
+    /**
+     * Startup check: every form's {@code roles(...)} names a role the application declares (or maps
+     * with {@code fromIdp}), so a misspelled role fails startup instead of hiding the form from
+     * everyone.
+     */
+    public void requireKnownRoles(su.onno.access.RoleGrants grants) {
+        for (PrintForm<?> form : allForms()) {
+            grants.requireRecognized("print form " + scope(form) + "/" + form.key() + " roles(...)", form.spec().roles());
+        }
+    }
+
     /** Every registered form, ordered by scope then label. */
     public List<PrintForm<?>> allForms() {
         return forms.values().stream().flatMap(m -> m.values().stream())
@@ -127,7 +138,7 @@ public class PrintService {
     /** Whether {@code subject} passes the form's role restriction (record read access is checked separately). */
     public boolean permits(PrintForm<?> form, AccessSubject subject) {
         Set<String> roles = form.spec().roles();
-        if (roles.isEmpty() || subject.superuser()) return true;
+        if (roles.isEmpty() || subject.trusted()) return true;
         return roles.stream().map(AccessSubject::normalizeRole).anyMatch(subject.roles()::contains);
     }
 

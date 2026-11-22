@@ -1,5 +1,7 @@
 package su.onno.service;
 
+import su.onno.access.RoleGrants;
+import su.onno.access.RoleKey;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import org.junit.jupiter.api.Test;
@@ -21,44 +23,51 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class AccessServiceNameLookupTest {
 
-    private static Authentication admin() {
-        UserDetails user = User.withUsername("admin").password("x").roles("ADMIN").build();
+    enum TestRole implements RoleKey { RENTALS }
+
+    static final class Property {}
+    static final class BankAccount {}
+
+    private static Authentication rentals() {
+        UserDetails user = User.withUsername("rentals").password("x").roles("RENTALS").build();
         return new UsernamePasswordAuthenticationToken(user, "x", user.getAuthorities());
     }
 
     private static CatalogDescriptor catalog(String logicalName, Class<?> javaClass) {
         return new CatalogDescriptor(logicalName, logicalName, logicalName.replace(" ", "_").toLowerCase(),
-                javaClass, 9, false, true, "C", "Sales",
-                List.of("RENTALS"), List.of(), List.of());
+                javaClass, 9, false, true, "C", "Sales", List.of());
     }
 
     private AccessService withCatalogs() {
         MetadataRegistry registry = new MetadataRegistry();
-        registry.registerCatalog(catalog("Properties", Object.class));
-        registry.registerCatalog(catalog("Bank Accounts", String.class));
-        return new AccessService(registry);
+        registry.registerCatalog(catalog("Properties", Property.class));
+        registry.registerCatalog(catalog("Bank Accounts", BankAccount.class));
+        return new AccessService(registry, RoleGrants.of(TestRole.class)
+                .role(TestRole.RENTALS, r -> r.read(Property.class, BankAccount.class)));
     }
 
     @Test
     void resolvesNameCaseInsensitively() {
         AccessService access = withCatalogs();
-        assertThat(access.canRead(admin(), "catalog", "properties")).isTrue();
-        assertThat(access.canRead(admin(), "catalog", "Properties")).isTrue();
-        assertThat(access.canRead(admin(), "catalog", "PROPERTIES")).isTrue();
+        assertThat(access.canRead(rentals(), "catalog", "properties")).isTrue();
+        assertThat(access.canRead(rentals(), "catalog", "Properties")).isTrue();
+        assertThat(access.canRead(rentals(), "catalog", "PROPERTIES")).isTrue();
     }
 
     @Test
     void resolvesNameIgnoringSpacesAndUnderscores() {
         AccessService access = withCatalogs();
-        assertThat(access.canRead(admin(), "catalog", "bank_accounts")).isTrue();
-        assertThat(access.canRead(admin(), "catalog", "bankaccounts")).isTrue();
+        assertThat(access.canRead(rentals(), "catalog", "bank_accounts")).isTrue();
+        assertThat(access.canRead(rentals(), "catalog", "bankaccounts")).isTrue();
     }
 
     @Test
     void deniesAnUnknownName() {
-        AccessService access = withCatalogs();
-        // ADMIN is a superuser, so a true here would mean access slipped through without the entity
-        // even resolving — an unknown name must still be denied.
-        assertThat(access.canRead(admin(), "catalog", "nonexistent")).isFalse();
+        // Even in an application without grants (everyone reads everything), an unknown name must
+        // be denied: a true here would mean access slipped through without the entity resolving.
+        MetadataRegistry registry = new MetadataRegistry();
+        registry.registerCatalog(catalog("Properties", Property.class));
+        assertThat(new AccessService(registry).canRead(rentals(), "catalog", "nonexistent")).isFalse();
+        assertThat(withCatalogs().canRead(rentals(), "catalog", "nonexistent")).isFalse();
     }
 }

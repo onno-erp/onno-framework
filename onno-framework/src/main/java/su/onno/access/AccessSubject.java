@@ -23,14 +23,15 @@ import java.util.UUID;
  */
 public sealed interface AccessSubject permits AccessSubject.User, AccessSubject.System {
 
-    /** The role that bypasses entity-level and record-level checks. */
-    String SUPERUSER_ROLE = "ADMIN";
-
     /** The normalized roles this subject holds (empty for {@link System}). */
     Set<String> roles();
 
-    /** Whether this subject bypasses every record policy (the {@code ADMIN} superuser or {@link System}). */
-    boolean superuser();
+    /**
+     * Whether this subject is trusted code ({@link System}) that no entity grant or record policy
+     * applies to. A signed-in user is never trusted, whatever roles they hold: what a user may do
+     * comes from {@link RoleGrants}.
+     */
+    boolean trusted();
 
     /** The trusted, unscoped subject for background work, posting, migrations and connectors. */
     static AccessSubject system() {
@@ -91,8 +92,8 @@ public sealed interface AccessSubject permits AccessSubject.User, AccessSubject.
         }
 
         @Override
-        public boolean superuser() {
-            return roles.contains(SUPERUSER_ROLE);
+        public boolean trusted() {
+            return false;
         }
     }
 
@@ -106,12 +107,18 @@ public sealed interface AccessSubject permits AccessSubject.User, AccessSubject.
         }
 
         @Override
-        public boolean superuser() {
+        public boolean trusted() {
             return true;
         }
     }
 
-    /** Upper-case and strip a {@code ROLE_} prefix, matching Spring Security authority naming. */
+    /**
+     * The one role-name normalization of the framework: trim, upper-case and strip a {@code ROLE_}
+     * prefix ({@code "ROLE_manager"} → {@code "MANAGER"}). Every comparison of role names — account
+     * and identity-provider roles, {@link RoleGrants} role names and {@code fromIdp} aliases, command,
+     * print-form, MCP-tool and workspace role lists — goes through it. Returns {@code ""} for
+     * {@code null} or blank input.
+     */
     static String normalizeRole(String role) {
         String normalized = role == null ? "" : role.trim().toUpperCase(Locale.ROOT);
         return normalized.startsWith("ROLE_") ? normalized.substring("ROLE_".length()) : normalized;

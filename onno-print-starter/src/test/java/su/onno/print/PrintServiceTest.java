@@ -93,13 +93,26 @@ class PrintServiceTest {
     }
 
     @Test
-    void rolesRestrictTheFormButAdminAlwaysPasses() {
+    void rolesRestrictTheFormAndOnlyTrustedCodeAlwaysPasses() {
         PrintService service = service(List.of(new InvoiceForm("invoice", "manager")));
         PrintForm<?> form = service.form(Invoice.class, "invoice").orElseThrow();
 
         assertThat(service.permits(form, AccessSubject.user("clerk", Set.of("CLERK")))).isFalse();
         assertThat(service.permits(form, AccessSubject.user("boss", Set.of("ROLE_MANAGER")))).isTrue();
-        assertThat(service.permits(form, AccessSubject.user("root", Set.of("ADMIN")))).isTrue();
+        assertThat(service.permits(form, AccessSubject.user("root", Set.of("ADMIN")))).isFalse();
+        assertThat(service.permits(form, AccessSubject.system())).isTrue();
+    }
+
+    enum TestRole implements su.onno.access.RoleKey { MANAGER, CLERK }
+
+    @Test
+    void formRolesMustBeDeclaredRoles() {
+        var grants = su.onno.access.RoleGrants.of(TestRole.class);
+        service(List.of(new InvoiceForm("invoice", "manager"))).requireKnownRoles(grants);
+        assertThatThrownBy(() -> service(List.of(new InvoiceForm("invoice", "MANGER"))).requireKnownRoles(grants))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("[MANGER]")
+                .hasMessageContaining("print form");
     }
 
     @Test

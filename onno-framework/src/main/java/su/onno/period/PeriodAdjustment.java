@@ -13,7 +13,7 @@ import java.lang.annotation.Target;
  * <p>Only the adjustment document itself is admitted — every other document stays locked. A hard
  * close admits nothing, and a backdated adjustment whose chronological restoration would repost a
  * non-adjustment document inside a closed period is still rejected. Restrict who may write the
- * document type with {@code @AccessControl} as usual.
+ * document type in the application's {@code RoleGrants} as usual.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)

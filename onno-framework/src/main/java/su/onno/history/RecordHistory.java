@@ -51,7 +51,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * values. An entity that has not opted in costs one cached map lookup per write.
  *
  * <p>This class does not authorize reads: {@link #list} and {@link #page} return raw entries for trusted code. The
- * UI starter's {@code /api/history} endpoint applies {@code @AccessControl}, record policies and
+ * UI starter's {@code /api/history} endpoint applies the entity grants, record policies and
  * reference visibility on top.
  */
 public class RecordHistory {

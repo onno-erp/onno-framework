@@ -82,7 +82,7 @@ public class MentionResolver {
 
     /**
      * True when {@code viewer} may read the record a mention points at: the entity-level grant
-     * (deny-by-default, ADMIN bypasses) and, for a record-scoped viewer, the record's scope.
+     * (the viewer's RoleGrants) and, for a record-scoped viewer, the record's scope.
      */
     public boolean canRead(AccessSubject viewer, MentionRef ref) {
         if (!access.canRead(viewer, ref.accessType(), ref.name())) {

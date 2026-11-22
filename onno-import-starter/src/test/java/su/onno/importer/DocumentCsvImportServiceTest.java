@@ -33,11 +33,11 @@ class DocumentCsvImportServiceTest {
 
     private final DocumentDescriptor invoice = new DocumentDescriptor(
             "Invoices", "Invoices", "doc_invoices", Object.class, 9, true, "INV-", "Sales",
-            List.of("ADMIN"), List.of("ADMIN"), List.of(), List.of());
+            List.of(), List.of());
 
     private final DocumentDescriptor salesOrder = new DocumentDescriptor(
             "SalesOrders", "Sales Orders", "doc_sales_orders", Object.class, 9, true, "SO-", "Sales",
-            List.of("ADMIN"), List.of("ADMIN"), List.of(),
+            List.of(),
             List.of(new TabularSectionDescriptor("lines", "lines", "doc_sales_orders_lines",
                     Object.class, List.of(attr("product"), attr("qty")))));
 

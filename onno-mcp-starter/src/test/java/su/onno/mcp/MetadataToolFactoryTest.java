@@ -51,14 +51,13 @@ class MetadataToolFactoryTest {
 
     private final CatalogDescriptor clients = new CatalogDescriptor(
             "Clients", "Clients", "cat_clients", Object.class, 12, false, true, "C-", "Rentals",
-            List.of("RENTALS"), List.of("RENTALS"),
             List.of(new AttributeDescriptor("name", "Name", "name", String.class, 100,
                     true, false, "", 0, 0, AttributeDescriptor.Constraints.NONE, false)));
 
     private final AccumulationRegisterDescriptor cash = new AccumulationRegisterDescriptor(
             "Cash", "Cash", "reg_cash", "reg_cash_totals", Object.class,
             AccumulationType.BALANCE, false, PostingOrder.INDEPENDENT, "Finance",
-            List.of("RENTALS"), List.of("RENTALS"), clients.attributes(), List.of());
+            clients.attributes(), List.of());
 
     MetadataToolFactoryTest() {
         registry.registerCatalog(clients);
@@ -86,8 +85,7 @@ class MetadataToolFactoryTest {
     @Test
     void describeMetadataIncludesCatalogSections() {
         var profile = new CatalogDescriptor("Profiles", "Profiles", "catalog_profiles", Object.class,
-                9, false, true, "", "", List.of("RENTALS"), List.of("RENTALS"),
-                List.of(), List.of(), List.of(new su.onno.metadata.TabularSectionDescriptor(
+                9, false, true, "", "", List.of(), List.of(), List.of(new su.onno.metadata.TabularSectionDescriptor(
                 "filters", "filters", "catalog_profiles_filters", Object.class, clients.attributes())));
         registry.registerCatalog(profile);
         var describe = byName(factory(new OnnoMcpProperties()).build(), "describe_metadata");

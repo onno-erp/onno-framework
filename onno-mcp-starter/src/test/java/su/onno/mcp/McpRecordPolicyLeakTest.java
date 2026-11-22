@@ -7,7 +7,8 @@ import su.onno.access.RecordAccessPolicy;
 import su.onno.access.RecordPolicies;
 import su.onno.access.RecordScope;
 import su.onno.access.Subject;
-import su.onno.annotations.AccessControl;
+import su.onno.access.RoleGrants;
+import su.onno.access.RoleKey;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.metadata.CatalogDescriptor;
@@ -57,15 +58,15 @@ import static org.mockito.Mockito.when;
  */
 class McpRecordPolicyLeakTest {
 
+    enum TestRole implements RoleKey { CUSTOMER }
+
     @Catalog(name = "McpOwners")
-    @AccessControl(readRoles = {"CUSTOMER"})
     public static class McpOwner extends CatalogObject {
         @Attribute
         private String email;
     }
 
     @Catalog(name = "McpTenants")
-    @AccessControl(readRoles = {"CUSTOMER"})
     public static class McpTenant extends CatalogObject {
         @Attribute
         private Ref<McpOwner> owner;
@@ -95,7 +96,8 @@ class McpRecordPolicyLeakTest {
                 RecordAccessPolicy.forCatalog(McpTenant.class).appliesTo("CUSTOMER")
                         .read(RecordScope.eq("owner", Subject.recordId()))));
         RecordScopeCompiler compiler = new RecordScopeCompiler(policies);
-        AccessService access = new AccessService(registry);
+        AccessService access = new AccessService(registry, RoleGrants.of(TestRole.class)
+                .role(TestRole.CUSTOMER, r -> r.write(McpOwner.class, McpTenant.class)));
         CatalogQueryService catalogQuery = new CatalogQueryService(registry, jdbi, compiler, access);
         AtomicInteger seq = new AtomicInteger();
         NumberGenerator numbers = new NumberGenerator() {

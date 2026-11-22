@@ -8,6 +8,16 @@ import su.onno.model.CatalogObject;
 import su.onno.crm.service.*;
 
 public final class TestBindings {
+    /** Roles of the CRM tests: only ADMIN holds crm.administer, and only because it is granted. */
+    public enum TestRole implements su.onno.access.RoleKey { ADMIN, CRM_AGENT, CRM_MANAGER }
+    public static final su.onno.access.RoleGrants GRANTS = su.onno.access.RoleGrants.of(TestRole.class)
+            .role(TestRole.ADMIN, r -> r.permit(CrmPermissions.ADMINISTER));
+    /** Make a mocked AccessService resolve permissions from {@link #GRANTS} and its stubbed roles. */
+    public static su.onno.service.AccessService withGrants(su.onno.service.AccessService access) {
+        org.mockito.Mockito.when(access.access(org.mockito.ArgumentMatchers.<java.security.Principal>any()))
+                .thenAnswer(call -> GRANTS.resolve(access.roles(call.<java.security.Principal>getArgument(0))));
+        return access;
+    }
     @Catalog(name="ExistingClients")
     public static class Client extends CatalogObject {}
     public static CrmCustomerBinding<Client> customers() {

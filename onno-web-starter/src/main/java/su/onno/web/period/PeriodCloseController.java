@@ -25,8 +25,8 @@ import java.util.Map;
 
 /**
  * Period close over HTTP. Any signed-in user may read the closes in force (so a client can explain
- * a rejection up front); closing, reopening and reading the audit trail need {@code ADMIN} or a
- * role from {@code onno.period-close.manage-roles}.
+ * a rejection up front); closing, reopening and reading the audit trail need the
+ * {@code periodClose.manage} permission ({@code CorePermissions.MANAGE_PERIOD_CLOSE}).
  *
  * <pre>
  * GET  /api/period-close                 → {locks: [{scope, label, closedThrough, state, updatedAt, updatedBy}], canManage}
@@ -108,7 +108,7 @@ public class PeriodCloseController {
     private void requireManager(Principal principal) {
         if (!periodAccess.canManage(principal)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Closing and reopening periods needs ADMIN or a period-close manage role");
+                    "Closing and reopening periods needs the periodClose.manage permission");
         }
     }
 

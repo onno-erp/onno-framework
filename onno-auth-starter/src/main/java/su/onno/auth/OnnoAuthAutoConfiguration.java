@@ -220,9 +220,11 @@ public class OnnoAuthAutoConfiguration {
 
         @Bean
         @ConditionalOnMissingBean
-        UserAccounts onnoUserAccounts(UserStore store, PasswordEncoder passwordEncoder, OnnoAuthProperties properties) {
+        UserAccounts onnoUserAccounts(UserStore store, PasswordEncoder passwordEncoder, OnnoAuthProperties properties,
+                                      org.springframework.beans.factory.ObjectProvider<su.onno.access.RoleGrants> grants) {
             return new UserAccounts(store, passwordEncoder,
-                    new PasswordPolicy(properties.getDatabase().getPasswordMinLength()));
+                    new PasswordPolicy(properties.getDatabase().getPasswordMinLength()),
+                    grants.getIfAvailable(su.onno.access.RoleGrants::open));
         }
 
         @Bean
@@ -264,8 +266,13 @@ public class OnnoAuthAutoConfiguration {
                             throw new IllegalStateException(
                                     "onno.auth.users entry is missing username or password");
                         }
+                        // The one normalization: "manager" / "ROLE_manager" become ROLE_MANAGER.
                         String[] roles = u.getRoles() == null ? new String[0]
-                                : u.getRoles().toArray(String[]::new);
+                                : u.getRoles().stream()
+                                        .map(su.onno.access.AccessSubject::normalizeRole)
+                                        .filter(r -> !r.isEmpty())
+                                        .distinct()
+                                        .toArray(String[]::new);
                         return User.withUsername(u.getUsername())
                                 .password(passwordEncoder.encode(u.getPassword()))
                                 .roles(roles)

@@ -2,6 +2,7 @@ package su.onno.web.comments;
 
 import su.onno.access.AccessMode;
 import su.onno.access.AccessSubject;
+import su.onno.access.CorePermissions;
 import su.onno.service.CatalogQueryService;
 import su.onno.service.CurrentUserResolver;
 import su.onno.service.CurrentUserResolver.CurrentUser;
@@ -36,15 +37,14 @@ import java.util.UUID;
  * addressed by the same {@code {kind}/{name}/{id}} triple the UI routes use. Reading and posting
  * are gated on <em>read</em> access to the target — the entity grant (see {@link AccessService})
  * and, for a record-scoped caller, the record itself (404 outside the scope): if you can open the
- * record you can comment on it. Deleting is limited to the author or an {@code ADMIN}.
+ * record you can comment on it. Deleting is limited to the author or a holder of
+ * {@link CorePermissions#MODERATE_COMMENTS} ({@code comments.moderate}).
  * Authorship is stamped from the authenticated principal via {@link CurrentUserResolver}, so the
  * client never asserts who it is.
  */
 @RestController
 @RequestMapping("/api/comments")
 public class CommentController {
-
-    private static final String SUPERUSER_ROLE = "ADMIN";
 
     private static final Set<String> ALLOWED_REACTIONS = Set.of("👍", "❤️", "🎉", "👀", "✅");
 
@@ -87,7 +87,7 @@ public class CommentController {
                                           @org.springframework.web.bind.annotation.RequestParam(defaultValue = "100") int limit) {
         requireRead(kind, name, id, subject);
         CurrentUser me = currentUser.resolve(principal);
-        boolean admin = isAdmin(principal);
+        boolean moderator = isModerator(principal);
         var page = comments.page(kind, name, id, cursor, limit,
                 su.onno.query.Cursor.context(su.onno.query.Cursor.subjectContext(subject),
                         catalogQuery.scopes().policies().fingerprint(subject)));
@@ -104,7 +104,7 @@ public class CommentController {
                 // authorId is null for authors not linked to an identity record (e.g. the built-in
                 // admin user). avatars is an immutable map whose get(null) throws NPE, so guard the
                 // key — a null-author comment simply has no avatar.
-                .map(c -> toJson(c, me, admin, c.authorId() == null ? null : avatars.get(c.authorId()),
+                .map(c -> toJson(c, me, moderator, c.authorId() == null ? null : avatars.get(c.authorId()),
                         mentionsFor(c.body(), resolved), reactions.getOrDefault(c.id(), List.of())))
                 .toList();
         return su.onno.service.KeysetWindow.envelope(new su.onno.query.KeysetWindow.Page<>(rows,
@@ -126,7 +126,7 @@ public class CommentController {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage(), e);
         }
         Map<MentionRef, ResolvedMention> resolved = resolveThreadMentions(List.of(saved), subject);
-        return toJson(saved, me, isAdmin(principal), authorAvatars.avatarFor(saved.authorId()),
+        return toJson(saved, me, isModerator(principal), authorAvatars.avatarFor(saved.authorId()),
                 mentionsFor(saved.body(), resolved), List.of());
     }
 
@@ -152,9 +152,9 @@ public class CommentController {
         Comment comment = comments.find(commentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         requireRead(comment.entityType(), comment.entityName(), comment.entityId(), subject);
-        if (!canDelete(comment, currentUser.resolve(principal), isAdmin(principal))) {
+        if (!canDelete(comment, currentUser.resolve(principal), isModerator(principal))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Only the author or an administrator can delete this comment");
+                    "Only the author or a comment moderator (comments.moderate) can delete this comment");
         }
         comments.softDelete(comment);
         return ResponseEntity.noContent().build();
@@ -197,13 +197,13 @@ public class CommentController {
         }
     }
 
-    private boolean isAdmin(Principal principal) {
-        return access.roles(principal).contains(SUPERUSER_ROLE);
+    private boolean isModerator(Principal principal) {
+        return access.has(principal, CorePermissions.MODERATE_COMMENTS);
     }
 
-    /** A comment is deletable by its author (matched on the linked record id) or any administrator. */
-    private static boolean canDelete(Comment comment, CurrentUser me, boolean admin) {
-        if (admin) {
+    /** A comment is deletable by its author (matched on the linked record id) or a moderator. */
+    private static boolean canDelete(Comment comment, CurrentUser me, boolean moderator) {
+        if (moderator) {
             return true;
         }
         return comment.authorId() != null && comment.authorId().equals(me.recordId());
@@ -244,7 +244,7 @@ public class CommentController {
         return out;
     }
 
-    private static Map<String, Object> toJson(Comment c, CurrentUser me, boolean admin, String avatarUrl,
+    private static Map<String, Object> toJson(Comment c, CurrentUser me, boolean moderator, String avatarUrl,
                                               List<Map<String, Object>> mentions,
                                               List<CommentService.CommentReaction> reactions) {
         Map<String, Object> out = new LinkedHashMap<>();
@@ -258,7 +258,7 @@ public class CommentController {
         out.put("createdAt", c.createdAt());
         out.put("editedAt", c.editedAt());
         out.put("mine", c.authorId() != null && c.authorId().equals(me.recordId()));
-        out.put("canDelete", canDelete(c, me, admin));
+        out.put("canDelete", canDelete(c, me, moderator));
         return out;
     }
 

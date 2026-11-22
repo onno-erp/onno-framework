@@ -79,9 +79,10 @@ public final class CommandBuilder<E> {
     }
 
     /**
-     * Restrict the command to callers holding any of the given roles ({@code ADMIN} always
-     * passes). This is a finer gate on top of the entity's write roles, enforced on every surface.
-     * Unset (the default) means every caller who may write the entity.
+     * Restrict the command to callers holding any of the given roles (compared normalized, so
+     * {@code "manager"} matches {@code MANAGER}). No role passes implicitly. This is a finer gate
+     * on top of the entity's write grant, enforced on every surface. Unset (the default) means
+     * every caller who may write the entity.
      */
     public CommandBuilder<E> roles(String... roles) {
         this.roles = List.of(roles);

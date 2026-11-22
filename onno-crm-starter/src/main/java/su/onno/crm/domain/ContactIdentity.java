@@ -8,7 +8,6 @@ import su.onno.types.Ref;
 
 /** Stable channel identity; messages keep their own channel-specific conversation. */
 @Catalog(name = "CrmContactIdentities", title = "Contact identity", codePrefix = "ID-", context = "CRM")
-@AccessControl(readRoles = {"ADMIN"}, writeRoles = {"ADMIN"})
 @Getter @Setter
 public class ContactIdentity extends CatalogObject {
     @Attribute(required = true) private java.util.UUID customer;

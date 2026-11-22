@@ -59,6 +59,8 @@ class PrintControllerTest {
     private final DocumentDescriptor desc = mock(DocumentDescriptor.class);
     private final RefResolver refs = mock(RefResolver.class);
     private final AccessSubject manager = AccessSubject.user("m", Set.of("MANAGER"));
+    /** Holders of print.templates.manage: ADMIN here, by stub. */
+    private final AccessService access = templateManagers("ADMIN");
     private PrintController controller;
     private PrintService service;
 
@@ -67,7 +69,7 @@ class PrintControllerTest {
         ResourceLoader resources = new org.springframework.core.io.DefaultResourceLoader();
         service = new PrintService(List.of(new InvoiceForm()), Map.of(Invoice.class, "documents/Invoices"), refs, resources);
         controller = new PrintController(service, mock(CatalogQueryService.class), documents,
-                mock(AccessService.class), refs);
+                access, refs);
         when(documents.require("Invoices")).thenReturn(desc);
         doReturn(Invoice.class).when(desc).javaClass();
         Invoice invoice = new Invoice();
@@ -140,7 +142,7 @@ class PrintControllerTest {
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
         PrintController small = new PrintController(service, mock(CatalogQueryService.class), documents,
-                mock(AccessService.class), refs, List.of("ADMIN"), 1);
+                mock(AccessService.class), refs, 1);
         assertThatThrownBy(() -> small.batch("documents", "Invoices", "invoice", null,
                 new PrintController.BatchRequest(List.of(id, hidden)), manager))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
@@ -161,7 +163,7 @@ class PrintControllerTest {
     }
 
     @Test
-    void templateManagementRequiresManageRole() {
+    void templateManagementRequiresTheManagePermission() {
         assertThatThrownBy(() -> controller.templates(manager))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
@@ -178,14 +180,14 @@ class PrintControllerTest {
         assertThat(template.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION)).contains("invoice.docx");
 
         PrintController managers = new PrintController(service, mock(CatalogQueryService.class), documents,
-                mock(AccessService.class), refs, List.of("ROLE_MANAGER"), 10);
+                templateManagers("MANAGER"), refs, 10);
         assertThat(managers.templates(manager).forms()).hasSize(1);
     }
 
     @Test
     void readOnlyModeRejectsTemplateChangesButStillPrints() {
         PrintController readOnly = new PrintController(service, mock(CatalogQueryService.class), documents,
-                mock(AccessService.class), refs, List.of("ADMIN"), 10, true);
+                access, refs, 10, true);
         AccessSubject admin = AccessSubject.user("root", Set.of("ADMIN"));
         org.springframework.mock.web.MockMultipartFile file =
                 new org.springframework.mock.web.MockMultipartFile("file", "invoice.docx", null, new byte[] {1});
@@ -201,5 +203,13 @@ class PrintControllerTest {
         when(documents.inScope(manager, desc, id, AccessMode.READ)).thenReturn(true);
         assertThat(readOnly.render("documents", "Invoices", id, "invoice", null, manager).getStatusCode())
                 .isEqualTo(HttpStatus.OK);
+    }
+
+    /** An access service where only holders of {@code role} hold {@code print.templates.manage}. */
+    private static AccessService templateManagers(String role) {
+        AccessService access = mock(AccessService.class);
+        when(access.has(any(AccessSubject.class), eq(PrintPermissions.MANAGE_TEMPLATES)))
+                .thenAnswer(call -> call.<AccessSubject>getArgument(0).roles().contains(role));
+        return access;
     }
 }

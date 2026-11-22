@@ -1,6 +1,5 @@
 package com.example.domain.catalogs;
 
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.model.CatalogObject;
@@ -18,7 +17,6 @@ import lombok.Setter;
  * {@code relations} customization in {@code entities/Suppliers.ts} and {@code entities/Books.ts}).
  */
 @Catalog(name = "Supplier Offers", title = "Supplier offers", codePrefix = "OFR-", context = "Catalog")
-@AccessControl(readRoles = {"MANAGER"}, writeRoles = {"MANAGER"})
 @Getter
 @Setter
 public class SupplierOffer extends CatalogObject {

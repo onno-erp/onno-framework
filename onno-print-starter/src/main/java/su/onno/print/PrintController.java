@@ -36,14 +36,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 /**
  * Print form downloads and template management. Record endpoints require read access to the entity
  * and the record (a record outside the caller's scope is a 404, like a missing one); a form's
- * {@code roles} gate it further. Template endpoints require one of
- * {@code onno.print.templates.manage-roles}; upload and reset are rejected in
+ * {@code roles} gate it further. Template endpoints require
+ * {@link PrintPermissions#MANAGE_TEMPLATES} ({@code print.templates.manage}); upload and reset are rejected in
  * {@code onno.web.read-only} mode.
  *
  * <pre>
@@ -65,27 +64,25 @@ public class PrintController {
     private final DocumentQueryService documents;
     private final AccessService access;
     private final RefResolver refs;
-    private final Set<String> manageRoles;
     private final int maxBatch;
     private final boolean readOnly;
 
     public PrintController(PrintService print, CatalogQueryService catalogs, DocumentQueryService documents,
                            AccessService access, RefResolver refs) {
-        this(print, catalogs, documents, access, refs, List.of("ADMIN"), 200);
+        this(print, catalogs, documents, access, refs, 200);
     }
 
     public PrintController(PrintService print, CatalogQueryService catalogs, DocumentQueryService documents,
-                           AccessService access, RefResolver refs, List<String> manageRoles, int maxBatch) {
-        this(print, catalogs, documents, access, refs, manageRoles, maxBatch, false);
+                           AccessService access, RefResolver refs, int maxBatch) {
+        this(print, catalogs, documents, access, refs, maxBatch, false);
     }
 
     /**
-     * @param manageRoles roles allowed to manage templates ({@code ADMIN} always passes)
      * @param maxBatch    most records one batch request may include
      * @param readOnly    {@code onno.web.read-only}: template upload/reset are rejected, printing still works
      */
     public PrintController(PrintService print, CatalogQueryService catalogs, DocumentQueryService documents,
-                           AccessService access, RefResolver refs, List<String> manageRoles, int maxBatch,
+                           AccessService access, RefResolver refs, int maxBatch,
                            boolean readOnly) {
         this.readOnly = readOnly;
         this.print = print;
@@ -93,7 +90,6 @@ public class PrintController {
         this.documents = documents;
         this.access = access;
         this.refs = refs;
-        this.manageRoles = Set.copyOf(manageRoles.stream().map(AccessSubject::normalizeRole).toList());
         this.maxBatch = maxBatch;
     }
 
@@ -264,8 +260,7 @@ public class PrintController {
     }
 
     private void requireManager(AccessSubject subject) {
-        if (subject.superuser()) return;
-        if (subject.roles().stream().noneMatch(manageRoles::contains)) {
+        if (!access.has(subject, PrintPermissions.MANAGE_TEMPLATES)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to print templates");
         }
     }

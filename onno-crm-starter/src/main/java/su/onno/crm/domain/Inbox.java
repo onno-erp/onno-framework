@@ -2,13 +2,11 @@ package su.onno.crm.domain;
 
 import lombok.Getter;
 import lombok.Setter;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.model.CatalogObject;
 
 @Catalog(name = "CrmInboxes", title = "Inbox", codePrefix = "IN-", context = "CRM")
-@AccessControl(readRoles = {"ADMIN"}, writeRoles = {"ADMIN"})
 @Getter
 @Setter
 public class Inbox extends CatalogObject {

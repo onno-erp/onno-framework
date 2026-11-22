@@ -1,7 +1,6 @@
 package com.example.domain.registers;
 
 import com.example.domain.catalogs.Book;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.AccumulationRegister;
 import su.onno.annotations.Dimension;
 import su.onno.annotations.Resource;
@@ -27,7 +26,6 @@ import java.math.BigDecimal;
  */
 @AccumulationRegister(name = "Book Stock", title = "Book stock", type = AccumulationType.BALANCE,
         context = "Inventory")
-@AccessControl(readRoles = {"MANAGER"})
 @Getter
 @Setter
 public class BookStock extends AccumulationRecord {

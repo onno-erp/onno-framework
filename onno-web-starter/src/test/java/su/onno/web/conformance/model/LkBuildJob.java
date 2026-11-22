@@ -1,6 +1,5 @@
 package su.onno.web.conformance.model;
 
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Document;
 import su.onno.annotations.TabularSection;
@@ -15,7 +14,6 @@ import java.util.List;
 
 /** A document scoped through its tenant, with a tabular section and register movements. */
 @Document(name = "LkBuildJobs")
-@AccessControl(readRoles = {"CUSTOMER", "STAFF"})
 public class LkBuildJob extends DocumentObject implements Postable {
 
     @Attribute

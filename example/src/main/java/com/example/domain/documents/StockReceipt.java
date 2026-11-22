@@ -2,7 +2,6 @@ package com.example.domain.documents;
 
 import com.example.domain.catalogs.Supplier;
 import com.example.domain.registers.BookStock;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Document;
 import su.onno.annotations.TabularSection;
@@ -25,7 +24,6 @@ import java.util.List;
  * {@link Order}, which takes copies back out.
  */
 @Document(name = "Stock Receipts", numberPrefix = "SR-", context = "Inventory")
-@AccessControl(readRoles = {"MANAGER"}, writeRoles = {"MANAGER"})
 @Getter
 @Setter
 public class StockReceipt extends DocumentObject implements OnFillingHandler, Postable {

@@ -1,7 +1,6 @@
 package su.onno.service;
 
 import su.onno.access.AccessSubject;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.annotations.Document;
@@ -45,7 +44,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 abstract class TimeTypesRoundTripContract {
 
     @Catalog(name = "Tt Shifts", autoNumber = false)
-    @AccessControl(readRoles = "ADMIN", writeRoles = "ADMIN")
     static class TtShift extends CatalogObject implements BeforeWriteHandler {
         static LocalTime seenStart;
         static Instant seenOpened;
@@ -61,7 +59,6 @@ abstract class TimeTypesRoundTripContract {
     }
 
     @Document(name = "Tt Visits", numberPrefix = "TV-")
-    @AccessControl(readRoles = "ADMIN", writeRoles = "ADMIN")
     static class TtVisit extends DocumentObject {
         @Attribute private Instant checkedInAt;
         @Attribute private LocalTime slot;

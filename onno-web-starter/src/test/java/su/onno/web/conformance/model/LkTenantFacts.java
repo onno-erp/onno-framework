@@ -1,6 +1,5 @@
 package su.onno.web.conformance.model;
 
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Dimension;
 import su.onno.annotations.InformationRegister;
 import su.onno.annotations.Attribute;
@@ -10,7 +9,6 @@ import su.onno.types.Ref;
 
 /** An information register scoped by its tenant dimension. */
 @InformationRegister(name = "LkTenantFacts", periodicity = Periodicity.NONE)
-@AccessControl(readRoles = {"CUSTOMER", "STAFF"})
 public class LkTenantFacts extends InformationRecord {
 
     @Dimension

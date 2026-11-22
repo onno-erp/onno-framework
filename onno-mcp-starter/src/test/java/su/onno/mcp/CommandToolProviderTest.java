@@ -3,6 +3,8 @@ package su.onno.mcp;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import su.onno.access.AccessMode;
 import su.onno.access.AccessSubject;
+import su.onno.access.RoleGrants;
+import su.onno.access.RoleKey;
 import su.onno.annotations.Catalog;
 import su.onno.command.CommandResult;
 import su.onno.command.CommandSpec;
@@ -45,6 +47,9 @@ import static org.mockito.Mockito.when;
 /** Entity commands become MCP tools that run through the shared, access-checked command path. */
 class CommandToolProviderTest {
 
+    /** RENTALS writes clients; MANAGER only adds the command's role gate on top. */
+    enum TestRole implements RoleKey { RENTALS, MANAGER }
+
     @Catalog(name = "Clients")
     static class Client {
     }
@@ -58,7 +63,6 @@ class CommandToolProviderTest {
     private final UUID closed = UUID.randomUUID();
     private final CatalogDescriptor clients = new CatalogDescriptor(
             "Clients", "Clients", "cat_clients", Client.class, 12, false, true, "C-", "Rentals",
-            List.of("RENTALS"), List.of("RENTALS"),
             List.of(new AttributeDescriptor("state", "State", "state", String.class, 100,
                     false, false, "", 0, 0, AttributeDescriptor.Constraints.NONE, false)));
 
@@ -92,7 +96,8 @@ class CommandToolProviderTest {
         when(catalogQuery.get(any(), eq(clients), eq(open))).thenReturn(Map.of("state", "open"));
         when(catalogQuery.get(any(), eq(clients), eq(closed))).thenReturn(Map.of("state", "closed"));
         CommandService service = new CommandService(catalogQuery, mock(DocumentQueryService.class),
-                new AccessService(registry), new CommandRegistry(List.of(bean)), new WebProperties(), batch);
+                new AccessService(registry, RoleGrants.of(TestRole.class)
+                        .role(TestRole.RENTALS, r -> r.write(Client.class))), new CommandRegistry(List.of(bean)), new WebProperties(), batch);
         return new CommandToolProvider(registry, service, properties, json);
     }
 

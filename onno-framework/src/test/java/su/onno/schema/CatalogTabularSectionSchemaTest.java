@@ -45,7 +45,7 @@ class CatalogTabularSectionSchemaTest {
         var registry = new MetadataRegistry();
         registry.registerCatalog(new CatalogDescriptor(full.logicalName(), full.displayTitle(), full.tableName(),
                 full.javaClass(), full.codeLength(), full.hierarchical(), full.autoNumber(), full.codePrefix(),
-                full.context(), full.readRoles(), full.writeRoles(), full.attributes(), full.previousNames()));
+                full.context(), full.attributes(), full.previousNames()));
         var ds = new JdbcDataSource();
         ds.setURL("jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
         var jdbi = Jdbi.create(ds);

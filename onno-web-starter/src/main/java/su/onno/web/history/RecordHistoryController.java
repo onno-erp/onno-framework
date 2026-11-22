@@ -41,7 +41,7 @@ import java.util.UUID;
  * {@code {kind}/{name}/{id}} triple the UI routes use.
  *
  * <p>Reading history needs exactly what reading the record needs: the entity's read grant
- * ({@code @AccessControl}, via {@link AccessService}) and, for a record-scoped caller, the record
+ * ({@code RoleGrants}, via {@link AccessService}) and, for a record-scoped caller, the record
  * inside its {@code RecordAccessPolicy} read scope (404 otherwise, like a missing record). An entity
  * that has not opted in with {@code history = true} has no history surface (404). Values are
  * presented the way the record itself is: references and enumerations carry a resolved display, a

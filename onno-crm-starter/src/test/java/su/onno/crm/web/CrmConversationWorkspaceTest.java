@@ -15,7 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** A conversation link finds the workspace that holds it; a conversation outside the viewer's workspaces stays forbidden. */
 class CrmConversationWorkspaceTest {
  @Test void authorizedConversationNamesItsWorkspaceButForeignConversationIsForbidden() throws Exception {
-  Principal alice=()->"alice";var access=mock(AccessService.class);when(access.roles(alice)).thenReturn(Set.of("CRM_AGENT","SALES"));when(access.hasAnyRole(eq(alice),anyList())).thenReturn(true);
+  Principal alice=()->"alice";var access=su.onno.crm.TestBindings.withGrants(mock(AccessService.class));when(access.roles(alice)).thenReturn(Set.of("CRM_AGENT","SALES"));when(access.hasAnyRole(eq(alice),anyList())).thenReturn(true);
   var visible=new Conversation();visible.setId(UUID.randomUUID());visible.setCustomer(UUID.randomUUID());visible.setChannel(Channel.TELEGRAM);visible.setSubject("Sales call");
   var hidden=new Conversation();hidden.setId(UUID.randomUUID());hidden.setCustomer(UUID.randomUUID());hidden.setChannel(Channel.EMAIL);
   var repository=mock(ConversationRepository.class);when(repository.findActiveById(visible.getId())).thenReturn(Optional.of(visible));when(repository.findActiveById(hidden.getId())).thenReturn(Optional.of(hidden));

@@ -84,41 +84,12 @@ public class OnnoProperties {
          */
         private boolean enabled = true;
 
-        /**
-         * Roles allowed to close and reopen periods through the UI page and {@code /api/period-close}.
-         * {@code ADMIN} is always allowed.
-         */
-        private List<String> manageRoles = new ArrayList<>();
-
-        /**
-         * Roles whose signed-in holders may change documents inside a closed period without
-         * reopening it. Each bypassed operation is written to the audit trail. Empty by default:
-         * nobody is exempt, not even {@code ADMIN} — list {@code ADMIN} here to exempt administrators.
-         */
-        private List<String> overrideRoles = new ArrayList<>();
-
         public boolean isEnabled() {
             return enabled;
         }
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
-        }
-
-        public List<String> getManageRoles() {
-            return manageRoles;
-        }
-
-        public void setManageRoles(List<String> manageRoles) {
-            this.manageRoles = manageRoles;
-        }
-
-        public List<String> getOverrideRoles() {
-            return overrideRoles;
-        }
-
-        public void setOverrideRoles(List<String> overrideRoles) {
-            this.overrideRoles = overrideRoles;
         }
     }
 

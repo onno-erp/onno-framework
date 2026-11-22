@@ -50,6 +50,26 @@ class CommandRegistryTest {
         assertThat(registry.entities()).containsExactly(Integer.class);
     }
 
+    enum TestRole implements su.onno.access.RoleKey { MANAGER }
+
+    @Test
+    void commandRolesMustBeDeclaredRoles() {
+        @SuppressWarnings("rawtypes")
+        List<Commands> beans = List.of(bean(Integer.class, c -> {
+            c.command("ok").roles("manager", "ROLE_MANAGER").run(ctx -> CommandResult.ok());
+            c.command("typo").roles("MANGER").run(ctx -> CommandResult.ok());
+        }));
+        CommandRegistry registry = new CommandRegistry(beans);
+        su.onno.access.RoleGrants grants = su.onno.access.RoleGrants.of(TestRole.class);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> registry.requireKnownRoles(grants))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("MANGER")
+                .hasMessageContaining("Integer#typo");
+        // An application without grants has no role vocabulary to check against.
+        registry.requireKnownRoles(su.onno.access.RoleGrants.open());
+    }
+
     @Test
     void lateBoundCommandsResolvePerRequest() {
         List<String> live = new ArrayList<>(List.of("x"));

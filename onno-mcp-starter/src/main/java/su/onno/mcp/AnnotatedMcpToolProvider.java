@@ -11,8 +11,8 @@ import io.modelcontextprotocol.spec.McpSchema.ToolAnnotations;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.core.MethodIntrospector;
 import org.springframework.core.annotation.AnnotatedElementUtils;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.server.ResponseStatusException;
+import su.onno.access.AccessSubject;
 import su.onno.service.WebProperties;
 
 import java.lang.reflect.InvocationTargetException;
@@ -29,7 +29,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -49,6 +48,7 @@ final class AnnotatedMcpToolProvider implements McpToolProvider {
     private final OnnoMcpProperties properties;
     private final McpJsonMapper json;
     private final WebProperties webProperties;
+    private final su.onno.access.RoleGrants grants;
 
     AnnotatedMcpToolProvider(ConfigurableListableBeanFactory beans, OnnoMcpProperties properties,
                              McpJsonMapper json) {
@@ -57,6 +57,13 @@ final class AnnotatedMcpToolProvider implements McpToolProvider {
 
     AnnotatedMcpToolProvider(ConfigurableListableBeanFactory beans, OnnoMcpProperties properties,
                              WebProperties webProperties, McpJsonMapper json) {
+        this(beans, properties, webProperties, json, su.onno.access.RoleGrants.open());
+    }
+
+    /** @param grants the application's grants: each tool's {@code roles} must name a declared role. */
+    AnnotatedMcpToolProvider(ConfigurableListableBeanFactory beans, OnnoMcpProperties properties,
+                             WebProperties webProperties, McpJsonMapper json, su.onno.access.RoleGrants grants) {
+        this.grants = java.util.Objects.requireNonNull(grants, "grants");
         this.beans = beans;
         this.properties = properties;
         this.webProperties = webProperties;
@@ -88,6 +95,7 @@ final class AnnotatedMcpToolProvider implements McpToolProvider {
         if (!TOOL_NAME.matcher(name).matches()) {
             throw new IllegalStateException("Invalid @McpTool name '" + name + "' on " + method);
         }
+        grants.requireRecognized("@McpTool " + name + " roles", List.of(annotation.roles()));
         String title = annotation.title().isBlank() ? name : annotation.title().trim();
         Map<String, Object> inputSchema = inputSchema(method);
 
@@ -118,7 +126,8 @@ final class AnnotatedMcpToolProvider implements McpToolProvider {
                                   McpSyncServerExchange exchange, CallToolRequest request) {
         Principal principal = McpPrincipalContext.principal(exchange);
         if (principal == null) return error("Authentication required");
-        if (!hasAnyRole(principal, annotation.roles())) return error("Access denied");
+        // The resolved subject's roles: normalized, and including roles mapped from IdP names (fromIdp).
+        if (!hasAnyRole(McpPrincipalContext.subject(exchange).roles(), annotation.roles())) return error("Access denied");
 
         try {
             Object bean = beans.getBean(beanName);
@@ -291,16 +300,12 @@ final class AnnotatedMcpToolProvider implements McpToolProvider {
         }
     }
 
-    private static boolean hasAnyRole(Principal principal, String[] roles) {
+    /** Whether {@code held} (normalized) holds any of {@code roles}, compared normalized; no role passes implicitly. */
+    private static boolean hasAnyRole(Set<String> held, String[] roles) {
         if (roles.length == 0) return true;
-        if (!(principal instanceof Authentication authentication)) return false;
-        Set<String> authorities = authentication.getAuthorities().stream()
-                .map(authority -> authority.getAuthority().toUpperCase(Locale.ROOT))
-                .collect(java.util.stream.Collectors.toSet());
-        if (authorities.contains("ADMIN") || authorities.contains("ROLE_ADMIN")) return true;
         for (String role : roles) {
-            String normalized = role.trim().toUpperCase(Locale.ROOT);
-            if (authorities.contains(normalized) || authorities.contains("ROLE_" + normalized)) return true;
+            String required = AccessSubject.normalizeRole(role);
+            if (!required.isEmpty() && held.contains(required)) return true;
         }
         return false;
     }

@@ -1,7 +1,6 @@
 package com.example.domain.documents;
 
 import com.example.domain.catalogs.Employee;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Document;
 import su.onno.annotations.TabularSection;
@@ -30,7 +29,6 @@ import java.util.List;
 // A calendar entry, not an accounting event: closing a period must not freeze the schedule.
 @PeriodCloseExempt
 @Document(name = "Schedule Events", title = "Team events", numberPrefix = "EV-", context = "People")
-@AccessControl(readRoles = {"MANAGER", "ADMIN"}, writeRoles = {"MANAGER", "ADMIN"})
 @Getter
 @Setter
 public class ScheduleEvent extends DocumentObject implements OnFillingHandler, Validated {

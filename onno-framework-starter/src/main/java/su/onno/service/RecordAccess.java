@@ -22,7 +22,7 @@ import java.util.UUID;
 /**
  * Record-level access checks for application code — custom controllers, page actions, widget
  * backends and {@code @McpTool}s that serve external users. Applies the same rules as the generic
- * surfaces: the entity-level grant ({@code @AccessControl} + {@link EntityAccessPolicy}) first,
+ * surfaces: the entity-level grant ({@code RoleGrants} + {@link EntityAccessPolicy}) first,
  * then the subject's {@link su.onno.access.RecordAccessPolicy} scope.
  *
  * <pre>{@code
@@ -139,7 +139,7 @@ public class RecordAccess {
     /**
      * Whether {@code subject} may read the record {@code route} addresses. A {@code null} subject
      * throws (as in {@link RecordPolicies#scopeFor}) whether or not policies are declared. A subject no
-     * policy narrows (superuser, exempt, or not covered) is never narrowed here; for a subject some
+     * policy narrows (trusted code, exempt, or not covered) is never narrowed here; for a subject some
      * policy narrows, an unknown entity is denied, since no policy can be ruled out for it. Entity
      * grants are not checked for an unnarrowed subject: to authorize access in application code use
      * {@link #can} or {@link #require}.
@@ -179,11 +179,11 @@ public class RecordAccess {
 
     /**
      * Whether some policy narrows what {@code subject} reads (false with no policies or for a
-     * superuser) — when false, no record-scope check can change an answer for it.
+     * trusted code) — when false, no record-scope check can change an answer for it.
      */
     public boolean narrowsReads(AccessSubject subject) {
         requireSubject(subject);
-        if (subject.superuser()) return false;
+        if (subject.trusted()) return false;
         for (Class<?> type : compiler.policies().all().keySet()) {
             if (compiler.isScoped(type, subject, AccessMode.READ)) return true;
         }
@@ -261,7 +261,7 @@ public class RecordAccess {
         return new ScopeClause("(" + String.join(" OR ", visible) + ")", bindings);
     }
 
-    /** Entity-level grant (role + {@link EntityAccessPolicy}) for {@code mode}. */
+    /** Entity-level grant ({@code RoleGrants} + {@link EntityAccessPolicy}) for {@code mode}. */
     boolean entityGrant(AccessSubject subject, ScopedEntity entity, AccessMode mode) {
         String kind = kind(entity);
         return mode == AccessMode.WRITE

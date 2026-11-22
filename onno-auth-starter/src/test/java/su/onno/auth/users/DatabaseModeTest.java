@@ -91,6 +91,42 @@ class DatabaseModeTest {
                 });
     }
 
+    enum SeedRole implements su.onno.access.RoleKey { MANAGER, IT }
+
+    @Test
+    void theFirstSeedGetsARoleHoldingUsersManageWhenNoSeedHoldsOne() {
+        su.onno.access.RoleGrants grants = su.onno.access.RoleGrants.of(SeedRole.class)
+                .role(SeedRole.IT, r -> r.permit(su.onno.auth.AuthPermissions.MANAGE_USERS));
+        runner(freshDb()).withBean(su.onno.access.RoleGrants.class, () -> grants)
+                .withPropertyValues(
+                        "onno.auth.users[0].username=first@example.test",
+                        "onno.auth.users[0].password=first",
+                        "onno.auth.users[0].roles[0]=MANAGER",
+                        "onno.auth.users[1].username=second@example.test",
+                        "onno.auth.users[1].password=second",
+                        "onno.auth.users[1].roles[0]=MANAGER")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    UserAccounts accounts = context.getBean(UserAccounts.class);
+                    assertThat(accounts.find("first@example.test").orElseThrow().roles())
+                            .containsExactlyInAnyOrder("MANAGER", "IT");
+                    assertThat(accounts.find("second@example.test").orElseThrow().roles())
+                            .containsExactly("MANAGER");
+                });
+
+        // A seed that already holds the right role changes nothing.
+        runner(freshDb()).withBean(su.onno.access.RoleGrants.class, () -> grants)
+                .withPropertyValues(
+                        "onno.auth.users[0].username=first@example.test",
+                        "onno.auth.users[0].password=first",
+                        "onno.auth.users[0].roles[0]=MANAGER",
+                        "onno.auth.users[1].username=it@example.test",
+                        "onno.auth.users[1].password=it",
+                        "onno.auth.users[1].roles[0]=it")
+                .run(context -> assertThat(context.getBean(UserAccounts.class)
+                        .find("first@example.test").orElseThrow().roles()).containsExactly("MANAGER"));
+    }
+
     @Test
     void aSeedThatKeepsAWeakPasswordFailsStartup() {
         runner(freshDb()).withPropertyValues(

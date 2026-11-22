@@ -108,8 +108,10 @@ public class OnnoMcpAutoConfiguration {
     @Bean
     public McpToolProvider annotatedMcpToolProvider(ConfigurableListableBeanFactory beanFactory,
                                                    OnnoMcpProperties properties, WebProperties webProperties,
-                                                   McpJsonMapper json) {
-        return new AnnotatedMcpToolProvider(beanFactory, properties, webProperties, json);
+                                                   McpJsonMapper json,
+                                                   org.springframework.beans.factory.ObjectProvider<su.onno.access.RoleGrants> grants) {
+        return new AnnotatedMcpToolProvider(beanFactory, properties, webProperties, json,
+                grants.getIfAvailable(su.onno.access.RoleGrants::open));
     }
 
     @Bean

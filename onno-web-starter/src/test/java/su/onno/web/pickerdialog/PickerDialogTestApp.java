@@ -1,9 +1,12 @@
 package su.onno.web.pickerdialog;
 
+import su.onno.access.RoleGrants;
+import su.onno.access.RoleKey;
 import su.onno.command.CommandResult;
 import su.onno.command.CommandSpec;
 import su.onno.command.Commands;
 import su.onno.web.pickerdialog.model.PdGroup;
+import su.onno.web.pickerdialog.model.PdTag;
 
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -13,6 +16,16 @@ import org.springframework.context.annotation.Bean;
 @SpringBootConfiguration
 @EnableAutoConfiguration
 public class PickerDialogTestApp {
+
+    enum PdRole implements RoleKey { READER, WRITER }
+
+    /** READER reads both catalogs, WRITER also writes them. */
+    @Bean
+    RoleGrants pickerDialogRoles() {
+        return RoleGrants.of(PdRole.class)
+                .role(PdRole.READER, r -> r.read(PdGroup.class, PdTag.class))
+                .role(PdRole.WRITER, r -> r.write(PdGroup.class, PdTag.class));
+    }
 
     /** A collection command the picker must never surface. */
     @Bean

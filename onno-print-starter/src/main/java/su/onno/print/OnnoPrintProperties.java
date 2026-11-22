@@ -5,8 +5,6 @@ import org.springframework.util.unit.DataSize;
 
 import java.net.URI;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
 
 /** Settings of {@code onno-print-starter}. */
 @ConfigurationProperties(prefix = "onno.print")
@@ -46,13 +44,10 @@ public class OnnoPrintProperties {
     public static class Templates {
 
         /**
-         * Whether admins may upload replacement templates (stored in the onno_print_templates
+         * Whether holders of {@code print.templates.manage} may upload replacement templates (stored in the onno_print_templates
          * table) that take precedence over the built-in ones.
          */
         private boolean enabled = true;
-
-        /** Roles allowed to list, download, upload and reset print templates. ADMIN always passes. */
-        private List<String> manageRoles = new ArrayList<>(List.of("ADMIN"));
 
         /** Largest accepted uploaded template. */
         private DataSize maxSize = DataSize.ofMegabytes(10);
@@ -63,14 +58,6 @@ public class OnnoPrintProperties {
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
-        }
-
-        public List<String> getManageRoles() {
-            return manageRoles;
-        }
-
-        public void setManageRoles(List<String> manageRoles) {
-            this.manageRoles = manageRoles;
         }
 
         public DataSize getMaxSize() {

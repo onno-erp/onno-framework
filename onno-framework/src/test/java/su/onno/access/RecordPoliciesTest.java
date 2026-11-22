@@ -1,6 +1,5 @@
 package su.onno.access;
 
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.AccumulationRegister;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
@@ -36,12 +35,10 @@ class RecordPoliciesTest {
     public enum TenantStatus { ACTIVE, ARCHIVED }
 
     @Catalog(name = "RpOwners")
-    @AccessControl(readRoles = {"CUSTOMER", "STAFF"})
     public static class Owner extends CatalogObject {
     }
 
     @Catalog(name = "RpTenants")
-    @AccessControl(readRoles = {"CUSTOMER", "STAFF"})
     public static class Tenant extends CatalogObject {
         @Attribute
         private Ref<Owner> owner;
@@ -54,14 +51,12 @@ class RecordPoliciesTest {
     }
 
     @Document(name = "RpBuildJobs")
-    @AccessControl(readRoles = {"CUSTOMER", "STAFF"})
     public static class BuildJob extends DocumentObject {
         @Attribute
         private Ref<Tenant> tenant;
     }
 
     @AccumulationRegister(name = "RpUsage", type = AccumulationType.TURNOVER)
-    @AccessControl(readRoles = {"CUSTOMER", "STAFF"})
     public static class Usage extends AccumulationRecord {
         @Dimension
         private Ref<Tenant> tenant;
@@ -70,14 +65,19 @@ class RecordPoliciesTest {
     }
 
     @Catalog(name = "RpFolders", hierarchical = true)
-    @AccessControl(readRoles = {"CUSTOMER"})
     public static class Folder extends CatalogObject {
     }
 
     @Catalog(name = "RpStaffOnly")
-    @AccessControl(readRoles = {"STAFF"})
     public static class StaffOnly extends CatalogObject {
     }
+
+    enum TestRole implements RoleKey { CUSTOMER, STAFF, ADMIN }
+
+    /** CUSTOMER and STAFF read what their policies scope; only STAFF reads StaffOnly; ADMIN is ordinary. */
+    private static final RoleGrants GRANTS = RoleGrants.of(TestRole.class)
+            .role(TestRole.CUSTOMER, r -> r.read(Owner.class, Tenant.class, BuildJob.class, Usage.class, Folder.class))
+            .role(TestRole.STAFF, r -> r.read(Owner.class, Tenant.class, BuildJob.class, Usage.class, StaffOnly.class));
 
     private MetadataRegistry registry;
     private final UUID ownerA = UUID.randomUUID();
@@ -100,7 +100,7 @@ class RecordPoliciesTest {
     }
 
     private RecordPolicies policies(RecordAccessPolicy... policies) {
-        return new RecordPolicies(registry, List.of(policies));
+        return new RecordPolicies(registry, List.of(policies), GRANTS);
     }
 
     private static RecordAccessPolicy tenantsByOwner() {
@@ -113,14 +113,18 @@ class RecordPoliciesTest {
     // ------------------------------------------------------------------ applicability
 
     @Test
-    void appliesOnlyToHoldersOfTheRoleAndAdminAndSystemAreExempt() {
+    void appliesOnlyToHoldersOfTheRoleAndOnlySystemIsImplicitlyExempt() {
         RecordPolicies p = policies(tenantsByOwner());
 
         assertThat(p.scopeFor(Tenant.class, customer(), AccessMode.READ))
                 .isEqualTo(RecordScope.eq("owner", Subject.recordId()));
         assertThat(p.scopeFor(Tenant.class, AccessSubject.user("s", Set.of("STAFF")), AccessMode.READ))
                 .isEqualTo(RecordScope.all());
+        // A role named ADMIN is an ordinary role: it exempts nobody unless listed in exemptRoles.
         assertThat(p.scopeFor(Tenant.class, AccessSubject.user("root", Set.of("ADMIN", "CUSTOMER")), AccessMode.READ))
+                .isEqualTo(RecordScope.eq("owner", Subject.recordId()));
+        assertThat(policies(tenantsByOwner().exemptRoles("ADMIN"))
+                .scopeFor(Tenant.class, AccessSubject.user("root", Set.of("ADMIN", "CUSTOMER")), AccessMode.READ))
                 .isEqualTo(RecordScope.all());
         assertThat(p.scopeFor(Tenant.class, AccessSubject.system(), AccessMode.READ))
                 .isEqualTo(RecordScope.all());
@@ -207,6 +211,23 @@ class RecordPoliciesTest {
         assertThatThrownBy(() -> policies(RecordAccessPolicy.of(String.class).appliesTo("CUSTOMER")
                 .read(RecordScope.all())))
                 .hasMessageContaining("not a registered");
+    }
+
+    @Test
+    void rejectsUndeclaredAppliesToAndExemptRoles() {
+        assertThatThrownBy(() -> policies(tenantsByOwner().exemptRoles("STAF")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("exemptRoles role STAF is neither a declared role nor a fromIdp name");
+        assertThatThrownBy(() -> policies(RecordAccessPolicy.forCatalog(Tenant.class).appliesTo("CUSTOMR")
+                .read(RecordScope.all())))
+                .hasMessageContaining("appliesTo role CUSTOMR is neither a declared role nor a fromIdp name");
+    }
+
+    @Test
+    void anApplicationWithoutGrantsHasNoDeadPolicies() {
+        // Open grants let every role read everything, so no appliesTo role can be unable to read.
+        new RecordPolicies(registry, List.of(RecordAccessPolicy.forCatalog(StaffOnly.class).appliesTo("CUSTOMER")
+                .read(RecordScope.all())), RoleGrants.open());
     }
 
     @Test

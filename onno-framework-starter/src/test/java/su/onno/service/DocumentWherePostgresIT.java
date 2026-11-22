@@ -1,7 +1,6 @@
 package su.onno.service;
 
 import su.onno.access.AccessSubject;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Document;
 import su.onno.metadata.DefaultNamingStrategy;
@@ -42,7 +41,6 @@ class DocumentWherePostgresIT {
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
 
     @Document(name = "Pg Stays", numberPrefix = "S-")
-    @AccessControl(readRoles = "ADMIN", writeRoles = "ADMIN")
     public static class PgStay extends DocumentObject {
         @Attribute(length = 20) private String status;
         @Attribute(length = 4) private String season;

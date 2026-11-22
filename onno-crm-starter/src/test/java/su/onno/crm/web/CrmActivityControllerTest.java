@@ -18,7 +18,7 @@ class CrmActivityControllerTest {
  final ConversationMessageRepository messages=mock(ConversationMessageRepository.class);
  final InboxRepository inboxes=mock(InboxRepository.class);
  final CrmInboxWorkspaceService workspaces=mock(CrmInboxWorkspaceService.class);
- final AccessService access=mock(AccessService.class);
+ final AccessService access=su.onno.crm.TestBindings.withGrants(mock(AccessService.class));
  final CurrentUserResolver users=mock(CurrentUserResolver.class);
  final CommentService comments=mock(CommentService.class);
  final su.onno.web.comments.CommentAuthorAvatars avatars=mock(su.onno.web.comments.CommentAuthorAvatars.class);

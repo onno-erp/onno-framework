@@ -1,5 +1,8 @@
 package su.onno.service;
 
+import su.onno.access.EntityRight;
+import su.onno.access.RoleGrants;
+import su.onno.access.RoleKey;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.MetadataRegistry;
@@ -20,12 +23,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Role resolution for {@link AccessService}, covering issue #54: action/write authorization
- * 403'd privileged users (including {@code ADMIN}) whenever the injected {@link Principal} was not
- * the authority-bearing {@code Authentication}. Roles must then come from the {@code SecurityContext}.
+ * 403'd privileged users whenever the injected {@link Principal} was not the authority-bearing
+ * {@code Authentication}. Roles must then come from the {@code SecurityContext}. Rights come from
+ * {@link RoleGrants}; no role (ADMIN included) passes implicitly.
  */
 class AccessServiceRolesTest {
 
-    private final AccessService access = new AccessService(null);
+    enum TestRole implements RoleKey { RENTALS, FINANCE, ADMIN }
+
+    static final class TravellerReport {}
+    static final class BankAccount {}
+
+    private static final RoleGrants GRANTS = RoleGrants.of(TestRole.class)
+            .role(TestRole.RENTALS, r -> r.write(TravellerReport.class))
+            .role(TestRole.FINANCE, r -> r.read(BankAccount.class));
+
+    private final MetadataRegistry registry = registry();
+    private final AccessService access = new AccessService(registry, GRANTS);
 
     @AfterEach
     void clearContext() {
@@ -37,23 +51,92 @@ class AccessServiceRolesTest {
         return new UsernamePasswordAuthenticationToken(user, "x", user.getAuthorities());
     }
 
-    /** A document writable only by RENTALS, mirroring {@code @AccessControl(writeRoles = {"RENTALS"})}. */
     private static DocumentDescriptor rentalsDoc() {
         return new DocumentDescriptor("Traveller Reports", "Traveller Reports", "traveller_reports",
-                Object.class, 9, true, "TR", "documents",
-                List.of(), List.of("RENTALS"), List.of(), List.of());
+                TravellerReport.class, 9, true, "TR", "documents", List.of(), List.of());
     }
 
-    @Test void privacyPoliciesCanExplicitlyConstrainAdministratorsWithoutChangingDefaultPolicies() {
-        EntityAccessPolicy ordinary=(roles,type,name,write)->false;
-        EntityAccessPolicy privacy=new EntityAccessPolicy() {
-            public boolean includesAdministrators() { return true; }
-            public boolean allows(java.util.Set<String> roles,String type,String name,boolean write) { return false; }
-        };
-        var admin=token("admin","ADMIN");
-        assertThat(new AccessService(null,()->List.of(ordinary)).canRead(admin,rentalsDoc())).isTrue();
-        assertThat(new AccessService(null,()->List.of(privacy)).canRead(admin,rentalsDoc())).isFalse();
-        assertThat(new AccessService(null,()->List.of(privacy)).canWrite(admin,rentalsDoc())).isFalse();
+    private static MetadataRegistry registry() {
+        MetadataRegistry registry = new MetadataRegistry();
+        registry.registerDocument(rentalsDoc());
+        // logicalName ("Bank Accounts") deliberately differs from the route slug ("bank_accounts").
+        registry.registerCatalog(new CatalogDescriptor(
+                "Bank Accounts", "Bank Accounts", "bank_accounts", BankAccount.class,
+                12, false, true, "BA-", "Rentals", List.of()));
+        return registry;
+    }
+
+    @Test
+    void entityPoliciesConstrainEveryRole() {
+        EntityAccessPolicy deny = (roles, type, name, write) -> false;
+        AccessService denied = new AccessService(registry, GRANTS, () -> List.of(deny));
+        assertThat(denied.canRead(token("rentals", "RENTALS"), rentalsDoc())).isFalse();
+        assertThat(denied.canWrite(token("rentals", "RENTALS"), rentalsDoc())).isFalse();
+    }
+
+    @Test
+    void aRoleNamedAdminIsOrdinary() {
+        assertThat(access.canRead(token("admin", "ADMIN"), rentalsDoc())).isFalse();
+        assertThat(access.canRead(token("admin", "ADMIN"), "catalog", "bank_accounts")).isFalse();
+        assertThat(access.hasAnyRole(token("admin", "ADMIN"), List.of("RENTALS"))).isFalse();
+    }
+
+    @Test
+    void anApplicationWithoutGrantsLetsEveryUserDoEverything() {
+        AccessService open = new AccessService(registry);
+        assertThat(open.canWrite(token("anyone"), rentalsDoc())).isTrue();
+        assertThat(open.canUnpost(token("anyone"), rentalsDoc())).isTrue();
+    }
+
+    @Test
+    void anIdpRoleMappedWithFromIdpCountsAsTheDeclaredRoleEverywhere() {
+        RoleGrants grants = RoleGrants.of(TestRole.class)
+                .role(TestRole.FINANCE, r -> r.read(BankAccount.class).fromIdp("erp-finance"));
+        AccessService mapped = new AccessService(registry, grants);
+        Authentication sso = token("sso", "erp-finance");
+
+        // The caller's roles carry the declared role, so plain role lists (commands, task
+        // assignments, record policies, UI gates) match it, not only RoleGrants itself.
+        assertThat(mapped.roles(sso)).contains("ERP-FINANCE", "FINANCE");
+        assertThat(mapped.hasAnyRole(sso, List.of("finance"))).isTrue();
+        assertThat(mapped.canRead(sso, "catalog", "bank_accounts")).isTrue();
+        // Without grants nothing is mapped.
+        assertThat(new AccessService(registry).roles(sso)).containsExactly("ERP-FINANCE");
+    }
+
+    @Test
+    void anAnonymousCallerGetsNothingEvenWithoutGrants() {
+        AccessService open = new AccessService(registry);
+        assertThat(open.canRead((Principal) null, rentalsDoc())).isFalse();
+        assertThat(open.canRead((Principal) null, "catalog", "bank_accounts")).isFalse();
+        assertThat(open.access((Principal) null).can(TravellerReport.class, EntityRight.READ)).isFalse();
+        assertThat(open.canRead(su.onno.access.AccessSubject.user(null, java.util.Set.of()), rentalsDoc())).isFalse();
+        assertThat(open.canRead(su.onno.access.AccessSubject.system(), rentalsDoc())).isTrue();
+    }
+
+    @Test
+    void postAndUnpostAreTheirOwnRights() {
+        RoleGrants grants = RoleGrants.of(TestRole.class)
+                .role(TestRole.RENTALS, r -> r.write(TravellerReport.class))
+                .role(TestRole.FINANCE, r -> r.post(TravellerReport.class));
+        AccessService posting = new AccessService(registry, grants);
+        assertThat(posting.canWrite(token("r", "RENTALS"), rentalsDoc())).isTrue();
+        assertThat(posting.canPost(token("r", "RENTALS"), rentalsDoc())).isFalse();
+        assertThat(posting.canPost(token("f", "FINANCE"), rentalsDoc())).isTrue();
+        assertThat(posting.canWrite(token("f", "FINANCE"), rentalsDoc())).as("post implies write").isTrue();
+        assertThat(posting.canUnpost(token("f", "FINANCE"), rentalsDoc())).isFalse();
+    }
+
+    @Test
+    void grantsMustFitTheModel() {
+        assertThatThrownBy(() -> new AccessService(registry, RoleGrants.of(TestRole.class)
+                .role(TestRole.RENTALS, r -> r.read(String.class))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("not a registered");
+        assertThatThrownBy(() -> new AccessService(registry, RoleGrants.of(TestRole.class)
+                .role(TestRole.FINANCE, r -> r.post(BankAccount.class))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("only documents");
     }
 
     @Test
@@ -64,10 +147,8 @@ class AccessServiceRolesTest {
     @Test
     void requireWriteAuthorizesViaInjectedPrincipal() {
         DocumentDescriptor desc = rentalsDoc();
-        assertThatCode(() -> access.requireWrite(token("admin", "ADMIN"), desc))
-                .as("ADMIN superuser bypass").doesNotThrowAnyException();
         assertThatCode(() -> access.requireWrite(token("rentals", "RENTALS"), desc))
-                .as("holds the required write role").doesNotThrowAnyException();
+                .as("holds the write grant").doesNotThrowAnyException();
         assertThatThrownBy(() -> access.requireWrite(token("finance", "FINANCE"), desc))
                 .hasMessageContaining("not allowed");
     }
@@ -80,19 +161,10 @@ class AccessServiceRolesTest {
     @Test
     void fallsBackToSecurityContextWhenPrincipalLacksAuthorities() {
         DocumentDescriptor desc = rentalsDoc();
-        Principal bare = () -> "admin"; // a bare java.security.Principal, no getAuthorities()
-
-        SecurityContextHolder.getContext().setAuthentication(token("admin", "ADMIN"));
-        assertThat(access.roles(bare)).contains("ADMIN");
-        assertThatCode(() -> access.requireWrite(bare, desc)).doesNotThrowAnyException();
-    }
-
-    @Test
-    void fallsBackForRequiredWriteRoleViaSecurityContext() {
-        DocumentDescriptor desc = rentalsDoc();
-        Principal bare = () -> "rentals";
+        Principal bare = () -> "rentals"; // a bare java.security.Principal, no getAuthorities()
 
         SecurityContextHolder.getContext().setAuthentication(token("rentals", "RENTALS"));
+        assertThat(access.roles(bare)).contains("RENTALS");
         assertThatCode(() -> access.requireWrite(bare, desc)).doesNotThrowAnyException();
     }
 
@@ -113,30 +185,19 @@ class AccessServiceRolesTest {
     /**
      * The #127 regression: the name-based read check (used by the comment endpoint, which passes a
      * route slug like {@code bank_accounts}) must resolve the same descriptor the detail routes do.
-     * It matched {@code logicalName()} exactly, so a slug never equalled the logical name — the
-     * descriptor was "not found" and the check 403'd every caller, ADMIN included. Names are now
-     * matched normalized (space/underscore/case-insensitive), mirroring {@code CatalogQueryService}.
+     * Names are matched normalized (space/underscore/case-insensitive), mirroring
+     * {@code CatalogQueryService}.
      */
     @Test
     void nameBasedReadResolvesRouteSlugAcrossNameForms() {
-        MetadataRegistry registry = new MetadataRegistry();
-        // logicalName ("Bank Accounts") deliberately differs from the route slug ("bank_accounts").
-        registry.registerCatalog(new CatalogDescriptor(
-                "Bank Accounts", "Bank Accounts", "bank_accounts", Object.class,
-                12, false, true, "BA-", "Rentals",
-                List.of("FINANCE"), List.of("FINANCE"), List.of()));
-        AccessService withRegistry = new AccessService(registry);
-
-        // The route slug resolves despite differing from logicalName...
-        assertThat(withRegistry.canRead(token("admin", "ADMIN"), "catalog", "bank_accounts"))
-                .as("ADMIN superuser, descriptor resolved by normalized slug").isTrue();
-        assertThat(withRegistry.canRead(token("finance", "FINANCE"), "catalog", "bank_accounts"))
-                .as("holds the FINANCE read role").isTrue();
-        assertThat(withRegistry.canRead(token("rentals", "RENTALS"), "catalog", "bank_accounts"))
+        assertThat(access.canRead(token("finance", "FINANCE"), "catalog", "bank_accounts"))
+                .as("holds the FINANCE read grant, descriptor resolved by normalized slug").isTrue();
+        assertThat(access.canRead(token("rentals", "RENTALS"), "catalog", "bank_accounts"))
                 .as("descriptor resolved but role denied — a real deny, not a not-found").isFalse();
         // ...as do the display-name and logical-name forms.
-        assertThat(withRegistry.canRead(token("finance", "FINANCE"), "catalog", "Bank Accounts")).isTrue();
-        // An unknown name still denies.
-        assertThat(withRegistry.canRead(token("admin", "ADMIN"), "catalog", "nope")).isFalse();
+        assertThat(access.canRead(token("finance", "FINANCE"), "catalog", "Bank Accounts")).isTrue();
+        // An unknown name still denies, even without grants.
+        assertThat(new AccessService(registry).canRead(token("finance", "FINANCE"), "catalog", "nope")).isFalse();
+        assertThat(access.access(token("finance", "FINANCE")).can(BankAccount.class, EntityRight.WRITE)).isFalse();
     }
 }

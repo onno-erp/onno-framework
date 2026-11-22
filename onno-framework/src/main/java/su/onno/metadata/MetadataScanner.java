@@ -63,7 +63,7 @@ public class MetadataScanner {
 
         return new CatalogDescriptor(logicalName, displayTitle, tableName, clazz, codeLength,
                 catalog.hierarchical(), catalog.autoNumber(), catalog.codePrefix(),
-                catalog.context(), readRoles(clazz), writeRoles(clazz), attributes,
+                catalog.context(), attributes,
                 List.of(catalog.previousNames()), scanTabularSections(clazz, storageKey));
     }
 
@@ -88,7 +88,7 @@ public class MetadataScanner {
 
         return new DocumentDescriptor(logicalName, displayTitle, tableName, clazz, numberLength,
                 document.autoNumber(), document.numberPrefix(), document.context(),
-                readRoles(clazz), writeRoles(clazz), attributes, tabularSections,
+                attributes, tabularSections,
                 List.of(document.previousNames()));
     }
 
@@ -114,7 +114,7 @@ public class MetadataScanner {
         return new AccumulationRegisterDescriptor(
                 logicalName, displayTitle, tableName, totalsTableName, clazz, type,
                 reg.allowNegative(), reg.postingOrder(), reg.context(),
-                readRoles(clazz), writeRoles(clazz), dimensions, resources);
+                dimensions, resources);
     }
 
     @SuppressWarnings("unchecked")
@@ -201,17 +201,7 @@ public class MetadataScanner {
 
         return new InformationRegisterDescriptor(
                 logicalName, displayTitle, tableName, clazz, periodicity, reg.context(),
-                readRoles(clazz), writeRoles(clazz), dimensions, resources, attributes);
-    }
-
-    private List<String> readRoles(Class<?> clazz) {
-        AccessControl access = clazz.getAnnotation(AccessControl.class);
-        return access == null ? List.of() : List.of(access.readRoles());
-    }
-
-    private List<String> writeRoles(Class<?> clazz) {
-        AccessControl access = clazz.getAnnotation(AccessControl.class);
-        return access == null ? List.of() : List.of(access.writeRoles());
+                dimensions, resources, attributes);
     }
 
     public ConstantDescriptor scanConstant(Class<?> clazz) {

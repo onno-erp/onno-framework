@@ -182,7 +182,10 @@ public class UiViewController {
      * by context), default screens and permissions from this; no navigation is authored server-side.
      * {@code informationRegisters} lists the readable information registers (read through
      * {@code /api/information-registers}); {@code constants} the {@code @Constant} settings with
-     * their value type, for administrators only (as {@code /api/settings} is).
+     * their value type, only for holders of {@code settings.edit} (as {@code /api/settings} is).
+     * {@code user.permissions} lists the granted permission keys and {@code user.unrestricted} is
+     * true in an application without grants; {@code roles} lists the role names the application
+     * declares.
      */
     @GetMapping("/model")
     public Map<String, Object> model(Principal principal) {
@@ -225,6 +228,11 @@ public class UiViewController {
         me.put("displayName", user.displayName());
         me.put("avatarUrl", Objects.requireNonNullElse(user.avatarUrl(), ""));
         me.put("roles", access.roles(principal));
+        su.onno.access.EffectiveAccess effective = access.access(principal);
+        // Granted permission keys, and whether the app runs without grants (every user holds every
+        // permission except the explicit-only ones, which the server checks itself).
+        me.put("permissions", effective.permissions().stream().map(su.onno.access.Permission::key).sorted().toList());
+        me.put("unrestricted", effective.unrestricted());
 
         Map<String, Object> features = new LinkedHashMap<>();
         features.put("comments", commentsEnabled());
@@ -233,6 +241,8 @@ public class UiViewController {
 
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("user", me);
+        // Every role the app declares (RoleKey enum), for role pickers; empty without grants.
+        out.put("roles", access.grants().roleNames().stream().map(su.onno.access.AccessSubject::normalizeRole).toList());
         out.put("features", features);
         out.put("entities", entities);
         out.put("informationRegisters", registry.allInformationRegisters().stream()
@@ -247,8 +257,8 @@ public class UiViewController {
                     return e;
                 })
                 .toList());
-        // Settings (@Constant values) are administrator-only, like their endpoint.
-        out.put("constants", !access.roles(principal).contains("ADMIN") ? List.of()
+        // Settings (@Constant values) need settings.edit, like their endpoint.
+        out.put("constants", !effective.has(su.onno.access.CorePermissions.EDIT_SETTINGS) ? List.of()
                 : registry.allConstants().stream()
                 .sorted(Comparator.comparing(su.onno.metadata.ConstantDescriptor::logicalName))
                 .map(d -> Map.<String, Object>of("name", d.logicalName(), "type", d.valueType().getSimpleName()))
@@ -437,7 +447,7 @@ public class UiViewController {
         boolean posted = Boolean.TRUE.equals(row.get("_posted"));
 
         List<ViewDescriptors.RecordAction> actions = new ArrayList<>();
-        // Posting rights can be narrower than write access (@AccessControl postRoles/unpostRoles, #546).
+        // Posting rights can be narrower than write access (RoleGrants post/unpost, #546).
         boolean canPost = canWrite && postable && access.canPost(principal, desc);
         boolean canUnpost = canWrite && access.canUnpost(principal, desc);
         if (canUnpost && postable && posted) {

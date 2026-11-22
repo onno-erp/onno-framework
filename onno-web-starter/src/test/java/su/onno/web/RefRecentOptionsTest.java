@@ -1,5 +1,8 @@
 package su.onno.web;
 
+import su.onno.access.RoleGrants;
+import su.onno.access.RoleKey;
+
 import su.onno.service.AccessService;
 import su.onno.service.CatalogQueryService;
 import su.onno.service.DocumentQueryService;
@@ -9,7 +12,6 @@ import su.onno.access.AccessSubject;
 import su.onno.access.RecordAccessPolicy;
 import su.onno.access.RecordPolicies;
 import su.onno.access.RecordScope;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.annotations.Document;
@@ -47,14 +49,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class RefRecentOptionsTest {
 
-    @AccessControl(readRoles = {"CLERK", "CUSTOMER"})
+    enum TestRole implements RoleKey { CLERK, CUSTOMER }
+
+    private static final RoleGrants GRANTS = RoleGrants.of(TestRole.class)
+            .role(TestRole.CLERK, r -> r.write(Client.class).post(Order.class).unpost(Order.class))
+            .role(TestRole.CUSTOMER, r -> r.write(Client.class));
+
     @Catalog(name = "RecentClients")
     static class Client extends CatalogObject {
         @Attribute(length = 40)
         private String tier;
     }
 
-    @AccessControl(readRoles = "CLERK")
     @Document(name = "RecentOrders")
     static class Order extends DocumentObject {
     }
@@ -90,7 +96,7 @@ class RefRecentOptionsTest {
         RecordScopeCompiler scopes = new RecordScopeCompiler(new RecordPolicies(registry, List.of(
                 RecordAccessPolicy.forCatalog(Client.class).appliesTo("CUSTOMER")
                         .read(RecordScope.eq("tier", "gold")))));
-        AccessService access = new AccessService(registry);
+        AccessService access = new AccessService(registry, GRANTS);
         store = new RefRecentStore(jdbi);
         controller = new RefOptionController(
                 new CatalogQueryService(registry, jdbi, scopes, access),

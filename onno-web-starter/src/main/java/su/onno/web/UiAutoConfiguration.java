@@ -335,16 +335,14 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
         return new CheckController(catalogQueryService, documentQueryService, access, checkRegistry);
     }
 
-    /** Period-close roles ({@code onno.period-close.manage-roles} / {@code override-roles}) and override policy. */
+    /**
+     * Period-close permissions ({@code periodClose.manage} / {@code periodClose.override}) and the
+     * override policy.
+     */
     @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
-    public su.onno.web.period.PeriodCloseAccess periodCloseAccess(
-            AccessService access,
-            org.springframework.beans.factory.ObjectProvider<su.onno.spring.OnnoProperties> onnoProperties) {
-        su.onno.spring.OnnoProperties onno = onnoProperties.getIfAvailable();
-        return new su.onno.web.period.PeriodCloseAccess(access,
-                onno == null ? java.util.List.<String>of() : onno.getPeriodClose().getManageRoles(),
-                onno == null ? java.util.List.<String>of() : onno.getPeriodClose().getOverrideRoles());
+    public su.onno.web.period.PeriodCloseAccess periodCloseAccess(AccessService access) {
+        return new su.onno.web.period.PeriodCloseAccess(access);
     }
 
     @Bean

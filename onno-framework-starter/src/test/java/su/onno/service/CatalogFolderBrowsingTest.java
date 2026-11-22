@@ -4,7 +4,6 @@ import su.onno.access.AccessSubject;
 import su.onno.access.RecordAccessPolicy;
 import su.onno.access.RecordPolicies;
 import su.onno.access.RecordScope;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.metadata.CatalogDescriptor;
@@ -46,7 +45,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class CatalogFolderBrowsingTest {
 
-    @AccessControl(readRoles = {"CLERK", "CUSTOMER"})
     @Catalog(name = "BrowseItems", hierarchical = true)
     static class Item extends CatalogObject {
         @Attribute(length = 20)

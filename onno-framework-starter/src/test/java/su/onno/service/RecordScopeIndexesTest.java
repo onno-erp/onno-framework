@@ -4,7 +4,6 @@ import su.onno.access.RecordAccessPolicy;
 import su.onno.access.RecordPolicies;
 import su.onno.access.RecordScope;
 import su.onno.access.Subject;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.metadata.CatalogDescriptor;
@@ -33,7 +32,6 @@ class RecordScopeIndexesTest {
     // Fixture fields are read reflectively by MetadataScanner, not by test code.
     @SuppressWarnings("unused")
     @Catalog(name = "ScopeIndexNotes")
-    @AccessControl(readRoles = "CUSTOMER")
     static class Note extends CatalogObject {
         @Attribute private UUID owner; // scalar, so the schema itself leaves it unindexed
     }

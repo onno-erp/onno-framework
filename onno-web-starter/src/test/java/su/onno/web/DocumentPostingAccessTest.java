@@ -7,7 +7,8 @@ import su.onno.service.DocumentCommandService;
 import su.onno.service.DocumentQueryService;
 import su.onno.service.WebProperties;
 import su.onno.access.AccessSubject;
-import su.onno.annotations.AccessControl;
+import su.onno.access.RoleGrants;
+import su.onno.access.RoleKey;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Document;
 import su.onno.lifecycle.Postable;
@@ -38,15 +39,23 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Post / unpost rights are separate from write access (#546): {@code @AccessControl(postRoles,
- * unpostRoles)} narrows who may post or unpost a document they can otherwise edit, on the shared
- * command path the REST API, MCP tools and UI actions all go through.
+ * Post / unpost rights are separate from write access (#546): {@code RoleGrants} grants
+ * {@code post(...)} and {@code unpost(...)} on their own (each implies write), so a role may edit a
+ * document without posting or unposting it, on the shared command path the REST API, MCP tools and
+ * UI actions all go through.
  */
 class DocumentPostingAccessTest {
 
+    enum TestRole implements RoleKey { CLERK, POSTER, MANAGER, VIEWER, ADMIN }
+
+    /** CLERK edits gated invoices; POSTER also posts them; MANAGER also unposts. ADMIN is ordinary. */
+    private static final RoleGrants GRANTS = RoleGrants.of(TestRole.class)
+            .role(TestRole.CLERK, r -> r.write(GatedInvoice.class).post(OpenInvoice.class).unpost(OpenInvoice.class))
+            .role(TestRole.POSTER, r -> r.post(GatedInvoice.class))
+            .role(TestRole.MANAGER, r -> r.post(GatedInvoice.class).unpost(GatedInvoice.class))
+            .role(TestRole.VIEWER, r -> r.read(OpenInvoice.class));
+
     @Document(name = "GatedInvoices", numberPrefix = "GI-")
-    @AccessControl(readRoles = {"CLERK", "POSTER", "MANAGER"},
-            postRoles = {"POSTER", "MANAGER"}, unpostRoles = "MANAGER")
     @SuppressWarnings("unused") // Reflective model fixture.
     public static class GatedInvoice extends DocumentObject implements Postable {
         @Attribute(length = 60) private String title;
@@ -54,9 +63,8 @@ class DocumentPostingAccessTest {
         @Override public void handlePosting(PostingContext context) { }
     }
 
-    /** No post/unpost lists: every writer keeps both rights (the pre-#546 behaviour). */
+    /** CLERK holds write, post and unpost on it; VIEWER only reads it. */
     @Document(name = "OpenInvoices", numberPrefix = "OI-")
-    @AccessControl(readRoles = {"CLERK", "VIEWER"}, writeRoles = "CLERK")
     @SuppressWarnings("unused") // Reflective model fixture.
     public static class OpenInvoice extends DocumentObject implements Postable {
         @Attribute(length = 60) private String title;
@@ -90,18 +98,17 @@ class DocumentPostingAccessTest {
         registry.registerDocument(open);
         new SchemaGenerator(registry).execute(jdbi);
 
-        access = new AccessService(registry);
+        access = new AccessService(registry, GRANTS);
         PostingService posting = new PostingService(new PostingEngine(jdbi, registry, Map.of()));
         TestEntityStore.Stack stack = TestEntityStore.builder(ds, registry).numbers(new WriteLifecycleCommandServiceTest.SequentialNumbers()).cipher(new SecretCipher(null)).events(event -> { }).build();
         commands = new DocumentCommandService(registry, stack.jdbi(), new WebProperties(), posting, new DocumentQueryService(registry, jdbi), access, stack.store());
     }
 
     @Test
-    void descriptorExposesPostAndUnpostRoles() {
-        assertThat(gated.postRoles()).containsExactly("POSTER", "MANAGER");
-        assertThat(gated.unpostRoles()).containsExactly("MANAGER");
-        assertThat(open.postRoles()).isEmpty();
-        assertThat(open.unpostRoles()).isEmpty();
+    void aPostGrantImpliesWriteAccess() {
+        UUID id = create(gated, CLERK);
+        assertThatCode(() -> commands.update(gated, id, Map.of("title", "by poster"), POSTER))
+                .doesNotThrowAnyException();
     }
 
     @Test
@@ -161,18 +168,21 @@ class DocumentPostingAccessTest {
     }
 
     @Test
-    void adminAndSystemAlwaysPass() {
-        for (AccessSubject subject : new AccessSubject[] {ADMIN, AccessSubject.system()}) {
-            UUID id = create(gated, CLERK);
-            commands.post(gated, id, subject);
-            assertThat(posted(gated, id)).isTrue();
-            commands.unpost(gated, id, subject);
-            assertThat(posted(gated, id)).isFalse();
-        }
+    void onlySystemAlwaysPassesAndARoleNamedAdminIsOrdinary() {
+        UUID id = create(gated, CLERK);
+        commands.post(gated, id, AccessSubject.system());
+        assertThat(posted(gated, id)).isTrue();
+        commands.unpost(gated, id, AccessSubject.system());
+        assertThat(posted(gated, id)).isFalse();
+
+        assertThatThrownBy(() -> commands.post(gated, id, ADMIN))
+                .isInstanceOfSatisfying(ServiceException.class,
+                        e -> assertThat(e.status()).isEqualTo(ServiceException.Status.FORBIDDEN));
+        assertThat(posted(gated, id)).isFalse();
     }
 
     @Test
-    void unsetListsLeaveBothRightsWithEveryWriter() {
+    void postAndUnpostGrantedWithWrite() {
         UUID id = create(open, CLERK);
 
         commands.post(open, id, CLERK);
@@ -194,9 +204,9 @@ class DocumentPostingAccessTest {
         assertThat(access.canUnpost(POSTER, gated)).isFalse();
         assertThat(access.canPost(MANAGER, gated)).isTrue();
         assertThat(access.canUnpost(MANAGER, gated)).isTrue();
-        assertThat(access.canPost(ADMIN, gated)).isTrue();
+        assertThat(access.canPost(ADMIN, gated)).isFalse();
         assertThat(access.canUnpost(AccessSubject.system(), gated)).isTrue();
-        // A post role never widens write access.
+        // A read grant never carries posting.
         assertThat(access.canPost(VIEWER, open)).isFalse();
         assertThat(access.canPost(CLERK, open)).isTrue();
     }

@@ -34,7 +34,7 @@ class OnnoCrmAutoConfigurationTest {
             .withBean(su.onno.web.comments.CommentAuthorAvatars.class, () -> mock(su.onno.web.comments.CommentAuthorAvatars.class))
             .withBean(su.onno.service.AccessSubjectResolver.class, () -> mock(su.onno.service.AccessSubjectResolver.class))
             .withBean(CurrentUserResolver.class, () -> mock(CurrentUserResolver.class))
-            .withBean(AccessService.class, () -> mock(AccessService.class));
+            .withBean(AccessService.class, () -> su.onno.crm.TestBindings.withGrants(mock(AccessService.class)));
 
     @Test
     void installsCrmServicesApiUiAndScannerPackage() {

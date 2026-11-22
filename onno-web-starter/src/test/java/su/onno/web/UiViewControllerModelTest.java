@@ -109,6 +109,17 @@ class UiViewControllerModelTest {
                 .containsExactly(Map.of("name", "UmShopName", "type", "String"));
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void carriesTheUsersPermissionsAndTheDeclaredRoles() throws Exception {
+        Map<String, Object> admin = model(ADMIN);
+        assertThat((Map<String, Object>) admin.get("user"))
+                .containsEntry("permissions", List.of("settings.edit"))
+                .containsEntry("unrestricted", false);
+        assertThat((Map<String, Object>) model(READER).get("user")).containsEntry("permissions", List.of());
+        assertThat(admin.get("roles")).isEqualTo(List.of("READER", "WRITER", "HR", "ADMIN"));
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> model(Principal who) throws Exception {
         var response = mvc.perform(get("/api/ui/model").principal(who)).andReturn().getResponse();

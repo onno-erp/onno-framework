@@ -20,7 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class CrmInboxWorkspaceSecurityTest {
     Principal alice=()->"alice";
-    AccessService access=mock(AccessService.class);
+    AccessService access=su.onno.crm.TestBindings.withGrants(mock(AccessService.class));
     ConversationRepository repository=mock(ConversationRepository.class);
     ConversationService commands=mock(ConversationService.class);
     CommentService comments=mock(CommentService.class);
@@ -98,10 +98,22 @@ class CrmInboxWorkspaceSecurityTest {
         verify(repository,never()).save(any());
     }
     @Test void genericGateBlocksAgentsAndLeavesAdminToolsAvailable() {
-        var policy=new OnnoCrmAutoConfiguration().crmWorkspaceGenericAccess(su.onno.crm.service.CrmFeatures.defaults());
+        var policy=new OnnoCrmAutoConfiguration().crmWorkspaceGenericAccess(su.onno.crm.service.CrmFeatures.defaults(), TestBindings.GRANTS);
         assertThat(policy.allows(Set.of("CRM_AGENT"),"catalog","crmconversations",false)).isFalse();
         assertThat(policy.allows(Set.of("CRM_MANAGER"),"catalog","crmconversationmessages",true)).isFalse();
         assertThat(policy.allows(Set.of("ADMIN"),"catalog","crmconversations",true)).isTrue();
         assertThat(policy.allows(Set.of("CRM_AGENT"),"catalog","crmcustomers",false)).isTrue();
+    }
+    @Test void workspaceRolesMustBeDeclaredRoles() {
+        var factory=new org.springframework.beans.factory.support.StaticListableBeanFactory();
+        factory.addBean("grants",TestBindings.GRANTS);
+        org.springframework.beans.factory.ObjectProvider<su.onno.access.RoleGrants> grants=factory.getBeanProvider(su.onno.access.RoleGrants.class);
+        var known=new CrmInboxWorkspace("ok","OK",Set.of("crm_agent"),c->true);
+        new CrmInboxWorkspaceService(List.of(known),repository,access,mock(CrmWorkspaceService.class),
+                TestBindings.readableContacts(),mock(CrmConnectionAccounts.class),grants);
+        var typo=new CrmInboxWorkspace("typo","Typo",Set.of("CRM_AGNET"),c->true);
+        assertThatThrownBy(()->new CrmInboxWorkspaceService(List.of(typo),repository,access,mock(CrmWorkspaceService.class),
+                TestBindings.readableContacts(),mock(CrmConnectionAccounts.class),grants))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("[CRM_AGNET]").hasMessageContaining("typo");
     }
 }

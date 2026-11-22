@@ -63,14 +63,17 @@ public class OnnoPrintAutoConfiguration {
     public PrintService printService(ObjectProvider<PrintForm<?>> forms, MetadataRegistry registry,
                                      RefResolver refs, ResourceLoader resources,
                                      ObjectProvider<PrintTemplateStore> store, ObjectProvider<PdfConverter> pdf,
-                                     OnnoPrintProperties properties) {
+                                     OnnoPrintProperties properties,
+                                     ObjectProvider<su.onno.access.RoleGrants> grants) {
         // Uploaded templates are keyed by entity scope (catalogs/{name}, documents/{name}), not by
         // class name, so a package move keeps them; renaming the entity orphans them.
         Map<Class<?>, String> scopes = new HashMap<>();
         registry.allCatalogs().forEach(d -> scopes.put(d.javaClass(), "catalogs/" + route(d.logicalName())));
         registry.allDocuments().forEach(d -> scopes.put(d.javaClass(), "documents/" + route(d.logicalName())));
-        return new PrintService((List) forms.orderedStream().toList(), scopes, refs, resources,
+        PrintService service = new PrintService((List) forms.orderedStream().toList(), scopes, refs, resources,
                 store.getIfAvailable(), pdf.getIfAvailable(), properties.getTemplates().getMaxSize().toBytes());
+        service.requireKnownRoles(grants.getIfAvailable(su.onno.access.RoleGrants::open));
+        return service;
     }
 
     @Bean
@@ -89,7 +92,7 @@ public class OnnoPrintAutoConfiguration {
                                            RefResolver refs, OnnoPrintProperties properties,
                                            WebProperties webProperties) {
         return new PrintController(print, catalogs, documents, access, refs,
-                properties.getTemplates().getManageRoles(), properties.getBatch().getMaxRecords(),
+                properties.getBatch().getMaxRecords(),
                 webProperties.isReadOnly());
     }
 

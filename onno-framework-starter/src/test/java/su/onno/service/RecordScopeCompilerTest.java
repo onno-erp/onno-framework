@@ -8,7 +8,6 @@ import su.onno.access.RecordScope;
 import su.onno.access.RecordScopeEvaluator;
 import su.onno.access.ScopedEntity;
 import su.onno.access.Subject;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.annotations.Enumeration;
@@ -42,12 +41,10 @@ class RecordScopeCompilerTest {
     public enum Status { ACTIVE, ARCHIVED }
 
     @Catalog(name = "RscOwners")
-    @AccessControl(readRoles = "CUSTOMER")
     public static class Owner extends CatalogObject {
     }
 
     @Catalog(name = "RscTenants")
-    @AccessControl(readRoles = "CUSTOMER")
     public static class Tenant extends CatalogObject {
         @Attribute
         private Ref<Owner> owner;
@@ -58,7 +55,6 @@ class RecordScopeCompilerTest {
     }
 
     @Catalog(name = "RscProjects")
-    @AccessControl(readRoles = "CUSTOMER")
     public static class Project extends CatalogObject {
         @Attribute
         private Ref<Tenant> tenant;

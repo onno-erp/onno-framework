@@ -19,7 +19,10 @@ public class AccountUserDetails extends User {
     public AccountUserDetails(UserAccount account, String passwordHash) {
         super(account.username(), passwordHash == null ? "" : passwordHash, account.enabled(),
                 true, true, true,
-                account.roles().stream().map(r -> new SimpleGrantedAuthority("ROLE_" + r)).toList());
+                account.roles().stream()
+                        .map(su.onno.access.AccessSubject::normalizeRole)
+                        .filter(r -> !r.isEmpty())
+                        .map(r -> new SimpleGrantedAuthority("ROLE_" + r)).toList());
         this.accountId = account.id();
         this.securityStamp = account.securityStamp();
         this.passwordChangeRequired = account.passwordChangeRequired();

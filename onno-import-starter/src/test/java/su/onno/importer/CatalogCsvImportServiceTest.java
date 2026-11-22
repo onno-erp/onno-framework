@@ -28,8 +28,7 @@ class CatalogCsvImportServiceTest {
             new CatalogCsvImportService(mock(Jdbi.class), commands, properties);
 
     private final CatalogDescriptor clients = new CatalogDescriptor(
-            "Clients", "Clients", "cat_clients", Object.class, 9, false, true, "C-", "Sales",
-            List.of("ADMIN"), List.of("ADMIN"), List.of());
+            "Clients", "Clients", "cat_clients", Object.class, 9, false, true, "C-", "Sales", List.of());
 
     @Test
     void preview_returnsHeadersSampleRowsAndTotalCount() {

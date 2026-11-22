@@ -33,16 +33,17 @@ import java.util.UUID;
 
 /**
  * HTTP surface of {@link UserAccounts} in {@code onno.auth.mode=database}: the holder's own
- * password change (any signed-in account) and account administration ({@code ADMIN} only).
+ * password change (any signed-in account) and account administration (holders of
+ * {@link su.onno.auth.AuthPermissions#MANAGE_USERS}, {@code users.manage}, only).
  *
  * <pre>
  * GET   /api/auth/password-policy            the active policy (for the change-password form)
  * POST  /api/auth/password                   {currentPassword, newPassword} — change own password
- * GET   /api/auth/users                      list accounts                         (ADMIN)
- * POST  /api/auth/users                      {username, roles, password?} — create (ADMIN)
- * PATCH /api/auth/users/{id}                 {roles?, enabled?}                     (ADMIN)
- * POST  /api/auth/users/{id}/reset-password  issue a one-time password             (ADMIN)
- * POST  /api/auth/users/{id}/sign-out        end every session of the account      (ADMIN)
+ * GET   /api/auth/users                      list accounts                         (users.manage)
+ * POST  /api/auth/users                      {username, roles, password?} — create (users.manage)
+ * PATCH /api/auth/users/{id}                 {roles?, enabled?}                     (users.manage)
+ * POST  /api/auth/users/{id}/reset-password  issue a one-time password             (users.manage)
+ * POST  /api/auth/users/{id}/sign-out        end every session of the account      (users.manage)
  * </pre>
  *
  * A generated one-time password is returned exactly once, in the response that created it.
@@ -104,13 +105,13 @@ public class UserAccountsController {
 
     @GetMapping("/users")
     List<AccountView> list(Authentication authentication) {
-        requireAdmin(authentication);
+        requireManager(authentication);
         return accounts.list().stream().map(AccountView::of).toList();
     }
 
     @PostMapping("/users")
     ResponseEntity<CreatedView> create(@RequestBody CreateRequest body, Authentication authentication) {
-        requireAdmin(authentication);
+        requireManager(authentication);
         if (body == null) {
             return ResponseEntity.badRequest().build();
         }
@@ -126,7 +127,7 @@ public class UserAccountsController {
 
     @PatchMapping("/users/{id}")
     AccountView update(@PathVariable UUID id, @RequestBody UpdateRequest body, Authentication authentication) {
-        requireAdmin(authentication);
+        requireManager(authentication);
         UserAccount account = accounts.find(id).orElseThrow(() ->
                 new UserAccountException(UserAccountException.Reason.NOT_FOUND, "Account not found."));
         if (body != null && body.roles() != null && !body.roles().equals(account.roles())) {
@@ -140,13 +141,13 @@ public class UserAccountsController {
 
     @PostMapping("/users/{id}/reset-password")
     TemporaryPasswordView resetPassword(@PathVariable UUID id, Authentication authentication) {
-        requireAdmin(authentication);
+        requireManager(authentication);
         return new TemporaryPasswordView(accounts.resetPassword(id));
     }
 
     @PostMapping("/users/{id}/sign-out")
     AccountView signOut(@PathVariable UUID id, Authentication authentication) {
-        requireAdmin(authentication);
+        requireManager(authentication);
         return AccountView.of(accounts.signOutEverywhere(id));
     }
 
@@ -169,14 +170,15 @@ public class UserAccountsController {
     @ExceptionHandler(ForbiddenException.class)
     ResponseEntity<Map<String, String>> forbidden(ForbiddenException e) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("error", "forbidden", "message", "Only administrators can manage accounts."));
+                .body(Map.of("error", "forbidden", "message", "Managing accounts needs the users.manage permission."));
     }
 
-    private static void requireAdmin(Authentication authentication) {
-        boolean admin = authentication != null && authentication.getAuthorities().stream()
+    private void requireManager(Authentication authentication) {
+        // Authorities carry the ROLE_ prefix; canManage resolves them through the one normalization.
+        boolean manager = authentication != null && accounts.canManage(authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
-                .anyMatch(("ROLE_" + UserAccounts.ADMIN_ROLE)::equals);
-        if (!admin) {
+                .toList());
+        if (!manager) {
             throw new ForbiddenException();
         }
     }
