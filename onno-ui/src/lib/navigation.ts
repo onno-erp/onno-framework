@@ -7,6 +7,7 @@
 import { withBasePath } from "./base-path";
 
 const OPEN = "onno:open";
+const OPEN_TAB = "onno:open-tab";
 const CLOSE = "onno:close";
 
 /** Router-relative paths; protocol-relative URLs are not application routes. */
@@ -44,39 +45,56 @@ export function routeHref(route: string): string | undefined {
   return withBasePath(route.startsWith("onno://") ? "/" + route.slice("onno://".length) : route);
 }
 
+/** How {@link openRoute} places a route. */
+export type OpenRouteOptions = {
+  /** Open in a new browser tab under the UI's base path, outside the workspace. */
+  newTab?: boolean;
+  /** Open in a new workspace tab instead of showing the route in the active tab. */
+  newWorkspaceTab?: boolean;
+};
+
 /**
  * Open an `onno://` link or an app route through the workspace, preserving its tabs, panes and
- * command handling — or, with `newTab`, in a new browser tab under the UI's base path.
+ * command handling. By default the route replaces what the active tab shows, and Back returns to
+ * it; `newWorkspaceTab` opens it in a new workspace tab, `newTab` in a new browser tab.
  */
-export function openRoute(route: string, options?: { newTab?: boolean }): void {
+export function openRoute(route: string, options?: OpenRouteOptions): void {
   if (!route.startsWith("onno://") && !isAppRoute(route)) return;
   if (options?.newTab) {
     const href = routeHref(route);
     if (href) window.open(href, "_blank", "noopener,noreferrer");
     return;
   }
-  window.dispatchEvent(new CustomEvent<string>(OPEN, { detail: route }));
+  window.dispatchEvent(new CustomEvent<string>(options?.newWorkspaceTab ? OPEN_TAB : OPEN, { detail: route }));
 }
 
-/** Close the workspace tab showing `path` (a form after save or cancel). */
+/**
+ * Leave the surface at `path` once it finished its job (a form after save or cancel): its workspace
+ * tab returns to the surface it was opened from, or closes when it has no history.
+ */
 export function closeRoute(path: string): void {
   window.dispatchEvent(new CustomEvent<string>(CLOSE, { detail: path }));
 }
 
 /** The shell's side: handle every {@link openRoute} and {@link closeRoute}. Returns the unsubscribe. */
-export function listenForNavigation(handlers: { open: (route: string) => void; close: (path: string) => void }): () => void {
+export function listenForNavigation(handlers: {
+  open: (route: string, options: { newWorkspaceTab: boolean }) => void;
+  close: (path: string) => void;
+}): () => void {
   const onOpen = (e: Event) => {
     const route = (e as CustomEvent<unknown>).detail;
-    if (typeof route === "string") handlers.open(route);
+    if (typeof route === "string") handlers.open(route, { newWorkspaceTab: e.type === OPEN_TAB });
   };
   const onClose = (e: Event) => {
     const path = (e as CustomEvent<unknown>).detail;
     if (typeof path === "string") handlers.close(path);
   };
   window.addEventListener(OPEN, onOpen);
+  window.addEventListener(OPEN_TAB, onOpen);
   window.addEventListener(CLOSE, onClose);
   return () => {
     window.removeEventListener(OPEN, onOpen);
+    window.removeEventListener(OPEN_TAB, onOpen);
     window.removeEventListener(CLOSE, onClose);
   };
 }

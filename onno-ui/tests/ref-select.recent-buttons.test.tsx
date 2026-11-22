@@ -91,17 +91,17 @@ describe("RefSelect recent picks (#409)", () => {
 });
 
 describe("RefSelect open and clear buttons (#409)", () => {
-  it("opens the selected record through the workspace", () => {
+  it("opens the selected record in a new workspace tab, beside the form", () => {
     getCatalogItem.mockReturnValue(new Promise(() => {}));
     searchRefOptions.mockResolvedValue([]);
     const seen: string[] = [];
     const listener = (event: Event) => seen.push(String((event as CustomEvent).detail));
-    window.addEventListener("onno:open", listener);
+    window.addEventListener("onno:open-tab", listener);
     try {
       render(<RefSelect targetName="Customers" value="c-7" openButton onChange={vi.fn()} />);
       fireEvent.click(screen.getByRole("button", { name: "Open record" }));
     } finally {
-      window.removeEventListener("onno:open", listener);
+      window.removeEventListener("onno:open-tab", listener);
     }
     expect(seen).toEqual(["onno://catalogs/customers/c-7"]);
   });

@@ -6,6 +6,7 @@ import {
   useId,
   useMemo,
   useState,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 import { ChevronRight } from "lucide-react";
@@ -30,10 +31,35 @@ export type NavigationProps = {
   header?: ReactNode;
   footer?: ReactNode;
 };
+/** Opens a navigation item; `newWorkspaceTab` asks for a new workspace tab (middle- or Ctrl/⌘-click). */
+export type NavigateHandler = (path: string, options?: { newWorkspaceTab?: boolean }) => void;
+
+/**
+ * Click handlers for a navigation button: a plain click navigates the active tab, a middle-click
+ * or a Ctrl/⌘-click opens a new workspace tab.
+ */
+export function navigationClickHandlers(path: string, onNavigate: NavigateHandler) {
+  return {
+    onClick: (event: MouseEvent) => {
+      if (event.ctrlKey || event.metaKey) onNavigate(path, { newWorkspaceTab: true });
+      else onNavigate(path);
+    },
+    onAuxClick: (event: MouseEvent) => {
+      if (event.button !== 1) return;
+      event.preventDefault();
+      onNavigate(path, { newWorkspaceTab: true });
+    },
+    // A middle press would otherwise start the browser's autoscroll.
+    onMouseDown: (event: MouseEvent) => {
+      if (event.button === 1) event.preventDefault();
+    },
+  };
+}
+
 type NavigationContext = {
   activePath: string;
   mobile: boolean;
-  onNavigate: (path: string) => void;
+  onNavigate: NavigateHandler;
 };
 const NavigationContext = createContext<NavigationContext>({
   activePath: "",
@@ -70,7 +96,7 @@ export function NavigationHost({
   header,
   footer,
 }: NavigationProps & {
-  onNavigate: (path: string) => void;
+  onNavigate: NavigateHandler;
   children: ReactNode;
 }) {
   const Custom = useAppConfig().app.navigationComponent;
@@ -231,7 +257,7 @@ function Destination({
       type="button"
       aria-label={item.label}
       aria-current={active ? "page" : undefined}
-      onClick={() => onNavigate(item.path)}
+      {...navigationClickHandlers(item.path, onNavigate)}
       className={cn(
         "flex w-full items-center gap-2 rounded-field px-2 text-left text-sm transition-colors hover:bg-muted",
         mobile ? "py-3" : "py-1.5",

@@ -197,6 +197,21 @@ exceptions. Keep component tests for every custom picker trigger.
   merely open, inactive tab stays unfilled until hover. Exactly one tab is the command target for
   global actions such as Escape. The fixed tab strip scrolls horizontally when needed and must
   always hide vertical overflow.
+- Workspace navigation behaves like a browser window: an ordinary open (a menu item, a link, a
+  record) replaces what the focused island's active tab shows, and that tab keeps its own Back /
+  Forward history. Back and Forward are the two arrow buttons at the start of every island's tab
+  strip (disabled when there is nowhere to go), Alt+Left / Alt+Right outside text fields, and the
+  mouse's back / forward buttons. A new tab opens only on request: the "+" button after an island's
+  last tab (in the main, leftmost island it opens the app's home page, or activates it when it is
+  already open; in a detail island to its right it opens a menu of the entities the viewer may
+  create, the active record's entity first, and the chosen New form opens as a new tab there), a middle- or
+  Ctrl/Cmd-click on a menu item, "Open in new tab" in a row's context menu, batch "Open" over selected rows, a reference
+  picker's open and "+ New" buttons (the form being edited and its waiting picker stay open), or
+  `openRoute(link, { newWorkspaceTab: true })`. A surface that is already open is activated rather
+  than duplicated, and a tab holding unsaved edits is never replaced, not even by the browser's own
+  Back / Forward; the route opens beside it.
+  An island keeps at most 15 tabs: past that it quietly closes its least recently used tab that is
+  neither active nor dirty. A tab's context menu offers "Close other tabs".
 - Desktop rail highlighting follows the focused tab's navigation section. When the focused
   pane is empty or its route is outside authored navigation, the selected drawer section becomes
   the single highlighted fallback only while its submenu is visible; never paint both the routed

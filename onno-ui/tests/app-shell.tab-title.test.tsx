@@ -64,9 +64,9 @@ function mockShell(...entities: ReturnType<typeof entity>[]) {
   ]));
 }
 
-// Stands in for the old server-rendered nav card's "Open products" link.
+// Opens products beside the current surface, in a new workspace tab.
 function openProducts() {
-  act(() => openRoute("onno://catalogs/products"));
+  act(() => openRoute("onno://catalogs/products", { newWorkspaceTab: true }));
 }
 
 describe("AppShell tab titles", () => {
@@ -108,9 +108,11 @@ describe("AppShell tab titles", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Acme" }));
 
+    // The home intent navigates the focused tab, like a link in a browser window; Back returns.
     const orders = await screen.findByTestId("content-/documents/orders");
     expect(orders.parentElement).toHaveStyle({ visibility: "visible" });
-    expect(screen.getByTestId("content-/").parentElement).toHaveStyle({ visibility: "hidden" });
+    expect(screen.queryByTestId("content-/tasks")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back" })).toBeEnabled();
   });
 
   it("titles a list tab from the shell's localized title map, not the URL segment", async () => {
@@ -245,7 +247,7 @@ describe("AppShell tab titles", () => {
     await screen.findByTestId("content-/catalogs/customers");
     act(() => openRoute("/app"));
     await screen.findByTestId("content-/app");
-    expect(screen.getByTestId("content-/catalogs/customers")).toBeInTheDocument();
+    expect(screen.queryByTestId("content-/catalogs/customers")).not.toBeInTheDocument();
   });
 
   it("opens application paths on mobile", async () => {

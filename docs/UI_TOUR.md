@@ -109,7 +109,9 @@ state, so a component's behaviour depends only on its props and the providers ab
   read with `useUiEvents(listener, filter)` over the same shared stream.
 - Per-session state (notifications, presence, dirty forms, the quick-create hand-off): providers
   mounted in `App.tsx`. Opening and closing screens goes through `openRoute`/`closeRoute`
-  (`lib/navigation.ts`), which the shell alone listens to.
+  (`lib/navigation.ts`), which the shell alone listens to. The workspace rules (an open replaces the
+  active tab's screen and records it for that tab's Back / Forward, explicit new tabs, the soft tab
+  limit) are pure functions in `views/workspace-navigation.ts`.
 - Shared page state (theme, messages, the page's time range): their providers.
 - A component's own UI state: inside it, and *controllable* where a page may care.
   `EntityList` works like an `<input>`: `defaultGroupBy`/`defaultSort`/`defaultView` set where it

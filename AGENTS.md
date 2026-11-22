@@ -1222,7 +1222,9 @@ orders nothing. Logical entity names are checked against the generated model.
   scheduler or reschedule endpoint for one entity.
 - **Links**: `openRecord("Orders", id)`, `openRoute(links.list("Orders", { where }))`; `onno://`
   links (`onno://documents/orders/<id>`, `…/new?customer=<id>`) name what to open for web and
-  mobile clients alike. A New form also seeds from field initializers on the Java class.
+  mobile clients alike. An open replaces the active workspace tab's screen and that tab's Back
+  returns, as in a browser; `openRoute(link, { newWorkspaceTab: true })` opens a new tab (use it
+  when several records open at once). A New form also seeds from field initializers on the Java class.
 - Values handed to the UI are typed, never strings it parses: formats `{ money: "USD" }`,
   `{ date: "medium" }`; inputs `"textarea"`, `"image"`, `"color"`, …; icons are imported Lucide components. The package ships
   them through `@onno/ui/icons`: use `icon: Truck`, `<Truck />`, or `<Icon icon={Truck} />`.

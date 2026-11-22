@@ -330,6 +330,12 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "action.delete": "Delete",
   "action.open": "Open",
   "action.copyLink": "Copy link",
+  "workspace.back": "Back",
+  "workspace.forward": "Forward",
+  "workspace.openInNewTab": "Open in new tab",
+  "workspace.closeOtherTabs": "Close other tabs",
+  "workspace.newTab": "New tab",
+  "workspace.createRecord": "Create a record",
 
   // Record change history panel (@Catalog/@Document(history = true)).
   "history.title": "History",

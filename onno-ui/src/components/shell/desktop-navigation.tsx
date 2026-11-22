@@ -8,7 +8,7 @@ import type { Translate } from "../../lib/messages";
 import type { ShellNavSection } from "../../lib/view-types";
 export type { ShellNavItem, ShellNavSection } from "../../lib/view-types";
 import { navigationActive, navigationLinks } from "../../lib/navigation-tree";
-import { NavigationItems, NavigationProvider } from "./navigation";
+import { NavigationItems, NavigationProvider, type NavigateHandler } from "./navigation";
 
 type DesktopNavigationProps = {
   brand?: string;
@@ -17,7 +17,7 @@ type DesktopNavigationProps = {
   navigation: ShellNavSection[];
   activePath: string;
   home: string;
-  onNavigate: (path: string) => void;
+  onNavigate: NavigateHandler;
   onSectionFocus?: () => void;
   account: (compact: boolean) => ReactNode;
   notification: ReactNode;
@@ -157,10 +157,17 @@ export function DesktopNavigation({
                 aria-expanded={direct ? undefined : sectionSelected && expanded}
                 data-navigation-state={navigationState}
                 title={label}
-                onClick={() => {
+                onAuxClick={(event) => {
+                  if (event.button !== 1 || !direct || !item) return;
+                  event.preventDefault();
+                  setSelected(index);
+                  onNavigate(item.path, { newWorkspaceTab: true });
+                }}
+                onClick={(event) => {
                   if (direct && item) {
                     setSelected(index);
-                    onNavigate(item.path);
+                    if (event.ctrlKey || event.metaKey) onNavigate(item.path, { newWorkspaceTab: true });
+                    else onNavigate(item.path);
                     return;
                   }
                   if (sectionSelected) {

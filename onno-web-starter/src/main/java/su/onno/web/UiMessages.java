@@ -355,6 +355,12 @@ public final class UiMessages {
         d.put("action.delete", "Delete");
         d.put("action.open", "Open");
         d.put("action.copyLink", "Copy link");
+        d.put("workspace.back", "Back");
+        d.put("workspace.forward", "Forward");
+        d.put("workspace.openInNewTab", "Open in new tab");
+        d.put("workspace.closeOtherTabs", "Close other tabs");
+        d.put("workspace.newTab", "New tab");
+        d.put("workspace.createRecord", "Create a record");
 
         // Record change history panel (@Catalog/@Document(history = true)).
         d.put("history.title", "History");

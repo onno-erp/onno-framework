@@ -6,7 +6,7 @@ import { Button, buttonVariants } from "../ui/button";
 import { ListSelectionCheckbox, selectLoaded } from "./list-selection-checkbox";
 import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { PageGutterContext } from "../../lib/page-gutter";
-import { ArrowDown, ArrowLeftRight, ArrowUp, CalendarDays, Check, ChevronsUpDown, Copy, ExternalLink, GanttChart, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowLeftRight, ArrowUp, CalendarDays, Check, ChevronsUpDown, Copy, ExternalLink, GanttChart, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Plus, Rows3, Search, SquarePlus, Table2, Trash2, X } from "lucide-react";
 import { CalendarDate, getLocalTimeZone, parseDate, startOfMonth, startOfYear, today } from "@internationalized/date";
 import { toast } from "../ui/toast";
 import { ListMapView, type ListMapConfig } from "../maps/list-map-view";
@@ -2987,7 +2987,7 @@ export function EntityListView({
         const batch = (rowMenu.batch || selected.size > 1) && selected.has(rowMenu.id);
         const ids = batch ? [...selected] : [rowMenu.id];
         const openBatch = () => {
-          for (const id of ids) openRoute(rowOpenUrl(kind, name, id));
+          for (const id of ids) openRoute(rowOpenUrl(kind, name, id), { newWorkspaceTab: true });
         };
         const flatCustom = recordCommands.filter((c) => !c.group);
         const submenus = rowSubmenus;
@@ -3071,6 +3071,15 @@ export function EntityListView({
                   <ExternalLink className="text-muted-foreground" aria-hidden="true" />
                   <span>{t("action.open")}</span>
                   <ContextMenuShortcut>{shortcutLabel({ key: "Enter", mod: true })}</ContextMenuShortcut>
+                </ContextMenuItem>
+                <ContextMenuItem
+                  onSelect={() => {
+                    openRoute(rowMenu.url, { newWorkspaceTab: true });
+                    close();
+                  }}
+                >
+                  <SquarePlus className="text-muted-foreground" aria-hidden="true" />
+                  <span>{t("workspace.openInNewTab")}</span>
                 </ContextMenuItem>
                 {showDuplicate ? (
                   <>
@@ -3206,7 +3215,7 @@ export function EntityListView({
             <div role="group" aria-label={t("list.selectionActions")} className="flex shrink-0 items-center gap-2 border-r border-border pr-2">
               {canWrite && SelectionWidget ? <SelectionWidget ids={[...selected]} complete={() => { clearSelection(); reload(); }} /> : null}
               <Button size="toolbar" variant="subtle" onClick={() => {
-                for (const id of selected) openRoute(rowOpenUrl(kind, name, id));
+                for (const id of selected) openRoute(rowOpenUrl(kind, name, id), { newWorkspaceTab: true });
               }}><ExternalLink />{t("action.open")}</Button>
               {(list.selectionDownloads ?? []).filter(d => !builtInHidden(d.key)).map(d => (
                 <Button key={d.key} size="toolbar" variant="subtle" disabled={pending.has(`download:${d.key}`)}
