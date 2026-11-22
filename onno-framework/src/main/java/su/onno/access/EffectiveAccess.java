@@ -14,6 +14,12 @@ public final class EffectiveAccess {
     /** Everything: trusted code, and every user of an application without grants. */
     static final EffectiveAccess ALL = new EffectiveAccess(null);
 
+    /**
+     * Nothing: an anonymous caller (no signed-in user). Even an application without grants, where
+     * every signed-in user may do everything, gives an anonymous caller nothing.
+     */
+    public static final EffectiveAccess NONE = new EffectiveAccess(List.of());
+
     private final List<RoleGrants.RoleGrant> roles;
 
     EffectiveAccess(List<RoleGrants.RoleGrant> roles) {
@@ -30,6 +36,16 @@ public final class EffectiveAccess {
     public boolean has(Permission permission) {
         if (roles == null) return true;
         return roles.stream().anyMatch(g -> g.permissions().contains(permission));
+    }
+
+    /**
+     * Whether a role the subject holds explicitly grants {@code permission}. Unlike {@link #has},
+     * unrestricted access (trusted code, an application without grants) does not imply it. For
+     * capabilities that change what a user sees or bypass a safeguard — a closed-period override,
+     * every process task, every CRM workspace — which an application must hand out deliberately.
+     */
+    public boolean granted(Permission permission) {
+        return !unrestricted() && has(permission);
     }
 
     /** Whether this is unrestricted access (trusted code, or an application without grants). */
