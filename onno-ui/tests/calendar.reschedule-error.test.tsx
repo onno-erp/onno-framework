@@ -37,7 +37,8 @@ import { Calendar } from "@/components/widgets/calendar";
 
 // The calendar resolves `entity` (and the viewer's write right) from the loaded model.
 setModel({
-  user: { username: "u", displayName: "U", avatarUrl: "", roles: [] },
+  user: { username: "u", displayName: "U", avatarUrl: "", roles: [], permissions: [], unrestricted: false },
+  roles: [],
   features: { comments: false, notifications: false },
   informationRegisters: [],
   constants: [],

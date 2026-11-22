@@ -18,7 +18,8 @@ export function entity(kind: ModelEntity["kind"], name: string, overrides: Parti
 /** A `GET /api/ui/model` payload with the given entities. */
 export function appModel(entities: ModelEntity[] = []): AppModel {
   return {
-    user: { username: "admin", displayName: "Admin", avatarUrl: "", roles: ["ADMIN"] },
+    user: { username: "admin", displayName: "Admin", avatarUrl: "", roles: ["ADMIN"], permissions: [], unrestricted: false },
+    roles: [],
     features: { comments: false, notifications: false },
     entities,
     informationRegisters: [],

@@ -8,7 +8,8 @@ import { setModel } from "@/lib/model-store";
 
 // RouteView renders once the business model is in.
 setModel({
-  user: { username: "u", displayName: "U", avatarUrl: "", roles: [] },
+  user: { username: "u", displayName: "U", avatarUrl: "", roles: [], permissions: [], unrestricted: false },
+  roles: [],
   features: { comments: false, notifications: false },
   informationRegisters: [],
   constants: [],

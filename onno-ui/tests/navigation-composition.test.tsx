@@ -29,7 +29,8 @@ vi.mock("@/components/collaboration/nav-presence", () => ({
   NavPresenceIndicator: () => null,
 }));
 const model: AppModel = {
-  user: { username: "u", displayName: "User", avatarUrl: "", roles: ["USER"] },
+  user: { username: "u", displayName: "User", avatarUrl: "", roles: ["USER"], permissions: [], unrestricted: false },
+  roles: [],
   features: { comments: false, notifications: false },
   informationRegisters: [],
   constants: [],

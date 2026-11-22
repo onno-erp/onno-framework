@@ -453,7 +453,7 @@ export interface CommentView {
   editedAt: string | null;
   /** True when the current user authored this comment. */
   mine: boolean;
-  /** True when the current user may delete it (author or ADMIN). */
+  /** True when the current user may delete it (author, or a holder of `comments.moderate`). */
   canDelete: boolean;
 }
 

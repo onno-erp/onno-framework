@@ -1,6 +1,6 @@
 import type { IconSource } from "./icons";
 import { createContext, useContext, useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
-import { defaultNavigation, ENTITY_KIND_ICONS, isEntitySurface, type AppModel, type ModelEntity } from "./app-model";
+import { defaultNavigation, ENTITY_KIND_ICONS, holdsPermission, holdsRole, isEntitySurface, type AppModel, type ModelEntity } from "./app-model";
 import { applyForm, applyList, customizationsFor, type EntityCustomization } from "./entity-customizations";
 import { mergePresentations, type CommandPresentation } from "./commands";
 import { findEntity, modelOutsideReact, useModel } from "./model-store";
@@ -24,7 +24,7 @@ import type { LoginPageProps } from "../components/auth/sign-in";
  *       { path: "/", component: HomePage },
  *       { list: "Orders", component: OrdersPage, icon: ClipboardList },
  *       { record: "Orders", component: OrderPage },
- *       { path: "/settings", component: SettingsPage, label: "Settings", icon: Settings, roles: ["ADMIN"] },
+ *       { path: "/settings", component: SettingsPage, label: "Settings", icon: Settings, permission: "settings.edit" },
  *     ],
  *     navigation: [
  *       { title: "Sales", icon: ShoppingCart, items: ["Orders", "Customers"] },
@@ -42,8 +42,10 @@ export type PageDefinition = {
   /** Navigation label and icon, used wherever the navigation lists this page. */
   label?: string;
   icon?: IconSource;
-  /** Only users holding one of these roles see the page and its nav link (`ADMIN` always does). */
+  /** Only users holding one of these roles see the page and its nav link (no role passes implicitly). */
   roles?: string[];
+  /** Only users holding this permission (`"settings.edit"`, …) see the page and its nav link. */
+  permission?: string;
   /** A further condition, e.g. an optional module being present. May be async. */
   when?: (model: AppModel) => boolean | Promise<boolean>;
   /**
@@ -56,11 +58,11 @@ export type PageDefinition = {
 /** An entity by logical name (`"Orders"`), a page by path (`"/ops"`), or either with overrides. */
 export type NavItemSpec =
   | string
-  | { entity?: string; path?: string; label?: string; icon?: IconSource; roles?: string[] }
+  | { entity?: string; path?: string; label?: string; icon?: IconSource; roles?: string[]; permission?: string }
   | NavGroupSpec;
 
-export type NavGroupSpec = { title: string; icon?: IconSource; actions?: ReactNode; roles?: string[]; items: NavItemSpec[] };
-export type NavSectionSpec = { title?: string | null; icon?: IconSource; actions?: ReactNode; roles?: string[]; items: NavItemSpec[] };
+export type NavGroupSpec = { title: string; icon?: IconSource; actions?: ReactNode; roles?: string[]; permission?: string; items: NavItemSpec[] };
+export type NavSectionSpec = { title?: string | null; icon?: IconSource; actions?: ReactNode; roles?: string[]; permission?: string; items: NavItemSpec[] };
 
 export type AppDefinition = {
   navigationComponent?: ComponentType<NavigationProps>;
@@ -79,9 +81,9 @@ export type AppDefinition = {
 
 type NavItem = ShellNavSection["items"][number];
 
-function hasRole(model: AppModel, roles: string[] | undefined): boolean {
-  if (!roles?.length) return true;
-  return model.user.roles.includes("ADMIN") || roles.some((r) => model.user.roles.includes(r));
+/** Whether the user passes a page or nav entry's `roles` and `permission` gates. No role passes implicitly. */
+function allowed(model: AppModel, gate: { roles?: string[]; permission?: string }): boolean {
+  return holdsRole(model, gate.roles) && holdsPermission(model, gate.permission);
 }
 
 /** The resolved app configuration every part of the shell reads. */
@@ -89,7 +91,7 @@ export type AppConfig = {
   app: AppDefinition;
   /** The app's pages as routes (plus any the shell adds, e.g. the mobile menu). */
   routes: Route[];
-  /** Whether the signed-in user may use a page: its roles and its (possibly async) condition. */
+  /** Whether the signed-in user may use a page: its roles, permission and (possibly async) condition. */
   pageAllowed: (page: PageDefinition) => boolean;
 };
 
@@ -103,7 +105,7 @@ export function pagePath(page: PageDefinition, model: AppModel | null): string |
   return entity ? entity.route + (page.record ? "/:id" : "") : null;
 }
 
-/** The page component behind its `roles`/`when` gate. */
+/** The page component behind its `roles`/`permission`/`when` gate. */
 function gated(page: PageDefinition): ComponentType<RouteProps> {
   const Page = page.component;
   function GatedPage(props: RouteProps) {
@@ -161,7 +163,7 @@ export function AppConfigProvider({ app, children }: { app: AppDefinition; child
   const value = useMemo<AppConfig>(() => ({
     app,
     routes,
-    pageAllowed: (page) => !!model && hasRole(model, page.roles) && (!page.when || answers.get(page) === true),
+    pageAllowed: (page) => !!model && allowed(model, page) && (!page.when || answers.get(page) === true),
   }), [app, routes, model, answers]);
   return <AppConfigContext.Provider value={value}>{children}</AppConfigContext.Provider>;
 }
@@ -256,7 +258,7 @@ export function buildNavigation(
   }
   const resolve = (spec: NavItemSpec): NavItem | null => {
     const item = typeof spec === "string" ? (spec.startsWith("/") ? { path: spec } : { entity: spec }) : spec;
-    if (!hasRole(model, item.roles)) return null;
+    if (!allowed(model, item)) return null;
     if ("items" in item) {
       const items = item.items.map(resolve).filter((i): i is NavItem => !!i);
       return items.length || (item.actions && !item.items.length)
@@ -280,7 +282,7 @@ export function buildNavigation(
     return { label: item.label ?? page?.label ?? item.path, icon: item.icon ?? page?.icon, path: item.path };
   };
   return navigation
-    .filter((s) => hasRole(model, s.roles))
+    .filter((s) => allowed(model, s))
     .map((s) => ({
       title: s.title ?? null,
       icon: s.icon,

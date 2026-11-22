@@ -21,7 +21,8 @@ import { Chart } from "@/components/widgets/chart";
 
 // The model lives on the shared query client, which each test clears; re-seed it first.
 beforeEach(() => setModel({
-  user: { username: "u", displayName: "U", avatarUrl: "", roles: [] },
+  user: { username: "u", displayName: "U", avatarUrl: "", roles: [], permissions: [], unrestricted: false },
+  roles: [],
   features: { comments: false, notifications: false },
   informationRegisters: [],
   constants: [],

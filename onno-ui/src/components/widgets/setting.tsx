@@ -15,7 +15,7 @@ import { HintIcon } from "../ui/hint-icon";
 /**
  * An input bound to a single framework {@code @Constant}, placed on any page via
  * {@code <Setting constant="<name>" />}. It loads the current
- * value from SettingsController (admin-only, {@code GET /api/settings}), renders a text/number
+ * value from SettingsController ({@code settings.edit} only, {@code GET /api/settings}), renders a text/number
  * field or a switch by the constant's type, and persists edits with {@code PUT /api/settings}.
  *
  * This is the whole "settings" surface now: no bespoke editor or dedicated page — settings is just

@@ -31,8 +31,8 @@ export interface PeriodCloseProps {
 type Mode = "close" | "reopen";
 
 /**
- * Period-close administration: the closes in force, and — for `ADMIN` and
- * `onno.period-close.manage-roles` — forms to close or reopen a period and the recent audit trail.
+ * Period-close administration: the closes in force, and — for holders of the
+ * `periodClose.manage` permission — forms to close or reopen a period and the recent audit trail.
  * Documents dated on or before a close date cannot be created, changed, deleted, posted or unposted.
  * Place it on any page: `<PeriodClose />`. The server enforces who may manage periods.
  */
