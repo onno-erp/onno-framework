@@ -27,7 +27,7 @@ public class OrderInvoicePrint extends PrintForm<Order> {
     protected void configure(PrintFormSpec spec) {
         spec.label("Invoice (Word)")           // menu label (defaults to the key)
             .template("classpath:/print/invoice.docx") // default: classpath:/print/{key}.docx, then .xlsx
-            .roles("MANAGER")                  // optional; ADMIN always passes
+            .roles("MANAGER")                  // optional; a declared role (checked at startup), compared normalized
             .locale(Locale.GERMANY)            // Word number/date patterns (default: JVM locale)
             .pdf();                            // optional: download as PDF by default (needs a converter)
     }
@@ -145,8 +145,8 @@ edited copy) and **Reset** (back to the built-in file). An upload must be the sa
 built-in template, a readable `.docx`/`.xlsx`, and at most `onno.print.templates.max-size`
 (default 10 MB). It replaces the template for every user and every node; the file is stored in the
 framework-managed `onno_print_templates` table, keyed by entity (`documents/Orders`) and form key —
-renaming the entity orphans its uploads. Only `onno.print.templates.manage-roles` (default
-`ADMIN`) may manage templates; `onno.print.templates.enabled=false` makes the built-in templates
+renaming the entity orphans its uploads. Only holders of `print.templates.manage`
+(`PrintPermissions.MANAGE_TEMPLATES`, granted in the app's `RoleGrants`) may manage templates; `onno.print.templates.enabled=false` makes the built-in templates
 final. The fill code is unchanged by an upload, so an edited template can rearrange or restyle the
 `{{placeholders}}` but not invent new ones.
 

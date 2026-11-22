@@ -52,8 +52,8 @@ admits:
 - **Adjustment documents** — document types annotated `@PeriodAdjustment` (a correction, a
   revaluation) may be created, changed, posted and unposted inside the period. Each such operation
   is audited as `ADJUSTMENT` with the signed-in user. Every other document stays locked, so allowing
-  adjustments never allows arbitrary edits; restrict who may write the adjustment type with
-  `@AccessControl`. A backdated adjustment whose `CHRONOLOGICAL` restoration would repost an
+  adjustments never allows arbitrary edits; restrict who may write the adjustment type in the
+  application's `RoleGrants`. A backdated adjustment whose `CHRONOLOGICAL` restoration would repost an
   ordinary document inside a closed period is still rejected.
 - **Overrides** (below).
 
@@ -87,13 +87,14 @@ Over HTTP it is `409` with `{error: "period-closed", message, scope, closedThrou
 documentDate}`. `GET /api/documents/{name}/{id}/posting-preview` reports it the same way, so the
 user learns the post would be rejected before trying.
 
-## Roles, override and audit
+## Permissions, override and audit
 
-- **Close / reopen** — `ADMIN`, plus the roles in `onno.period-close.manage-roles`. A reopen needs
+- **Close / reopen** — holders of `periodClose.manage` (`CorePermissions.MANAGE_PERIOD_CLOSE`). A reopen needs
   a reason; `close` refuses to move a date back.
-- **Override** — signed-in users holding a role from `onno.period-close.override-roles` may change
-  a closed period without reopening it. The list is empty by default: nobody is exempt, not even
-  `ADMIN` (list `ADMIN` to exempt administrators). Trusted background code is never exempt
+- **Override** — signed-in users holding an explicit `periodClose.override` grant
+  (`CorePermissions.OVERRIDE_PERIOD_CLOSE`) may change a closed period without reopening it. It is
+  never implied — not even by an application without grants, where every user holds every other
+  permission — so by default nobody is exempt. Trusted background code is never exempt
   implicitly; wrap it explicitly:
 
   ```java
@@ -125,7 +126,7 @@ export function PeriodClosePage() {
 
 // main.tsx
 { path: "/period-close", component: PeriodClosePage, label: "Period close", icon: Lock,
-  roles: ["ADMIN"], when: (model) => model.features.periodClose === true },
+  permission: "periodClose.manage", when: (model) => model.features.periodClose === true },
 ```
 
 The forms offer `global`, every bounded `context:<name>` and every accumulation `register:<name>`

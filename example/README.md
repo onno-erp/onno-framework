@@ -49,9 +49,10 @@ layout from `./gradlew onnoUiInit`. For hot reload, run the backend and `npm run
 The demo automatically signs anonymous visitors in as `manager@onnobooks.local`: home is the Orders
 board and there is no Employees or Settings nav. The password never needs to reach the browser for
 this flow. `admin@onnobooks.local`/`admin` gets the dashboard as home, Employees under People, and
-Settings. The UI decides what to show with page `roles` and `useHasRole("ADMIN")`; the server enforces
-access on every call (`@AccessControl` — `Employee` writes are ADMIN-only; the settings API is
-admin-only). Remove `onno.auth.demo.auto-login-username` before any non-demo use.
+Settings. The UI decides what to show with page `roles`/`permission` and `useHasRole("ADMIN")`; the
+server enforces access on every call (the `RoleGrants` bean in `com.example.access.AccessConfiguration`
+— `Employee` writes are ADMIN-only, and the settings API needs `settings.edit`, which only ADMIN is
+granted; `ADMIN` is an ordinary app role here, not a superuser). Remove `onno.auth.demo.auto-login-username` before any non-demo use.
 
 ## Running it
 

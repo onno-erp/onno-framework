@@ -117,10 +117,14 @@ that matters to an integrator:
   challenge.
 - **Auth is a session cookie, established by a JSON login** (or a bearer JWT in the auth starter's
   `resource-server` mode).
-- **Per-entity RBAC is deny-by-default.** A catalog/document/register is invisible and uneditable
-  unless its `@AccessControl` read/write roles grant the caller. `ADMIN` bypasses every per-entity
-  check. Roles match case-insensitively with the `ROLE_` prefix stripped. Failing a check is `403`.
-  Documents may narrow posting with `@AccessControl(postRoles = …, unpostRoles = …)`.
+- **Access is the application's `RoleGrants` bean.** With one declared, a catalog/document/register
+  is invisible and uneditable unless a role the caller holds is granted `read`/`write` on it, and
+  posting / unposting need their own `post` / `unpost` grants; there is no superuser. Without one
+  the app runs open (every signed-in user may do everything; anonymous callers nothing). Roles
+  match normalized (`ROLE_manager` → `MANAGER`). Failing a check is `403`. Admin screens check
+  permissions: `/api/settings` and the `constants` of `/api/ui/model` need `settings.edit`,
+  `/api/period-close` close/reopen `periodClose.manage`, deleting another user's comment
+  `comments.moderate`, and every process task `processes.administer` (explicit grant only).
 - **Record-level policies narrow further.** A `RecordAccessPolicy` bean scopes which *records* the
   holders of a role see and change — enforced in every list/count/group/aggregate/search/get, every
   write, command, picker, comment/tag/presence/notification surface, SSE delivery and MCP tool. A
@@ -128,8 +132,7 @@ that matters to an integrator:
   reads as restricted (`{field}Restricted: true`, no id). See
   [Record access policies](../docs/RECORD_ACCESS_POLICIES.md).
 - **`EntityAccessPolicy` beans** add deny-only vetoes on top (REST, UI, MCP and event visibility).
-  `ADMIN` stays exempt unless the policy's `includesAdministrators()` returns `true`; the CRM uses
-  that to keep personal inboxes private.
+  Every policy constrains every role; the CRM uses one to keep personal inboxes private.
 - **Mutating requests need a CSRF token.** POST/PUT/DELETE send the `XSRF-TOKEN` cookie's value back
   in the `X-XSRF-TOKEN` header. `POST /api/auth/login` is exempt so a client can bootstrap a session.
 
@@ -188,7 +191,7 @@ onno:
         roles: [ADMIN]
 ```
 
-`@onno/ui` renders account administration with `<UserAccounts />` (ADMIN: create with a one-time
+`@onno/ui` renders account administration with `<UserAccounts />` (`users.manage`: create with a one-time
 password, roles, disable/enable, reset password, sign out everywhere) and the holder's own password
 change with `<ChangePassword />`. A session holding a one-time password sees only the
 change-password screen until it is replaced.
@@ -227,8 +230,8 @@ specified in [docs/HEADLESS_READ_API.md](../docs/HEADLESS_READ_API.md).
 | GET | `/{name}/{id}` | One document with its tabular sections inlined. |
 | POST | `/{name}` | Create. Header fields plus tabular-section arrays keyed by section name; the number is generated when omitted. |
 | PUT | `/{name}/{id}` | Partial update; supplied tabular sections are replaced wholesale. `version` for optimistic locking. |
-| POST | `/{name}/{id}/post` | Post a draft, or atomically reverse and recalculate a posted one. Needs write access and, when declared, one of the `postRoles`. |
-| POST | `/{name}/{id}/unpost` | Reverse a posted document. Needs the `unpostRoles` when declared; `BeforeUnpostHandler` may veto. |
+| POST | `/{name}/{id}/post` | Post a draft, or atomically reverse and recalculate a posted one. Needs the `post` grant (which implies write). |
+| POST | `/{name}/{id}/unpost` | Reverse a posted document. Needs the `unpost` grant; `BeforeUnpostHandler` may veto. |
 | GET | `/{name}/{id}/posting-preview` | The movements a post would write, without writing them. |
 | POST | `/{name}/{id}/duplicate` | Server-side copy: attributes and lines, fresh id and number, dated now, unposted. |
 | POST | `/{name}/batch-delete` | Soft-delete `{ids: […]}` (≤500), unposting posted ones. |
@@ -306,7 +309,7 @@ The server describes what exists and what the caller may do; it never describes 
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/ui/model` | Every catalog, document and register the caller can read (`kind`, `logicalName`, `title`, `context`, `route`, `canWrite`, posting rights), the readable information registers, the `@Constant` settings (administrators only), and the signed-in user with roles. The UI builds navigation and permissions from it. |
+| GET | `/api/ui/model` | Every catalog, document and register the caller can read (`kind`, `logicalName`, `title`, `context`, `route`, `canWrite`, posting rights), the readable information registers, the `@Constant` settings (holders of `settings.edit` only), the signed-in user (`roles`, granted `permissions`, `unrestricted` — true without `RoleGrants`) and the declared role names (`roles`). The UI builds navigation and permissions from it. |
 | GET | `/api/ui/view/{catalogs\|documents}/{name}` | The entity's default list descriptor: columns, filters, the commands it offers and selection downloads. |
 | GET | `/api/ui/view/{catalogs\|documents}/{name}/{id}`, `/new`, `/{id}/duplicate` | The record form descriptor: field metadata (names, types, references, constraints), the record, the record's actions and their state, `canPost`. |
 | GET | `/api/ui/view/registers/{name}` | The register report descriptor. |
@@ -402,7 +405,7 @@ any command.
 |--------|------|-------|
 | GET | `/api/process-definitions` | Definitions with version and typed graph descriptor. |
 | GET / POST | `/api/processes`, `/api/processes/{definitionKey}` | Instances visible to the caller; start one (the body is the payload, authorized by `startAssignment`). |
-| GET | `/api/processes/{instanceId}[/history\|/executions]` | One instance (ADMIN, starter, candidate/assignee or a recorded actor). |
+| GET | `/api/processes/{instanceId}[/history\|/executions]` | One instance (a process administrator, the starter, a candidate/assignee or a recorded actor). |
 | POST | `/api/processes/{instanceId}/cancel`, `/migrate` | `{"reason":"…"}`; migration follows registered typed migrations. |
 | GET | `/api/tasks`, `/api/task-assignees` | The caller's work items; delegation candidates from the `IdentityLink` catalog. |
 | POST | `/api/tasks/{id}/claim`, `/delegate`, `/complete` | `delegate {"targetActorId","reason"}`, `complete {"outcome":"ENUM_CONSTANT"}`. |
@@ -425,7 +428,7 @@ The UI shows the thread under a record form when the entity's customization sets
 | GET | `/api/comments/{kind}/{name}/{id}` | The thread, oldest first; each comment has `parentId`, live-resolved `mentions` and grouped `reactions`. |
 | POST | `/api/comments/{kind}/{name}/{id}` | `{ "body": "…", "parentId": "…"? }`. The author is the session's user. |
 | POST | `/api/comments/{commentId}/reactions` | Toggle `{ "emoji": "👍" }` (`👍 ❤️ 🎉 👀 ✅`). |
-| DELETE | `/api/comments/{commentId}` | Soft delete; author or `ADMIN`, with current read access to the record. |
+| DELETE | `/api/comments/{commentId}` | Soft delete; the author or a `comments.moderate` holder, with current read access to the record. |
 | GET | `/api/mentions?q=&kind=people\|catalogs\|documents` | Mention typeahead: `people` (the `IdentityLink` catalog) for `@`, any record for `#`. `GET /api/mentions/resolve` resolves one record. |
 
 Reading and posting need read access to the record. A mention is stored as a token in the body

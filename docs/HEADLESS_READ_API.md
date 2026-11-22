@@ -92,7 +92,7 @@ registers order by ID descending and reject `from` / `to` with `400`.
 Invalid dates and reversed ranges also return `400`.
 
 The response uses logical names: `id`, `period` (periodic registers only), dimension/resource/
-attribute field names, and reference `*Display` / `*Ref` sidecars. `@AccessControl` gates the route
+attribute field names, and reference `*Display` / `*Ref` sidecars. The `RoleGrants` read grant gates the route
 (`403` without a read grant); record policies filter rows before pagination, and restricted references
 are masked by the common resolver. Secret attributes carry the common redacted sentinel.
 Unknown register names return `404`. This is a read-only route; it does not expose SQL or writes.
@@ -118,10 +118,10 @@ Business actions are host-authored as ordinary `Commands<Conversation>` commands
 Process actors are always derived from the authenticated principal; usernames and roles are never
 accepted from the request body. Starting is authorized by the definition's typed
 `startAssignment(payload)`. `GET /api/tasks` returns open candidate work plus work already
-claimed by the caller. `ADMIN` is the process superuser. Completion outcome names are checked
+claimed by the caller; a process administrator (an explicit `processes.administer` grant) sees and may operate every task. Completion outcome names are checked
 against the active `HumanTask`'s declared enum before the persisted graph advances. Process
 mutations use the same CSRF requirements as other session-authenticated `/api/**` writes.
-Only a claimed task's current assignee (or `ADMIN`) may delegate it; a nonblank reason is required
+Only a claimed task's current assignee (or a process administrator) may delegate it; a nonblank reason is required
 and the transfer is durable. `GET /api/task-assignees?q=` searches the `IdentityLink` identity
 catalog and returns `{actorId, username, display, avatarUrl}`. `actorId` is the stable catalog record
 UUID; username/display/avatar are live presentation data. `avatarUrl` is present when the identity
@@ -136,7 +136,7 @@ completion/cancellation timestamps, and the required cancellation reason. Execut
 the durable token, parent branch token, node type/status, due time, and child instance.
 
 Cancellation is authorized by the definition's typed `cancellationAssignment(payload)` (plus the
-starter and `ADMIN`); it cancels descendants and all live work. Migration is explicit: the
+starter and process administrators); it cancels descendants and all live work. Migration is explicit: the
 application must keep the stored and target definition versions registered and supply a
 `ProcessDefinitionMigration` that maps every active token. Missing versions, migration edges, or
 token mappings fail atomically.
@@ -660,7 +660,7 @@ There are no CRM contact edit, duplicate-search, merge-preview, merge, history o
 `GET /api/crm/statuses` returns configured `{id,description,color,closed}` choices (empty if disabled).
 `GET /api/crm/channels` returns `{channels,canManage}` for enabled connectors only, with no credentials.
 `POST /api/crm/channels/{key}` accepts `{action,credential?}` and enforces host `CrmChannelAccess`
-(ADMIN by default). Unknown connectors return 404; invalid commands return 422.
+(explicit `crm.administer` holders by default). Unknown connectors return 404; invalid commands return 422.
 `POST /api/crm/contacts/{id}/identities` accepts manual `{channel,address}` email/phone identities,
 requiring writable workspace membership and host customer write permission. Telegram's cached JPEG
 endpoint `/api/crm/telegram/avatars/{identityId}` requires customer/workspace access as well.
@@ -772,7 +772,7 @@ with `Content-Disposition: attachment`. Both apply the same entity read access a
 (`403`). The response is a binary file, not JSON. `?format=pdf` (or the template format) picks the
 output when a PDF converter is configured; `formats` in the listing says which values are accepted.
 `POST /api/print/batch/{kind}/{name}/{form}` with `{"ids":[…]}` (CSRF) returns a zip, skipping ids
-outside the caller's scope. Template management (`/api/print/templates/**`) is admin-only; see
+outside the caller's scope. Template management (`/api/print/templates/**`) needs the `print.templates.manage` permission; see
 `onno-print-starter/README.md`.
 
 ### Record tag API
@@ -887,8 +887,7 @@ rechecks ownership on its one-use callback. Each mailbox has separate credential
 
 Personal inbox ownership restricts scoped conversation reads/writes and contact projections.
 Generic CRM catalogs/exports/events are unavailable to all roles once personal accounts exist,
-preventing ADMIN from bypassing per-account privacy. Host contacts retain host catalog permissions.
-`EntityAccessPolicy.includesAdministrators()` defaults false; privacy policies explicitly opt in.
+so no role, `crm.administer` holders included, bypasses per-account privacy. Host contacts retain host catalog permissions.
 See `onno-crm-starter/README.md` and `onno-crm-channels-starter/README.md` for response fields,
 component props, lifecycle behavior and remaining shared-only provider limits.
 

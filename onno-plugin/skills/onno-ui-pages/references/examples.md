@@ -40,10 +40,10 @@ defineApp({
     { path: "/ops", component: SalesOpsPage, label: "Sales Ops", icon: Activity },
     { path: "/tasks", component: TasksPage, label: "My tasks", icon: ListChecks },
     { path: "/team", component: TeamPage, label: "Team", icon: Users },
-    { path: "/settings", component: SettingsPage, label: "Settings", icon: Settings, roles: ["ADMIN"] },
+    { path: "/settings", component: SettingsPage, label: "Settings", icon: Settings, permission: "settings.edit" },
     // Optional modules: the page and its link exist only when the module does.
     { path: "/support", component: SupportPage, label: "Inbox", icon: Inbox, when: crmInboxAvailable },
-    { path: "/support/connections", component: ConnectionsPage, label: "Connections", icon: Plug, roles: ["ADMIN"], when: crmInboxAvailable },
+    { path: "/support/connections", component: ConnectionsPage, label: "Connections", icon: Plug, permission: "crm.administer", when: crmInboxAvailable },
     { path: "/catalogs/crm_conversations/:id", component: ConversationPage, view: false, when: crmInboxAvailable },
     // Pages that replace an entity's default screen (only where the layout differs).
     { list: "Suppliers", component: SuppliersPage },

@@ -110,8 +110,8 @@ In brief:
   constant for its localized value label — both fall back to the name — plus an optional
   `@EnumLabel(color="#…")` that renders the value as a colored status pill), **`@Constant`** (singleton
   setting), **`@ScheduledJob`**
-  (`cron`) / `@Scheduled` background jobs, **`@DomainEvent`** (outbox), **`@AccessControl`**
-  (`readRoles`/`writeRoles`, plus `postRoles`/`unpostRoles` on documents), **`@Attribute`** (`required`, `length`, `precision`/`scale`, `secret`,
+  (`cron`) / `@Scheduled` background jobs, **`@DomainEvent`** (outbox), **`RoleGrants`** + **`RoleKey`** + **`Permission`**
+  (`su.onno.access`: one bean declaring each role's entity rights and capabilities), **`@Attribute`** (`required`, `length`, `precision`/`scale`, `secret`,
   validation `min`/`max`/`pattern`/`email`, `previousNames`).
 - **`Ref<T>`** (`su.onno.types.Ref`) — a typed `(Class<T>, UUID)` reference, stored as a UUID
   column; resolved with `RefResolver`.
@@ -144,7 +144,7 @@ status field:
   timers, parent/child links, work items, transition history, and ordered task audit events in the
   framework-managed `onno_process_*` tables. Parent-token ancestry makes nested fork/join durable.
   Claim, delegate, complete, cancel, migrate, and token advancement use row locks plus optimistic
-  versions. A claimed item is private to its assignee; `ADMIN` bypasses candidate/assignee checks.
+  versions. A claimed item is private to its assignee; a process administrator (`ProcessActor.administrator()`, from an explicit `processes.administer` grant) bypasses candidate/assignee checks.
 - `ProcessController` is the authenticated boundary: definitions/start/instance reads plus a
   role-scoped task inbox and claim/delegate/history/complete commands. It also exposes versioned
   graph metadata, the caller's instances, execution tokens, cancellation, and migration. The
@@ -380,8 +380,8 @@ repost, so a backdated change cannot cascade into a closed period), `OnnoBeforeC
 runs it on every catalog/document save — repository and generic UI/REST/import/MCP writes alike —
 and `DocumentCommandService` checks a delete before unposting a posted document.
 Rejections throw `PeriodClosedException` (HTTP 409 `period-closed`, including from
-`posting-preview`). Close/reopen (`ADMIN` + `onno.period-close.manage-roles`; reopen needs a
-reason) and overrides (`onno.period-close.override-roles`, or an explicit
+`posting-preview`). Close/reopen (the `periodClose.manage` permission; reopen needs a
+reason) and overrides (an explicit `periodClose.override` grant, or an explicit
 `PeriodCloseService.override(...)` block) are audited in `onno_period_close_audit`. The web starter
 serves `/api/period-close` (and reports `features.periodClose` in the UI model); `@onno/ui`'s
 `<PeriodClose />` is the admin screen an app registers as a page; the MCP starter adds the read-only
@@ -465,7 +465,7 @@ cancellation comes from `cancellationAssignment(payload)`; inbox/task authorizat
 | List feed | `GET /api/list/catalogs/{name}`, `/api/list/documents/{name}` — the only catalog/document collection read: pass `?cursor=&limit=` and read `{rows, nextCursor, hasMore, prevCursor, hasPrevious}` (keyset pagination, constant-time at any depth, no skip/dup on shifting data); `?focus=<id>` returns the window containing that record (echoed as `focus`; a record the query cannot see falls back to the first window) and `?before=<prevCursor>` the window above one; `?count=exact\|estimate` adds a total. `?ids=` returns just those rows (the grid's single-row live patch); `?where=` applies a structured JSON predicate server-side (`{"posted":true,"total":{"gte":100}}`, compiled by `Where`; see [HEADLESS_READ_API](HEADLESS_READ_API.md)) — also accepted by `/groups`, `/aggregate` and the ref-option bodies; the toolbar's facet params (`eq`/`in`/`like`/`prefix`/`ge`/`le`) are validated against the entity's columns. `GET /api/list/registers/{name}/movements`, `/balance` — register data for the register report, same cursor envelope and facet params; movement rows carry a localized `_movement_type_display` + `_movement_type_color` (web-starter) |
 | List grouping | `GET /api/list/{kind}/{name}/groups?groupBy=&granularity=&agg=fn,col&q=&where=` — backend `GROUP BY`: `{groups: [{label, color?, count, values[], expand[]}], capped}`. One header per value (or per `day`/`month`/`year` bucket for a date column), each carrying an `expand` predicate the list replays on the feed to load the group's rows. Same WHERE as the flat list; headers cap at 200 (web-starter) |
 | Aggregate | `GET /api/list/{kind}/{name}/aggregate?metric=&field=&groupBy=&groupByDate=&seriesBy=&where=&dateField=&from=&to=` — server-side `GROUP BY` behind `@onno/ui`'s measures (`Stat`, `Chart`, `Sparkline`, `Gauge`, `useAggregate`): `{buckets: [{key, label?, series?, seriesLabel?, value, value2?}], truncated, span?}`, O(buckets) over the wire instead of the entity's whole table (#199). `groupByDate` (`minute…month`) buckets a timestamp via `DATE_TRUNC`; blank `groupBy` yields one grand-total bucket; enum/Ref bucket values carry a resolved `label`; `span` is the windowed MIN/MAX of `dateField` (granularity auto-sizing). Date-bucketed axes always zero-fill empty periods with `{key, value: 0}` fillers over the window — or between the first/last data when unbounded (#246). Buckets cap at 1000 (`truncated: true`) (web-starter) |
-| Settings | `GET`/`PUT /api/settings` — `@Constant` values as `{name, type, value}`, ADMIN (web-starter) |
+| Settings | `GET`/`PUT /api/settings` — `@Constant` values as `{name, type, value}`, `settings.edit` (web-starter) |
 | Commands | `GET /api/commands/{kind}/{name}[?id=]` — the entity's `Commands` descriptors (title, description, group, inputs, target) plus per-record state `{visible, enabled, title?}`; `POST …/{key}` with `{id?, inputs}` runs one and answers `{refresh, feedback, navigateTo}` (feedback is meaning only: `severity`, `title`, `message`, `details`; `navigateTo` is an app path or `onno://` link from `CommandResult.open(ref)`/`navigate(route)`, applied after feedback and refresh — command and external URLs are rejected; batch summaries omit per-record destinations); `CommandRejectedException` maps to HTTP 422 with `fieldErrors`/`formErrors`; `GET …/{key}/defaults[?id=]` returns opening input values `{values, rows}`; `POST …/{key}/batch` runs `{ids:[…]}` (≤500, `{ok, failed, total, feedback?}`, each id in its own transaction). `c.dynamic(...)` commands are resolved again on every listing and run. Every call honours entity write access, the command's `roles` (#227), `onno.web.read-only`, record scope and `availableWhen`/`enabledWhen`. `POST /api/{catalogs\|documents}/{name}/batch-delete` is bulk DELETE (web-starter) |
 | Media | `POST /api/media`, `GET /api/media/{key}`, `GET /api/media/limits` — authenticated uploads; served with `nosniff`, safe raster images inline and other types as attachments ([MEDIA_UPLOADS.md](MEDIA_UPLOADS.md)) (web-starter) |
 | Comments | `GET`/`POST /api/comments/{kind}/{name}/{id}`, `POST /api/comments/{commentId}/reactions`, `DELETE /api/comments/{commentId}` — discussion threads with replies (`parentId`) and grouped reactions, gated on read access to the record and on `onno.comments.enabled`; the thread `GET` is a keyset window `{rows, nextCursor, hasMore}`; the UI shows a thread where the entity's customization sets `comments: true`; `createdAt`/`editedAt` are zone-qualified instants (`…Z`) (web-starter) |
@@ -473,7 +473,7 @@ cancellation comes from `cancellationAssignment(payload)`; inbox/task authorizat
 | Period close | `GET /api/period-close` (locks), `GET /api/period-close/audit`, `POST /api/period-close/close`, `POST /api/period-close/reopen` — see [Period close](#period-close); the UI model reports `features.periodClose` when `PeriodCloseService` is wired, and `@onno/ui`'s `<PeriodClose />` is the admin screen (web-starter) |
 | Mentions | `GET /api/mentions?q=[&kind=people\|catalogs\|documents]` — comment typeahead over readable records; the UI uses `@` for people mentions (`kind=people` narrows to the `IdentityLink` catalog, falling back to all catalogs when no identity link is configured) and `#` to reference any record — no `kind` sweeps documents and catalogs alike, searchable by name or code. Suggestions carry a secondary `hint` (a person's `email` attribute, a catalog record's code, a document's `yyyy-MM-dd` date). `GET /api/mentions/resolve?kind&name&id` resolves one triple to its live display plus a `person` flag (same per-viewer read gate) — the compose box uses it to swap a pasted internal `/ui/...` record URL for an `@` (person) or `#` (anything else) mention. Bodies carry `@[Display](kind/name/id)` / `#[Display](kind/name/id)` tokens resolved live; readable `@` mentions publish `EntityMentionedEvent` (consumed by notifications; additive via `@EventListener`) (web-starter) |
 | Notifications | `GET /api/notifications[?unread&cursor]` — the caller's keyset-paginated timeline `{rows, nextCursor, hasMore, unreadCount}` (for a record-scoped viewer, rows about unreadable records are withheld and not counted); `POST /api/notifications/{id}/read` and `POST /api/notifications/read-all` mark read. Every call is scoped to the caller's identity (no cross-user reads). Rows persist in the framework-owned `onno_notifications` table; new ones push over the `notification` SSE event (routed by recipient, relayed across nodes over the `ClusterEventBus`). Built-in producers: comment mentions and record assignment (`@AssigneeField`); apps add more by calling `NotificationService.notify`. Gated by `onno.notifications.*` (web-starter) |
-| UI model | `GET /api/ui/model` — the readable entities (`kind`, `logicalName`, `title`, `context`, `route`, rights), information registers, `@Constant` settings (administrators) and the signed-in user; `GET /api/ui/view/{catalogs,documents}/{name}[/{id}\|/new\|/{id}/duplicate]` and `/api/ui/view/registers/{name}` — the default list, record form or register descriptor as data (columns, filters, field metadata, commands and record actions with their state; no icons, widths or titles). The UI `{name}` is the snake_case route name (`Stock Receipts` → `stock_receipts`), while REST accepts any spelling of the logical name. A record form's actions are `{key, url[, title][, danger]}`: the built-in `openInList` (read access only; opens the list at `?focus=<id>`), `duplicate`, `delete`, for documents `unpost`, and module record actions such as `print-invoice` (web-starter) |
+| UI model | `GET /api/ui/model` — the readable entities (`kind`, `logicalName`, `title`, `context`, `route`, rights), information registers, `@Constant` settings (holders of `settings.edit`), the signed-in user (`user.roles`, `user.permissions` — the granted permission keys — and `user.unrestricted`, true without `RoleGrants`) and the declared role names (`roles`); `GET /api/ui/view/{catalogs,documents}/{name}[/{id}\|/new\|/{id}/duplicate]` and `/api/ui/view/registers/{name}` — the default list, record form or register descriptor as data (columns, filters, field metadata, commands and record actions with their state; no icons, widths or titles). The UI `{name}` is the snake_case route name (`Stock Receipts` → `stock_receipts`), while REST accepts any spelling of the logical name. A record form's actions are `{key, url[, title][, danger]}`: the built-in `openInList` (read access only; opens the list at `?focus=<id>`), `duplicate`, `delete`, for documents `unpost`, and module record actions such as `print-invoice` (web-starter) |
 | Record refresh | `GET /api/ui/record-refresh/{catalogs,documents}/{name}/{id}` returns `{record, actions, commands, readOnly[, canPost]}`. It uses the record view's read and write scope checks and computes the record actions (`{key, url[, title][, danger]}`, presentation-free) from the same saved row as the logical record. The SPA updates the mounted form and action cluster in place. |
 | Theme/config | `GET /api/theme`, `GET /api/config`, `GET /api/branding`, `GET /api/ui/login` (web-starter) |
 | Events | `GET /api/events` — SSE stream of CRUD/posting changes, `tasks-changed` inbox invalidations, plus `presence` viewer-set updates (web-starter); filtered per subscriber by entity read access or process-task audience (#190) |
@@ -522,7 +522,9 @@ context. Its full API is [onno-ui/README.md](../onno-ui/README.md); the code is 
   pages applies the `su.onno.ui` Gradle plugin (`onno-ui-gradle-plugin`) and writes an ordinary Vite
   app in `src/main/ui`: `buildUi` packs it into `classpath:/onno-app/`, which the starter serves in
   its place; `generateUiModel` writes `model.gen.ts`, the TypeScript types of the Java entities,
-  enumerations, information registers, constants and roles; `onnoUiInit` seeds the app.
+  enumerations, information registers, constants, roles (the `RoleKey` enums, as `OnnoRoles`) and
+  permissions (the `public static final` `Permission` constants of the framework modules on the
+  classpath and of the app's scanned packages, as `OnnoPermissions`); `onnoUiInit` seeds the app.
 - **The contract.** `GET /api/ui/model` lists what the caller may read and do;
   `GET /api/ui/view/...` returns an entity's default list, form or register descriptor as data —
   columns, filters, field metadata (names, types, references, constraints), commands and record
@@ -598,7 +600,7 @@ public. `onno.auth.additional-public-paths` adds public Ant patterns; legacy `on
 entries are combined with them and can no longer remove mandatory framework paths.
 
 - **`database`** (recommended) — accounts in the framework-managed table `onno_auth_user`, managed at
-  runtime through `UserAccounts`, `/api/auth/users` (ADMIN) and `@onno/ui`'s `UserAccounts` /
+  runtime through `UserAccounts`, `/api/auth/users` (`users.manage`) and `@onno/ui`'s `UserAccounts` /
   `ChangePassword` components. `onno.auth.users[*]` only seeds an empty store once, flagged for a forced password change.
   Each security-relevant change bumps the account's security stamp; `AccountSessionGuardFilter`
   re-reads the account per request, revokes stale sessions (`401 session_revoked`, remember-me cookies
@@ -621,15 +623,40 @@ cross-site session iframe additionally needs `onno.auth.embedding.cross-site-coo
 
 `/api/**` requires authentication (except the public allowlist: `/error`, `/api/theme`,
 `/api/config`, `/api/branding`, `/api/auth/login`, `/api/auth/login/{method}[/challenge]`, `/api/auth/me`, `/api/auth/csrf`,
-`/api/ui/login`). **Per-entity RBAC is deny-by-default**: a
-catalog/document/register is invisible
-and uneditable unless its `@AccessControl` read/write roles grant the caller; the `ADMIN` role is a
-superuser. Override the whole thing by setting `onno.auth.enabled=false` and supplying your own
-`SecurityFilterChain`.
+`/api/ui/login`). **Access is declared in one `RoleGrants` bean** (`su.onno.access`): roles are an
+application enum implementing `RoleKey`, and each role lists the entities it may `read`, `write`,
+`post` or `unpost` (each right implies the weaker ones; keyed by the entity's Java class, or
+`readAll()`/`writeAll()` for the whole model and `postAll()`/`unpostAll()` for every document) and
+the capability `Permission`s it holds. With
+grants declared, access is deny-by-default and nothing bypasses it — there is no superuser; a role
+named `ADMIN` is ordinary. `AccessService` (framework-starter) evaluates the grants for every
+surface, narrowed by the deny-only `EntityAccessPolicy` beans, which constrain every role. Startup
+fails on a grant for an unregistered class or post/unpost on a non-document. With grants declared, every
+role named as a string elsewhere (static command `.roles(...)`, print-form roles, CRM workspace roles,
+`@McpTool(roles)`, record-policy `appliesTo`/`exemptRoles`) must be a declared role or a `fromIdp`
+name, or startup fails (`RoleGrants.requireRecognized`). **Without a
+`RoleGrants` bean the application runs open**: every signed-in user may do everything (logged at
+startup), except the explicit-only permissions `periodClose.override`, `processes.administer` and
+`crm.administer`. An anonymous caller gets nothing, and trusted `AccessSubject.system()` code is
+never checked. Role names compare through one normalization, `AccessSubject.normalizeRole`
+(`ROLE_manager` → `MANAGER`), for account roles, IdP claims (`ClaimRoleConverter`), `RoleGrants`
+and its `fromIdp(...)` aliases (a caller holding an aliased IdP role also holds the declared role,
+so every role list sees it), and every role list. Override the whole thing by setting
+`onno.auth.enabled=false` and supplying your own `SecurityFilterChain`.
 
-**Posting rights** are separate from write access. On a document, `@AccessControl(postRoles = …)`
-and `unpostRoles = …` narrow who may post / re-post or unpost: the caller needs write access *and*
-one of the listed roles (an empty list leaves the right with every writer; `ADMIN` always passes).
+| Permission | Constant | Gates |
+|---|---|---|
+| `settings.edit` | `CorePermissions.EDIT_SETTINGS` | `/api/settings`, `constants` in `/api/ui/model` |
+| `comments.moderate` | `CorePermissions.MODERATE_COMMENTS` | deleting another user's comment |
+| `periodClose.manage` | `CorePermissions.MANAGE_PERIOD_CLOSE` | `/api/period-close` close / reopen / audit |
+| `periodClose.override` | `CorePermissions.OVERRIDE_PERIOD_CLOSE` | changing a closed period (explicit grant only) |
+| `processes.administer` | `CorePermissions.ADMINISTER_PROCESSES` | every process task and instance (explicit grant only) |
+| `users.manage` | `AuthPermissions.MANAGE_USERS` | `/api/auth/users` |
+| `print.templates.manage` | `PrintPermissions.MANAGE_TEMPLATES` | `/api/print/templates` |
+| `crm.administer` | `CrmPermissions.ADMINISTER` | shared CRM channels, every inbox workspace, generic CRM catalogs (explicit grant only) |
+
+**Posting rights** are separate from write access: `RoleGrants` grants `post(...)` (post and
+re-post) and `unpost(...)` on their own, and `write(...)` alone grants neither.
 `DocumentCommandService` enforces them — so `POST /api/documents/{name}/{id}/post` and `/unpost`,
 the MCP `post_document`/`unpost_document` tools and the built-in UI actions all answer `403` — and
 `DELETE` of a *posted* document requires the unpost right because it unposts first. The record
@@ -639,10 +666,10 @@ application code.
 
 ### Record-level access policies
 
-`@AccessControl` decides which *entities* a role may use; a `RecordAccessPolicy` bean decides which
+`RoleGrants` decides which *entities* a role may use; a `RecordAccessPolicy` bean decides which
 *records*. A policy names the roles it `appliesTo`, a read `RecordScope` (and optionally a write scope
-and create `defaults`); `ADMIN` and `exemptRoles(...)` are exempt, several applicable policies are
-OR'ed, and an entity without an applicable policy is unscoped.
+and create `defaults`); only `exemptRoles(...)` and trusted code are exempt, several applicable
+policies are OR'ed, and an entity without an applicable policy is unscoped.
 
 ```java
 @Bean
@@ -767,7 +794,7 @@ entity table bypasses the recorder.
   lists the available forms. Both enforce entity read access, record scope (out of scope = 404) and
   the form's optional roles. A list's selection toolbar batch-prints through the web starter's
   `SelectionDownloadContributor` SPI (`POST /api/print/batch/{kind}/{name}/{form}` → zip; out-of-scope
-  ids skipped). Admins (`onno.print.templates.manage-roles`) replace templates at runtime via
+  ids skipped). Holders of `print.templates.manage` replace templates at runtime via
   `/api/print/templates/**` and `@onno/print`'s `<PrintTemplates />` component; uploads live in the
   framework-managed `onno_print_templates` table (keyed by entity scope + form key, so every node sees
   them) and win over the built-in file until reset. PDF output (`?format=pdf`, `spec.pdf()`) goes
@@ -796,8 +823,9 @@ SSE stream and lets server-side consumers (cache revalidation, search indexing) 
 resource instead of polling. The browser stream is **filtered per subscriber by per-entity read
 access** — an event (including `comment` and `presence` events) reaches a viewer only when their roles
 may read the affected record, so the live channel honours the same deny-by-default RBAC as the
-REST/UI/MCP surfaces; unknown event kinds are delivered only to `ADMIN` (fail closed) (#190).
-Process-task invalidations use their own audience gate: only candidate users/roles and `ADMIN`
+REST/UI/MCP surfaces; unknown event kinds are delivered to nobody (fail closed) (#190).
+Process-task invalidations use their own audience gate: only candidate users/roles and explicit
+`processes.administer` holders
 receive `tasks-changed`, and the candidate assignment itself never enters the browser payload.
 `@DomainEvent` declarations append to `onno_outbox` in the same transaction as the
 repository save/delete or posting mutation; a rollback cannot leave a phantom event, and an outbox
@@ -947,7 +975,7 @@ assignment using an existing employee/identity catalog. `CrmStateConfiguration` 
 conversation statuses; without it, incoming messages and replies carry no status.
 
 The host composes pages and navigation explicitly, rendering `@onno/crm`'s `CrmInbox`, `CrmConnections`
-and optional `CrmContactDetails` components. Channel management uses `CrmChannelAccess` (ADMIN by default).
+and optional `CrmContactDetails` components. Channel management uses `CrmChannelAccess` (explicit `crm.administer` holders by default).
 Only enabled connectors appear. Provider imports invoke the host's optional inbound contact policy;
 they never instantiate a built-in customer. Telegram avatars belong to channel identities.
 
@@ -955,7 +983,7 @@ The host owns business merging and any auditing or undo. `CrmContactService.tran
 host transaction and moves CRM conversations/identities plus a canonical redirect, preserving
 provider routing. It has no HTTP endpoint or automatic undo and never changes host business fields,
 comments or opportunities. The binding identity, redirects and transaction guard use `onno_crm_*`
-infrastructure tables. Personal-group storage is created only with `CrmFeatures(true)`. Personal provider accounts are opt-in via `CrmFeatures.withPersonalAccounts(true)`; enabling them closes the generic CRM catalogs to ADMIN because generic surfaces cannot filter personal inboxes. Sales models and metrics remain host-owned.
+infrastructure tables. Personal-group storage is created only with `CrmFeatures(true)`. Personal provider accounts are opt-in via `CrmFeatures.withPersonalAccounts(true)`; enabling them closes the generic CRM catalogs to every role, `crm.administer` holders included, because generic surfaces cannot filter personal inboxes. Sales models and metrics remain host-owned.
 
 The list customization `selectionCheckboxes: true` opts a catalog/document table into Onno
 row-selection controls (default false). Flat and grouped grids share the existing
@@ -1015,9 +1043,9 @@ views, never changes provider routing. The bookstore crm profile declares Suppor
 scoped reads and content-free page SSE invalidations; shared contacts keep their catalog policy.
 
 `EntityAccessPolicy` is a deny-only extension on `AccessService` for generic entity surfaces;
-policies receive roles, kind, normalized logical name and read/write intent. Existing annotation
-RBAC still applies and ADMIN remains the superuser. The CRM registers a gate that blocks generic
-conversation/message/identity surfaces for non-admin users, closing REST/UI/MCP/comment/event
+policies receive roles, kind, normalized logical name and read/write intent. The `RoleGrants`
+entity grants still apply and every policy constrains every role. The CRM registers a gate that blocks generic
+conversation/message/identity surfaces for everyone without an explicit `crm.administer` grant, closing REST/UI/MCP/comment/event
 alternatives to scoped endpoints. Comment deletion now checks current target read access as well as
 authorship. Generic services and repositories remain trusted application APIs, not row-security
 boundaries. Scoped folder membership affects display only; workspace predicates and roles authorize.
@@ -1230,8 +1258,7 @@ rechecks ownership on its one-use callback. Each mailbox has separate credential
 
 Personal inbox ownership restricts scoped conversation reads/writes and contact projections.
 Generic CRM catalogs/exports/events are unavailable to all roles once personal accounts exist,
-preventing ADMIN from bypassing per-account privacy. Host contacts retain host catalog permissions.
-`EntityAccessPolicy.includesAdministrators()` defaults false; privacy policies explicitly opt in.
+so no role, `crm.administer` holders included, bypasses per-account privacy. Host contacts retain host catalog permissions.
 See `onno-crm-starter/README.md` and `onno-crm-channels-starter/README.md` for response fields,
 component props, lifecycle behavior and remaining shared-only provider limits.
 

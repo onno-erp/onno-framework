@@ -46,7 +46,8 @@ Both in `onno-web-starter/src/main/java/su/onno/web/`.
 
 - `GET /api/ui/model` — every entity the user can read (`kind`, `logicalName`, `title`, `context`,
   `route`, `canWrite`; no icon — the client picks one), the readable information registers, the `@Constant` settings (for
-  administrators), the user and roles. Navigation is built from this. Branding is not in it: it is
+  holders of `settings.edit`), the user (roles, granted `permissions`, `unrestricted`) and the
+  declared roles. Navigation is built from this. Branding is not in it: it is
   served once, by the public `GET /api/branding` (`UiConfigController.java`), which the login screen
   and the shell both read; `GET /api/config` carries read-only mode, locale and chrome strings.
 - `GET /api/ui/view/{catalogs|documents|registers}/{name}[/{id}]` — the default screen for a route,
@@ -69,7 +70,7 @@ Both in `onno-web-starter/src/main/java/su/onno/web/`.
   `GenericCatalogController`, `GenericDocumentController`, `GenericRegisterController`; the SQL is
   in `CatalogQueryService`, `DocumentQueryService`, `RegisterQueryService`.
 - Writes: `CatalogCommandService`, `DocumentCommandService` (hooks, rules, posting).
-- Access: `AccessService` (roles) and `RecordAccess` (row-level policies) guard both.
+- Access: `AccessService` (the app's `RoleGrants`) and `RecordAccess` (row-level policies) guard both.
 - Live updates: `EventPublisher` → `GET /api/events` (SSE).
 
 **Serving the UI** — `SpaIndexHtml`, `UiAutoConfiguration`: the app's own build if its jar has one
@@ -275,7 +276,7 @@ List selection: the header checkbox and ⌘A/Ctrl+A select every record matching
 
 
 Navigation sections and nested groups accept React `actions` and recursive `items`; `roles`
-filters branches and empty groups disappear. Desktop active routes reveal ancestor groups; the
+and `permission` filter branches and empty groups disappear. Desktop active routes reveal ancestor groups; the
 mobile More menu uses the same tree, while bottom tabs derive from its leaf destinations.
 Register `navigationComponent: AppNavigation` for a custom desktop/menu layout. Compose
 `Navigation`, `NavigationSection`, `NavigationGroup`, `NavigationLink`, and `DefaultNavigation`;

@@ -109,7 +109,7 @@ compatibility reads retain `{col}_display` and `{col}_color`.
 | `ProcessStepKey` | Implement on the step enum. `key()` defaults to the enum name and may be overridden with a stable persistence key. |
 | `HumanTask<P,O extends Enum<O>>` | Typed human work; declares `outcomeType()`, `assignment(payload)`, and optional `title(payload)`. |
 | `ProcessActorId` / `ProcessIdentity` | Stable task-owner id plus mutable login/display snapshots. A linked Employee record UUID is the normal id. |
-| `TaskAssignment` | Candidate `identities(Ref<?>...)`, `actors(ProcessActorId...)`, `roles(...)`, or both; `ADMIN` bypasses assignment checks. |
+| `TaskAssignment` | Candidate `identities(Ref<?>...)`, `actors(ProcessActorId...)`, `roles(...)`, or both; a process administrator (`processes.administer`) bypasses assignment checks. |
 | `ProcessDefinition<P,S>` | Call `super(stableKey, Payload.class)` for v1 or `super(stableKey, version, Payload.class)`, declare start/cancellation assignment, and override `define`; instances pin the exact version. |
 | `ProcessGraph<P,S>` | `start`, `human`, `automatic`, `decision`, `timer`, typed `parallel(fork, Branch.class, join)`, `subprocess`, `end`, and inspectable `descriptor()`. |
 | `HumanTaskNode<P,S,O>` | `on(outcome).to(node)`; the outcome and target types are compiler-checked. |
@@ -145,11 +145,27 @@ stored instances under a changed same-version graph.
 ### `@DomainEvent` (repeatable; outbox)
 `name` (required), `when = EventTiming.AFTER_WRITE|AFTER_POST|AFTER_DELETE` (default `AFTER_WRITE`).
 
-### `@AccessControl` (RBAC; deny-by-default, `ADMIN` always allowed)
-`readRoles=String[]{}`, `writeRoles=String[]{}` (falls back to `readRoles` if empty).
-Documents only: `postRoles=String[]{}`, `unpostRoles=String[]{}` — narrow who may post/re-post or
-unpost **on top of write access** (empty = every writer). Deleting a posted document needs the
-unpost right. Enforced on REST/MCP/UI actions; direct `PostingService` calls are trusted code.
+### `RoleGrants` (RBAC; package `su.onno.access`, one Spring bean; no superuser)
+`enum AppRole implements RoleKey { … }` then `RoleGrants.of(AppRole.class).role(AppRole.X, r -> r…)`:
+`read|write|post|unpost(Class…)` (POST/UNPOST ⊃ WRITE ⊃ READ, keyed by Java class),
+`readAll|writeAll()` (whole model), `postAll|unpostAll()` (every document; nothing on catalogs or
+registers), `permit(Permission…)`, `fromIdp("idp-name"…)`. Each role declared once. Startup fails
+on an IdP name mapping to two roles, two `RoleKey` constants normalizing alike
+(`ADMIN`/`ROLE_ADMIN`), a grant on an unregistered class, post/unpost on a non-document, or a role
+string (command/print-form/workspace/`@McpTool`/record-policy roles) that names no declared role or
+`fromIdp` name. With grants: deny-by-default, a role named `ADMIN` is ordinary. **No bean = open mode** (every signed-in user may do everything; warning logged) except
+the explicit-only `periodClose.override`, `processes.administer`, `crm.administer`
+(`EffectiveAccess.granted(...)`). Anonymous callers get nothing. Deleting a posted document needs
+the unpost right. Enforced on REST/MCP/UI/events; `AccessSubject.system()` and direct
+`PostingService` calls are trusted code. Role names compare via `AccessSubject.normalizeRole`
+(`ROLE_manager` → `MANAGER`).
+
+Permissions (`Permission.of("dotted.key", "…")`, owned by the enforcing module):
+`CorePermissions.EDIT_SETTINGS` `settings.edit`, `.MODERATE_COMMENTS` `comments.moderate`,
+`.MANAGE_PERIOD_CLOSE` `periodClose.manage`, `.OVERRIDE_PERIOD_CLOSE` `periodClose.override`,
+`.ADMINISTER_PROCESSES` `processes.administer`; `AuthPermissions.MANAGE_USERS` `users.manage`;
+`PrintPermissions.MANAGE_TEMPLATES` `print.templates.manage`; `CrmPermissions.ADMINISTER`
+`crm.administer`. Check with `AccessService.has(principal|subject, permission)`.
 
 ### `RecordAccessPolicy` (record-level; package `su.onno.access`, a Spring bean)
 `RecordAccessPolicy.forCatalog|forDocument|forRegister|of(Type.class)` `.appliesTo(roles…)`
@@ -241,11 +257,11 @@ validation exception/payload.
   with `PeriodClosedException` (HTTP 409 `period-closed`) — in `PostingEngine` (incl. later
   documents of a `CHRONOLOGICAL` restoration), repository saves, and the generic command path.
 - `@PeriodCloseExempt` on a `@Document` class opts a non-accounting document out.
-- Roles: `onno.period-close.manage-roles` (+`ADMIN`) close/reopen; `onno.period-close.override-roles`
-  bypass (empty by default; `ADMIN` only when listed). All audited in `onno_period_close_audit`.
+- Permissions: `periodClose.manage` closes/reopens; an explicit `periodClose.override` grant
+  bypasses (never implied by open mode). All audited in `onno_period_close_audit`.
 - API: `GET /api/period-close`, `GET /audit`, `POST /close`, `POST /reopen`; `/api/ui/model`
   reports `features.periodClose`. UI: `@onno/ui`'s `<PeriodClose scopes? auditRows? />`, registered
-  by the app as a page (e.g. `/period-close`, ADMIN, `when: m => m.features.periodClose === true`).
+  by the app as a page (e.g. `/period-close`, `permission: "periodClose.manage"`, `when: m => m.features.periodClose === true`).
 
 ## Runtime query paths
 
@@ -303,8 +319,8 @@ because they are not Java field references.
   - `c.command(key)` record command; `c.collectionCommand(key)` no record id; `c.dynamic(live -> …)`
     commands from live data (re-evaluated per listing/run; not MCP tools).
   - `CommandBuilder`: `title(String)`, `title(row -> String)` (record only), `description`,
-    `group("Change status")` (UI submenu), `roles(...)` (any-of on top of write access; `ADMIN`
-    passes), `availableWhen(row -> bool)` (unlisted + rejected), `enabledWhen(row -> bool)`
+    `group("Change status")` (UI submenu), `roles(...)` (any-of on top of write access, normalized; no role
+    passes implicitly), `availableWhen(row -> bool)` (unlisted + rejected), `enabledWhen(row -> bool)`
     (listed disabled), `input(key, i -> i.title(…).text()|longText()|date()|number()|oneOf(…)|
     reference(Target.class).defaultValue(…).required())`, `inputRows(key, g -> g.title(…).required()
     .column(col, c -> …))`, `defaults(ctx -> CommandDefaults.ofValues(map)|ofRows(group, rows))`,
@@ -408,7 +424,7 @@ because they are not Java field references.
   `onno.ui.login.demo-accounts`; `onno.web.read-only`, `onno.web.list.page-size`,
   `onno.web.dev-mode`.
 
-Every readable entity is served by default; access is `@AccessControl` + record policies, never a
+Every readable entity is served by default; access is `RoleGrants` + record policies, never a
 UI allowlist. Media inputs stream the file to `MediaStorage` and persist the returned URL (see
 `docs/MEDIA_UPLOADS.md`).
 
@@ -429,7 +445,7 @@ UI allowlist. Media inputs stream the file to `MediaStorage` and persist the ret
   (file), `POST /api/print/batch/{kind}/{name}/{form}` `{"ids":[…]}` (zip), `/api/print/templates/**` (admin).
 - Batch: list selection toolbar → zip (`onno.print.batch.max-records`, default 200).
 - Uploaded templates: `<PrintTemplates />` from `@onno/print`; `onno.print.templates.*`
-  (`enabled`, `manage-roles` = ADMIN, `max-size` = 10MB); same format as the built-in file.
+  (`enabled`, `max-size` = 10MB; managing needs `print.templates.manage`); same format as the built-in file.
 - PDF: `onno.print.pdf.gotenberg.url` or `onno.print.pdf.libreoffice.command` (or a `PdfConverter`
   bean); `spec.pdf()` makes PDF the default (fails startup without a converter); menu gains `· PDF`.
 - Generic SPIs behind it: `su.onno.web.RecordActionContributor` (record ⋯ menu) and
@@ -502,8 +518,8 @@ forms and sales metrics use ordinary onno metadata. See `onno-crm-starter/README
 CRM connection pages: `<CrmConnections setups={[channelSetups]} scopes={["shared", "personal"]} defaultScope="shared"
 sharedLabel=… personalLabel=… providers={["gmail", …]} showUnavailable />` (React, `@onno/crm`). Provider metadata
 comes from `CrmAccountProvider`; ownership from `CrmConnectionAccounts`. Personal scope must
-isolate credentials and inboxes. `EntityAccessPolicy.includesAdministrators()` is an explicit
-opt-in privacy boundary, not the default role behavior.
+isolate credentials and inboxes. Every `EntityAccessPolicy` constrains every role (no administrator
+exemption); `crm.administer` is an explicit-only grant.
 
 ### CRM screens
 

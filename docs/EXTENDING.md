@@ -130,6 +130,13 @@ collide and config stays predictable.
 - **Declare the onno-framework version you support.** State the version (or range) you build and test
   against in your README and in your registry entry — the published surface is the
   `su.onno:*` artifacts on Maven Central.
+- **Gate admin-only capabilities with your own `Permission`, never a role name.** Declare
+  `public static final Permission MANAGE = Permission.of("<name>.manage", "…")` in a holder class
+  of your package, check it with `AccessService.has(...)` (or `access(...).granted(...)` when an
+  application without grants must not imply it), and document the key so applications grant it in
+  their `RoleGrants`. Do not test for `ADMIN` or any other role literal: an application's roles are
+  its own enum. `model.gen.ts` types the keys of the framework's holders and the app's own
+  packages; an app adds an extension's package to `onnoUi { modelPackages.add("…") }` to type its keys too.
 - **Tag your repo** `onno-framework` and `onno-extension` on GitHub so others can find it.
 - **Reserved plugin id:** the Gradle plugin id `su.onno.ui` is the framework's; don't reuse it.
 
@@ -214,8 +221,8 @@ They can combine multiple channel accounts without changing transport destinatio
 README for scoped endpoint and shared-contact boundaries.
 
 For generic entity surfaces, `EntityAccessPolicy` supplies an additional deny-only gate to
-`AccessService`. Policies cannot grant rights absent from annotation RBAC and ADMIN bypasses the
-additional gate. Keep policy beans lightweight and avoid circular dependencies on `AccessService`.
+`AccessService`. Policies cannot grant rights absent from the `RoleGrants` entity grants, and every
+policy constrains every role — no role bypasses it. Keep policy beans lightweight and avoid circular dependencies on `AccessService`.
 
 `OptionsFacet` is exported from `@onno/ui`: the same filter chip used by entity lists.
 Pass `label`, `options` (`value`, `label`, optional `color`/`avatarUrl`), `multi`, `selected: string[]`,
@@ -382,9 +389,8 @@ component (`<CrmConnections setups={[…]} />`) for provider-owned authorization
 account (accountId, scope), server-derived `canManage` and `refresh`. Use `CrmConnectionAccounts` for credential-free ownership/inbox binding,
 and private connector storage for secrets. Do not advertise personal scope without isolated
 credentials and inbox routing: advertising `PERSONAL` also closes the generic CRM catalogs to
-administrators. Existing `CrmChannelConnection` beans remain shared legacy accounts.
-For explicit privacy boundaries, `EntityAccessPolicy.includesAdministrators()` opts out of the
-ordinary ADMIN bypass. See the CRM starter README for full contracts and component props.
+every role, `crm.administer` holders included. Existing `CrmChannelConnection` beans remain shared legacy accounts.
+See the CRM starter README for full contracts and component props.
 
 CRM workspace pagination preserves Java selectors and facet resolvers through request-local SQL
 projections. Facet resolvers now receive bounded batches (maximum 500) and must produce values

@@ -143,7 +143,7 @@ Everything an app can import is in [`src/index.ts`](src/index.ts); the types are
 | Login | `useSignIn()` (`password`, `method(id, credentials)`, `challenge(id, input)`, `redirect(provider)`), `useLoginMethods()`, `LoginLayout`, `SignInMethods`, `PasswordLogin`, `SsoButtons`, `LoginButton`, `DefaultLogin`, `SignInError`; types `LoginPageProps`, `LoginMethods`, `SsoOption`. |
 | Navigation UI | `Navigation`, `NavigationSection`, `NavigationGroup`, `NavigationLink`, `DefaultNavigation`; section `actions`, nested `items`, optional `navigationComponent`. |
 | Navigation | `openRecord(entity, id?, prefill?)`, `openRoute(link \| path, { newTab? })`, `RouteLink` (an anchor that opens in the workspace), `links.record` / `newRecord` / `list` / `page` (typed `onno://` links). A command result's `navigateTo` is applied after its feedback and refresh. |
-| Model | `useModel()`, `useHasRole(...roles)`. |
+| Model | `useModel()`, `useHasRole(...roles)`, `useHasPermission(permission)`. |
 | Page blocks | `Page`, `Row`, `RecordPage`, `RecordFields`, `RecordLines`, `PageHeader`, `DefaultView`, `DefaultHome`, `EntityList` (an entity's full list; controllable: `where`, `defaultGroupBy`/`groupBy`, `sort`, `view`, `search`, `selection` with `on…Change`; `calendar`/`timeline` views). `RecordPage` takes `history` (default: when the entity records history). |
 | Widgets | `Stat`, `Sparkline`, `Gauge`, `Chart`, `TimeRange`, `RecentRecords`, `Kanban`, `Calendar`, `EntityMap`, `Setting`, `TaskInbox`, `UserAccounts`, `ChangePassword`, `PeriodClose` (period-close administration), `RecordHistory` (one record's change history). Typed per entity; they read data themselves and follow the page's time range. |
 | Controls | `Button`, `Badge`, `Input`, `Label`, `Textarea`, `Checkbox`, `Switch`, `Segmented`, `Card…`, `Popover…`, `Select…`, `ContextMenu…`, `DialogShell`, `ResponsiveActionPanel`, `WorkspaceToolbar`, `DatePicker`, `DateTimePicker`, `TimePicker`, `InstantPicker`, `ColorPicker`, `RefSelect`, `EntityTags`, `EntityTagMenu`, `CommentComposer`, `CommentBody`, `EntityListView`, `OptionsFacet`, `toast`, `HintIcon`. |
@@ -194,9 +194,16 @@ The desktop navigation exposes `shell.navigation.actions` through `defineApp({ e
 register an ordinary React button component there to add a navigation action. Entity and CRM
 outlets remain available for actions, side panels, context menus, and chat controls.
 
-**Roles and pages.** `RoleName` is typed from the `@AccessControl` roles in the model; add a
-runtime-only role with `declare module "@onno/ui" { interface OnnoRoles { SUPPORT: true } }`. A page's
-`roles` hide it and its nav link; the server still enforces access on every call.
+**Roles, permissions and pages.** `RoleName` is typed from the app's Java `RoleKey` enums and
+`PermissionName` from its `Permission` constants (both generated into `model.gen.ts`); add a
+runtime-only role with `declare module "@onno/ui" { interface OnnoRoles { SUPPORT: true } }`. A
+page's or nav entry's `roles` (compared normalized; no role passes implicitly) and `permission`
+(`"settings.edit"`, …) hide it and its nav link, and `useHasRole(...)` / `useHasPermission(...)`
+answer the same in a component. `model.user.permissions` lists the granted keys and
+`model.user.unrestricted` is true for an app without role grants; `model.roles` lists the declared
+roles (offered by `<UserAccounts />`). The server still enforces access on every call: in an app
+without role grants every `permission` gate passes in the UI, including `periodClose.override`,
+`processes.administer` and `crm.administer`, which the server honours only when granted explicitly.
 
 ## Custom login page
 

@@ -216,7 +216,7 @@ public class Counterparty extends CatalogObject {
 
 There is no Java UI DSL. With zero UI code an app already gets navigation (entities grouped by their
 annotation `context`), a home page, and a list + record form for every entity the user can read —
-RBAC (`@AccessControl`, record policies) decides what exists for whom. The server describes data
+RBAC (`RoleGrants`, record policies) decides what exists for whom. The server describes data
 and permissions, never screens. Write UI only for what differs. The UI is the npm package
 `@onno/ui`; an app's UI is an ordinary Vite app in `src/main/ui` that imports it:
 
@@ -337,9 +337,9 @@ the JSON read contract (logical `FieldDisplay`/`FieldRef` companions, storage co
   to `false` after every load. So "load, mutate, save" UPDATEs. If you build an entity by hand
   (new instance, set a known id keyed on an external system) and want an UPDATE, call `setNew(false)`
   yourself, or the save INSERTs and you get a duplicate-key error.
-- **Per-entity RBAC is deny-by-default.** A catalog/document/register is invisible and uneditable
-  unless its `@AccessControl(readRoles=…, writeRoles=…)` grants the caller; the `ADMIN` role is a
-  superuser. This applies to the REST API, the UI, and the MCP tools alike.
+- **Access is one `RoleGrants` bean.** Once declared, a catalog/document/register is invisible and uneditable
+  unless a role the caller holds is granted it (`read`/`write`/`post`/`unpost`); there is no
+  superuser, and without the bean the app runs open. This applies to the REST API, the UI, and the MCP tools alike.
 - **Deletion is soft — and the raw repository finders return the tombstones.** "Delete" sets
   `deletionMark = true` and the row stays in the table; the UI/REST read layer hides it, but
   `CatalogRepository`/`DocumentRepository` `findAll()`/`findById()`/`findByCode()`/`findByNumber()`
@@ -447,7 +447,7 @@ When you build an app *on* the framework, separate a **framework bug** from your
 mistake. A framework bug is reproducible behaviour that contradicts these docs or the framework's
 contract — a generated endpoint returns the wrong shape, a valid annotation is ignored, posting
 corrupts a register, a migration drops data it shouldn't, an `onno.*` property has no effect. A
-modeling mistake is yours to fix (missing `@AccessControl` role, wrong `context`, save+post in one
+modeling mistake is yours to fix (missing `RoleGrants` grant, wrong `context`, save+post in one
 transaction).
 
 When you hit a genuine framework bug, don't silently work around it — **surface it and file an

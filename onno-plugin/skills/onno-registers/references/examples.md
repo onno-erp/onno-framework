@@ -12,10 +12,13 @@
 
 ## Balance Register
 
+Registers carry no access annotation: grant them in the app's `RoleGrants` bean, e.g.
+`.role(AppRole.WAREHOUSE, r -> r.read(StockRegister.class))` and
+`.role(AppRole.SALES, r -> r.read(SalesRegister.class, PriceRegister.class))`.
+
 ```java
 @AccumulationRegister(name = "Stock", title = "Stock", type = AccumulationType.BALANCE,
         context = "Inventory")
-@AccessControl(readRoles = {"WAREHOUSE", "ADMIN"})
 @Getter
 @Setter
 public class StockRegister extends AccumulationRecord {
@@ -44,7 +47,6 @@ backdated changes must preserve order-dependent historical balances.
 ```java
 @AccumulationRegister(name = "Sales", title = "Sales", type = AccumulationType.TURNOVER,
         context = "Sales")
-@AccessControl(readRoles = {"SALES", "ADMIN"})
 @Getter
 @Setter
 public class SalesRegister extends AccumulationRecord {
@@ -71,7 +73,6 @@ are turnover, not balance.
 ```java
 @InformationRegister(name = "Prices", title = "Price list", periodicity = Periodicity.DAY,
         context = "Catalog")
-@AccessControl(readRoles = {"SALES", "ADMIN"}, writeRoles = {"ADMIN"})
 @Getter
 @Setter
 public class PriceRegister extends InformationRecord {

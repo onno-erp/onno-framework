@@ -16,7 +16,6 @@ package com.acme.sales.domain;
 
 import lombok.Getter;
 import lombok.Setter;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.model.CatalogObject;
@@ -25,7 +24,6 @@ import su.onno.types.Ref;
 import java.math.BigDecimal;
 
 @Catalog(name = "Products", title = "Products", codePrefix = "P-", context = "Catalog")
-@AccessControl(readRoles = {"SALES", "ADMIN"}, writeRoles = {"ADMIN"})
 @Getter
 @Setter
 public class Product extends CatalogObject {
@@ -54,6 +52,9 @@ Notes:
   or both. Keep list/form labels explicit in the UI customization (`fields: { description: { label: "Name" } }`).
 - `Ref<ProductGroup>` stores only the target UUID. Resolve it with `RefResolver` only when you need
   the full target object in Java logic.
+- Who may see or change it lives in the app's one `RoleGrants` bean, not on the class:
+  `.role(AppRole.SALES, r -> r.read(Product.class, ProductGroup.class))`,
+  `.role(AppRole.ADMIN, r -> r.write(Product.class, ProductGroup.class, ApiAccount.class))`.
 
 ## Hierarchical Catalog
 
@@ -62,7 +63,6 @@ Use hierarchy when users organize a list into folders or parent-child trees.
 ```java
 @Catalog(name = "ProductGroups", title = "Product groups", hierarchical = true,
         codePrefix = "G-", context = "Catalog")
-@AccessControl(readRoles = {"SALES", "ADMIN"}, writeRoles = {"ADMIN"})
 @Getter
 @Setter
 public class ProductGroup extends CatalogObject {
@@ -107,7 +107,6 @@ migration plan.
 
 ```java
 @Catalog(name = "ApiAccounts", title = "API accounts", codePrefix = "API-")
-@AccessControl(readRoles = "ADMIN", writeRoles = "ADMIN")
 @Getter
 @Setter
 public class ApiAccount extends CatalogObject {

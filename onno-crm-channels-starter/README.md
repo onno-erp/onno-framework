@@ -269,7 +269,7 @@ The channel starter activates only when the host registers `CrmCustomerBinding`.
 binding's explicit inbound-contact callback. No adapter creates or updates a CRM customer catalog.
 The host owns customer creation/validation, record permissions, employee identity and page routes.
 Telegram avatars remain identity-owned. Channel management and Gmail OAuth use `CrmChannelAccess`
-(ADMIN by default); cached Telegram avatars require host customer and inbox workspace access.
+(explicit `crm.administer` holders by default); cached Telegram avatars require host customer and inbox workspace access.
 See [the composition guide](../onno-crm-starter/README.md). No compatibility layer for the old CRM
 customer/agent model is provided.
 
@@ -295,7 +295,7 @@ the original mailbox, preserving routing and history.
 `POST /api/crm/gmail/authorize` accepts `{returnPath, accountId?}`. When `accountId` is present, the
 server rechecks ownership and workspace write permission before authorization and again at callback.
 The one-use session attempt binds the principal, account UUID, return path, expiry, state and PKCE
-verifier. Omitting `accountId` retains the legacy ADMIN-managed deployment account.
+verifier. Omitting `accountId` retains the legacy deployment account managed through `CrmChannelAccess`.
 
 Credentials live in owner-only `gmail-<account UUID>.json` files beside the configured `tokens-file`.
 The original `tokens-file` remains the legacy mailbox's credential file. Per-account clients isolate

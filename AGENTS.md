@@ -402,18 +402,22 @@ Data aggregates retain physical deletes. Generic REST/import/MCP creates and upd
 `onFilling` (create), `beforeWrite`, rules, persistence, then `afterWrite`; validation previews never
 run `afterWrite`.
 
-**Who may post is a separate right from who may edit.** `@AccessControl(postRoles = …,
-unpostRoles = …)` on a document narrows posting (and re-posting) or unposting to those roles *on
-top of* write access; left empty, every writer keeps the right. Deleting a posted document unposts
-it, so it needs the unpost right too. `ADMIN` always passes. The gates are enforced on the shared
-command path (generic REST, MCP tools, built-in UI actions — the Post/Unpost buttons are hidden
-from callers who lack them); trusted code calling `PostingService` directly is not gated, like typed
-repositories. For a state-based veto ("a reconciled payment cannot be unposted") implement
-`BeforeUnpostHandler.beforeUnpost()` — the counterpart of `BeforePostHandler` — and throw.
+**Who may post is a separate right from who may edit.** In the application's `RoleGrants`
+(see [Roles And Access](#roles-and-access)), `post(Invoice.class)` grants posting and re-posting and
+`unpost(Invoice.class)` grants unposting; each implies write and read, and `write(...)` alone grants
+neither. Deleting a posted document unposts it, so it needs the unpost right too. No role passes
+implicitly. The gates are enforced on the shared command path (generic REST, MCP tools, built-in UI
+actions — the Post/Unpost buttons are hidden from callers who lack them); trusted code calling
+`PostingService` directly is not gated, like typed repositories. For a state-based veto ("a
+reconciled payment cannot be unposted") implement `BeforeUnpostHandler.beforeUnpost()` — the
+counterpart of `BeforePostHandler` — and throw.
 
 ```java
+RoleGrants.of(AppRole.class)
+        .role(AppRole.RECEPTION, r -> r.post(Invoice.class))           // edit and post
+        .role(AppRole.MANAGER, r -> r.post(Invoice.class).unpost(Invoice.class));
+
 @Document(name = "Invoices")
-@AccessControl(readRoles = {"RECEPTION", "MANAGER"}, unpostRoles = "MANAGER")
 public class Invoice extends DocumentObject implements Postable, BeforeUnpostHandler {
     @Override
     public void beforeUnpost() {
@@ -638,8 +642,10 @@ auto-configured `ProcessEngine` persists JSON payloads, version-pinned instances
 transitions, timers, subprocess links, and human work items in framework-managed tables.
 Start work from ordinary Java with
 `processes.start(definition, payload, new ProcessActor(username, roles))`. Candidates come from
-`TaskAssignment.identities(Ref<?>...)` / `.actors(ProcessActorId...)` / `.roles(...)`; `ADMIN` is
-the process superuser.
+`TaskAssignment.identities(Ref<?>...)` / `.actors(ProcessActorId...)` / `.roles(...)`. A process
+administrator (`ProcessActor.administrator()`, set by the web layer from an explicit
+`processes.administer` grant — `CorePermissions.ADMINISTER_PROCESSES`) operates every task and
+instance; no role name does.
 
 `HumanTask.assignment(payload)` is also the automatic-routing hook: it may call an injected
 application service and return the selected employee reference with
@@ -665,7 +671,7 @@ public String subjectLabel(PurchaseRequest payload) {
 
 The authenticated UI/API exposes `GET /api/tasks`, claim, delegate, history, and complete commands,
 and `@onno/ui` renders them with the `<TaskInbox />` component. A claimed task may be delegated by its assignee (or
-`ADMIN`); the reason and assignee transfer are stored in an ordered audit trail. When
+a process administrator); the reason and assignee transfer are stored in an ordered audit trail. When
 `@Bean IdentityLink.of(Employee.class, "email")` is configured, the inbox searches that catalog instead
 of asking for a raw username. Application Java still owns the typed graph; the HTTP boundary accepts
 an enum constant name because JSON has no Java enum type.
@@ -679,17 +685,75 @@ and write external effects through an outbox. The starter's JobRunr worker advan
 completed subprocess waits; the database remains the source of truth.
 
 `processes.cancel(instanceId, reason, actor)` atomically cancels live tokens, timers, descendants,
-and open/claimed work. The caller policy comes from `cancellationAssignment(payload)` and `ADMIN`
-remains the superuser. Never edit a graph in place while its instances are active: retain the old
+and open/claimed work. The caller policy comes from `cancellationAssignment(payload)`; a process
+administrator may always cancel. Never edit a graph in place while its instances are active: retain the old
 definition bean, register the new version plus a `ProcessDefinitionMigration`, and call
 `processes.migrate(instanceId, actor)`. A migration transforms the payload and maps every active
 token id to a typed target step, so parallel work cannot be silently dropped. While parallel
 branches are active, map their coordinator to a parallel fork with the same branch enum keys;
 finish or cancel the instance before changing branch cardinality.
 
+### Roles And Access
+
+Roles are an application enum implementing `RoleKey`, so a role name is a compile-checked constant.
+One `RoleGrants` bean declares what each role may do; nothing bypasses it — there is no superuser,
+and a role named `ADMIN` is an ordinary role that may do exactly what it is granted.
+
+```java
+enum AppRole implements RoleKey { MANAGER, ACCOUNTANT, IT }
+
+@Bean
+RoleGrants roles() {
+    return RoleGrants.of(AppRole.class)
+            .role(AppRole.MANAGER, r -> r
+                    .read(Customer.class, Book.class)
+                    .post(Order.class))                          // post ⊃ write ⊃ read
+            .role(AppRole.ACCOUNTANT, r -> r
+                    .readAll()
+                    .unpost(Invoice.class)
+                    .permit(CorePermissions.MANAGE_PERIOD_CLOSE))
+            .role(AppRole.IT, r -> r
+                    .permit(AuthPermissions.MANAGE_USERS, CorePermissions.EDIT_SETTINGS)
+                    .fromIdp("erp-admins"));                     // also matched by this IdP role
+}
+```
+
+- **Entity rights** are `READ < WRITE < POST / UNPOST`, keyed by the entity's Java class;
+  `readAll()`/`writeAll()` cover the whole model and `postAll()`/`unpostAll()` every document (they
+  grant nothing on catalogs and registers). Startup fails on a grant for a class that is not a
+  registered entity, or on post/unpost granted on a non-document.
+- **Permissions** are capabilities that belong to no single entity, each a `Permission` constant the
+  enforcing module owns: `CorePermissions` (`settings.edit`, `comments.moderate`,
+  `periodClose.manage`, `periodClose.override`, `processes.administer`), `AuthPermissions`
+  (`users.manage`), `PrintPermissions` (`print.templates.manage`), `CrmPermissions`
+  (`crm.administer`). An application declares its own the same way (`Permission.of("key", "…")`).
+- **Role names** compare through one normalization, `AccessSubject.normalizeRole`
+  (`ROLE_manager` → `MANAGER`): account roles, IdP claims, `RoleGrants`, `fromIdp` aliases, command
+  `.roles(...)`, print-form roles, `@McpTool(roles)`, CRM workspaces and the UI's `roles` gates. A
+  user whose IdP role maps through `fromIdp(...)` also holds the declared role in all of them. An
+  IdP name that maps to two roles, or two `RoleKey` constants that normalize to the same name
+  (`ADMIN` and `ROLE_ADMIN`), fail at startup. Once grants are declared, every role named as a
+  string — static command `.roles(...)`, print-form roles, CRM workspace roles, `@McpTool(roles)`, record
+  policy `appliesTo`/`exemptRoles` — must be a declared role or a `fromIdp` name, or startup fails
+  (`RoleGrants.requireRecognized`), so a typo such as `"MANGER"` cannot silently deny everyone.
+  `TaskAssignment.roles(...)` is computed at runtime and is not checked.
+- **No `RoleGrants` bean means open mode**: every signed-in user may do everything (startup logs a
+  warning). Three permissions are never implied by open mode and need an explicit grant
+  (`EffectiveAccess.granted(...)`): `periodClose.override`, `processes.administer` and
+  `crm.administer`. An anonymous caller gets nothing, in either mode. Trusted code
+  (`AccessSubject.system()`, `trusted() == true`) is not checked.
+- **Lockout protection** (`onno.auth.mode=database`): when no seeded account would hold
+  `users.manage`, the first seeded account gets the first declared role that grants it; the server
+  refuses to disable or demote the last enabled account holding it. When accounts already exist and
+  none holds it (an upgrade from the `ADMIN` superuser, or a grant removed), startup logs a warning
+  naming the roles that grant it.
+- `/api/ui/model` reports `user.permissions`, `user.unrestricted` (open mode) and the declared
+  `roles`; `model.gen.ts` types `OnnoRoles` from the `RoleKey` enums and `OnnoPermissions` from the
+  `Permission` constants, so UI `roles`/`permission` gates type-check.
+
 ### Record-Level Access (External Users)
 
-`@AccessControl` grants a role an *entity*; a `RecordAccessPolicy` bean narrows it to *records*.
+`RoleGrants` grants a role an *entity*; a `RecordAccessPolicy` bean narrows it to *records*.
 Use it whenever external users (customers, clients, tenants) must only see their own data — do not
 build bespoke endpoints for that.
 
@@ -711,9 +775,10 @@ RecordAccessPolicy jobsByTenant() {
 Scopes are a closed predicate tree (`eq`, `in`, `isNull`, `via`, `and`, `or`, `not`, `all`,
 `none`) compiled into SQL; values are literals or `Subject.recordId()` / `Subject.username()` /
 `Subject.attribute(name)` (contributed by `AccessSubjectContributor` beans). `write(...)` defaults to
-the read scope; `write(RecordScope.none())` allows changes only through trusted code. `ADMIN` and
-`exemptRoles(...)` are exempt; several applicable policies are OR'ed. Register policies scope by
-dimensions. Startup fails on an invalid policy.
+the read scope; `write(RecordScope.none())` allows changes only through trusted code. Only
+`exemptRoles(...)` (and trusted code) are exempt — no role is exempt implicitly; several applicable
+policies are OR'ed. Register policies scope by dimensions. Startup fails on an invalid policy,
+including one whose `appliesTo` roles have no read grant on the entity.
 
 Every service-layer query/command method (`su.onno.service`, in `onno-framework-starter`) takes an `AccessSubject`. Request code receives it
 as a controller parameter (`AccessSubject subject`), from `CommandContext.subject()` or
@@ -741,12 +806,12 @@ other document stays locked; `close(scope, date, true, actor, reason)` is a hard
 nothing until reopened. Enforcement is in core posting (including every later document a
 `CHRONOLOGICAL` restoration would repost), repository saves and the generic UI/REST/import/MCP
 command path; a rejection is a `PeriodClosedException` (HTTP 409, also from `posting-preview`).
-`ADMIN` and `onno.period-close.manage-roles` close and reopen; `onno.period-close.override-roles`
-(empty by default — `ADMIN` is not exempt unless listed) or an explicit
+Holders of `periodClose.manage` (`CorePermissions.MANAGE_PERIOD_CLOSE`) close and reopen; holders
+of an explicit `periodClose.override` grant (never implied by open mode) or an explicit
 `periods.override(new PeriodOverride(actor, reason), ...)` bypass a close, and every close, reopen
 and bypass is audited. Mark non-accounting documents `@PeriodCloseExempt`. The admin screen is the
 `@onno/ui` component `<PeriodClose />`: register it as a page (for example
-`{ path: "/period-close", component: PeriodClosePage, roles: ["ADMIN"] }`, gated on the model's
+`{ path: "/period-close", component: PeriodClosePage, permission: "periodClose.manage" }`, gated on the model's
 `features.periodClose`) and link it from navigation. See [docs/PERIOD_CLOSE.md](docs/PERIOD_CLOSE.md).
 
 ### Record Change History (Audit Log)
@@ -781,7 +846,7 @@ HistoryActors.runAs(HistoryActor.named("lab-import"), () -> visits.save(visit));
 
 The default record page shows a collapsed **History** panel (`@onno/ui`'s `<RecordHistory />`;
 an authored `<RecordPage form={form} history={false}>` overrides it), and
-`GET /api/history/{kind}/{name}/{id}?cursor=&limit=` returns the entries. Reading history needs exactly what reading the record needs (`@AccessControl`
+`GET /api/history/{kind}/{name}/{id}?cursor=&limit=` returns the entries. Reading history needs exactly what reading the record needs (the `RoleGrants` read grant
 plus `RecordAccessPolicy`); references the viewer may not read are masked. Trusted Java reads the
 raw entries with `RecordHistory.list(recordId, before, limit)`. Writes that bypass both paths
 (hand-written SQL against an entity table) are not recorded.
@@ -894,7 +959,7 @@ Likely outputs:
 - `BeforeWriteHandler`
 - `BeforePostHandler` / `BeforeUnpostHandler`
 - validation in Java services
-- `@AccessControl(postRoles = …, unpostRoles = …)` when posting is a different right from editing
+- `RoleGrants` `post(...)` / `unpost(...)` when posting is a different right from editing
 
 ### Round 6: Integrations, Scale, And Boundaries
 
@@ -1204,7 +1269,7 @@ orders nothing. Logical entity names are checked against the generated model.
   the widgets `Stat`, `Chart`, `Sparkline`, `Gauge`, `RecentRecords`, `Kanban`, `Calendar`,
   `EntityMap`, `TimeRange`, `Setting`, `TaskInbox`, `UserAccounts`, and the starters' packages
   (`@onno/print`'s `PrintTemplates`, `@onno/crm`'s `CrmInbox`). A page at `/` is home; a page at an
-  entity route replaces its default screen; `roles` and `when` gate a page and its nav link.
+  entity route replaces its default screen; `roles`, `permission` (a key typed from `model.gen.ts`, e.g. `"settings.edit"`) and `when` gate a page and its nav link — no role passes implicitly. `useHasRole(...)` and `useHasPermission(...)` answer the same questions in a component.
 - **Data** is typed per entity: `useRecords("Orders", { where, sort, limit })`, `useRecord`,
   `useAggregate`, `useBalance`, `useTurnover`, `useMovements`, `useInformationRegister`,
   `useConstant`, the write hooks, `useCommand("Orders", "cancel")`,
@@ -1234,8 +1299,8 @@ Behaviour stays in Java, as Spring beans in `onno-framework` packages:
   (`/api/commands/{kind}/{name}[/{key}[/defaults|/batch]]`), the UI and MCP (one tool per command).
   `c.command(key)` runs on one record (`ctx.id()`), `c.collectionCommand(key)` on the entity as a
   whole; `.title(...)`/`.title(row -> …)`, `.description(...)` (also the MCP tool description),
-  `.group("Change status")` (a UI submenu), `.roles(...)` (on top of entity write rights; `ADMIN`
-  passes), `.availableWhen(row -> …)`/`.enabledWhen(row -> …)` over a `RecordRow<E>`,
+  `.group("Change status")` (a UI submenu), `.roles(...)` (on top of entity write rights; no role
+  passes implicitly), `.availableWhen(row -> …)`/`.enabledWhen(row -> …)` over a `RecordRow<E>`,
   `.input(key, i -> i.title(...).longText().required())` (also `.date()`, `.number()`,
   `.oneOf(...)`, `.reference(Target.class)`), `.inputRows(key, g -> g.column(...))` (read with
   `ctx.inputRows(key)`), `.defaults(ctx -> …)`, and `.run(ctx -> CommandResult.reload())` /
@@ -1479,7 +1544,7 @@ customer-stage model, EAV custom fields, business merge editor or navigation is 
 and CRUD remain ordinary host catalogs and their default screens. Provider imports call an explicit host
 inbound-contact policy. Customer UUIDs in CRM are scoped to the persisted binding identity; do not
 rebind a database to another catalog without migrating links. Workspace roles and host customer
-permissions both apply. Personal chat groups require `CrmFeatures(true)`, and personal provider accounts require `CrmFeatures.defaults().withPersonalAccounts(true)` (which also closes generic CRM catalogs to ADMIN); conversation statuses
+permissions both apply. Personal chat groups require `CrmFeatures(true)`, and personal provider accounts require `CrmFeatures.defaults().withPersonalAccounts(true)` (which also closes the generic CRM catalogs to every role, `crm.administer` holders included); conversation statuses
 require optional `CrmStateConfiguration`. Sales models and metrics remain host-owned.
 
 The host owns consolidation, audit and any reversal. Its transaction may call
@@ -1559,9 +1624,9 @@ can still use the low-level identity-link service for provider routing.
 The `@onno/crm` `<CrmConnections>` component uses `CrmAccountProvider` descriptors and durable
 `CrmConnectionAccounts` ownership. Gmail supports multiple shared/personal accounts; other bundled
 adapters remain shared-only. Personal ownership restricts scoped APIs even for other administrators.
-Generic CRM catalogs/exports/events are denied once personal accounts exist. The deny-only
-`EntityAccessPolicy.includesAdministrators()` opt-in preserves default ADMIN behavior for existing
-policies while allowing these privacy boundaries. Keep docs, permission tests and OAuth isolation
+Generic CRM catalogs/exports/events are denied once personal accounts exist. Every
+deny-only `EntityAccessPolicy` constrains every role (there is no administrator exemption), which
+is what keeps these privacy boundaries. Keep docs, permission tests and OAuth isolation
 tests aligned when extending providers.
 
 The CRM's presentation is the props of `@onno/crm`'s components (`CrmInbox`, `CrmConnections`,

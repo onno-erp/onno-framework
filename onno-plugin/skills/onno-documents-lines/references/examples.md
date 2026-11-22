@@ -13,12 +13,14 @@
 
 ## Complete Sales Order
 
+Access lives in the app's `RoleGrants` bean, not on the class: `.role(AppRole.SALES, r ->
+r.post(SalesOrder.class).unpost(SalesOrder.class))` lets sales edit, post and unpost orders.
+
 ```java
 package com.acme.sales.domain;
 
 import lombok.Getter;
 import lombok.Setter;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Document;
 import su.onno.annotations.TabularSection;
@@ -37,7 +39,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Document(name = "SalesOrders", title = "Sales orders", numberPrefix = "SO-", context = "Sales")
-@AccessControl(readRoles = {"SALES", "ADMIN"}, writeRoles = {"SALES", "ADMIN"})
 @Getter
 @Setter
 public class SalesOrder extends DocumentObject

@@ -104,7 +104,9 @@ facets. Write roles default to the read roles; configuration and facets are opti
 ```
 
 Workspace roles are application roles; there is no required `CRM_AGENT` or `CRM_MANAGER`
-role. `ADMIN` is the framework superuser. Customer read permissions still apply. A persisted `Inbox`
+role; workspace role names compare normalized and, with `RoleGrants` declared, must be declared roles or
+`fromIdp` names (startup fails otherwise). Only an explicit `crm.administer` grant
+(`CrmPermissions.ADMINISTER`) opens every workspace; no role name does. Customer read permissions still apply. A persisted `Inbox`
 represents a channel account; workspace predicates never change delivery destinations.
 
 A workspace's `Config` is behaviour: the conversation actions it enables (`CrmWorkspaceService.ACTIONS`:
@@ -128,7 +130,7 @@ membership. Internal repositories remain trusted application APIs.
 - **Personal chat groups:** register `CrmFeatures.defaults().withChatGroups(true)`. Disabled by default, with no group
   tables created and no group controls shown. Group membership never grants conversation access.
 - **Connections:** render `<CrmConnections setups={[channelSetups]} />` wherever wanted. Only enabled connectors appear.
-  `CrmChannelAccess` controls credential management and defaults to administrators only.
+  `CrmChannelAccess` controls credential management and defaults to explicit `crm.administer` holders.
 - **Sales:** model opportunities, stages and metrics in the host application with ordinary
   catalogs, enumerations and React pages. They are not part of the CRM artifact.
 
@@ -637,7 +639,8 @@ state tables it is internal module state created on startup, not a catalog.
 
 Who may do what:
 
-- **Shared accounts** are managed through `CrmChannelAccess.canManage` (ADMIN by default).
+- **Shared accounts** are managed through `CrmChannelAccess.canManage` (explicit `crm.administer` holders by default; never implied
+by an application without `RoleGrants`).
 - **Adding a personal account** needs the feature, `CrmChannelAccess.canManagePersonal` (any signed-in
   user by default; override the bean to restrict) and write access to an inbox workspace.
 - **An existing personal account** is managed only by its owner, never by administrators. The owner
@@ -667,11 +670,12 @@ inbox UUID (`account.inboxId().toString()`) as `IncomingContact.connectionKey`. 
 `visibleIdentities` recognises identities seen only in someone else's personal inbox.
 
 Generic CRM catalogs (`CrmConversations`, `CrmConversationMessages`, `CrmContactIdentities`,
-`CrmInboxes`), exports, and generic entity events are never open to non-administrators. With
-personal accounts enabled they are closed to ADMIN as well, because their contracts have no
+`CrmInboxes`), exports, and generic entity events are open only to explicit `crm.administer`
+holders that also hold an entity grant on them. With personal accounts enabled they are closed to
+those as well, because their contracts have no
 per-record principal filter; use the scoped CRM APIs. This is configuration, not data, so it does
-not change at runtime when someone connects an account. `EntityAccessPolicy.includesAdministrators()`
-is the opt-in for such privacy boundaries; other policies keep the ordinary ADMIN bypass.
+not change at runtime when someone connects an account. Every `EntityAccessPolicy` constrains
+every role, so such privacy boundaries need no opt-in.
 
 Contacts are not private. A correspondent who writes to a personal inbox is resolved into the host's
 shared contact catalog under the host's own permissions, so colleagues may see that the contact

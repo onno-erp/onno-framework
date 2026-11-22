@@ -6,7 +6,7 @@
 - OIDC Auth
 - Resource Server Auth
 - Entity RBAC
-- UI Profile Roles
+- UI Roles And Permissions
 - Debugging 401 vs 403
 
 ## In-Memory Auth
@@ -110,36 +110,49 @@ to the client and identity provider.
 
 ## Entity RBAC
 
-```java
-@Catalog(name = "Employees", title = "Employees", codePrefix = "E-", context = "People")
-@AccessControl(readRoles = {"MANAGER", "ADMIN"}, writeRoles = {"ADMIN"})
-public class Employee extends CatalogObject {
-}
+Roles are an enum; one `RoleGrants` bean declares every role's rights. Entity classes carry no
+access annotations.
 
-@Document(name = "Orders", title = "Orders", numberPrefix = "O-", context = "Sales")
-@AccessControl(readRoles = {"MANAGER"}, writeRoles = {"MANAGER"})
-public class Order extends DocumentObject {
+```java
+public enum AppRole implements RoleKey { ADMIN, MANAGER }
+
+@Configuration
+class AccessConfiguration {
+    @Bean
+    RoleGrants roleGrants() {
+        return RoleGrants.of(AppRole.class)
+                .role(AppRole.MANAGER, r -> r
+                        .read(Employee.class)                       // pickers / assignment
+                        .post(Order.class).unpost(Order.class))     // post ⊃ write ⊃ read
+                .role(AppRole.ADMIN, r -> r
+                        .writeAll().postAll().unpostAll()
+                        .permit(CorePermissions.EDIT_SETTINGS, AuthPermissions.MANAGE_USERS,
+                                CorePermissions.MANAGE_PERIOD_CLOSE)
+                        .fromIdp("erp-admins"));                    // an IdP role named differently
+    }
 }
 ```
 
-`Employee` is readable by managers for pickers/assignment but writable only by admins. `Order` is
-read/write for managers. `ADMIN` can always read/write even if not listed.
+`Employee` is readable by managers but writable only by `ADMIN` — because `ADMIN` is granted
+`writeAll()`, not because of its name. Without this bean the app runs open (every signed-in user
+may do everything); with it, anything not granted is denied.
 
-## UI Roles
+## UI Roles And Permissions
 
-Pages and nav items take `roles` in the app's `main.tsx`; components check with `useHasRole`:
+Pages and nav items take `roles` and `permission` in the app's `main.tsx`; components check with
+`useHasRole` / `useHasPermission`:
 
 ```tsx
 defineApp({
-  pages: [{ path: "/settings", component: SettingsPage, label: "Settings", icon: "settings", roles: ["ADMIN"] }],
-  navigation: [{ title: "People", icon: "users", items: ["/team", { entity: "Employees", roles: ["ADMIN"] }] }],
+  pages: [{ path: "/settings", component: SettingsPage, label: "Settings", icon: Settings, permission: "settings.edit" }],
+  navigation: [{ title: "People", icon: Users, items: ["/team", { entity: "Employees", roles: ["ADMIN"] }] }],
 });
 ```
 
-This curates the UI, not entity authorization: an unreadable entity drops out of navigation by
-itself, and the data stays guarded by `@AccessControl`. Do both. Role names are typed from the
-model; a role only commands or configured users use is declared with
-`declare module "@onno/ui" { interface OnnoRoles { SUPPORT: true } }`.
+This curates the UI, not authorization: an unreadable entity drops out of navigation by itself,
+and the data and settings stay guarded on the server. Role names are typed from the `RoleKey` enum
+and permission keys from the `Permission` constants (both in `model.gen.ts`); `/api/ui/model`
+reports the user's `permissions` and `unrestricted` (open mode).
 
 ## Debugging 401 vs 403
 
@@ -149,7 +162,9 @@ model; a role only commands or configured users use is declared with
 - If the login screen breaks, check that nothing in front of the app (a custom security chain, a
   proxy) blocks the framework bootstrap paths (`/api/config`, `/api/branding`, `/api/auth/me`,
   `/api/auth/csrf`, `/api/ui/login`).
-- If a picker is empty, check target entity `@AccessControl(readRoles=...)`.
+- If a picker is empty, check the target entity's read grant in `RoleGrants`.
+- If an admin screen 403s for an SSO user, check which permission it needs and that the IdP role
+  maps to a role granting it (`fromIdp(...)`); there is no ADMIN bypass.
 - If MCP can read less than the UI, check the MCP user's roles and whether the client authenticates
   each request.
 
