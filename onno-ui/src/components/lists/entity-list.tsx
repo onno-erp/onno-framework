@@ -7,7 +7,7 @@ import { Button, buttonVariants } from "../ui/button";
 import { ListSelectionCheckbox, selectLoaded } from "./list-selection-checkbox";
 import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { PageGutterContext } from "../../lib/page-gutter";
-import { ArrowDown, ArrowLeftRight, ArrowUp, CalendarDays, Check, ChevronsUpDown, Copy, ExternalLink, GanttChart, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowLeftRight, ArrowUp, CalendarDays, Check, ChevronsUpDown, Copy, ExternalLink, FileSpreadsheet, FileText, GanttChart, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
 import { CalendarDate, getLocalTimeZone, parseDate, startOfMonth, startOfYear, today } from "@internationalized/date";
 import { toast } from "../ui/toast";
 import { ListMapView, type ListMapConfig } from "../maps/list-map-view";
@@ -3445,14 +3445,18 @@ export function EntityListView({
             <Popover open={exportOpen} onOpenChange={setExportOpen}>
               <PopoverTrigger asChild>
                 <Button type="button" size="toolbar" variant="subtle" disabled={exportBusy}
-                  title={t("list.export")} aria-label={t("list.export")}>
+                  title={t("list.export")} aria-label={t("list.export")} aria-haspopup="menu">
                   {exportBusy ? <Loader2 className="animate-spin" /> : <Icon name="download" size={16} />}
                   {!compact && t("list.export")}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent align="end" className="flex min-w-24 flex-col gap-1 p-1">
-                <Button type="button" size="toolbar" variant="subtle" onClick={() => void exportList("xlsx")}>XLSX</Button>
-                <Button type="button" size="toolbar" variant="subtle" onClick={() => void exportList("csv")}>CSV</Button>
+              <PopoverContent align="end" role="menu" aria-label={t("list.export")} className="min-w-40 p-1">
+                <ContextMenuItem disabled={exportBusy} onSelect={() => void exportList("xlsx")}>
+                  <FileSpreadsheet aria-hidden="true" /> XLSX
+                </ContextMenuItem>
+                <ContextMenuItem disabled={exportBusy} onSelect={() => void exportList("csv")}>
+                  <FileText aria-hidden="true" /> CSV
+                </ContextMenuItem>
               </PopoverContent>
             </Popover>
           ) : null}

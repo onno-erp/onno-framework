@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { EntityListView, type ListDescriptor } from "@/components/lists/entity-list";
 import { MessagesProvider } from "@/providers/messages-provider";
@@ -47,7 +47,8 @@ it("exports an embedded list's authored filter, current options and visible colu
   render(<EntityListView list={list} queryParams={{ q: ["widget search"], in: ["tag,a,b", "tag,c"] }} />,
     { wrapper });
   fireEvent.click(await screen.findByRole("button", { name: "Export" }));
-  fireEvent.click(await screen.findByRole("button", { name: "XLSX" }));
+  expect(await screen.findByRole("menu", { name: "Export" })).toBeTruthy();
+  fireEvent.click(await screen.findByRole("menuitem", { name: "XLSX" }));
   await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/list/export/catalogs/Store%20items",
     expect.objectContaining({ method: "POST" })));
   const call = fetchMock.mock.calls.find(([url]) => url.startsWith("/api/list/export/"));
@@ -109,7 +110,7 @@ it("exports the chosen register view with its structured filter", async () => {
   render(<EntityListView list={{ ...plainList, kind: "registers", name: "Stock",
     feed: "/api/list/registers/Stock/balance", baseWhere: { site: "A" } }} />, { wrapper });
   fireEvent.click(await screen.findByRole("button", { name: "Export" }));
-  fireEvent.click(await screen.findByRole("button", { name: "CSV" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "CSV" }));
   await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/list/export/registers/Stock",
     expect.objectContaining({ method: "POST" })));
   const call = fetchMock.mock.calls.find(([url]) => url.startsWith("/api/list/export/"));
@@ -124,9 +125,41 @@ it("uses the current search text even before the list's debounce completes", asy
   const button = await screen.findByRole("button", { name: "Export" });
   fireEvent.change(screen.getByRole("textbox"), { target: { value: "new search" } });
   fireEvent.click(button);
-  fireEvent.click(await screen.findByRole("button", { name: "CSV" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "CSV" }));
   await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/list/export/catalogs/Books",
     expect.objectContaining({ method: "POST" })));
   const call = fetchMock.mock.calls.find(([url]) => url.startsWith("/api/list/export/"));
   expect(JSON.parse(String(call?.[1]?.body)).query.q).toEqual(["new search"]);
+});
+
+it("dismisses the export menu with Escape without starting a download", async () => {
+  const fetchMock = mockFeed();
+  render(<EntityListView list={plainList} />, { wrapper });
+  const trigger = await screen.findByRole("button", { name: "Export" });
+  expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+  fireEvent.click(trigger);
+  await screen.findByRole("menuitem", { name: "XLSX" });
+  fireEvent.keyDown(document, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("menu", { name: "Export" })).toBeNull());
+  expect(fetchMock.mock.calls.filter(([url]) => url.startsWith("/api/list/export/"))).toHaveLength(0);
+  await waitFor(() => expect(document.activeElement).toBe(trigger));
+});
+
+it.each(["XLSX", "CSV"])("closes the menu and blocks duplicate downloads while %s is being prepared", async (format) => {
+  const fetchMock = mockFeed();
+  const defaultFetch = fetchMock.getMockImplementation()!;
+  let finish!: (response: Response) => void;
+  const download = new Promise<Response>((resolve) => { finish = resolve; });
+  fetchMock.mockImplementation(async (url, init) => url.startsWith("/api/list/export/") ? download : defaultFetch(url, init));
+  render(<EntityListView list={plainList} />, { wrapper });
+  const trigger = await screen.findByRole("button", { name: "Export" });
+  fireEvent.click(trigger);
+  fireEvent.click(await screen.findByRole("menuitem", { name: format }));
+  await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url.startsWith("/api/list/export/"))).toHaveLength(1));
+  expect(screen.queryByRole("menu", { name: "Export" })).toBeNull();
+  expect(trigger).toBeDisabled();
+  fireEvent.click(trigger);
+  expect(fetchMock.mock.calls.filter(([url]) => url.startsWith("/api/list/export/"))).toHaveLength(1);
+  await act(async () => { finish(new Response(null, { status: 422 })); });
+  await waitFor(() => expect(trigger).not.toBeDisabled());
 });
