@@ -80,3 +80,16 @@ On first launch `BookstoreSeeder` fills a fresh database with a populated shop â
 suppliers and staff, ~36 customers, ~80 books, a generous opening stock receipt, and ~80 orders
 spread over the last quarter across the whole lifecycle. It's generated from a fixed RNG seed, so the
 dataset is identical every time. Delete `example/data/` to re-seed.
+
+### Information-register example
+
+Catalog â†’ Book prices opens the standard read-only information-register screen. On startup,
+`BookPriceSeeder` fills an empty register with illustrative prices for 30 days ago, 14 days ago
+and today, using the existing books. It also works with an already populated bookstore database
+and does not replace existing register data. These are demo values, not a reconstruction of
+actual sale prices or an automatic audit of future Book edits. Compare History with Latest values
+at different dates; sort Price or Book and scroll beyond the first page.
+
+On Book prices, the Book filter offers a searchable list of book titles; selecting a title
+filters the register by that book in both History and Latest values. Date labels the stored date
+column, history date range and latest-values date selector. Sorting Book retains UUID order.

@@ -524,3 +524,11 @@ public API; `testFrontend` runs Vitest and is part of `check`.
 ./gradlew :onno-web-starter:buildFrontend
 ./gradlew :onno-web-starter:test
 ```
+
+### Standard information-register screens
+
+Readable information registers have a read-only `/information-registers/{name}` surface.
+`GET /api/ui/view/information-registers/{name}` supplies the descriptor and
+`GET /api/list/information-registers/{name}` supplies sortable, filtered keyset windows with optional
+exact count. Periodic registers support `at` for a paged latest-values slice. Role and dimension
+record policies apply on every request. See [the read contract](../docs/HEADLESS_READ_API.md).

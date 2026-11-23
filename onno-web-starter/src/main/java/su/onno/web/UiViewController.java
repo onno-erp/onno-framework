@@ -241,6 +241,8 @@ public class UiViewController {
                 .map(d -> {
                     Map<String, Object> e = new LinkedHashMap<>();
                     e.put("logicalName", d.logicalName());
+                    e.put("name", toSnakeCase(d.logicalName()));
+                    e.put("route", "/information-registers/" + toSnakeCase(d.logicalName()));
                     e.put("title", d.displayTitle());
                     e.put("context", d.context() == null ? "" : d.context());
                     e.put("periodic", d.periodicity() != su.onno.model.Periodicity.NONE);

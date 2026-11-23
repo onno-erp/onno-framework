@@ -1606,3 +1606,9 @@ Every tuple cursor needs a unique trailing tiebreaker (id), and
 its feed context must include only filter values, never transport params (`cursor`, `limit`).
 The cursor-only collection contract
 and bounded-selector exceptions are specified only in docs/HEADLESS_READ_API.md.
+
+Standard information-register UI: readable `informationRegisters` model entries expose `name` and
+`route`. The React shell resolves default and authored navigation at `/information-registers/{name}`.
+The read-only surface reuses EntityListView with its explicit `/api/list/information-registers/{name}`
+feed; periodic registers offer history and a dated, keyset-paged latest-values slice. Apply read
+roles and dimension scopes to every window and count; select the last row before value filtering.

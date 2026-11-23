@@ -39,7 +39,16 @@ export type AppModel = {
 };
 
 /** An information register in the model. */
-export type ModelInformationRegister = { logicalName: string; title: string; context: string; periodic: boolean };
+export type ModelInformationRegister = { logicalName: string; title: string; context: string; periodic: boolean; name?: string; route?: string };
+
+/** All default list surfaces, including read-only information registers. */
+export function modelEntities(model: AppModel): ModelEntity[] {
+  return [...model.entities, ...(model.informationRegisters ?? []).map((r): ModelEntity => ({
+    kind: "registers", name: r.name ?? r.logicalName, logicalName: r.logicalName,
+    title: r.title, context: r.context, canWrite: false,
+    route: r.route ?? `/information-registers/${encodeURIComponent(r.logicalName)}`,
+  }))];
+}
 
 const KIND_SECTION: Record<ModelEntity["kind"], string> = {
   catalogs: "Catalogs",
@@ -65,7 +74,7 @@ export function defaultNavigation(
   iconOf: (entity: ModelEntity) => IconSource = (e) => ENTITY_KIND_ICONS[e.kind],
 ): ShellNavSection[] {
   const sections = new Map<string, ShellNavSection>();
-  for (const e of model.entities) {
+  for (const e of modelEntities(model)) {
     const title = e.context || KIND_SECTION[e.kind];
     let s = sections.get(title);
     if (!s) sections.set(title, (s = { title, items: [] }));
@@ -130,5 +139,5 @@ export function shellFromModel(
 /** Whether a route is one of the model's default entity surfaces (served by `/api/ui/view`). */
 export function isEntitySurface(path: string): boolean {
   const seg = path.split("?")[0].split("/").filter(Boolean);
-  return seg.length >= 2 && (seg[0] === "catalogs" || seg[0] === "documents" || seg[0] === "registers");
+  return seg.length >= 2 && (seg[0] === "catalogs" || seg[0] === "documents" || seg[0] === "registers" || seg[0] === "information-registers");
 }

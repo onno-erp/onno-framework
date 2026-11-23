@@ -1255,3 +1255,10 @@ bounded to 20 MB. ConversationMessage Body is optional; its business rule requir
 Filesystem media keeps private filename/content-type sidecars across restarts.
 
 CRM audio playback lives in the inbox component; common audio formats are served inline by `MediaController`. Audio files use the existing media upload and message attachment flow. Channel delivery remains attachment-based.
+
+Information registers have a standard read-only React list at `/information-registers/{name}`.
+Their model entries carry `name` and `route`; default and authored client navigation resolve them.
+The descriptor comes from `/api/ui/view/information-registers/{name}`, while
+`/api/list/information-registers/{name}` pages scoped records or a dated latest-values slice.
+It reuses the standard list renderer, customizations, sorting and filters, without accumulation
+register tabs or record-write actions. The canonical information-register REST reads stay unchanged.

@@ -382,3 +382,12 @@ backend port 8080 unless configured; this repository's example explicitly defaul
 
 For framework contributors, the [component organization](DESIGN.md#component-organization) describes
 the internal folders. Application imports continue to use the public `@onno/ui` entry point.
+
+### Information registers
+
+Readable information registers appear in default navigation, grouped by context, at
+`/information-registers/{name}`. Authored navigation can name their logical name (for example
+`"Book Prices"`), and ordinary entity list customizations apply by that name. The standard surface
+is read-only: no record form, New, Edit, Delete, balance or turnover actions. Periodic registers
+offer History (with a period range) and Latest values as of the end of a selected local date.
+Both modes use a scoped keyset feed, including sorting and authored filters.

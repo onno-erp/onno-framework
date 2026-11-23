@@ -500,6 +500,9 @@ public final class UiMessages {
         d.put("shell.expandNavigation", "Expand navigation");
 
         // Register surface (the virtualized movements/balance lists).
+        d.put("register.records", "History");
+        d.put("register.latest", "Latest values");
+        d.put("register.date", "Date");
         d.put("register.period", "Period");
         d.put("register.type", "Type");
         d.put("register.balanceTab", "Balance");

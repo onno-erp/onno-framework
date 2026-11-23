@@ -474,6 +474,9 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "shell.expandNavigation": "Expand navigation",
 
   // Register surface (the virtualized movements/balance lists).
+  "register.records": "History",
+  "register.latest": "Latest values",
+  "register.date": "Date",
   "register.period": "Period",
   "register.type": "Type",
   "register.balanceTab": "Balance",
