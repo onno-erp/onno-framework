@@ -197,6 +197,29 @@ exceptions. Keep component tests for every custom picker trigger.
   merely open, inactive tab stays unfilled until hover. Exactly one tab is the command target for
   global actions such as Escape. The fixed tab strip scrolls horizontally when needed and must
   always hide vertical overflow.
+- Workspace navigation behaves like a browser window: an ordinary open (a menu item, a link, a
+  record) replaces what the focused island's active tab shows, and that tab keeps its own Back /
+  Forward history. Back and Forward are the two arrow buttons at the start of every island's tab
+  strip (disabled when there is nowhere to go), Alt+Left / Alt+Right outside text fields, and the
+  mouse's back / forward buttons. A new tab opens only on request. The "+" after an island's last
+  tab means the same in every island and is never a no-op: it opens the new-tab palette
+  (`components/shell/new-tab-palette.tsx`, also Alt+T for the focused island), a searchable list of
+  every navigation screen and a New form for every entity the viewer may create (the island's
+  current entity first). Enter or a click opens the pick as a new tab of that island, Shift+Enter
+  or a Shift-click in a new island beside it; a screen that is already open is marked and activated.
+  The other requests: a middle- or Ctrl/Cmd-click on a menu item, a middle-click on a list row
+  (Ctrl/Cmd- and Shift-click on a row stay selection), "Open in new tab" in a row's context menu,
+  batch "Open" over selected rows, a reference picker's open and "+ New" buttons (the form being
+  edited and its waiting picker stay open), or `openRoute(link, { newWorkspaceTab: true })`.
+  Click modifiers follow the browser's and live in one place, `placementForClick`
+  (`lib/open-placement.ts`): plain = the active tab, middle or Ctrl/Cmd = a new tab, Shift = a new
+  island beside the focused one (the browser's "new window"). Do not add a second "+" to a tab
+  strip or give it another meaning; creating a record belongs to the list's New button, the
+  navigation section's actions and the palette's Create group.
+  A surface that is already open is activated rather than duplicated, and a tab holding unsaved
+  edits is never replaced, not even by the browser's own Back / Forward; the route opens beside it.
+  An island keeps at most 15 tabs: past that it quietly closes its least recently used tab that is
+  neither active nor dirty. A tab's context menu offers "Close other tabs".
 - Desktop rail highlighting follows the focused tab's navigation section. When the focused
   pane is empty or its route is outside authored navigation, the selected drawer section becomes
   the single highlighted fallback only while its submenu is visible; never paint both the routed

@@ -20,7 +20,8 @@ function withLinkedWhere(view: ViewModel, path: string): ViewModel {
 }
 
 /** An action a surface raises to the shell: an `onno://` URL or an app route (see AppShell). */
-export type ContentAction = { url?: string };
+/** A navigation or action URL; `newTab` asks for a new workspace tab instead of the active one. */
+export type ContentAction = { url?: string; newTab?: boolean };
 
 /** Fetch the server view for a route; rejects with a {@link PaneError}. */
 export function viewEndpoint(path: string): string {

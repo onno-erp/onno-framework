@@ -191,9 +191,10 @@ When adding a starter, include:
 - Javadoc currently emits many missing-comment warnings. Broken links are not acceptable because they can fail
   publication.
 - The frontend npm audit may report moderate vulnerabilities. Do not run forced upgrades without checking the
-  impact on the UI build and generated assets. `CI` runs the same audits as the release workflow on main and every PR
-  (`.github/scripts/npm-audit.mjs`, with its reviewed allowlist), so a new advisory blocks a merge rather
-  than a release tag.
+  impact on the UI build and generated assets. `CI` runs the same audits as the release workflow on main
+  (`.github/scripts/npm-audit.mjs`, with its reviewed allowlist), so a new advisory surfaces there rather
+  than on a release tag. `CI` does not run on pull requests by itself: start it for a branch with
+  `gh workflow run CI --ref <branch>` (see [docs/CI_RUNNER.md](docs/CI_RUNNER.md)).
 
 ### AI-Friendly Change Style
 
@@ -1222,7 +1223,9 @@ orders nothing. Logical entity names are checked against the generated model.
   scheduler or reschedule endpoint for one entity.
 - **Links**: `openRecord("Orders", id)`, `openRoute(links.list("Orders", { where }))`; `onno://`
   links (`onno://documents/orders/<id>`, `…/new?customer=<id>`) name what to open for web and
-  mobile clients alike. A New form also seeds from field initializers on the Java class.
+  mobile clients alike. An open replaces the active workspace tab's screen and that tab's Back
+  returns, as in a browser; `openRoute(link, { newWorkspaceTab: true })` opens a new tab (use it
+  when several records open at once). A New form also seeds from field initializers on the Java class.
 - Values handed to the UI are typed, never strings it parses: formats `{ money: "USD" }`,
   `{ date: "medium" }`; inputs `"textarea"`, `"image"`, `"color"`, …; icons are imported Lucide components. The package ships
   them through `@onno/ui/icons`: use `icon: Truck`, `<Truck />`, or `<Icon icon={Truck} />`.
