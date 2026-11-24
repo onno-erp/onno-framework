@@ -12,6 +12,7 @@ import { useBranding } from "../providers/branding-provider";
 import { useMessages } from "../providers/messages-provider";
 import type { Translate } from "../lib/messages";
 import { api } from "../lib/api";
+import { notifyError } from "../lib/notify-error";
 import { cn, copyToClipboard } from "../lib/utils";
 import { stripBasePath, withBasePath } from "../lib/base-path";
 import { useDirtyForms } from "../lib/dirty-forms";
@@ -706,7 +707,7 @@ function Shell() {
             message: t("confirm.delete.item.message"),
             confirmLabel: t("action.delete"),
             danger: true,
-            onConfirm: () => api.deleteCatalogItem(name, id).then(after).catch(() => {}),
+            onConfirm: () => api.deleteCatalogItem(name, id).then(after).catch(notifyError),
           });
         }
         return;

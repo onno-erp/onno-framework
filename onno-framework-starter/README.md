@@ -42,6 +42,11 @@ property the starter exposes. Everything else is derived from your annotated met
   - `SchemaInitializer` (see below)
   - the lifecycle callbacks (`OnnoBeforeConvertCallback`, `OnnoAfterSaveCallback`,
     `OnnoAfterConvertCallback`, `OnnoBeforeDeleteCallback`)
+    validate hierarchical catalog parents after filling/before-write hooks: a parent must be an
+    existing, non-deleted folder in the same catalog, with an acyclic ancestor chain. Saves lock
+    the written row and ancestors in their Spring transaction. Non-empty folders cannot be
+    demoted or soft-deleted. Failures use `ValidationException` with the `parent` field, including
+    direct repository saves; generic live validation performs the corresponding read-only check.
   - `NumberGenerator` (JDBC-backed code/number sequences), `OutboxWriter` (its ordinary
     `append(...)` joins an active Spring transaction; posting uses its handle-bound overload)
   - register persistence/repository maps, `PostingService` (wrapping a `PostingEngine`)

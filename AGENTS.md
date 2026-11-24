@@ -276,6 +276,14 @@ public class ProductGroup extends CatalogObject {
 }
 ```
 
+For hierarchical catalogs, the shared save callback checks that `parent` is a live folder in the
+same catalog and that its ancestor chain is acyclic. This also applies to typed repository saves,
+after `beforeWrite`. A folder with active children cannot be demoted to an item or soft-deleted.
+Failures are `ValidationException`s on `parent` (HTTP 400); live validation previews the same rules.
+The hierarchy validator reads the complete chain as a trusted integrity check and returns no
+records. Caller-facing commands/previews still check a supplied parent's record scope first;
+unknown and inaccessible parents must not be distinguishable in validation previews.
+
 ### Documents
 
 Documents are business events or transactions. They usually have a date, number, lifecycle, and line items.

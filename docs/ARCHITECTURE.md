@@ -500,6 +500,11 @@ encryption, period close, record history, `afterWrite()`, domain events and the 
 add only the caller-facing checks around the save (read-only mode, entity and record access, the
 post-write scope check, all in one transaction). Validation previews run only the pre-write phase
 and never call `afterWrite()`; posting still runs its own lifecycle in `PostingEngine`.
+For hierarchical catalogs the save callback also validates the persisted parent chain after the
+hooks: parents are live folders in the same catalog, cycles are rejected, and a folder with active
+children cannot be demoted or soft-deleted. The written row and ancestors are locked through the
+transaction-bound JDBI connection so concurrent moves cannot commit a cycle. Generic live
+validation repeats these rules without locks or writes. Failures are field-scoped on `parent`.
 Tabular-section `lineNumber` in read payloads is the 1-based position in stored order.
 
 The same pipeline backs **live form validation**: `POST /api/{catalogs,documents}/{name}[/{id}]/validate`
