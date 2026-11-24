@@ -23,7 +23,7 @@ concurrency:
 jobs:
   fuzz:
     name: Drive the example app and open fix PRs
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 90
     env:
       HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}

@@ -35,7 +35,7 @@ jobs:
     # Pre-release tags (v5.0.0-alpha.1, -rc.1, …) publish artifacts but leave the live demo on the
     # latest stable release; a manual dispatch still syncs any version.
     if: github.event_name == 'workflow_dispatch' || !contains(github.ref_name, '-')
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - name: Resolve version
         id: v

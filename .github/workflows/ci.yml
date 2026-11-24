@@ -12,10 +12,12 @@ on:
 permissions:
   contents: read
 
+# Every job runs on the runner named by the CI_RUNNER repository variable (a self-hosted runner's
+# label, e.g. "onno-ci"); unset, jobs run on GitHub-hosted ubuntu-latest. See docs/CI_RUNNER.md.
 jobs:
   verify:
     name: Verify build and local publication
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
