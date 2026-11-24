@@ -296,3 +296,50 @@ it("sends an email reply's formatting with its text, and drops it when the text 
   expect(sent()[1].body).toMatchObject({ body: "Dates confirmed" });
   expect(sent()[1].body).not.toHaveProperty("html");
 });
+
+it("keeps a formatted insert's HTML in an email reply, joined to what the draft already holds, and sends it", async () => {
+  extensions = [{ id: "test.insert-letter", slot: "crm.chat.composer",
+    component: ({ context }) => <button type="button" onClick={() => context.insertDraft?.("Dear Anna,\n\nThe villa is free.", [], "<p>Dear <b>Anna</b>,</p><p>The villa is free.</p>")}>Letter</button> }];
+  try {
+    const { sent } = mount({}, { components: formattingComposer });
+    const body = await openChat("Anna");
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Letter" })); });
+    expect(body).toHaveValue("Dear Anna,\n\nThe villa is free.");
+    expect(screen.getByTestId("html")).toHaveTextContent("<p>Dear <b>Anna</b>,</p><p>The villa is free.</p>");
+
+    // Into a plain draft: its text, escaped, comes first.
+    fireEvent.change(body, { target: { value: "Hi <Anna>" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Letter" })); });
+    expect(body).toHaveValue("Hi <Anna>\n\nDear Anna,\n\nThe villa is free.");
+    expect(screen.getByTestId("html")).toHaveTextContent("Hi &lt;Anna&gt;<br><br><p>Dear <b>Anna</b>,</p><p>The villa is free.</p>");
+    fireEvent.keyDown(body, { key: "Enter", ctrlKey: true });
+    await waitFor(() => expect(sent()).toHaveLength(1));
+    expect(sent()[0].body.html).toBe("Hi &lt;Anna&gt;<br><br><p>Dear <b>Anna</b>,</p><p>The villa is free.</p>");
+  } finally { extensions = []; }
+});
+
+it("lets an app draw its own paperclip, which still opens the composer's file picker", async () => {
+  const picked = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
+  const surfaces: string[] = [];
+  mount({}, { components: { Composer: (props: CrmComposerProps) => <CrmComposer {...props} renderAttach={({ chooseFiles, surface, labelled }) => {
+    surfaces.push(`${surface}${labelled ? ":labelled" : ""}`);
+    return <button type="button" onClick={chooseFiles}>Files and letters</button>;
+  }} /> } });
+  await openChat("Anna");
+  expect(screen.queryByRole("button", { name: "Attach files" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getAllByRole("button", { name: "Files and letters" })[0]);
+  expect(picked).toHaveBeenCalledTimes(1);
+  expect(surfaces).toContain("inline");
+});
+
+it("lets an app fold the fields above the reply and open the larger window from its own line", async () => {
+  mount({}, { components: { Composer: (props: CrmComposerProps) => <CrmComposer {...props} renderFields={parts => parts.surface === "inline"
+    ? <p>{parts.summary.recipient} · {parts.summary.subject}{parts.expand && <button type="button" onClick={parts.expand}>Bigger</button>}</p>
+    : <>{parts.header}{parts.recipient}{parts.subject}</>} /> } });
+  await openChat("Anna");
+  expect(screen.getByText("chat-anna@example.com · Villa")).toBeInTheDocument();
+  expect(screen.queryByRole("textbox", { name: "Subject" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Bigger" }));
+  // The larger window draws every field.
+  expect(await screen.findByRole("textbox", { name: "Subject" })).toHaveValue("Villa");
+});

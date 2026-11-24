@@ -296,6 +296,15 @@ and the other fields stay the composer's. When `formatting` is true (email), the
 `onChange(text, html)`: the HTML is kept in the draft beside the text and sent as the email's HTML part, the text as
 its plain part; `onChange(text)` alone, or any other change of the text, makes the reply plain again. Mark the editable element `data-composer-reply` so the
 composer can put the caret back in it; Ctrl/Cmd+Enter is ignored while an IME is composing.
+Two more hooks reshape the composer without redrawing it. `renderAttach` replaces the paperclip wherever the
+composer draws it (the toolbar, the mobile actions panel, the larger window) with the app's own control, a menu of
+files and templates say; it gets `CrmAttachProps` (`composer`, `chooseFiles` to open the composer's file picker,
+`surface`, `labelled`). `renderFields` arranges the fields above the reply: it gets `CrmComposerFieldParts`, onno's
+own `header` (sender row with the larger-window button), `sender`, `recipient`, `recipientNotice` and `subject`
+(null where the channel has none), `expand` to open the larger window, a `summary` of what the rows hold and whether
+the planner `changed` them, so an app can fold them behind one line as Gmail does and still let them out.
+`insertDraft(text, files, html)` takes the text's formatting too (a letter template): an email reply keeps it, joined
+to the draft's own HTML, and sends it; other channels send the text.
 `CrmInbox`'s `components` swaps a part in place. Every replacement gets the same props the built-in
 part does: `ConversationRowProps`, `CrmComposerProps`, `InboxContactPanelProps`.
 
