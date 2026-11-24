@@ -146,6 +146,14 @@ public final class UiMessages {
         d.put("crm.chat.subject", "Subject");
         d.put("crm.chat.from", "From");
         d.put("crm.chat.to", "To");
+        d.put("crm.chat.cc", "Cc");
+        d.put("crm.chat.addCc", "Add Cc");
+        d.put("crm.chat.removeCc", "Remove {name} from Cc");
+        d.put("crm.chat.ccInvalid", "{address} is not an email address.");
+        d.put("crm.chat.ccLimit", "At most {count} people can be copied.");
+        d.put("crm.chat.recipientsTo", "to");
+        d.put("crm.chat.recipientsCc", "cc");
+        d.put("crm.chat.me", "me");
         d.put("crm.chat.newRecipientThread", "Changing the recipient starts a new email thread.");
         d.put("crm.chat.newSubjectThread", "Changing the subject starts a new email thread.");
         d.put("crm.chat.uploadTooLarge", "{name} is too large. Maximum file size: {limit}.");

@@ -54,9 +54,16 @@ public class CrmActivityController {
                         /* Sanitized email HTML; null for plain-text messages and notes. Render isolated. */
                         String bodyHtml,
                         /* Sender account used for the reply, if present. */
-                        String senderAccount) {
+                        String senderAccount,
+                        /* An email's To and Cc lists ("Name <address>" entries joined by ", "); null when not known. */
+                        String sentTo,String copyTo) {
         public Entry {
             attachments=attachments==null?List.of():List.copyOf(attachments);
+        }
+        public Entry(String id,UUID conversationId,String subject,String channel,String kind,String direction,
+                String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine,String accountLabel,
+                List<su.onno.crm.service.CrmAttachments.View> attachments,String bodyHtml,String senderAccount) {
+            this(id,conversationId,subject,channel,kind,direction,authorName,body,at,deliveryStatus,authorAvatarUrl,mine,accountLabel,attachments,bodyHtml,senderAccount,null,null);
         }
         @SuppressWarnings("unused") // Compatibility constructor for Java clients.
         public Entry(String id,UUID conversationId,String subject,String channel,String kind,String direction,
@@ -112,7 +119,8 @@ public class CrmActivityController {
                 return new Entry("message:"+id,conversationId,conversation.getSubject(),channel,
                         message.getKind().name(),message.getDirection().name(),message.getAuthorName(),message.getBody(),
                         message.getSentAt(),message.getDeliveryStatus().name(),author==null?null:messageAvatars.get(author),
-                        author!=null&&author.equals(me.recordId()),accountLabel,attachments.viewsOf(message),message.getBodyHtml(),message.getSenderAccount());
+                        author!=null&&author.equals(me.recordId()),accountLabel,attachments.viewsOf(message),message.getBodyHtml(),message.getSenderAccount(),
+                        message.getSentTo(),message.getCopyTo());
             }
             var note=comments.find(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));
             String author=note.authorId();

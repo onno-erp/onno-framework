@@ -11,6 +11,7 @@ import { conversationChannel, fileSize, string } from "./crmModel";
 import { composerDrafts, type ComposerMode } from "./composerDrafts";
 import { useComposerWindowHost, useComposerWindows } from "./composerWindows";
 import { useAutoGrow } from "./useAutoGrow";
+import { addressLabel, parseAddress, splitAddresses, validAddress } from "./emailAddresses";
 import type { CrmComposerState } from "./useCrmComposer";
 import type { CrmConversationState } from "./useCrmConversation";
 
@@ -48,7 +49,7 @@ export function SenderControls({ conversation, composer, siblings = [], onSwitch
   const options = siblings.length ? siblings : [selected];
   const identity = <span className="flex min-w-0 items-center gap-2"><ChannelLogo channel={conversationChannel(selected)} className="size-4" /><span className="truncate">{string(selected, "inboxDisplay", delivery?.label || conversationChannel(selected))}</span></span>;
   const conversationSwitch = (label: string) => options.length === 1 || !onSwitch ? <span className="flex h-9 min-w-0 items-center px-1">{identity}</span> : (
-    <Select value={conversation.id || ""} disabled={composer.busy || !!composer.draft.trim() || composer.subjectDraft !== null || (composer.recipientDraft !== null && composer.recipientDraft !== delivery?.recipient) || composer.mode === "note"}
+    <Select value={conversation.id || ""} disabled={composer.busy || !!composer.draft.trim() || composer.subjectDraft !== null || (composer.recipientDraft !== null && composer.recipientDraft !== delivery?.recipient) || composer.ccChanged || composer.mode === "note"}
       onValueChange={(id: string) => onSwitch(id)}>
       <SelectTrigger aria-label={label} className={selectTriggerClass} title={composer.draft.trim() ? t("crm.chat.switchLocked") : t("crm.chat.switchHint")}>
         <SelectValue>{identity}</SelectValue>
@@ -110,17 +111,75 @@ export type CrmAttachProps = { composer: CrmComposerState; chooseFiles: () => vo
 /**
  * The fields above the reply, as parts an app may arrange (fold them behind one line, as Gmail does): `header`
  * is the default first row (the sender controls, with the larger-window button inline), `sender` the sender
- * controls alone, `recipient` and `subject` the email rows (null elsewhere), `recipientNotice` the note shown
- * when the recipient changed. `expand` opens the larger window when it may open (inline only). `summary` is what
- * the rows hold, and `changed` whether the planner changed the recipient or subject.
+ * controls alone, `recipient`, `cc` and `subject` the email rows (null elsewhere), `recipientNotice` the note shown
+ * when the recipient changed. `cc` is the Cc row with its chips and add field, drawn even when nobody is copied (the
+ * default layout shows it only then, or once "Cc" is clicked). `expand` opens the larger window when it may open
+ * (inline only). `summary` is what the rows hold (`cc`: the `Name <address>` entries copied, so a folded line can say
+ * "+2 in Cc"), and `changed` whether the planner changed the recipient, the Cc or the subject.
  */
 export type CrmComposerFieldParts = {
   surface: "inline" | "window"; mode: ComposerMode;
-  header: ReactNode; sender: ReactNode; recipient: ReactNode | null; recipientNotice: ReactNode | null; subject: ReactNode | null;
+  header: ReactNode; sender: ReactNode; recipient: ReactNode | null; recipientNotice: ReactNode | null; cc: ReactNode | null; subject: ReactNode | null;
   expand?: () => void;
-  summary: { recipient: string | null; subject: string };
+  summary: { recipient: string | null; cc: string[]; subject: string };
   changed: boolean;
 };
+
+/** The most people a reply may copy; the server refuses more. */
+const MAX_CC = 20;
+
+/**
+ * The Cc row of an email reply: the people copied as chips (× takes one out) and a field that adds addresses
+ * (Enter, a comma or leaving the field; several may be pasted at once). It edits `composer.cc`.
+ */
+export function CcField({ composer, disabled, autoFocus = false }: { composer: CrmComposerState; disabled: boolean; autoFocus?: boolean }) {
+  const inputId = useId();
+  const errorId = useId();
+  const [text, setText] = useState("");
+  const [invalid, setInvalid] = useState<string | null>(null);
+  const add = (raw: string) => {
+    const entries = splitAddresses(raw);
+    const bad = entries.find(entry => !validAddress(parseAddress(entry).address));
+    if (bad) { setInvalid(t("crm.chat.ccInvalid", { address: bad })); return; }
+    const next = [...composer.cc];
+    for (const entry of entries) {
+      const address = parseAddress(entry).address.toLowerCase();
+      if (!next.some(other => parseAddress(other).address.toLowerCase() === address)) next.push(entry);
+    }
+    if (next.length > MAX_CC) { setInvalid(t("crm.chat.ccLimit", { count: MAX_CC })); return; }
+    if (next.length !== composer.cc.length) composer.setCcDraft(next);
+    setText("");
+    setInvalid(null);
+  };
+  const remove = (entry: string) => composer.setCcDraft(composer.cc.filter(other => other !== entry));
+  return <div className="mb-1 text-xs" data-composer-cc="">
+    <div className="flex min-w-0 items-center gap-2">
+      <label htmlFor={inputId} className="w-12 shrink-0 text-muted-foreground">{t("crm.chat.cc")}</label>
+      <div className="flex min-h-9 min-w-0 flex-1 flex-wrap items-center gap-1 px-1 py-1">
+        {composer.cc.map(entry => <span key={entry} title={entry} className="inline-flex max-w-full items-center gap-1 rounded-pill bg-muted px-2 py-0.5 text-[11px]">
+          <span className="min-w-0 truncate">{addressLabel(entry)}</span>
+          <Button variant="ghost" type="button" aria-label={t("crm.chat.removeCc", { name: addressLabel(entry) })} disabled={disabled}
+            className="h-auto p-0 text-inherit" onClick={() => remove(entry)}>
+            <X className="size-3" />
+          </Button>
+        </span>)}
+        <Input id={inputId} value={text} disabled={disabled} autoFocus={autoFocus} aria-invalid={invalid ? true : undefined}
+          aria-describedby={invalid ? errorId : undefined} placeholder={composer.cc.length ? undefined : t("crm.chat.addCc")}
+          className="h-7 min-w-24 flex-1 rounded-none border-0 bg-transparent px-1 py-0 text-xs shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none"
+          onChange={(event: { target: { value: string } }) => { setText(event.target.value); setInvalid(null); }}
+          onKeyDown={(event: { key: string; metaKey: boolean; ctrlKey: boolean; preventDefault: () => void }) => {
+            if (event.metaKey || event.ctrlKey) return; // the send shortcut
+            if (event.key === "Enter" || event.key === "," || event.key === ";") {
+              if (text.trim() || event.key !== "Enter") event.preventDefault();
+              if (text.trim()) add(text);
+            } else if (event.key === "Backspace" && !text && composer.cc.length) remove(composer.cc[composer.cc.length - 1]);
+          }}
+          onBlur={() => { if (text.trim()) add(text); }} />
+      </div>
+    </div>
+    {invalid && <p id={errorId} role="alert" className="ml-14 text-[10px] text-destructive">{invalid}</p>}
+  </div>;
+}
 
 /** Props shared by the composer's parts. */
 export type CrmComposerPartProps = {
@@ -148,6 +207,8 @@ export function CrmComposerFields({ conversation, composer, config, surface = "i
 }) {
   const subjectId = useId();
   const statusId = useId();
+  // The Cc row shows by itself when someone is copied; otherwise "Cc" on the To row opens it.
+  const [ccOpen, setCcOpen] = useState(false);
   const selected = conversation.conversation;
   if (!selected) return null;
   const inline = surface === "inline";
@@ -160,14 +221,20 @@ export function CrmComposerFields({ conversation, composer, config, surface = "i
   const submit = onSubmit ?? (() => void composer.submit());
   const error = composer.error ?? conversation.error;
   const email = mode === "reply" && conversationChannel(selected) === "EMAIL";
-  const recipient = email && !!delivery?.recipient ? <div className="mb-1 flex min-w-0 items-center gap-2 text-xs">
+  const addressed = email && !!delivery?.recipient;
+  const ccShown = addressed && (ccOpen || composer.cc.length > 0);
+  const recipientRow = (ccToggle: boolean) => addressed ? <div className="mb-1 flex min-w-0 items-center gap-2 text-xs">
       <span className="w-12 shrink-0 text-muted-foreground">{t("crm.chat.to")}</span>
       {(delivery.recipients?.length ?? 0) > 1 ? <Select value={composer.recipientDraft ?? delivery.recipient} disabled={composer.busy || replyState.disabled}
         onValueChange={(value: string) => composer.setRecipientDraft(value === delivery.recipient ? null : value)}>
         <SelectTrigger aria-label={t("crm.chat.to")} className="h-9 w-auto max-w-full min-w-0 gap-2 border-0 bg-transparent px-1 text-xs shadow-none hover:bg-muted"><SelectValue /></SelectTrigger>
         <SelectContent>{delivery.recipients?.map(address => <SelectItem key={address} value={address}>{address}</SelectItem>)}</SelectContent>
       </Select> : <span className="flex h-9 min-w-0 items-center truncate px-1">{composer.recipientDraft ?? delivery.recipient}</span>}
+      {ccToggle && !ccShown && <Button type="button" variant="ghost" size="toolbar" className="ml-auto h-7 shrink-0 px-2 text-xs text-muted-foreground"
+        disabled={composer.busy || replyState.disabled} aria-label={t("crm.chat.addCc")} onClick={() => setCcOpen(true)}>{t("crm.chat.cc")}</Button>}
     </div> : null;
+  const recipient = recipientRow(false);
+  const cc = addressed ? <CcField composer={composer} disabled={composer.busy || replyState.disabled} autoFocus={ccOpen && composer.cc.length === 0} /> : null;
   const recipientChanged = composer.recipientDraft !== null && composer.recipientDraft !== delivery?.recipient;
   const recipientNotice = mode === "reply" && recipientChanged ? <p className="mb-2 text-xs text-muted-foreground">{t("crm.chat.newRecipientThread")}</p> : null;
   const subject = email ? <div className="mb-2">
@@ -181,10 +248,10 @@ export function CrmComposerFields({ conversation, composer, config, surface = "i
       {composer.subjectDraft !== null && <p className="mt-1 text-[10px] text-muted-foreground">{t("crm.chat.newSubjectThread")}</p>}
     </div> : null;
   return <>
-    {renderFields ? renderFields({ surface, mode, header, sender: sender ?? header, recipient, recipientNotice, subject, expand,
-      summary: { recipient: composer.recipientDraft ?? delivery?.recipient ?? null, subject: composer.subjectDraft ?? string(selected, "subject", "") },
-      changed: composer.subjectDraft !== null || recipientChanged })
-      : <>{header}{recipient}{recipientNotice}{subject}</>}
+    {renderFields ? renderFields({ surface, mode, header, sender: sender ?? header, recipient, recipientNotice, cc, subject, expand,
+      summary: { recipient: composer.recipientDraft ?? delivery?.recipient ?? null, cc: addressed ? composer.cc : [], subject: composer.subjectDraft ?? string(selected, "subject", "") },
+      changed: composer.subjectDraft !== null || recipientChanged || (addressed && composer.ccChanged) })
+      : <>{header}{recipientRow(true)}{ccShown && cc}{recipientNotice}{subject}</>}
     <div hidden={mode !== "note"} className={!inline && mode === "note" ? "flex min-h-0 flex-1 flex-col" : undefined}>
       <NoteInput key={composer.draftKey ?? ""} draftKey={composer.draftKey ?? undefined} value={composer.noteDraft} autoGrow={inline} fill={!inline}
         disabled={composer.busy || !action(config, "note")} onChange={(text, body) => composer.setNote(text, body)}
