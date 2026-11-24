@@ -8,17 +8,24 @@ import { NoteInput } from "./NoteInput";
 import { ScheduleCall } from "./ScheduleCall";
 import { action, type Config } from "./CrmWorkspace";
 import { conversationChannel, fileSize, string } from "./crmModel";
-import type { ComposerMode } from "./composerDrafts";
+import { composerDrafts, type ComposerMode } from "./composerDrafts";
+import { useComposerWindowHost, useComposerWindows } from "./composerWindows";
 import { useAutoGrow } from "./useAutoGrow";
 import type { CrmComposerState } from "./useCrmComposer";
 import type { CrmConversationState } from "./useCrmConversation";
 
 /** Puts the caret at the end of the composer field in `scope`, the way a returning writer expects. */
 function focusComposerField(scope: ParentNode | null | undefined, mode: ComposerMode) {
-  const field = scope?.querySelector<HTMLTextAreaElement>(mode === "note" ? "[data-composer-note] textarea" : "textarea[data-composer-reply]");
-  if (!field || field.disabled) return;
+  const field = scope?.querySelector<HTMLElement>(mode === "note" ? "[data-composer-note] textarea" : "[data-composer-reply]");
+  if (!field || field.getAttribute("aria-disabled") === "true" || field.matches(":disabled")) return;
   field.focus({ preventScroll: true });
-  field.setSelectionRange(field.value.length, field.value.length);
+  if (field instanceof HTMLTextAreaElement) field.setSelectionRange(field.value.length, field.value.length);
+  else {
+    const range = document.createRange();
+    range.selectNodeContents(field); range.collapse(false);
+    const selection = window.getSelection();
+    selection?.removeAllRanges(); selection?.addRange(range);
+  }
 }
 
 const selectTriggerClass = "h-9 w-auto max-w-full min-w-0 gap-2 rounded-field border-0 bg-transparent px-1 text-xs shadow-none hover:bg-muted focus:ring-1";
@@ -79,6 +86,42 @@ export function SenderControls({ conversation, composer, siblings = [], onSwitch
   </div>;
 }
 
+/**
+ * An app-supplied reply field; draft storage, delivery and all other fields stay with the composer.
+ * `formatting` says the channel carries formatted text (email): the field may then report HTML with the text,
+ * `onChange(text, html)`, which is sent as the email's HTML while `text` stays its plain part. `html` is the
+ * draft's current HTML (null when plain, or after something else changed the text). `onChange(text)` alone
+ * keeps the reply plain.
+ */
+export type CrmReplyInputProps = {
+  value: string; html: string | null; formatting: boolean;
+  onChange: (value: string, html?: string | null) => void; onSubmit: () => void;
+  disabled: boolean; maxLength: number; label: string; placeholder: string;
+  describedBy?: string; surface: "inline" | "window";
+};
+
+/**
+ * The paperclip's place, for an app that draws its own (a menu of files and templates, say): `chooseFiles`
+ * opens the composer's file picker (it does nothing while files can't go; `composer.attachState` says why).
+ * `labelled` is the mobile actions panel's row, which shows a label beside the icon.
+ */
+export type CrmAttachProps = { composer: CrmComposerState; chooseFiles: () => void; surface: "inline" | "window"; labelled: boolean };
+
+/**
+ * The fields above the reply, as parts an app may arrange (fold them behind one line, as Gmail does): `header`
+ * is the default first row (the sender controls, with the larger-window button inline), `sender` the sender
+ * controls alone, `recipient` and `subject` the email rows (null elsewhere), `recipientNotice` the note shown
+ * when the recipient changed. `expand` opens the larger window when it may open (inline only). `summary` is what
+ * the rows hold, and `changed` whether the planner changed the recipient or subject.
+ */
+export type CrmComposerFieldParts = {
+  surface: "inline" | "window"; mode: ComposerMode;
+  header: ReactNode; sender: ReactNode; recipient: ReactNode | null; recipientNotice: ReactNode | null; subject: ReactNode | null;
+  expand?: () => void;
+  summary: { recipient: string | null; subject: string };
+  changed: boolean;
+};
+
 /** Props shared by the composer's parts. */
 export type CrmComposerPartProps = {
   conversation: CrmConversationState;
@@ -90,9 +133,16 @@ export type CrmComposerPartProps = {
  * The composer's fields: recipient and subject (email), the reply or note editor, the attachment
  * tray, the channel's status, errors. `header` is drawn first (the sender controls, an expand button).
  */
-export function CrmComposerFields({ conversation, composer, config, surface = "inline", compact = false, header, replyInputRef, onSubmit }: CrmComposerPartProps & {
+export function CrmComposerFields({ conversation, composer, config, surface = "inline", compact = false, header, sender, expand, replyInputRef, onSubmit, renderReplyInput, renderFields }: CrmComposerPartProps & {
   surface?: "inline" | "window"; compact?: boolean; header?: ReactNode;
+  /** The sender controls alone, for `renderFields` (default: `header`). */
+  sender?: ReactNode;
+  /** Opens the larger window, for `renderFields`. */
+  expand?: () => void;
+  /** Arranges the fields above the reply (see `CrmComposerFieldParts`); by default they are drawn in rows. */
+  renderFields?: (parts: CrmComposerFieldParts) => ReactNode;
   replyInputRef?: Ref<HTMLTextAreaElement>;
+  renderReplyInput?: (props: CrmReplyInputProps) => ReactNode;
   /** What Ctrl/Cmd+Enter does (default: send the draft). */
   onSubmit?: () => void;
 }) {
@@ -103,24 +153,24 @@ export function CrmComposerFields({ conversation, composer, config, surface = "i
   const inline = surface === "inline";
   const { delivery } = conversation;
   const { mode, replyState } = composer;
-  const sendShortcut = (event: { key: string; metaKey: boolean; ctrlKey: boolean; defaultPrevented: boolean; preventDefault: () => void }) => {
-    if (event.defaultPrevented) return;
+  const sendShortcut = (event: { key: string; metaKey: boolean; ctrlKey: boolean; defaultPrevented: boolean; nativeEvent?: { isComposing?: boolean }; preventDefault: () => void }) => {
+    if (event.defaultPrevented || event.nativeEvent?.isComposing) return;
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submit(); }
   };
   const submit = onSubmit ?? (() => void composer.submit());
   const error = composer.error ?? conversation.error;
-  return <>
-    {header}
-    {mode === "reply" && conversationChannel(selected) === "EMAIL" && !!delivery?.recipient && <div className="mb-1 flex min-w-0 items-center gap-2 text-xs">
+  const email = mode === "reply" && conversationChannel(selected) === "EMAIL";
+  const recipient = email && !!delivery?.recipient ? <div className="mb-1 flex min-w-0 items-center gap-2 text-xs">
       <span className="w-12 shrink-0 text-muted-foreground">{t("crm.chat.to")}</span>
       {(delivery.recipients?.length ?? 0) > 1 ? <Select value={composer.recipientDraft ?? delivery.recipient} disabled={composer.busy || replyState.disabled}
         onValueChange={(value: string) => composer.setRecipientDraft(value === delivery.recipient ? null : value)}>
         <SelectTrigger aria-label={t("crm.chat.to")} className="h-9 w-auto max-w-full min-w-0 gap-2 border-0 bg-transparent px-1 text-xs shadow-none hover:bg-muted"><SelectValue /></SelectTrigger>
         <SelectContent>{delivery.recipients?.map(address => <SelectItem key={address} value={address}>{address}</SelectItem>)}</SelectContent>
       </Select> : <span className="flex h-9 min-w-0 items-center truncate px-1">{composer.recipientDraft ?? delivery.recipient}</span>}
-    </div>}
-    {mode === "reply" && composer.recipientDraft !== null && composer.recipientDraft !== delivery?.recipient && <p className="mb-2 text-xs text-muted-foreground">{t("crm.chat.newRecipientThread")}</p>}
-    {mode === "reply" && conversationChannel(selected) === "EMAIL" && <div className="mb-2">
+    </div> : null;
+  const recipientChanged = composer.recipientDraft !== null && composer.recipientDraft !== delivery?.recipient;
+  const recipientNotice = mode === "reply" && recipientChanged ? <p className="mb-2 text-xs text-muted-foreground">{t("crm.chat.newRecipientThread")}</p> : null;
+  const subject = email ? <div className="mb-2">
       <div className="flex min-w-0 items-center gap-2 border-b border-border/60 pb-1 transition-colors focus-within:border-primary">
         <label htmlFor={subjectId} className="w-12 shrink-0 text-xs text-muted-foreground">{t("crm.chat.subject")}</label>
         <Input id={subjectId} value={composer.subjectDraft ?? string(selected, "subject", "")}
@@ -129,13 +179,25 @@ export function CrmComposerFields({ conversation, composer, config, surface = "i
           onChange={(event: { target: { value: string } }) => composer.setSubjectDraft(event.target.value === string(selected, "subject", "") ? null : event.target.value)} />
       </div>
       {composer.subjectDraft !== null && <p className="mt-1 text-[10px] text-muted-foreground">{t("crm.chat.newSubjectThread")}</p>}
-    </div>}
+    </div> : null;
+  return <>
+    {renderFields ? renderFields({ surface, mode, header, sender: sender ?? header, recipient, recipientNotice, subject, expand,
+      summary: { recipient: composer.recipientDraft ?? delivery?.recipient ?? null, subject: composer.subjectDraft ?? string(selected, "subject", "") },
+      changed: composer.subjectDraft !== null || recipientChanged })
+      : <>{header}{recipient}{recipientNotice}{subject}</>}
     <div hidden={mode !== "note"} className={!inline && mode === "note" ? "flex min-h-0 flex-1 flex-col" : undefined}>
       <NoteInput key={composer.draftKey ?? ""} draftKey={composer.draftKey ?? undefined} value={composer.noteDraft} autoGrow={inline} fill={!inline}
         disabled={composer.busy || !action(config, "note")} onChange={(text, body) => composer.setNote(text, body)}
         onSubmit={submit} />
     </div>
-    {mode === "reply" && !replyState.disabled && <Textarea
+    {mode === "reply" && !replyState.disabled && (renderReplyInput ? renderReplyInput({
+      value: composer.draft, html: composer.draftHtml, formatting: composer.formatting,
+      onChange: (text: string, html?: string | null) => html === undefined || !composer.formatting ? composer.setDraft(text) : composer.setFormattedDraft(text, html),
+      onSubmit: submit,
+      disabled: composer.busy || replyState.disabled, maxLength: delivery?.maxTextLength ?? 4096,
+      label: t("crm.composer.replyLabel"), placeholder: replyState.placeholder,
+      describedBy: replyState.message ? statusId : undefined, surface,
+    }) : <Textarea
       ref={replyInputRef}
       data-composer-reply=""
       value={composer.draft}
@@ -147,7 +209,7 @@ export function CrmComposerFields({ conversation, composer, config, surface = "i
       maxLength={delivery?.maxTextLength ?? 4096}
       aria-label={t("crm.composer.replyLabel")}
       className={`${inline ? "min-h-16" : "min-h-48 flex-1"} resize-none border-0 bg-transparent dark:bg-transparent px-2 shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none`}
-    />}
+    />)}
     {/* What is about to go with the reply. It sits under the text because that is the order
         it will arrive in, and each chip can be taken back out before sending. */}
     {mode === "reply" && (composer.pending.length > 0 || composer.uploading > 0) && <div className="mt-1 flex flex-wrap gap-1.5 px-2">
@@ -214,8 +276,19 @@ export type CrmComposerProps = CrmComposerPartProps & {
   contactName: string;
   /** Offer the "Open in a larger window" button (default true). */
   expandable?: boolean;
-  /** The id that keeps the composer window's place (default: one per workspace). */
+  /** Replace only the reply editor in both the inline composer and its larger window. */
+  renderReplyInput?: (props: CrmReplyInputProps) => ReactNode;
+  /** Replace the paperclip wherever the composer draws it (toolbar, mobile actions, larger window). */
+  renderAttach?: (props: CrmAttachProps) => ReactNode;
+  /** Arrange the fields above the reply, in both the inline composer and its larger window (`CrmComposerFieldParts`). */
+  renderFields?: (parts: CrmComposerFieldParts) => ReactNode;
+  /** The id that keeps the composer window's place (default: one per conversation in an inbox, else one per workspace). */
   windowId?: string;
+  /**
+   * Draw only the larger window, not the inline composer. The inbox uses it for the windows of conversations it
+   * is not showing (see `composerWindows`); an app's own `Composer` should pass it through to `CrmComposer`.
+   */
+  windowOnly?: boolean;
 };
 
 /**
@@ -223,9 +296,20 @@ export type CrmComposerProps = CrmComposerPartProps & {
  * outlet, send), with an "Open in a larger window" button that moves the same draft into a docked,
  * non-modal window.
  */
-export function CrmComposer({ conversation, composer, config, compact = false, layouts, extensionContext, siblings, onSwitch, contactName, expandable = true, windowId }: CrmComposerProps) {
+export function CrmComposer({ conversation, composer, config, compact = false, layouts, extensionContext, siblings, onSwitch, contactName, expandable = true, windowId, windowOnly = false, renderReplyInput, renderAttach, renderFields }: CrmComposerProps) {
   const selected = conversation.conversation;
-  const [expanded, setExpanded] = useState(false);
+  // In an inbox the window belongs to the conversation (composerWindows), so it outlives this composer when
+  // another chat is chosen; elsewhere it is this composer's own.
+  const host = useComposerWindowHost();
+  const windows = useComposerWindows();
+  const key = host && conversation.id ? composerDrafts.key(conversation.workspace, conversation.id) : null;
+  const [ownExpanded, setOwnExpanded] = useState(false);
+  const expanded = key ? windows.isOpen(key) : ownExpanded;
+  const setExpanded = (open: boolean) => {
+    if (!key) { setOwnExpanded(open); return; }
+    if (!open) windows.close(key);
+    else if (selected) windows.open({ key, workspace: host!.workspace, conversation: selected, contactName });
+  };
   const rootRef = useRef<HTMLDivElement | null>(null);
   const windowRef = useRef<HTMLDivElement | null>(null);
   const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -233,7 +317,8 @@ export function CrmComposer({ conversation, composer, config, compact = false, l
   useAutoGrow(replyInputRef, composer.draft, !expanded);
   // Writing moves with the window: into it when it opens, back to the inline field when it closes
   // (the expand button that opened it is gone by then, so the window cannot hand focus back itself).
-  const wasExpanded = useRef(false);
+  // A window already open when this composer mounts (taken over from another chat's view) keeps the focus where it is.
+  const wasExpanded = useRef(expanded);
   useEffect(() => {
     if (wasExpanded.current === expanded) return;
     wasExpanded.current = expanded;
@@ -244,11 +329,24 @@ export function CrmComposer({ conversation, composer, config, compact = false, l
   const { mode, busy, sendAction } = composer;
   const send = async () => { if (await composer.submit()) setExpanded(false); };
   const chooseAttachment = () => { if (!composer.attachState.disabled) fileInputRef.current?.click(); };
-  const sendShortcut = (event: { key: string; metaKey: boolean; ctrlKey: boolean; defaultPrevented: boolean; preventDefault: () => void }) => {
-    if (event.defaultPrevented) return;
+  const sendShortcut = (event: { key: string; metaKey: boolean; ctrlKey: boolean; defaultPrevented: boolean; nativeEvent?: { isComposing?: boolean }; preventDefault: () => void }) => {
+    if (event.defaultPrevented || event.nativeEvent?.isComposing) return;
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void send(); }
   };
   const composerContext = { ...extensionContext, insertDraft: mode === "reply" ? composer.insertDraft : undefined };
+  const attach = (surface: "inline" | "window", labelled = false) => renderAttach
+    ? renderAttach({ composer, chooseFiles: chooseAttachment, surface, labelled })
+    : <AttachButton composer={composer} onChoose={chooseAttachment} labelled={labelled} />;
+  const expand = expandable && composer.canExpand ? () => setExpanded(true) : undefined;
+  // Switching to another of the contact's chats from the window takes the window along.
+  const switchInWindow = onSwitch && ((conversationId: string) => {
+    const target = siblings?.find(row => String(row.id) === conversationId);
+    if (key && target) {
+      windows.close(key);
+      windows.open({ key: composerDrafts.key(conversation.workspace, conversationId), workspace: host!.workspace, conversation: target, contactName });
+    }
+    onSwitch(conversationId);
+  });
   const sending = <SenderControls conversation={conversation} composer={composer} siblings={siblings} onSwitch={onSwitch} labels={!compact} />;
   const modeSwitch = <Segmented value={mode} onChange={(value: ComposerMode) => { if (!busy) composer.setMode(value); }} options={composer.modeOptions} />;
   const insertInvitation = (text: string) => { composer.setMode("reply"); composer.setDraft(previous => previous ? `${previous}\n\n${text}` : text); };
@@ -267,7 +365,7 @@ export function CrmComposer({ conversation, composer, config, compact = false, l
   // The large composer is a non-modal window: docked in the corner by default, so the rest of the
   // screen (other chats, the contact, the timeline) stays usable while writing. It can float, be
   // resized, minimised to its title bar or maximised; it edits the same draft as the inline field.
-  const window = expanded ? <FloatingWindow id={windowId ?? `crm-composer:${conversation.workspace ?? ""}`}
+  const window = expanded ? <FloatingWindow id={windowId ?? (key ? `crm-composer:${key}` : `crm-composer:${conversation.workspace ?? ""}`)}
     open onOpenChange={(open: boolean) => { if (!open) setExpanded(false); }}
     initialState="docked" persist="crm.composer" width={620} height={580} minWidth={380} minHeight={320}
     icon={<PenLine className="size-4" aria-hidden="true" />}
@@ -275,7 +373,7 @@ export function CrmComposer({ conversation, composer, config, compact = false, l
     bodyClassName={mode === "note" ? "bg-amber-400/5" : undefined}
     footer={<div className="flex w-full min-w-0 flex-wrap items-center gap-2">
       {composer.modeOptions.length > 0 && modeSwitch}
-      <AttachButton composer={composer} onChoose={chooseAttachment} />
+      {attach("window")}
       <ExtensionSlot name="crm.chat.composer" context={composerContext} className="flex items-center gap-2" />
       <span className="flex-1" />
       {sendAction && <Button type="button" disabled={composer.cannotSend} onClick={() => void send()}>
@@ -283,21 +381,23 @@ export function CrmComposer({ conversation, composer, config, compact = false, l
       </Button>}
     </div>}>
     <div ref={windowRef} data-crm-composer-window="" onKeyDown={sendShortcut} className="relative flex min-h-0 flex-1 flex-col">
-      <CrmComposerFields conversation={conversation} composer={composer} config={config} surface="window" onSubmit={() => void send()}
+      <CrmComposerFields conversation={conversation} composer={composer} config={config} surface="window" renderReplyInput={renderReplyInput} renderFields={renderFields} onSubmit={() => void send()}
         header={<div className="mb-2 flex min-w-0 flex-col gap-1">
-          <SenderControls conversation={conversation} composer={composer} siblings={siblings} onSwitch={onSwitch} labels />
+          <SenderControls conversation={conversation} composer={composer} siblings={siblings} onSwitch={switchInWindow} labels />
           {mode === "note" && <p className="text-xs text-muted-foreground">{t("crm.composer.noteHint")}</p>}
         </div>} />
       <FileDropOverlay composer={composer} />
     </div>
   </FloatingWindow> : null;
+  const fileInput = <input ref={fileInputRef} type="file" multiple className="hidden"
+    onChange={(event: { target: { files: FileList | null; value: string } }) => { void composer.attach(event.target.files); event.target.value = ""; }} />;
+  if (windowOnly) return <>{fileInput}{window}</>;
   return <>
-    <input ref={fileInputRef} type="file" multiple className="hidden"
-      onChange={(event: { target: { files: FileList | null; value: string } }) => { void composer.attach(event.target.files); event.target.value = ""; }} />
+    {fileInput}
     <div ref={rootRef} data-chat-composer className="crm-chat-composer shrink-0 rounded-panel border border-border">
       {expanded ? <p className={`${compact ? "p-2" : "p-3"} text-xs text-muted-foreground`}>{t("crm.composer.inWindow")}</p> : <div className={`${compact ? "p-2" : "p-3"} ${mode === "note" ? "bg-amber-400/5" : ""}`}>
-        <CrmComposerFields conversation={conversation} composer={composer} config={config} surface="inline" compact={compact} onSubmit={() => void send()}
-          header={inlineHeader} replyInputRef={replyInputRef} />
+        <CrmComposerFields conversation={conversation} composer={composer} config={config} surface="inline" compact={compact} renderReplyInput={renderReplyInput} onSubmit={() => void send()}
+          header={inlineHeader} sender={sending} expand={expand} renderFields={renderFields} replyInputRef={replyInputRef} />
         <WorkspaceToolbar compact={compact} className="mt-2"
           layout={{ start: ["mode", "attach"], end: ["send"], secondary: ["extensions"], ...layouts?.composer }}
           compactLayout={layouts?.mobileComposer}
@@ -306,11 +406,11 @@ export function CrmComposer({ conversation, composer, config, compact = false, l
             { id: "tools", content: <ResponsiveActionPanel presentation="actions" label={t("crm.chat.actions")} align="start" trigger={<Button variant="ghost" className="size-10 shrink-0 p-0" aria-label={t("crm.chat.actions")}><Plus className="size-5" /></Button>}>
                 {action(config, "logActivity") && <ScheduleCall customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={conversation.reload} onInvitation={insertInvitation} />}
                 {action(config, "logActivity") && <LogActivity customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={conversation.reload} />}
-                <AttachButton composer={composer} onChoose={chooseAttachment} labelled />
+                {attach("inline", true)}
                 <ExtensionSlot name="crm.chat.header" context={extensionContext} className="flex flex-col gap-2" />
               </ResponsiveActionPanel> },
             { id: "mode", content: modeSwitch },
-            { id: "attach", content: <AttachButton composer={composer} onChoose={chooseAttachment} /> },
+            { id: "attach", content: attach("inline") },
             { id: "extensions", content: <ExtensionSlot name="crm.chat.composer" context={composerContext} className="flex items-center gap-2" /> },
             { id: "send", content: sendAction && <Button aria-label={busy ? t("crm.composer.sending") : sendAction.label} className={compact ? "size-10 shrink-0 p-0" : undefined} disabled={composer.cannotSend} onClick={() => void send()}>
               {compact ? <Send className="size-4" /> : busy ? t("crm.composer.sending") : sendAction.label}

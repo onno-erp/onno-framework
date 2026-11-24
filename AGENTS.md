@@ -191,9 +191,10 @@ When adding a starter, include:
 - Javadoc currently emits many missing-comment warnings. Broken links are not acceptable because they can fail
   publication.
 - The frontend npm audit may report moderate vulnerabilities. Do not run forced upgrades without checking the
-  impact on the UI build and generated assets. `CI` runs the same audits as the release workflow on main and every PR
-  (`.github/scripts/npm-audit.mjs`, with its reviewed allowlist), so a new advisory blocks a merge rather
-  than a release tag.
+  impact on the UI build and generated assets. `CI` runs the same audits as the release workflow on main
+  (`.github/scripts/npm-audit.mjs`, with its reviewed allowlist), so a new advisory surfaces there rather
+  than on a release tag. `CI` does not run on pull requests by itself: start it for a branch with
+  `gh workflow run CI --ref <branch>` (see [docs/CI_RUNNER.md](docs/CI_RUNNER.md)).
 
 ### AI-Friendly Change Style
 
@@ -1171,6 +1172,8 @@ orders nothing. Logical entity names are checked against the generated model.
   `ClinicDoctor { clinic, doctor, role }`) — not a denormalized name field or a bespoke endpoint.
   Each side shows it with the entity's `relations` customization:
   `relations: { doctors: { entity: "Clinic Doctors", via: "clinic", columns: ["doctor", "role"] } }`.
+  Relation editors must finish every cursor window before enabling replacement writes; a partial
+  or failed read must never be submitted as the complete relation set.
   The rows render with the tabular-section editor and save with the record's Save: the form sends
   `@relations` and the server replaces the join rows in the record's transaction, through the
   ordinary write path. The example app's `Supplier Offers` is edited from both Suppliers and Books.
@@ -1205,7 +1208,9 @@ orders nothing. Logical entity names are checked against the generated model.
   entity route replaces its default screen; `roles` and `when` gate a page and its nav link.
 - **Data** is typed per entity: `useRecords("Orders", { where, sort, limit })`, `useRecord`,
   `useAggregate`, `useBalance`, `useTurnover`, `useMovements`, `useInformationRegister`,
-  `useConstant`, the write hooks, `useCommand("Orders", "cancel")`, and the measures
+  `useConstant`, the write hooks, `useCommand("Orders", "cancel")`,
+  `useCommandPresentations(kind, name)` (a surface that lists an entity's commands itself, like the
+  CRM row menu, reads their icons and placements from it), and the measures
   `count`/`sum`/`avg`/`min`/`max` (`sum("Orders", "total", { posted: true })`). Which records is
   always a typed `where` object (`{ status: { in: [OrderStatus.NEW] }, total: { gte: 100 } }`),
   sent to the server as JSON. Everything refreshes from the server's live events.
@@ -1218,7 +1223,9 @@ orders nothing. Logical entity names are checked against the generated model.
   scheduler or reschedule endpoint for one entity.
 - **Links**: `openRecord("Orders", id)`, `openRoute(links.list("Orders", { where }))`; `onno://`
   links (`onno://documents/orders/<id>`, `…/new?customer=<id>`) name what to open for web and
-  mobile clients alike. A New form also seeds from field initializers on the Java class.
+  mobile clients alike. An open replaces the active workspace tab's screen and that tab's Back
+  returns, as in a browser; `openRoute(link, { newWorkspaceTab: true })` opens a new tab (use it
+  when several records open at once). A New form also seeds from field initializers on the Java class.
 - Values handed to the UI are typed, never strings it parses: formats `{ money: "USD" }`,
   `{ date: "medium" }`; inputs `"textarea"`, `"image"`, `"color"`, …; icons are imported Lucide components. The package ships
   them through `@onno/ui/icons`: use `icon: Truck`, `<Truck />`, or `<Icon icon={Truck} />`.

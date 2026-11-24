@@ -243,7 +243,7 @@ authorization precedes it. `canAccess` remains for single-conversation checks.
 | `GET /inbox-workspaces/{key}` | `{key,label,canWrite,config,list,channelAccounts,rows,total,hasMore,nextCursor}`: authorized rows (filters, `sort`/`dir`, cursor/limit) and the conversation list's default descriptor |
 | `GET /inbox-workspaces/{key}/conversation/{id}` | Authorized conversations for the same customer |
 | `GET/POST /inbox-workspaces/{key}/conversations/{id}/comments` | Internal notes. POST validates `body` against the shared `onno.comments.max-length` (4000 characters by default) and the CRM request cap of 8000 characters. Invalid text returns `422`. |
-| `GET/POST /conversations/{id}/messages` | History / enqueue `{body,attachments,subject?,recipient?,from?}`; each message returns `attachments:[{url,filename,contentType,size,image}]` and the stored `subject`/`recipient`/`senderAccount` (null when not set), so history shows overrides. A `from` the delivery connection does not offer is `400` |
+| `GET/POST /conversations/{id}/messages` | History / enqueue `{body,attachments,subject?,recipient?,from?,html?}` (`html`: an email's formatted version of `body`, sanitized to formatting tags into the message's `bodyHtml` and sent as its HTML part; `400` on other channels); each message returns `attachments:[{url,filename,contentType,size,image}]` and the stored `subject`/`recipient`/`senderAccount` (null when not set), so history shows overrides. A `from` the delivery connection does not offer is `400` |
 | `GET /conversations/{id}/delivery` | `{connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients,senders,sender}`; `recipient` is the default address and `recipients` the choices (null/empty when the transport offers no selection); `senders` (`[{id,label}]`) are the accounts the reply may come from and `sender` the default id (empty/null when there is no choice), as offered to the caller. Addresses known only through another user's personal account are left out |
 | `POST /conversations/{id}/status` | `{status}` (a configured status id) → the updated conversation state; a missing body or `status` is `400` |
 | `POST /conversations/{id}/messages/{messageId}/retry` | Retry a failed reply |
@@ -289,6 +289,22 @@ There is no backward-compatibility layer for the former CRM-owned business model
    - `useCrmContact(id)`.
 
 Each part takes the hook state as props, so an app replaces one piece and keeps the rest.
+`CrmComposer`'s `renderReplyInput` replaces only the reply editor (a rich-text field, say) in both the
+inline composer and its larger window; it gets `CrmReplyInputProps` (`value`, `html`, `formatting`, `onChange`,
+`onSubmit`, `disabled`, `maxLength`, `label`, `placeholder`, `describedBy`, `surface`), while drafts, files, sending
+and the other fields stay the composer's. When `formatting` is true (email), the field may report
+`onChange(text, html)`: the HTML is kept in the draft beside the text and sent as the email's HTML part, the text as
+its plain part; `onChange(text)` alone, or any other change of the text, makes the reply plain again. Mark the editable element `data-composer-reply` so the
+composer can put the caret back in it; Ctrl/Cmd+Enter is ignored while an IME is composing.
+Two more hooks reshape the composer without redrawing it. `renderAttach` replaces the paperclip wherever the
+composer draws it (the toolbar, the mobile actions panel, the larger window) with the app's own control, a menu of
+files and templates say; it gets `CrmAttachProps` (`composer`, `chooseFiles` to open the composer's file picker,
+`surface`, `labelled`). `renderFields` arranges the fields above the reply: it gets `CrmComposerFieldParts`, onno's
+own `header` (sender row with the larger-window button), `sender`, `recipient`, `recipientNotice` and `subject`
+(null where the channel has none), `expand` to open the larger window, a `summary` of what the rows hold and whether
+the planner `changed` them, so an app can fold them behind one line as Gmail does and still let them out.
+`insertDraft(text, files, html)` takes the text's formatting too (a letter template): an email reply keeps it, joined
+to the draft's own HTML, and sends it; other channels send the text.
 `CrmInbox`'s `components` swaps a part in place. Every replacement gets the same props the built-in
 part does: `ConversationRowProps`, `CrmComposerProps`, `InboxContactPanelProps`.
 
@@ -318,7 +334,11 @@ input. Commands with a `.group("Change status")` appear under that submenu. A co
 input stays with the conversation's own actions, through `crm.chat.header` contributions and
 `context.execute`. The actions endpoint returns `group` and `inputs: boolean` for this.
 `rowMenu={{ open: false }}` drops "Open conversation"; `rowMenu={{ groups: false }}` drops the
-chat-group items.
+chat-group items. A command's icon, and `"hidden"` to leave it out of the menu, come from the app's
+customization of the conversation entity, as for any entity's list menu:
+`entities: { CrmConversations: { commands: { "assign-to-me": { icon: UserCheck }, "state-closed": { icon: CircleCheck } } } }`.
+Commands without an icon show none. Offer a command only in some states with `availableWhen`: the
+menu lists only the ones the actions endpoint marks visible.
 
 ## UI extensions and verification
 
@@ -497,7 +517,7 @@ entry, at most 100 entries, dropped after 30 days); files already uploaded for t
 in memory only. A draft is cleared after a successful send or when its author empties it. Clicking
 a contact opens the conversation that holds its unsent draft, and the page asks before unloading
 while text or files written in this session are unsent. `insertDraft` contributions append to the
-open conversation's draft as before.
+open conversation's draft as before; `insertDraft(text, files)` also puts stored files in its tray.
 
 The inline reply grows with its text up to `min(240px, 40vh)`. **Open in a larger window** edits the
 same draft in a non-modal `@onno/ui` window (`FloatingWindow`), docked in the bottom-right corner
@@ -506,6 +526,15 @@ history, copy dates and numbers. The window can be minimized to its title bar, d
 freely floating and resizable window, or maximized. Its state, position and size are remembered in
 the browser (`persist="crm.composer"`). On phones (under 640px) it always fills the screen. Closing it
 returns focus to the inline field.
+
+In the inbox the window belongs to its conversation, like a mail draft (`src/main/ui/composerWindows.ts`):
+choosing another chat leaves it open, docked or minimized where it was, still writing to and sending
+from the chat it was opened for, while the newly chosen chat gets its own inline composer. Each chat
+has at most one window (`crm-composer:<draft key>`), so several drafts can sit side by side; choosing a
+chat whose window is open hands that same window back to the chat's composer. The inbox draws the
+windows of chats it is not showing with its `Composer` component and `windowOnly`, so an app's own
+composer must pass its props through to `CrmComposer`. Outside an inbox (`CrmConversation`, an app's
+screen) a composer's window is its own and closes with it.
 
 When the delivery connection lists two or more `senders` (`{id, label}`), the From row becomes a
 mailbox picker defaulting to `sender`, and the send command carries `from: <sender id>`. Switching to

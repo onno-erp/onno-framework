@@ -743,10 +743,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify(pick),
     }, { silent: true }),
-  listCatalogPage: (name: string, where?: WhereClause, page?: { cursor?: string | null; limit?: number }) => {
-    const params = new URLSearchParams({ limit: String(page?.limit ?? 100) });
-    const w = whereParam(where);
-    if (w) params.set("where", w);
+  listCatalogPage: (name: string, where?: WhereClause, page?: RecordsPage & { cursor?: string | null }) => {
+    const params = recordsParams(where, { ...page, limit: page?.limit ?? 100 });
     if (page?.cursor) params.set("cursor", page.cursor);
     return fetchJson<CollectionPage<EntityRecord>>(`${BASE}/list/catalogs/${toSnakeCase(name)}?${params}`);
   },
@@ -780,12 +778,10 @@ export const api = {
     ).then((page) => page.rows ?? []);
   },
   listDocumentsPage: (name: string, from?: string, to?: string, where?: WhereClause,
-      page?: { cursor?: string | null; limit?: number }) => {
-    const params = new URLSearchParams({ limit: String(page?.limit ?? 100) });
+      page?: RecordsPage & { cursor?: string | null }) => {
+    const params = recordsParams(where, { ...page, limit: page?.limit ?? 100 });
     if (from) params.set("from", from);
     if (to) params.set("to", to);
-    const w = whereParam(where);
-    if (w) params.set("where", w);
     if (page?.cursor) params.set("cursor", page.cursor);
     return fetchJson<CollectionPage<EntityRecord>>(`${BASE}/list/documents/${toSnakeCase(name)}?${params}`);
   },

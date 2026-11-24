@@ -1,12 +1,12 @@
 import { text as t, useTranslate } from "@onno/ui";
 import type { ChatGroup, GroupChange } from "./chatGroups";
-import { ExtensionSlot, Button, Input, openRoute, toast } from "@onno/ui";
+import { ExtensionSlot, Button, Icon, Input, openRoute, toast, useCommandPresentations, type EntityRecord } from "@onno/ui";
 import { crmCommand } from "./crmModel";
 import { request } from "./CrmWorkspace";
 import type { KeyboardEvent, ReactNode } from "react";
 import { ContextMenuSub, ContextMenuContent, ContextMenuItem } from "@onno/ui";
 import { useEffect, useRef, useState } from "react";
-import { MoreHorizontal } from "@onno/ui/icons";
+import { FolderInput, MessageSquare, MoreHorizontal, type LucideIcon } from "@onno/ui/icons";
 
 const MENU_WIDTH = 200;
 /** A conversation command as the workspace offers it (GET …/conversations/{id}/actions). */
@@ -72,7 +72,19 @@ export function ContactRowMenu({ id, canEdit, onOpen, groups, groupKey, conversa
       close();
     } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   };
-  const oneClick = commands.filter(command => !command.inputs);
+  // Presented like the entity's own menus: a command's icon comes from the app's customization of the
+  // conversation entity (`entities.CrmConversations.commands`), and "hidden" ones are left out.
+  const presentation = useCommandPresentations("catalogs", "CrmConversations");
+  const icon = (command: RowCommand) => {
+    const declared: unknown = presentation[command.id]?.icon;
+    let resolved: LucideIcon | null | undefined;
+    // A Lucide icon is a forwardRef object; a function picks one per record (typed for the app's records).
+    if (typeof declared === "function") {
+      try { resolved = (declared as (row: EntityRecord) => LucideIcon | null | undefined)((record ?? {}) as EntityRecord); } catch { resolved = null; }
+    } else resolved = declared as LucideIcon | undefined;
+    return resolved ? <Icon icon={resolved} size={16} /> : null;
+  };
+  const oneClick = commands.filter(command => !command.inputs && presentation[command.id]?.placement !== "hidden");
   const ungrouped = oneClick.filter(command => !command.group);
   const commandGroups = [...new Set(oneClick.map(command => command.group).filter(Boolean))] as string[];
   useEffect(() => {
@@ -108,8 +120,8 @@ export function ContactRowMenu({ id, canEdit, onOpen, groups, groupKey, conversa
     </Button>}
     <ContextMenuContent ref={menuRef} open={!!position} position={position} width={MENU_WIDTH} onKeyDown={moveFocus}
       onOpenChange={(open: boolean) => { if (!open) close(); }}>
-      {showOpen && <ContextMenuItem onSelect={() => { close(); onOpen(); }}>{t("crm.contact.openConversation")}</ContextMenuItem>}
-      {onGroupChange && <ContextMenuSub label={t("crm.group.move")} width={240}>
+      {showOpen && <ContextMenuItem onSelect={() => { close(); onOpen(); }}><MessageSquare aria-hidden="true" />{t("crm.contact.openConversation")}</ContextMenuItem>}
+      {onGroupChange && <ContextMenuSub icon={<FolderInput aria-hidden="true" />} label={t("crm.group.move")} width={240}>
         <div className="max-h-64 overflow-y-auto">
           {groups?.map(group => <ContextMenuItem key={group.key} disabled={busy || group.key === groupKey} onSelect={() => void changeGroup({operation:"move",key:group.key})}>{group.label}{group.key === groupKey ? " ✓" : ""}</ContextMenuItem>)}
         </div>
@@ -120,9 +132,10 @@ export function ContactRowMenu({ id, canEdit, onOpen, groups, groupKey, conversa
         </form> : <ContextMenuItem disabled={busy} onSelect={() => setCreating(true)}>{t("crm.group.new")}</ContextMenuItem>}
         {error && <p role="alert" className="p-2 text-xs text-destructive">{error}</p>}
       </ContextMenuSub>}
-      {ungrouped.map(command => <ContextMenuItem key={command.id} disabled={busy || !command.enabled} onSelect={() => void run(command)}>{command.title}</ContextMenuItem>)}
+      {(showOpen || onGroupChange) && oneClick.length > 0 && <div role="separator" className="-mx-1 my-1 h-px bg-border" />}
+      {ungrouped.map(command => <ContextMenuItem key={command.id} disabled={busy || !command.enabled} onSelect={() => void run(command)}>{icon(command)}{command.title}</ContextMenuItem>)}
       {commandGroups.map(group => <ContextMenuSub key={`group:${group}`} label={group} width={220}>
-        {oneClick.filter(command => command.group === group).map(command => <ContextMenuItem key={command.id} disabled={busy || !command.enabled} onSelect={() => void run(command)}>{command.title}</ContextMenuItem>)}
+        {oneClick.filter(command => command.group === group).map(command => <ContextMenuItem key={command.id} disabled={busy || !command.enabled} onSelect={() => void run(command)}>{icon(command)}{command.title}</ContextMenuItem>)}
       </ContextMenuSub>)}
       {!onGroupChange && error && <p role="alert" className="p-2 text-xs text-destructive">{error}</p>}
       <ExtensionSlot name="crm.chat.context-menu" context={{surface:"crm-chat",kind:"catalogs",name:"crm_conversations",recordId:conversationId,record:record??{id:conversationId,customer:id},workspaceKey,openRecord:(kind,name,id)=>openRoute(`onno://${kind}/${name}/${id}`),permissions:{canWrite:canEdit},closeMenu:close,

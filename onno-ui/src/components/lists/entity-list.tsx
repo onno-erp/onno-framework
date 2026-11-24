@@ -7,7 +7,7 @@ import { Button, buttonVariants } from "../ui/button";
 import { ListSelectionCheckbox, selectLoaded } from "./list-selection-checkbox";
 import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { PageGutterContext } from "../../lib/page-gutter";
-import { ArrowDown, ArrowLeftRight, ArrowUp, CalendarDays, Check, ChevronsUpDown, Copy, ExternalLink, FileSpreadsheet, FileText, GanttChart, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowLeftRight, ArrowUp, CalendarDays, Check, ChevronsUpDown, Copy, ExternalLink, FileSpreadsheet, FileText, GanttChart, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Plus, Rows3, Search, SquarePlus, Table2, Trash2, X } from "lucide-react";
 import { CalendarDate, getLocalTimeZone, parseDate, startOfMonth, startOfYear, today } from "@internationalized/date";
 import { toast } from "../ui/toast";
 import { ListMapView, type ListMapConfig } from "../maps/list-map-view";
@@ -1719,7 +1719,10 @@ export function EntityListView({
     return col ? { column: col, descending: initialParams.get("dir") === "desc" } : list.sort;
   });
   const [query, setQuery] = useControllable(state?.search, state?.onSearchChange, () => (urlSynced ? initialParams.get("q") ?? "" : ""));
-  const [debounced, setDebounced] = useState(() => (urlSynced ? initialParams.get("q") ?? "" : ""));
+  const [debouncedSearch, setDebounced] = useState(() => (urlSynced ? initialParams.get("q") ?? "" : ""));
+  // The picker already debounces its search together with its folder constraint. Read both
+  // from the same render, rather than fetching a new scope with the previous search text.
+  const debounced = selectMode?.query?.trim() ?? debouncedSearch;
   // The toolbar's facet rail: it scrolls horizontally when the chips don't fit, and the
   // left/right fades are the "there's more" signal. Re-measured on every render (chips appear and
   // resize with filter state) plus on rail scroll — the setter's referential guard keeps the
@@ -2316,14 +2319,14 @@ export function EntityListView({
       });
   }, [feedBase, pageSize, buildParams, finishWindow]);
 
-  // Load the initial window on first mount or query change. Reset the cursor so the query re-seeks
-  // from the top rather than an old position.
+  // Load the initial window on first mount or query change, including a host page's `where` prop.
+  // Reset the cursor so the query re-seeks from the top rather than an old position.
   useEffect(() => {
     cursorRef.current = null;
     setHasMore(true);
     loadInitial(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedBase, pageSize, sort.column, sort.descending, debounced, filterSig, queryParamSig]);
+  }, [feedBase, pageSize, sort.column, sort.descending, debounced, filterSig, queryParamSig, baseWhereSig]);
 
   useEffect(() => { if (refreshKey) loadInitial(true); }, [refreshKey, loadInitial]);
   useEffect(() => { if (queuedRefresh) loadInitial(true); }, [queuedRefresh]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -3025,7 +3028,7 @@ export function EntityListView({
         const batch = (rowMenu.batch || selected.size > 1) && selected.has(rowMenu.id);
         const ids = batch ? [...selected] : [rowMenu.id];
         const openBatch = () => {
-          for (const id of ids) openRoute(rowOpenUrl(kind, name, id));
+          for (const id of ids) openRoute(rowOpenUrl(kind, name, id), { newWorkspaceTab: true });
         };
         const flatCustom = recordCommands.filter((c) => !c.group);
         const submenus = rowSubmenus;
@@ -3109,6 +3112,15 @@ export function EntityListView({
                   <ExternalLink className="text-muted-foreground" aria-hidden="true" />
                   <span>{t("action.open")}</span>
                   <ContextMenuShortcut>{shortcutLabel({ key: "Enter", mod: true })}</ContextMenuShortcut>
+                </ContextMenuItem>
+                <ContextMenuItem
+                  onSelect={() => {
+                    openRoute(rowMenu.url, { newWorkspaceTab: true });
+                    close();
+                  }}
+                >
+                  <SquarePlus className="text-muted-foreground" aria-hidden="true" />
+                  <span>{t("workspace.openInNewTab")}</span>
                 </ContextMenuItem>
                 {showDuplicate ? (
                   <>
@@ -3244,7 +3256,7 @@ export function EntityListView({
             <div role="group" aria-label={t("list.selectionActions")} className="flex shrink-0 items-center gap-2 border-r border-border pr-2">
               {canWrite && SelectionWidget ? <SelectionWidget ids={[...selected]} complete={() => { clearSelection(); reload(); }} /> : null}
               <Button size="toolbar" variant="subtle" onClick={() => {
-                for (const id of selected) openRoute(rowOpenUrl(kind, name, id));
+                for (const id of selected) openRoute(rowOpenUrl(kind, name, id), { newWorkspaceTab: true });
               }}><ExternalLink />{t("action.open")}</Button>
               {(list.selectionDownloads ?? []).filter(d => !builtInHidden(d.key)).map(d => (
                 <Button key={d.key} size="toolbar" variant="subtle" disabled={pending.has(`download:${d.key}`)}
@@ -3769,8 +3781,16 @@ export function EntityListView({
                       // omitted when writable so rows from older servers keep the full menu.
                       data-onno-row-writable={canWrite ? undefined : "0"}
                       // Shift-click extends the selection — suppress the browser's text-range drag.
+                      // …and a middle press the browser's autoscroll (it opens a new tab instead).
                       onMouseDown={(e) => {
-                        if (e.shiftKey && recordId) e.preventDefault();
+                        if ((e.shiftKey && recordId) || (e.button === 1 && url)) e.preventDefault();
+                      }}
+                      // Middle-click opens the record in a new workspace tab, like a link in a
+                      // browser. (⌘/Ctrl- and Shift-click belong to the selection.)
+                      onAuxClick={(e) => {
+                        if (e.button !== 1 || !url) return;
+                        e.preventDefault();
+                        openRoute(url, { newWorkspaceTab: true });
                       }}
                       onClick={(e) => {
                         // ⌘/Ctrl toggles a row in and out; Shift selects the range from the last

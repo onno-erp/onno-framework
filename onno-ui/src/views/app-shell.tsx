@@ -3,8 +3,8 @@ import { NavigationHost } from "../components/shell/navigation";
 import type { IconSource } from "../lib/icons";
 import { isAppRoute, listenForNavigation } from "../lib/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router";
-import { Copy, ExternalLink, Link2, Trash2, X, type LucideIcon } from "lucide-react";
+import { useLocation, useNavigate, useNavigationType } from "react-router";
+import { ArrowLeft, ArrowRight, Copy, ExternalLink, Link2, SquarePlus, Trash2, X, type LucideIcon } from "lucide-react";
 import { toast } from "../components/ui/toast";
 import { useAuth } from "../providers/auth-provider";
 import { useTheme } from "../providers/theme-provider";
@@ -17,7 +17,33 @@ import { stripBasePath, withBasePath } from "../lib/base-path";
 import { useDirtyForms } from "../lib/dirty-forms";
 import { MobileNavigationFrame } from "../components/shell/mobile-navigation-frame";
 import { ContentPane, type ContentAction } from "./content-pane";
+import {
+  activeTab,
+  closeOtherTabs,
+  decodeSegment,
+  followBrowserHistory,
+  humanizeRouteToken,
+  leaveSurface,
+  navigateInTab,
+  normalizeSizes,
+  openInNewIsland,
+  openInNewTab,
+  recordBasePath,
+  sameRecordTab,
+  stripQuery,
+  tabBack,
+  tabForPath,
+  tabForward,
+  tabHistory,
+  touchTab,
+  type Pane,
+  type Workspace,
+  type WorkspaceTab,
+} from "./workspace-navigation";
 import { invalidateEntity } from "../lib/query";
+import { NEW_TAB_SHORTCUT, NewTabPalette } from "../components/shell/new-tab-palette";
+import { newTabDestinations } from "../lib/new-tab-destinations";
+import type { OpenPlacement } from "../lib/open-placement";
 import { Icon } from "../lib/icons";
 import { BottomTabBar, MobileMenu, ShellContext, type ShellContextValue } from "../components/shell/mobile-shell";
 import { shellBrand, shellFromModel } from "../lib/app-model";
@@ -71,15 +97,7 @@ function viewportFor(width: number): Viewport {
   return "desktop";
 }
 
-export type WorkspaceTab = { path: string; title: string };
-
-// An island: an ordered set of open tabs plus the one currently shown. Several live
-// side by side, each sized by a flex weight in {@link Workspace.sizes}.
-export type Pane = { id: string; tabs: WorkspaceTab[]; activePath: string };
-
-// The desktop content area: islands left-to-right, their flex weights, and which one
-// has focus (the island the URL/navigation drives).
-export type Workspace = { panes: Pane[]; sizes: number[]; focused: string | null };
+export type { Pane, Workspace, WorkspaceTab } from "./workspace-navigation";
 
 export type WorkspaceTabState = "command-target" | "pane-active" | "open";
 
@@ -111,46 +129,6 @@ let paneSeq = 0;
 function newPaneId(): string {
   paneSeq += 1;
   return `pane-${paneSeq}`;
-}
-
-// Percent-decode a single route segment for display. Route segments can be
-// percent-encoded (a non-ASCII or spaced entity name leaks into the URL as
-// e.g. "%D0%97..."), and a tab title built from the raw segment would show that
-// encoded form. Falls back to the raw segment if it isn't valid encoding.
-function decodeSegment(segment: string): string {
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return segment;
-  }
-}
-
-function humanizeRouteToken(token: string): string {
-  return decodeSegment(token)
-    .split(/[_\s]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-// A path may carry a query (a prefilled New form: …/new?startsAt=…). Keep the full string as the
-// stored tab path (the surface fetch needs the query), but read route segments from the query-less
-// form so verb detection and title/identity aren't thrown off by the "?…" tail.
-function stripQuery(pathname: string): string {
-  return pathname.split("?")[0];
-}
-
-function tabForPath(pathname: string): WorkspaceTab {
-  const path = pathname || "/";
-  if (stripQuery(path) === "/") return { path, title: "Dashboard" };
-
-  const [kind, name, detail, action] = stripQuery(path).split("/").filter(Boolean);
-  const entity = name ? humanizeRouteToken(name) : humanizeRouteToken(kind ?? "Page");
-
-  if (detail === "new") return { path, title: `New ${entity}` };
-  if (action === "duplicate") return { path, title: `Duplicate ${entity}` };
-  if (detail) return { path, title: `${entity} ${decodeSegment(detail).slice(0, 8)}` };
-  return { path, title: entity };
 }
 
 // The tab's display title, resolved at render time (not stored) so it tracks the shell's
@@ -193,17 +171,6 @@ function iconForPath(pathname: string, icons: Record<string, IconSource> | undef
   return "panel-top";
 }
 
-// A record surface opened from a list — a document/catalog record or a "new" form (3 segments).
-// These open in their own island beside the list, master-detail style.
-function isRecordDetail(pathname: string): boolean {
-  const seg = stripQuery(pathname).split("/").filter(Boolean);
-  return seg.length === 3 && (seg[0] === "documents" || seg[0] === "catalogs");
-}
-
-function recordBasePath(pathname: string): string | null {
-  return isRecordDetail(pathname) ? stripQuery(pathname) : null;
-}
-
 // A catalog/document list route opened on a record: "/{kind}/{name}?focus={id}" (#410).
 export function isFocusedListPath(path: string): boolean {
   const [pathname, search = ""] = path.split("?");
@@ -228,19 +195,6 @@ export function workspaceWithFocusedList(ws: Workspace, path: string): Workspace
     return { ...p, tabs, activePath: path };
   });
   return { ...ws, panes, focused: target.id };
-}
-
-function sameRecordTab(a: string, b: string): boolean {
-  const ar = recordBasePath(a);
-  const br = recordBasePath(b);
-  return ar != null && ar === br;
-}
-
-function tabsWithRecordPath(tabs: WorkspaceTab[], path: string): WorkspaceTab[] {
-  if (!recordBasePath(path)) {
-    return tabs.some((t) => t.path === path) ? tabs : [...tabs, tabForPath(path)];
-  }
-  return [...tabs.filter((t) => !sameRecordTab(t.path, path)), tabForPath(path)];
 }
 
 // Turn a row's open url ("onno://{kind}/{name}/{id}") into the delete action url
@@ -271,16 +225,6 @@ function initialWorkspace(): Workspace {
   return { panes: [{ id, tabs: [tabForPath(path)], activePath: path }], sizes: [1], focused: id };
 }
 
-// Scale flex weights so they sum to the island count (mean 1 each). Flexbox only
-// distributes the *fraction* of free space equal to the sum of grow factors when that
-// sum is < 1 — so a lone survivor weighted 0.5 would fill only half. Renormalising on
-// every structural change keeps the sum >= 1, so the islands always fill the row.
-function normalize(sizes: number[]): number[] {
-  const sum = sizes.reduce((a, b) => a + b, 0) || 1;
-  const k = sizes.length / sum;
-  return sizes.map((s) => s * k);
-}
-
 // Drop the tab from whichever island holds it. If that empties the island, remove it
 // (and its size weight), keeping at least one island alive. Returns the trimmed
 // workspace; the caller re-points focus afterwards.
@@ -305,7 +249,7 @@ function detachTab(ws: Workspace, path: string): Workspace {
     return initialWorkspace();
   }
   const focused = panes.some((p) => p.id === ws.focused) ? ws.focused : panes[panes.length - 1].id;
-  return { panes, sizes: normalize(sizes), focused };
+  return { panes, sizes: normalizeSizes(sizes), focused };
 }
 
 export function AppShell() {
@@ -319,6 +263,7 @@ export function AppShell() {
 function Shell() {
   const location = useLocation();
   const routePath = location.pathname + location.search;
+  const navigationType = useNavigationType();
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { theme, setTheme } = useTheme();
@@ -330,6 +275,15 @@ function Shell() {
   const [workspace, setWorkspace] = useState<Workspace>(initialWorkspace);
   const wsRef = useRef(workspace);
   wsRef.current = workspace;
+  // Navigation updates go through here: the ref is advanced at once, so a close issued in the same
+  // tick as an open (a form saved, then closed) sees the open instead of a stale workspace.
+  const updateWorkspace = useCallback((change: (ws: Workspace) => Workspace) => {
+    const next = change(wsRef.current);
+    if (next === wsRef.current) return next;
+    wsRef.current = next;
+    setWorkspace(next);
+    return next;
+  }, []);
   // A single, always-mounted presence driver for the focused pane's route. Feeding it by prop (not a
   // per-pane mounted component) means closing/opening/Esc-ing panes only changes its `path` — the hook
   // never remounts, so the "this tab's own route" marker moves old→new without flashing through null
@@ -339,6 +293,8 @@ function Shell() {
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; url: string; writable: boolean } | null>(null);
   // Right-click menu for a workspace tab: screen position + the tab's route path.
   const [tabMenu, setTabMenu] = useState<{ x: number; y: number; path: string } | null>(null);
+  // The island whose "+" palette (search a screen or a New form, open it as a new tab) is open.
+  const [newTabPane, setNewTabPane] = useState<string | null>(null);
   // The in-app confirmation modal (delete, etc.); null when closed.
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   // Mirror the menu/modal open-state into refs so the window-level Delete-key handler can read
@@ -368,29 +324,23 @@ function Shell() {
   // Mirror the URL into the focused island: ensure it has a tab for the route and
   // shows it. (Clicking a tab in another island focuses it and navigates here, so by
   // the time this runs the focused island already matches — a no-op.)
+  // A URL change the workspace didn't make itself (the browser's Back / Forward, a deep link, a
+  // plain router navigate) is applied like any navigation: the focused tab shows the route. The
+  // browser's own Back / Forward step the focused tab's history when the route is its previous /
+  // next surface (see followBrowserHistory).
   useEffect(() => {
-    setWorkspace((ws) => {
-      const focused = ws.panes.find((p) => p.id === ws.focused) ?? ws.panes[0];
-      // An island intentionally emptied (last tab closed → URL reset to "/") stays blank;
-      // don't re-open a "/" tab for it. Real routes still open normally.
-      if (routePath === "/" && focused.tabs.length === 0) {
-        return ws;
-      }
-      if (
-        focused.activePath === routePath &&
-        focused.tabs.some((t) => t.path === routePath)
-      ) {
-        return ws;
-      }
-      const tab = tabForPath(routePath);
-      const panes = ws.panes.map((p) => {
-        if (p.id !== focused.id) return p;
-        const tabs = p.tabs.some((t) => t.path === tab.path) ? p.tabs : [...p.tabs, tab];
-        return { ...p, tabs, activePath: tab.path };
-      });
-      return { ...ws, panes, focused: focused.id };
-    });
-  }, [routePath]);
+    const ws = wsRef.current;
+    const focused = ws.panes.find((p) => p.id === ws.focused) ?? ws.panes[0];
+    // An island intentionally emptied (last tab closed → URL reset to "/") stays blank;
+    // don't re-open a "/" tab for it. Real routes still open normally.
+    if (routePath === "/" && focused.tabs.length === 0) return;
+    if (focused.activePath === routePath && focused.tabs.some((t) => t.path === routePath)) return;
+    updateWorkspace((current) =>
+      navigationType === "POP"
+        ? followBrowserHistory(current, routePath, dirtyForms.isDirty)
+        : navigateInTab(current, focused.id, routePath, dirtyForms.isDirty)
+    );
+  }, [routePath, navigationType, dirtyForms, updateWorkspace]);
 
   const model = useModelLoader();
 
@@ -485,29 +435,50 @@ function Shell() {
     }
   }, [shell, location.pathname, landHome]);
 
-  // Open a route in the focused island: add a tab if missing and make it active, then
-  // sync the URL. Doing the workspace update directly (not just navigate) means it
-  // works even when the path equals the current URL — e.g. reopening the route whose
-  // last tab was just closed, which leaves the URL unchanged so navigate() is a no-op.
+  // Open a route in the focused island the way a browser window does: its active tab shows the
+  // route and remembers the previous surface for Back. `newTab` opens it in a new tab instead (a
+  // middle-click / Ctrl-click or "Open in new tab"). Doing the workspace update directly (not just
+  // navigate) means it works even when the path equals the current URL — e.g. reopening the route
+  // whose last tab was just closed, which leaves the URL unchanged so navigate() is a no-op.
   const openPath = useCallback(
-    (path: string) => {
-      setWorkspace((ws) => {
+    (path: string, newTab = false) => {
+      updateWorkspace((ws) => {
         const focused = ws.panes.find((p) => p.id === ws.focused) ?? ws.panes[0];
-        const panes = ws.panes.map((p) => {
-          if (p.id !== focused.id) {
-            return recordBasePath(path) ? { ...p, tabs: p.tabs.filter((t) => !sameRecordTab(t.path, path)) } : p;
-          }
-          const tabs = tabsWithRecordPath(p.tabs, path);
-          return { ...p, tabs, activePath: path };
-        });
-        return { ...ws, panes, focused: focused.id };
+        return newTab
+          ? openInNewTab(ws, focused.id, path, dirtyForms.isDirty)
+          : navigateInTab(ws, focused.id, path, dirtyForms.isDirty);
       });
       // Always navigate — never guard on location.pathname. A handler that captured a stale
       // `location.pathname` (the landing route "/") would make the guard `path !== location.pathname`
       // wrongly skip navigating to the home page, leaving it unreachable from the nav. React Router no-ops a navigate to the current location.
       navigate(path);
     },
-    [navigate]
+    [navigate, updateWorkspace, dirtyForms]
+  );
+
+  // Open a route next to an island instead of in its active tab: as a new tab of that island, or in
+  // a new island to its right. The explicit island wins over the usual list / record placement.
+  const openBeside = useCallback(
+    (paneId: string | null, path: string, placement: Exclude<OpenPlacement, "tab">) => {
+      updateWorkspace((ws) => {
+        const pane = ws.panes.find((p) => p.id === (paneId ?? ws.focused)) ?? ws.panes[0];
+        return placement === "new-island"
+          ? openInNewIsland(ws, pane.id, path, newPaneId())
+          : openInNewTab(ws, pane.id, path, dirtyForms.isDirty);
+      });
+      navigate(path);
+    },
+    [navigate, updateWorkspace, dirtyForms]
+  );
+
+  // The sidebar's dispatcher: a plain click navigates the focused tab, a middle- or Ctrl-click
+  // opens a new tab, a Shift-click a new island beside the focused one.
+  const navigateFromMenu = useCallback(
+    (path: string, options?: { newWorkspaceTab?: boolean; newIsland?: boolean }) => {
+      if (options?.newIsland) openBeside(null, path, "new-island");
+      else openPath(path, options?.newWorkspaceTab === true);
+    },
+    [openPath, openBeside]
   );
 
   // Opening a rail section transfers command focus to navigation without closing or hiding
@@ -556,45 +527,26 @@ function Shell() {
 
   // Open a record beside the focused island, master-detail style — but cap auto-opened
   // columns at two so nested opens (a form, then "+ New" from a dropdown, then its edit…)
-  // tab into the existing detail column instead of cramming the screen with ever more
-  // panes. If it's already open anywhere, focus it; if a second column already exists,
-  // pile the record on there as a tab; otherwise spawn the detail column to the right.
+  // stay in the existing detail column instead of cramming the screen with ever more
+  // panes. If it's already open anywhere, focus it; if a second column already exists, the
+  // record replaces what its active tab shows (Back returns to it); otherwise spawn the detail
+  // column to the right. `newTab` adds a tab to the detail column instead of replacing.
   const MAX_AUTO_COLUMNS = 2;
   const openDetailRight = useCallback(
-    (path: string) => {
-      setWorkspace((ws) => {
+    (path: string, newTab = false) => {
+      updateWorkspace((ws) => {
         const holder = ws.panes.find((p) =>
           p.tabs.some((t) => t.path === path || sameRecordTab(t.path, path))
         );
-        if (holder) {
-          return {
-            ...ws,
-            focused: holder.id,
-            panes: ws.panes.map((p) =>
-              p.id === holder.id
-                ? { ...p, tabs: tabsWithRecordPath(p.tabs, path), activePath: path }
-                : recordBasePath(path)
-                  ? { ...p, tabs: p.tabs.filter((t) => !sameRecordTab(t.path, path)) }
-                  : p
-            ),
-          };
-        }
+        if (holder) return navigateInTab(ws, holder.id, path, dirtyForms.isDirty);
         const idx = Math.max(0, ws.panes.findIndex((p) => p.id === ws.focused));
-        // Already at the column cap → tab into the rightmost pane (the detail column)
-        // rather than splitting a new one.
+        // Already at the column cap → reuse the rightmost pane (the detail column) rather than
+        // splitting a new one.
         if (ws.panes.length >= MAX_AUTO_COLUMNS) {
           const target = ws.panes[ws.panes.length - 1];
-          return {
-            ...ws,
-            focused: target.id,
-            panes: ws.panes.map((p) =>
-              p.id === target.id
-                ? { ...p, tabs: tabsWithRecordPath(p.tabs, path), activePath: path }
-                : recordBasePath(path)
-                  ? { ...p, tabs: p.tabs.filter((t) => !sameRecordTab(t.path, path)) }
-                  : p
-            ),
-          };
+          return newTab
+            ? openInNewTab(ws, target.id, path, dirtyForms.isDirty)
+            : navigateInTab(ws, target.id, path, dirtyForms.isDirty);
         }
         const id = newPaneId();
         const panes = [
@@ -606,11 +558,11 @@ function Shell() {
         const share = sizes[idx] / 2;
         sizes[idx] = share;
         sizes.splice(idx + 1, 0, share);
-        return { panes, sizes: normalize(sizes), focused: id };
+        return { panes, sizes: normalizeSizes(sizes), focused: id };
       });
       if (path !== location.pathname) navigate(path);
     },
-    [location.pathname, navigate]
+    [location.pathname, navigate, updateWorkspace, dirtyForms]
   );
 
   // "Open in list" (#410): behaves like a navigation click on the list — see workspaceWithFocusedList.
@@ -622,8 +574,9 @@ function Shell() {
     [navigate]
   );
 
-  // Close a tab by its path wherever it lives. Repoints focus to what remains in that island and
-  // follows it with the URL.
+  // A surface finished its job (a form saved or cancelled, a record deleted): its tab returns to the
+  // surface it came from, or closes when it has no history. Repoints focus to what remains and
+  // follows it with the URL (replacing the history entry, so Back doesn't reopen the closed form).
   const closePath = useCallback(
     (path: string) => {
       // Programmatic close (post-save, post-delete): the initiator owns the data outcome, so any
@@ -631,12 +584,13 @@ function Shell() {
       dirtyForms.clear(path);
       const ws = wsRef.current;
       if (!ws.panes.some((p) => p.tabs.some((t) => t.path === path))) return;
-      const next = detachTab(ws, path);
-      setWorkspace(next);
+      const next = updateWorkspace((current) => leaveSurface(current, path) ?? detachTab(current, path));
       const focused = next.panes.find((p) => p.id === next.focused) ?? next.panes[0];
-      if (focused?.activePath && focused.activePath !== location.pathname) navigate(focused.activePath);
+      if (focused?.activePath && focused.activePath !== location.pathname) {
+        navigate(focused.activePath, { replace: true });
+      }
     },
-    [location.pathname, navigate]
+    [location.pathname, navigate, updateWorkspace, dirtyForms]
   );
 
   // Copy the shareable deep link for a route path to the clipboard, with a toast. Used by the
@@ -649,11 +603,11 @@ function Shell() {
   }, []);
 
   // All navigation sources use the same pane placement and existing-tab reuse rules.
-  const openSurface = useCallback((path: string, explicitMain = false) => {
+  const openSurface = useCallback((path: string, explicitMain = false, newTab = false) => {
     // "/" is the generic home intent, same as onno:// — dashboard-less personas (e.g. a manager)
     // have no "/" page and declare their first reachable surface as shell.home.
     if (path === "/") {
-      openPath(shell?.home ?? "/");
+      openPath(shell?.home ?? "/", newTab);
       return;
     }
     if (isFocusedListPath(path)) {
@@ -667,9 +621,9 @@ function Shell() {
     // On the desktop islands layout, a record opens in its own island to the right;
     // elsewhere (single content pane) it just navigates.
     if (!inMain && shell?.navStyle === "sidebar" && recordBasePath(path)) {
-      openDetailRight(path);
+      openDetailRight(path, newTab);
     } else {
-      openPath(path);
+      openPath(path, newTab);
     }
   }, [openPath, openDetailRight, openFocusedList, shell?.home, shell?.navStyle, shell?.mainRecordRoutes]);
 
@@ -678,8 +632,9 @@ function Shell() {
     (action: ContentAction) => {
       const url = action?.url;
       if (!url) return;
+      const newTab = action.newTab === true;
       if (isAppRoute(url)) {
-        openSurface(url);
+        openSurface(url, false, newTab);
         return;
       }
       if (!url.startsWith("onno://")) return;
@@ -789,7 +744,7 @@ function Shell() {
         return;
       }
       const explicitMain = rest.startsWith("main/");
-      openSurface("/" + (explicitMain ? rest.slice("main/".length) : rest), explicitMain);
+      openSurface("/" + (explicitMain ? rest.slice("main/".length) : rest), explicitMain, newTab);
     },
     [
       navigate,
@@ -924,7 +879,10 @@ function Shell() {
   // Every openRoute / closeRoute in the app lands here: open an onno:// link or app route through
   // the action handler (open record, open catalog new-form, …), close a form pane after save/cancel.
   useEffect(
-    () => listenForNavigation({ open: (url) => onCustomAction({ url }), close: closePath }),
+    () => listenForNavigation({
+      open: (url, { newWorkspaceTab }) => onCustomAction({ url, newTab: newWorkspaceTab }),
+      close: closePath,
+    }),
     [onCustomAction, closePath],
   );
 
@@ -943,14 +901,87 @@ function Shell() {
   // Show a tab: focus its island, make it active, and sync the URL.
   const activateTab = useCallback(
     (paneId: string, path: string) => {
-      setWorkspace((ws) => ({
-        ...ws,
-        focused: paneId,
-        panes: ws.panes.map((p) => (p.id === paneId ? { ...p, activePath: path } : p)),
-      }));
+      updateWorkspace((ws) => touchTab(ws, paneId, path));
       if (path !== location.pathname) navigate(path);
     },
-    [location.pathname, navigate]
+    [location.pathname, navigate, updateWorkspace]
+  );
+
+  // Step an island's active tab through its own history (the strip's arrows, Alt+←/→, the mouse's
+  // back/forward buttons). The URL entry is replaced, not pushed, so the browser history doesn't
+  // grow with every step. A form with unsaved edits asks before it is left.
+  const stepHistoryRef = useRef<((paneId: string | null, direction: "back" | "forward") => void) | null>(null);
+  const stepHistory = useCallback(
+    (paneId: string | null, direction: "back" | "forward") => {
+      const ws = wsRef.current;
+      const pane = ws.panes.find((p) => p.id === (paneId ?? ws.focused)) ?? ws.panes[0];
+      if (!pane) return;
+      const history = tabHistory(pane);
+      if (direction === "back" ? !history.canBack : !history.canForward) return;
+      const current = activeTab(pane);
+      if (current && dirtyForms.isDirty(current.path)) {
+        setConfirm({
+          title: t("confirm.discard.title"),
+          message: t("confirm.discard.message"),
+          confirmLabel: t("action.discard"),
+          danger: true,
+          onConfirm: () => {
+            dirtyForms.clear(current.path);
+            stepHistoryRef.current?.(pane.id, direction);
+          },
+        });
+        return;
+      }
+      const next = updateWorkspace((w) => (direction === "back" ? tabBack(w, pane.id) : tabForward(w, pane.id)));
+      const target = next.panes.find((p) => p.id === pane.id)?.activePath;
+      if (target && target !== current?.path) navigate(target, { replace: true });
+    },
+    [navigate, updateWorkspace, dirtyForms, t]
+  );
+  stepHistoryRef.current = stepHistory;
+
+  // What an island's "+" palette offers: every navigation screen, then a New form per entity the
+  // viewer may create — the entity the island shows first.
+  const paletteDestinations = useMemo(() => {
+    const pane = workspace.panes.find((p) => p.id === newTabPane);
+    return newTabDestinations({
+      navigation: shell?.navigation ?? [],
+      entities: model?.entities ?? [],
+      home: shell?.home ?? "/",
+      homeLabel: tabTitle(shell?.home ?? "/"),
+      homeIcon: tabIcon(shell?.home ?? "/"),
+      titles: shell?.titles,
+      icons: shell?.icons,
+      currentEntityRoute: recordBasePath(pane?.activePath ?? "")?.split("/").slice(0, 3).join("/"),
+    });
+  }, [workspace.panes, newTabPane, shell, model, tabTitle, tabIcon]);
+  const openTabPaths = useMemo(
+    () => new Set(workspace.panes.flatMap((pane) => pane.tabs.map((tab) => stripQuery(tab.path)))),
+    [workspace.panes]
+  );
+
+  // Alt+T opens the palette of the focused island (⌘T / Ctrl+T is the browser's own).
+  const newTabKeybindings = useMemo(
+    () => [{
+      ...NEW_TAB_SHORTCUT,
+      enabled: viewport === "desktop",
+      run: () => {
+        if (isInteractiveLayerOpen()) return;
+        const ws = wsRef.current;
+        setNewTabPane((ws.panes.find((p) => p.id === ws.focused) ?? ws.panes[0])?.id ?? null);
+      },
+    }],
+    [viewport]
+  );
+  useGlobalKeybindings(newTabKeybindings);
+
+  // "Close other tabs" in a tab's menu: keeps that tab and any tab with unsaved edits.
+  const closeOthers = useCallback(
+    (paneId: string, keep: string) => {
+      updateWorkspace((ws) => closeOtherTabs(ws, paneId, keep, dirtyForms.isDirty));
+      if (keep !== location.pathname) navigate(keep);
+    },
+    [location.pathname, navigate, updateWorkspace, dirtyForms]
   );
 
   // Self-reference so the discard-confirm can re-enter the (by then flag-cleared) close without
@@ -1076,7 +1107,7 @@ function Shell() {
       const share = sizes[idx] / 2;
       sizes[idx] = share;
       sizes.splice(idx + 1, 0, share);
-      setWorkspace({ panes, sizes: normalize(sizes), focused: id });
+      setWorkspace({ panes, sizes: normalizeSizes(sizes), focused: id });
       if (path !== location.pathname) navigate(path);
     },
     [activateTab, moveTabInto, location.pathname, navigate]
@@ -1110,7 +1141,7 @@ function Shell() {
       const share = sizes[idx] / 2;
       sizes[idx] = share;
       sizes.splice(idx, 0, share);
-      setWorkspace({ panes, sizes: normalize(sizes), focused: id });
+      setWorkspace({ panes, sizes: normalizeSizes(sizes), focused: id });
       if (path !== location.pathname) navigate(path);
     },
     [activateTab, moveTabInto, location.pathname, navigate]
@@ -1285,6 +1316,38 @@ function Shell() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [closeTab, dragState, viewport]);
+
+  // Alt+←/→ and the mouse's back/forward buttons step the focused tab's history instead of the
+  // browser's, so they agree with the arrows on the tab strip. Alt+arrows inside a text field keep
+  // their editing meaning (word navigation on macOS).
+  useEffect(() => {
+    if (viewport !== "desktop") return;
+    const editable = (target: EventTarget | null) =>
+      target instanceof HTMLElement
+      && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      if (editable(e.target) || isInteractiveLayerOpen()) return;
+      e.preventDefault();
+      stepHistory(null, e.key === "ArrowLeft" ? "back" : "forward");
+    };
+    // Buttons 3 and 4 are the mouse's back and forward. The browser navigates on their release,
+    // so both halves of the click are claimed.
+    const onMouse = (e: MouseEvent) => {
+      if (e.button !== 3 && e.button !== 4) return;
+      e.preventDefault();
+      if (e.type === "mouseup") stepHistory(null, e.button === 3 ? "back" : "forward");
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onMouse);
+    window.addEventListener("mouseup", onMouse);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mousedown", onMouse);
+      window.removeEventListener("mouseup", onMouse);
+    };
+  }, [stepHistory, viewport]);
 
   // ----- resize between islands -----
 
@@ -1472,6 +1535,11 @@ function Shell() {
             run: () => onCustomAction({ url: rowMenu.url }),
             shortcut: shortcutLabel({ key: "Enter", mod: true }),
           },
+          {
+            label: t("workspace.openInNewTab"),
+            icon: SquarePlus,
+            run: () => onCustomAction({ url: rowMenu.url, newTab: true }),
+          },
           ...(rowMenu.writable
             ? [
                 {
@@ -1510,10 +1578,21 @@ function Shell() {
 
   // The tab right-click menu — copy a shareable link to whatever surface the tab shows
   // (record detail, list, page, dashboard, register), covering the cases a list row can't.
+  const tabMenuPane = tabMenu ? workspace.panes.find((p) => p.tabs.some((tab) => tab.path === tabMenu.path)) : undefined;
   const tabMenuEl = tabMenu
     ? contextMenu(
         tabMenu,
-        [{ label: t("action.copyLink"), icon: Link2, run: () => copyLink(tabMenu.path) }],
+        [
+          { label: t("action.copyLink"), icon: Link2, run: () => copyLink(tabMenu.path) },
+          ...(tabMenuPane && tabMenuPane.tabs.length > 1
+            ? [{
+                label: t("workspace.closeOtherTabs"),
+                icon: X,
+                run: () => closeOthers(tabMenuPane.id, tabMenu.path),
+                divider: true,
+              }]
+            : []),
+        ],
         () => setTabMenu(null)
       )
     : null;
@@ -1636,6 +1715,32 @@ function Shell() {
             clearTabDrag();
           }}
         >
+          {/* Back / Forward through the active tab's own history, browser-style. */}
+          {hasTabs ? (
+            <div className="mr-1 flex shrink-0 items-center" data-tab-history>
+              {(["back", "forward"] as const).map((direction) => {
+                const history = tabHistory(pane);
+                const enabled = direction === "back" ? history.canBack : history.canForward;
+                const label = t(direction === "back" ? "workspace.back" : "workspace.forward");
+                const Arrow = direction === "back" ? ArrowLeft : ArrowRight;
+                const shortcut = direction === "back" ? "Alt+←" : "Alt+→";
+                return (
+                  <button
+                    key={direction}
+                    type="button"
+                    aria-label={label}
+                    title={`${label} (${shortcut})`}
+                    disabled={!enabled}
+                    data-history-direction={direction}
+                    className="grid size-7 place-items-center rounded-md text-muted-foreground transition hover:bg-foreground/10 hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
+                    onClick={() => stepHistory(pane.id, direction)}
+                  >
+                    <Arrow className="size-4" aria-hidden="true" />
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
           {displayTabs.map((slot) => {
             if (slot.kind === "ghost") {
               // Where a tab from another island will land.
@@ -1726,6 +1831,15 @@ function Shell() {
               </div>
             );
           })}
+          {/* New tab, right after the last tab, browser-style: pick a screen or a New form. */}
+          <NewTabPalette
+            open={newTabPane === pane.id}
+            onOpenChange={(open) => setNewTabPane((current) => (open ? pane.id : current === pane.id ? null : current))}
+            destinations={paletteDestinations}
+            openPaths={openTabPaths}
+            onPick={(path, placement) => openBeside(pane.id, path, placement)}
+            t={t}
+          />
           {/* Collaborator avatars for the focused pane's record — pinned right of the tabs. */}
           {showFocusedChrome && pane.activePath ? (
             <div className="ml-auto flex shrink-0 items-center pl-2 pr-1">
@@ -1823,7 +1937,7 @@ function Shell() {
       <ShellContext.Provider value={shellContext}>
       <div className="flex h-screen w-full overflow-hidden" style={{ background: pageBg }}>
         {shell ? (
-          <NavigationHost navigation={shell.navigation} activePath={commandPane?.activePath ?? ""} mobile={false} onNavigate={openPath}
+          <NavigationHost navigation={shell.navigation} activePath={commandPane?.activePath ?? ""} mobile={false} onNavigate={navigateFromMenu}
             header={<button type="button" onClick={() => openPath(shell.home)} className="px-2 py-3 text-left text-lg font-semibold">{shell.brand || "onno"}</button>}
             footer={<div className="mt-auto space-y-2"><NotificationTrigger />{desktopAccountEl(false)}</div>}>
           <DesktopNavigation
@@ -1833,7 +1947,7 @@ function Shell() {
             navigation={shell.navigation}
             activePath={commandPane?.activePath ?? ""}
             home={shell.home}
-            onNavigate={openPath}
+            onNavigate={navigateFromMenu}
             onSectionFocus={focusNavigation}
             account={desktopAccountEl}
             notification={<NotificationTrigger compact />}

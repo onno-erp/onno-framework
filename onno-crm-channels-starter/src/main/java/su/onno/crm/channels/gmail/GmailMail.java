@@ -193,7 +193,12 @@ final class GmailMail {
     /** {@link #reply(String,String,String,String,String,List,UUID)} signed with {@code signatureHtml} (see {@link #compose(String,String,String,String,String,List,UUID,String)}). */
     static String reply(String from,String to,String subject,String reference,String body,
             List<Outgoing> files,UUID id,String signatureHtml) throws Exception {
-        return compose(from,to,subject.regionMatches(true,0,"Re:",0,3)?subject:"Re: "+subject,reference,body,files,id,signatureHtml);
+        return reply(from,to,subject,reference,body,null,files,id,signatureHtml);
+    }
+    /** {@link #reply(String,String,String,String,String,List,UUID,String)} with a formatted body (see {@link #compose(String,String,String,String,String,String,List,UUID,String)}). */
+    static String reply(String from,String to,String subject,String reference,String body,String bodyHtml,
+            List<Outgoing> files,UUID id,String signatureHtml) throws Exception {
+        return compose(from,to,subject.regionMatches(true,0,"Re:",0,3)?subject:"Re: "+subject,reference,body,bodyHtml,files,id,signatureHtml);
     }
     static String compose(String from,String to,String subject,String reference,String body,
             List<Outgoing> files,UUID id) throws Exception {
@@ -207,16 +212,26 @@ final class GmailMail {
      */
     static String compose(String from,String to,String subject,String reference,String body,
             List<Outgoing> files,UUID id,String signatureHtml) throws Exception {
+        return compose(from,to,subject,reference,body,null,files,id,signatureHtml);
+    }
+    /**
+     * An email with a formatted body: {@code bodyHtml} (already sanitized, {@code ConversationMessage#getBodyHtml})
+     * becomes the HTML alternative, with the signature under it when there is one, and {@code body} the plain-text
+     * one. A null or blank {@code bodyHtml} is {@link #compose(String,String,String,String,String,List,UUID,String)}.
+     */
+    static String compose(String from,String to,String subject,String reference,String body,String bodyHtml,
+            List<Outgoing> files,UUID id,String signatureHtml) throws Exception {
         if(subject.contains("\r")||subject.contains("\n"))throw new IllegalArgumentException("Invalid email subject");
         if(from.contains("\r")||from.contains("\n")||to.contains("\r")||to.contains("\n")||reference.contains("\r")||reference.contains("\n"))throw new IllegalArgumentException("Invalid email header");
         var message=new MimeMessage(Session.getInstance(new Properties()));
         message.setFrom(new InternetAddress(from,true));message.setRecipient(Message.RecipientType.TO,new InternetAddress(to,true));
         message.setSubject(subject,"UTF-8");
         String signature=signatureHtml==null||signatureHtml.isBlank()?null:signatureHtml;
-        if(files.isEmpty())setText(message,body,signature);
+        String formatted=bodyHtml==null||bodyHtml.isBlank()?null:bodyHtml;
+        if(files.isEmpty())setText(message,body,formatted,signature);
         else {
             var parts=new MimeMultipart("mixed");
-            var text=new MimeBodyPart();setText(text,body,signature);parts.addBodyPart(text);
+            var text=new MimeBodyPart();setText(text,body,formatted,signature);parts.addBodyPart(text);
             for(var file:files) {
                 var part=new MimeBodyPart();
                 part.setDataHandler(new jakarta.activation.DataHandler(
@@ -233,24 +248,32 @@ final class GmailMail {
         message.setSentDate(new Date());message.saveChanges();message.setHeader("Message-ID","<onno-"+id+"@"+from.substring(from.indexOf('@')+1)+">");
         var out=new ByteArrayOutputStream();message.writeTo(out);return Base64.getUrlEncoder().withoutPadding().encodeToString(out.toByteArray());
     }
-    /** The email's text: plain, or plain and HTML alternatives when it is signed. */
-    private static void setText(MimePart part,String body,String signature) throws Exception {
-        if(signature==null){part.setText(body,"UTF-8");return;}
+    /** The email's text: plain, or plain and HTML alternatives when it is formatted or signed. */
+    private static void setText(MimePart part,String body,String bodyHtml,String signature) throws Exception {
+        if(signature==null && bodyHtml==null){part.setText(body,"UTF-8");return;}
         var alternatives=new MimeMultipart("alternative");
         var plain=new MimeBodyPart();
-        String signatureText=EmailHtml.toText(signature);
+        String signatureText=signature==null?"":EmailHtml.toText(signature);
         plain.setText(signatureText.isBlank()?body:body+"\n\n-- \n"+signatureText,"UTF-8");
         alternatives.addBodyPart(plain);
         var html=new MimeBodyPart();
-        html.setText(signedHtml(body,signature),"UTF-8","html");
+        html.setText(signature==null?formattedHtml(bodyHtml):signedHtml(body,bodyHtml,signature),"UTF-8","html");
         alternatives.addBodyPart(html);
         part.setContent(alternatives);
     }
     /** The typed text as HTML (escaped, line breaks kept) followed by the signature, as Gmail lays it out. */
     static String signedHtml(String body,String signature) {
-        String text=org.jsoup.nodes.Entities.escape(body).replace("\r\n","\n").replace("\n","<br>");
+        return signedHtml(body,null,signature);
+    }
+    /** {@link #signedHtml(String,String)} with the formatted body, when there is one, in place of the escaped text. */
+    static String signedHtml(String body,String bodyHtml,String signature) {
+        String text=bodyHtml!=null?bodyHtml:org.jsoup.nodes.Entities.escape(body).replace("\r\n","\n").replace("\n","<br>");
         return "<div dir=\"auto\">"+text+"</div><br><div class=\"gmail_signature\" data-smartmail=\"gmail_signature\">"
             +signature+"</div>";
+    }
+    /** A formatted body without a signature. */
+    static String formattedHtml(String bodyHtml) {
+        return "<div dir=\"auto\">"+bodyHtml+"</div>";
     }
     private static String safeName(String name) {
         String leaf=name==null||name.isBlank()?"attachment":name.replaceAll("[\\r\\n\"\\\\/]","_").strip();

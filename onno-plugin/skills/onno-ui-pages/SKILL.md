@@ -273,8 +273,11 @@ Links name what to open; web and mobile clients share them.
 | `links.list("Orders", { where: { posted: false } })` | `onno://documents/orders?where=<json>` | a list showing only those records |
 | `links.page("/ops")` | `onno://ops` | an app page (`onno://` is home) |
 
-Open with `openRoute(link)` (also takes a page path; `openRoute(link, { newTab: true })` opens a
-browser tab under the app's base path) or the shortcut `openRecord("Orders", id)` /
+Open with `openRoute(link)` (also takes a page path). Like a link in a browser window, it replaces
+what the active workspace tab shows and that tab's Back returns; `openRoute(link, { newWorkspaceTab:
+true })` opens a new workspace tab and `openRoute(link, { newTab: true })` a browser tab under the
+app's base path. Use `newWorkspaceTab` when several records open at once (each would otherwise
+replace the previous one) or the shortcut `openRecord("Orders", id)` /
 `openRecord("Orders", "new", prefill)`. `<RouteLink to={link}>` is a real anchor (middle-click and
 copy work) that opens in the workspace on a plain click. A Java command can send the user on with
 `CommandResult.open(ref)` / `.navigate(route)`; the client applies the result's `navigateTo` after
@@ -290,7 +293,10 @@ windows line up right to left), floated (drag the title bar, resize from any edg
 phones a window always fills the screen. Escape inside a window never reaches the page beneath it.
 For a blocking question or form, use a command's input dialog instead.
 
-Owned by a component, with children in the owner's state and context. It closes with its owner:
+Owned by a component, with children in the owner's state and context. It closes with its owner, unless
+another component renders a `FloatingWindow` with the same `id` in the same commit: then that one takes the
+window over as it is (minimised, docked, moved, resized). The inbox uses this to keep a composer window on its
+conversation while the planner opens other chats.
 
 ```tsx
 import { FloatingWindow } from "@onno/ui";

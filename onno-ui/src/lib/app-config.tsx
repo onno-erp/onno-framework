@@ -2,6 +2,7 @@ import type { IconSource } from "./icons";
 import { createContext, useContext, useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { defaultNavigation, ENTITY_KIND_ICONS, isEntitySurface, type AppModel, type ModelEntity } from "./app-model";
 import { applyForm, applyList, customizationsFor, type EntityCustomization } from "./entity-customizations";
+import { mergePresentations, type CommandPresentation } from "./commands";
 import { findEntity, modelOutsideReact, useModel } from "./model-store";
 import { openRoute } from "./navigation";
 import { matchRoute, route, type MatchedRoute, type Route, type RouteProps } from "./routes";
@@ -195,6 +196,15 @@ export function useEntityCustomizations(
     const declared = customizationsFor(app.entities, { kind, name, logicalName });
     return extra ? [...declared, extra] : declared;
   }, [app.entities, model, kind, name, extra]);
+}
+
+/**
+ * How the app presents an entity's commands: the `commands` of its customizations, merged (later ones
+ * win). For a surface that lists commands itself and should look like the entity's own menus.
+ */
+export function useCommandPresentations(kind: string, name: string): Record<string, CommandPresentation> {
+  const customizations = useEntityCustomizations(kind, name);
+  return useMemo(() => mergePresentations(...customizations.map(c => c.commands)), [customizations]);
 }
 
 /** An entity's default list with the app's customizations (and `extra`) applied. */

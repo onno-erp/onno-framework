@@ -191,7 +191,22 @@ function save(entry: Entry | undefined) {
   }
 }
 
+/**
+ * Windows whose owner unmounted this tick. Removal waits a microtask, so another owner rendering the same id in
+ * the same commit (a remount, or a window handed from one component to another) takes over the open window as it
+ * is: minimised, docked, moved and resized, in its place in the stack.
+ */
+const leaving = new Set<string>();
+function release(id: string) {
+  leaving.add(id);
+  queueMicrotask(() => { if (leaving.delete(id)) unregister(id); });
+}
+
 function register(id: string, spec: WindowSpec, options?: WindowOptions) {
+  if (leaving.delete(id) && find(id)) {
+    patch(id, () => ({ options }));
+    return;
+  }
   const existing = find(id);
   if (existing) {
     patch(id, () => ({ options, z: ++zCounter }));
@@ -209,6 +224,7 @@ function register(id: string, spec: WindowSpec, options?: WindowOptions) {
 }
 
 function unregister(id: string) {
+  leaving.delete(id);
   if (!find(id)) return;
   entries = entries.filter(entry => entry.id !== id);
   emit();
@@ -618,7 +634,7 @@ export function FloatingWindow({ id: givenId, open = true, onOpenChange, childre
   useLayoutEffect(() => {
     if (!open) return;
     register(id, { ...spec, persist, initialState });
-    return () => unregister(id);
+    return () => release(id);
     // The spec's other fields are read live while rendering; only identity and opening matter here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, open, persist, initialState]);
@@ -697,6 +713,7 @@ function WindowContent({ render }: { render: (window: WindowControls) => ReactNo
 /** Test seam: forget every window (vitest runs share the module). */
 export function resetWindowsForTests() {
   entries = [];
+  leaving.clear();
   zCounter = 1;
   openCounter = 0;
   dockedWidths.clear();

@@ -34,7 +34,8 @@ Server behaviour stays in Java, as ordinary beans in `example/src/main/java/com/
 `checks/ScheduleEventChecks` (live form checks), `pickers/EmployeeAvailability` (picker options).
 How a command is offered (row button, header button, menu, icon) is the entity's `commands`
 customization in `entities/*.ts`; so are the built-in record actions and the print starter's
-`print-*` actions. The same file supplies the entity's imported Lucide `icon`, and `comments: true`
+`print-*` actions. The CRM inbox's conversation row menu reads the same customization of
+`CrmConversations` (`useCommandPresentations`). The same file supplies the entity's imported Lucide `icon`, and `comments: true`
 enables the record discussion.
 
 ## 2. The contract between server and browser
@@ -108,7 +109,10 @@ state, so a component's behaviour depends only on its props and the providers ab
   read with `useUiEvents(listener, filter)` over the same shared stream.
 - Per-session state (notifications, presence, dirty forms, the quick-create hand-off): providers
   mounted in `App.tsx`. Opening and closing screens goes through `openRoute`/`closeRoute`
-  (`lib/navigation.ts`), which the shell alone listens to.
+  (`lib/navigation.ts`), which the shell alone listens to. The workspace rules (an open replaces the
+  active tab's screen and records it for that tab's Back / Forward, explicit new tabs and islands,
+  the soft tab limit) are pure functions in `views/workspace-navigation.ts`; the tab strip's "+"
+  palette is `components/shell/new-tab-palette.tsx` over `lib/new-tab-destinations.ts`.
 - Shared page state (theme, messages, the page's time range): their providers.
 - A component's own UI state: inside it, and *controllable* where a page may care.
   `EntityList` works like an `<input>`: `defaultGroupBy`/`defaultSort`/`defaultView` set where it
@@ -252,6 +256,12 @@ How an entity presents is one `EntityCustomization<E>` per entity in `entities/`
 `form` (`fields`: the header fields shown, in order), `fields` (presentation only, keyed by field;
 its key order selects and orders nothing), `rowStyle`, `commands`, `recordPanels`, `comments` and `relations` (a join entity such as `Supplier Offers` edited inline from each side and saved with the record),
 and applies wherever the entity shows. Icons are imported components from `@onno/ui/icons`.
+
+Relation editors read the complete join-row set through cursor pagination before enabling edits.
+They preserve the owner filter and configured sort on every page. A failed or invalid continuation
+keeps the editor unavailable for replacement writes: saving a partial set would delete unseen links.
+The lower-level `api.listCatalogPage` and `api.listDocumentsPage` accept `sort` alongside `cursor`
+and `limit`; bounded `listCatalog`/`listDocuments` reads still return a single window.
 
 Register a list or record component by logical name in `defineApp({ pages })` only when the layout
 differs from the default: `{ list: "Suppliers", component: SuppliersPage }` puts a stat above

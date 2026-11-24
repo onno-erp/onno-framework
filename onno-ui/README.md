@@ -91,6 +91,12 @@ calendar, timeline, custom view) for this list only. `sort` and `groupBy` set in
 pair them with their `on…Change` callback for controlled state. `selectionToolbar` is a component;
 `selection` is the controlled array of selected ids.
 
+`where` follows the page's current state: changing or removing it reloads the first matching
+window and clears the previous selection. For example,
+`<EntityList entity="Orders" where={onlyOpen ? { open: true } : undefined} />` switches between
+open orders and all orders when `onlyOpen` changes. Recreating an equivalent filter object during
+a render does not reload the list; no changing React `key` or manual refresh is needed.
+
 `RecordPageProps<E>` injects the live form: `values`, typed `set(field, value)`, `save(post?)`,
 `isNew`, `readOnly`, `saving`, `errors`, `feedback`, and `defaultLayout`. Custom editors can display
 `form.errors.note` and the field-scoped `form.feedback` messages. `RecordPage` retains the header, actions,
@@ -142,12 +148,12 @@ Everything an app can import is in [`src/index.ts`](src/index.ts); the types are
 | The app | `defineApp(app)` — `entities` (one `EntityCustomization<E>` per entity name), `pages` (`path` or `list` or `record`, `component`, `label`, `icon`, `roles`, `when`, `view`), `navigation` (sections of entity names and page paths, or a function of the model), `extensions` (components for named `ExtensionSlot` outlets), `login` (the app's own login page). |
 | Login | `useSignIn()` (`password`, `method(id, credentials)`, `challenge(id, input)`, `redirect(provider)`), `useLoginMethods()`, `LoginLayout`, `SignInMethods`, `PasswordLogin`, `SsoButtons`, `LoginButton`, `DefaultLogin`, `SignInError`; types `LoginPageProps`, `LoginMethods`, `SsoOption`. |
 | Navigation UI | `Navigation`, `NavigationSection`, `NavigationGroup`, `NavigationLink`, `DefaultNavigation`; section `actions`, nested `items`, optional `navigationComponent`. |
-| Navigation | `openRecord(entity, id?, prefill?)`, `openRoute(link \| path, { newTab? })`, `RouteLink` (an anchor that opens in the workspace), `links.record` / `newRecord` / `list` / `page` (typed `onno://` links). A command result's `navigateTo` is applied after its feedback and refresh. |
+| Navigation | `openRecord(entity, id?, prefill?)`, `openRoute(link \| path, { newWorkspaceTab?, newTab? })` (an open replaces the active tab's screen and its Back returns; `newWorkspaceTab` opens a new workspace tab, `newTab` a browser tab), `RouteLink` (an anchor that opens in the workspace), `links.record` / `newRecord` / `list` / `page` (typed `onno://` links). A command result's `navigateTo` is applied after its feedback and refresh. |
 | Model | `useModel()`, `useHasRole(...roles)`. |
 | Page blocks | `Page`, `Row`, `RecordPage`, `RecordFields`, `RecordLines`, `PageHeader`, `DefaultView`, `DefaultHome`, `EntityList` (an entity's full list; controllable: `where`, `defaultGroupBy`/`groupBy`, `sort`, `view`, `search`, `selection` with `on…Change`; `calendar`/`timeline` views). `RecordPage` takes `history` (default: when the entity records history). |
 | Widgets | `Stat`, `Sparkline`, `Gauge`, `Chart`, `TimeRange`, `RecentRecords`, `Kanban`, `Calendar`, `EntityMap`, `Setting`, `TaskInbox`, `UserAccounts`, `ChangePassword`, `PeriodClose` (period-close administration), `RecordHistory` (one record's change history). Typed per entity; they read data themselves and follow the page's time range. |
 | Controls | `Button`, `Badge`, `Input`, `Label`, `Textarea`, `Checkbox`, `Switch`, `Segmented`, `Card…`, `Popover…`, `Select…`, `ContextMenu…`, `DialogShell`, `ResponsiveActionPanel`, `WorkspaceToolbar`, `DatePicker`, `DateTimePicker`, `TimePicker`, `InstantPicker`, `ColorPicker`, `RefSelect`, `EntityTags`, `EntityTagMenu`, `CommentComposer`, `CommentBody`, `EntityListView`, `OptionsFacet`, `toast`, `HintIcon`. |
-| Data | `useRecords(entity, { where, sort, limit })`, `useRecord`, `useAggregate(measure, by)`, `useBalance`, `useTurnover`, `useMovements` (every window of the register feed), `useInformationRegister`, `useConstant`, `useSetConstants`, `useCreateRecord`, `useUpdateRecord`, `useDeleteRecord`, `usePostDocument`, `useUnpostDocument`, `useCommand(entity, key)`; `api` (register reads `getMovements`/`getBalance`/`getTurnover` return one `{ rows, nextCursor, hasMore }` window; `allRegisterRows` follows the cursor), `queryClient` and TanStack Query's `useQuery`/`useMutation`. |
+| Data | `useRecords(entity, { where, sort, limit })`, `useRecord`, `useAggregate(measure, by)`, `useBalance`, `useTurnover`, `useMovements` (every window of the register feed), `useInformationRegister`, `useConstant`, `useSetConstants`, `useCreateRecord`, `useUpdateRecord`, `useDeleteRecord`, `usePostDocument`, `useUnpostDocument`, `useCommand(entity, key)`, `useCommandPresentations(kind, name)` (the entity's `commands` customization, merged, for a surface that lists commands itself); `api` (register reads `getMovements`/`getBalance`/`getTurnover` return one `{ rows, nextCursor, hasMore }` window; `allRegisterRows` follows the cursor), `queryClient` and TanStack Query's `useQuery`/`useMutation`. |
 | Measures | `count`, `sum`, `avg`, `min`, `max` — `sum("Orders", "total", { posted: true })`. |
 | Live events | `useUiEvents(listener, filter)`, `subscribeUiEvents` — for comments, presence, tasks; entity data refreshes by itself. |
 | Text | `useTranslate`, `useLocale`, `text`, `locale`, `formatMoney`, `formatDate`, `displayOf`. |
@@ -169,7 +175,7 @@ too): label, hidden/hideInList/hideInForm, group,
 width, input, format, `render`, placeholder, hint, `refSecondary`, `filterBy` for a cascading
 picker, openButton/clearButton, `commandGroup` for a cell's right-click menu), `rowStyle`, `commands` (placement `"primary" | "menu" | "row" |
 "hidden"`, icon — also for the built-ins `post`, `unpost`, `duplicate`, `delete`, `openInList` and
-modules' `print-*`), `recordPanels`, `icon`, `comments`, `relations` (a many-to-many join entity's rows edited like a tabular section and saved with the record: `{ entity: "Supplier Offers", via: "supplier", columns: ["book", "purchasePrice"] }`). The commands themselves, their inputs and
+modules' `print-*`), `recordPanels`, `icon`, `comments`, `relations` (a many-to-many join entity's rows edited like a tabular section and saved with the record: `{ entity: "Supplier Offers", via: "supplier", columns: ["book", "purchasePrice"] }`). Relation editors load every cursor window before enabling edits; saving therefore preserves links beyond the first 500 rows. Failed or invalid continuations never produce a partial replacement payload. The commands themselves, their inputs and
 who may run them are the server's (`Commands` beans).
 
 **Time.** `LocalTime` fields use `TimePicker`; `Instant` fields use `InstantPicker` and display in

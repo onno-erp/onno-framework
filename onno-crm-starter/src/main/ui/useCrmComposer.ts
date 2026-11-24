@@ -1,4 +1,4 @@
-import { text as t } from "@onno/ui";
+import { text as t, type DraftFile } from "@onno/ui";
 import { useEffect, useRef, useState, useSyncExternalStore, type DragEvent } from "react";
 import { composerState } from "./composerState";
 import { composerDrafts, installDraftUnloadGuard, EMPTY_DRAFT, type ComposerDraft, type ComposerMode } from "./composerDrafts";
@@ -22,7 +22,7 @@ export function useCrmComposer(conversation: CrmConversationState, config: Confi
   const draftKey = id ? composerDrafts.key(workspace, id) : null;
   const defaultMode: ComposerMode = !config || action(config, "reply") ? "reply" : "note";
   const composed: ComposerDraft = (draftKey && composerDrafts.read(draftKey)) || { ...EMPTY_DRAFT, mode: defaultMode };
-  const { mode, body: draft, subject: subjectDraft, recipient: recipientDraft, note: noteDraft, noteBody } = composed;
+  const { mode, body: draft, html: draftHtml, subject: subjectDraft, recipient: recipientDraft, note: noteDraft, noteBody } = composed;
   // Files already uploaded and waiting to go with the next reply.
   const pending: CrmAttachment[] = draftKey ? composerDrafts.files(draftKey) : [];
   const updateDraft = (change: (current: ComposerDraft) => ComposerDraft, key: string | null = draftKey) => {
@@ -30,8 +30,14 @@ export function useCrmComposer(conversation: CrmConversationState, config: Confi
     composerDrafts.write(key, change(composerDrafts.read(key) ?? { ...EMPTY_DRAFT, mode: key === draftKey ? mode : defaultMode }));
   };
   const setMode = (next: ComposerMode) => updateDraft(current => ({ ...current, mode: next }));
+  /** Sets the reply's text; any formatting it had is dropped (the text no longer matches it). */
   const setDraft = (next: string | ((previous: string) => string)) =>
-    updateDraft(current => ({ ...current, body: typeof next === "function" ? next(current.body) : next }));
+    updateDraft(current => {
+      const body = typeof next === "function" ? next(current.body) : next;
+      return { ...current, body, html: body === current.body ? current.html : null };
+    });
+  /** Sets the reply's text and its formatted HTML together (a formatting reply editor); `null` HTML is plain text. */
+  const setFormattedDraft = (body: string, html: string | null) => updateDraft(current => ({ ...current, body, html: html || null }));
   const setSubjectDraft = (subject: string | null) => updateDraft(current => ({ ...current, subject }));
   const setRecipientDraft = (recipient: string | null) => updateDraft(current => ({ ...current, recipient }));
   const setNote = (text: string, body: string) => updateDraft(current => ({ ...current, note: text, noteBody: body }));
@@ -155,6 +161,8 @@ export function useCrmComposer(conversation: CrmConversationState, config: Confi
         const email = conversationChannel(row) === "EMAIL";
         await workspaceCommand(workspace, `/api/crm/conversations/${id}/messages`, {
           body: draft,
+          // The formatted version of the same text; only email carries it, and older backends ignore it.
+          ...(email && draftHtml ? { html: draftHtml } : {}),
           recipient: email ? recipientDraft ?? delivery?.recipient : undefined,
           subject: email ? subjectDraft : undefined,
           attachments: pending.map(file => file.url),
@@ -186,13 +194,32 @@ export function useCrmComposer(conversation: CrmConversationState, config: Confi
     } finally { setBusy(false); }
   };
 
-  /** Adds text to the reply (a template, a quoted date); it is never sent by this call. */
-  const insertDraft = (text: string) => {
+  /**
+   * Adds text to the reply (a template, a quoted date) and files already stored through `/api/media`
+   * (a generated PDF) to its tray; it is never sent by this call. Files the channel can't carry, or
+   * more than its limit, are refused with the composer's own reason, before anything changes.
+   * `html` is the text formatted (a letter template): where the reply is formatted (email) it joins the
+   * draft's HTML and is sent with it; elsewhere it is ignored and the text goes as it is.
+   */
+  const insertDraft = (text: string, files: readonly DraftFile[] = [], html?: string | null) => {
     if (replyState.disabled) throw new Error(t("crm.error.replyUnavailable"));
-    const next = draft.trim() ? `${draft}\n\n${text}` : text;
+    const next = !text.trim() ? draft : draft.trim() ? `${draft}\n\n${text}` : text;
+    const formatted = conversationChannel(row) === "EMAIL" && !!html?.trim() && !!text.trim();
     if (next.length > (delivery?.maxTextLength ?? 4096)) throw new Error(t("crm.error.replyTooLong"));
+    const added = files.filter(file => file?.url && !pending.some(item => item.url === file.url));
+    if (added.length) {
+      const limit = delivery?.maxAttachments ?? 0;
+      if (limit <= 0) throw new Error(delivery?.attachmentReason || t("crm.chat.attachUnavailable"));
+      if (pending.length + added.length > limit) throw new Error(t("crm.chat.attachLimit", { count: limit }));
+    }
     setMode("reply");
-    setDraft(next);
+    // A formatted insert joins the draft's own HTML (or its text, escaped, when it has none).
+    if (formatted) setFormattedDraft(next, draft.trim() ? `${draftHtml ?? plainHtml(draft)}<br><br>${html}` : html!);
+    else if (next !== draft) setDraft(next);
+    if (added.length) setPending(current => [...current, ...added.map(file => {
+      const contentType = file.contentType || "application/octet-stream";
+      return { url: file.url, filename: file.filename, contentType, size: file.size ?? 0, image: /^image\/(png|jpeg|gif|webp|avif)$/.test(contentType) };
+    })]);
   };
 
   // Files dragged onto the chat: accepted for a reply that can carry them, explained otherwise.
@@ -223,7 +250,10 @@ export function useCrmComposer(conversation: CrmConversationState, config: Confi
   const modeOptions = (config?.actions ?? []).filter(a => a.visible && ["reply", "note"].includes(a.key)).map(a => ({ value: a.key as ComposerMode, label: a.label }));
   return {
     draftKey, mode, setMode, modeOptions,
-    draft, setDraft, subjectDraft, setSubjectDraft, recipientDraft, setRecipientDraft,
+    draft, setDraft, draftHtml, setFormattedDraft,
+    /** Whether the reply may be formatted: email carries HTML, the other channels plain text only. */
+    formatting: conversationChannel(row) === "EMAIL",
+    subjectDraft, setSubjectDraft, recipientDraft, setRecipientDraft,
     noteDraft, noteBody, setNote, updateDraft,
     /** Anything typed or chosen that a switch of conversation would lose sight of. */
     hasDraft: !!(draft || noteDraft) || subjectDraft !== null || (recipientDraft !== null && recipientDraft !== delivery?.recipient),
@@ -239,3 +269,8 @@ export function useCrmComposer(conversation: CrmConversationState, config: Confi
 }
 
 export type CrmComposerState = ReturnType<typeof useCrmComposer>;
+
+/** Plain text as HTML, for joining a formatted insert to a draft that has none: escaped, line breaks kept. */
+function plainHtml(text: string) {
+  return text.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!).replace(/\n/g, "<br>");
+}

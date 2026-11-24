@@ -2,6 +2,9 @@ import type { ComponentType } from "react";
 
 /** Stable outlets supplied by the shell and the CRM. Applications may render additional namespaced outlets. */
 export type ExtensionSlotName = "shell.navigation.actions" | "entity.list.context-menu" | "entity.list.actions" | "entity.list.selection" | "entity.form.actions" | "entity.form.aside" | "crm.chat.header" | "crm.chat.composer" | "crm.chat.aside" | "crm.chat.context-menu" | "crm.chat.message.actions" | "crm.chat.timeline.start" | "crm.contact.actions" | "crm.contact.profile" | "crm.contact.page.aside" | "crm.inbox.toolbar" | (string & {});
+/** A stored file an outlet puts in the reply's attachment tray (`ExtensionContext.insertDraft`). */
+export type DraftFile = { readonly url: string; readonly filename: string; readonly contentType?: string; readonly size?: number };
+
 export interface ExtensionContext {
   readonly surface: "entity-list" | "entity-form" | "crm-chat" | (string & {});
   readonly kind?: string;
@@ -16,8 +19,12 @@ export interface ExtensionContext {
   readonly permissions: Readonly<Record<string, boolean>>;
   readonly refresh?: () => void | Promise<unknown>;
   readonly openRecord?: (kind: string, name: string, id: string) => void;
-  /** Host preserves the draft and enforces its length limit. This never sends a message. */
-  readonly insertDraft?: (text: string) => void;
+  /**
+   * Adds text, and optionally files already stored through `/api/media` (a generated PDF), to the reply.
+   * `html` is the same text formatted (a letter template): an email reply keeps it, other channels send the text.
+   * Host preserves the draft and enforces its length and attachment limits. This never sends a message.
+   */
+  readonly insertDraft?: (text: string, files?: readonly DraftFile[], html?: string | null) => void;
   /** Only named commands supplied by this outlet are accepted. Backend authorization still applies. */
   readonly execute?: (command: string, input: Readonly<Record<string, unknown>>) => Promise<unknown>;
   readonly closeMenu?: () => void;

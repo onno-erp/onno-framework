@@ -74,10 +74,18 @@ public class ConversationService {
      * @param sender the id of one of the connection's {@link CrmMessageTransport.Connection#senders()}
      *               to send from; null sends from the connection's default sender.
      */
+    /**
+     * @param html the reply as formatted HTML, for email only; {@code body} stays its plain-text version. It is
+     *             sanitized ({@link ReplyHtml}) and kept as the message's {@code bodyHtml}; null sends plain text.
+     */
     public record Reply(String body, List<String> files, String authorName, String authorId, String subject, String recipient,
-                        String sender) {
+                        String sender, String html) {
         public Reply {
             files = files == null ? List.of() : List.copyOf(files);
+        }
+        public Reply(String body, List<String> files, String authorName, String authorId, String subject, String recipient,
+                     String sender) {
+            this(body, files, authorName, authorId, subject, recipient, sender, null);
         }
         public Reply(String body, List<String> files, String authorName, String authorId, String subject, String recipient) {
             this(body, files, authorName, authorId, subject, recipient, null);
@@ -121,6 +129,14 @@ public class ConversationService {
             subject = subject.strip();
         }
         String normalized = reply.body() == null ? "" : reply.body().trim();
+        String html = null;
+        if (reply.html() != null && !reply.html().isBlank()) {
+            if (!su.onno.crm.domain.Channel.EMAIL.equals(conversation.getChannel()))
+                throw new IllegalArgumentException("Only email messages can be formatted");
+            html = ReplyHtml.sanitize(reply.html());
+            if (html == null && reply.html().length() > ReplyHtml.MAX_LENGTH)
+                throw new IllegalArgumentException("The formatted message is too long");
+        }
         List<String> accepted = attachments.accept(reply.files());
         if (normalized.isEmpty() && accepted.isEmpty()) {
             throw new IllegalArgumentException("Message cannot be empty");
@@ -154,6 +170,7 @@ public class ConversationService {
                 ? "CRM agent" : reply.authorName());
         message.setAuthorId(reply.authorId() == null || reply.authorId().isBlank() ? null : reply.authorId());
         message.setBody(normalized);
+        message.setBodyHtml(normalized.isEmpty() ? null : html);
         message.setSubject(subject);
         message.setRecipient(recipient);
         message.setSenderAccount(sender);

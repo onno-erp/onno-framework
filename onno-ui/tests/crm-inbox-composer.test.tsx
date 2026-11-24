@@ -4,8 +4,10 @@ import { AppConfigProvider } from "@/lib/app-config";
 import type { UiExtension } from "@/lib/extension-types";
 vi.mock("@/lib/presence-store", () => ({ useViewersById: () => new Map() }));
 vi.mock("@/components/maps/list-map-view", () => ({ ListMapView: () => null }));
-import { CrmInbox } from "../../onno-crm-starter/src/main/ui/CrmInbox";
+import { CrmInbox, type CrmInboxProps } from "../../onno-crm-starter/src/main/ui/CrmInbox";
+import { CrmComposer, type CrmComposerProps, type CrmReplyInputProps } from "../../onno-crm-starter/src/main/ui/CrmComposer";
 import { composerDrafts } from "../../onno-crm-starter/src/main/ui/composerDrafts";
+import { composerWindows } from "../../onno-crm-starter/src/main/ui/composerWindows";
 
 class Observer { observe() {} unobserve() {} disconnect() {} }
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
@@ -18,7 +20,7 @@ const rows = [
 const connected = { connected: true, label: "Email", replyCapability: "AVAILABLE", maxAttachments: 2, maxTextLength: 8000 };
 const mailboxes = { senders: [{ id: "office", label: "office@studio.test" }, { id: "wedding", label: "wedding@studio.test" }], sender: "office" };
 
-function mount(delivery: Record<string, object> = {}) {
+function mount(delivery: Record<string, object> = {}, props: Partial<CrmInboxProps> = {}) {
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input), "http://localhost").pathname;
     if (path === "/api/crm/inbox-workspaces") return response([{ key: "support" }]);
@@ -37,7 +39,7 @@ function mount(delivery: Record<string, object> = {}) {
     return response([]);
   });
   vi.stubGlobal("fetch", fetcher);
-  const view = render(<AppConfigProvider app={{ extensions }}><CrmInbox workspace="support" toolbar={{ placement: "renderer" }} showAvatars={false} actionLabels={{ note: "Note" }} /></AppConfigProvider>);
+  const view = render(<AppConfigProvider app={{ extensions }}><CrmInbox workspace="support" toolbar={{ placement: "renderer" }} showAvatars={false} actionLabels={{ note: "Note" }} {...props} /></AppConfigProvider>);
   return { ...view, fetcher, sent: () => fetcher.mock.calls.filter(([url, init]) => String(url).includes("/messages") && init?.method === "POST").map(([url, init]) => ({ url: String(url), body: JSON.parse(String(init?.body)) })) };
 }
 const replyBox = () => screen.findByRole("textbox", { name: "Write a reply" });
@@ -58,7 +60,7 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([{}] as unknown as DOMRectList);
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); composerDrafts.reset(); window.localStorage.clear(); delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView; });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); composerDrafts.reset(); composerWindows.reset(); window.localStorage.clear(); delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView; });
 
 it("keeps each conversation's draft when switching chats, remounting and reloading", async () => {
   mount();
@@ -165,6 +167,53 @@ it("opens the composer in a non-modal window that edits the same draft and sends
   expect(await replyBox()).toHaveValue("");
 });
 
+it("keeps a composer window on its own conversation, minimised, while another chat is open", async () => {
+  const { sent } = mount();
+  await openChat("Anna");
+  fireEvent.click(screen.getByRole("button", { name: "Open in a larger window" }));
+  const window = await screen.findByRole("dialog", { name: "Reply to Anna" });
+  fireEvent.change(within(window).getByRole("textbox", { name: "Write a reply" }), { target: { value: "Dear Anna, the villa is free" } });
+  fireEvent.click(within(window).getByRole("button", { name: "Minimize" }));
+
+  // Another chat: its own empty composer inline, Anna's window still there, minimised, with her draft.
+  const ben = await openChat("Ben");
+  expect(ben).toHaveValue("");
+  const parked = await screen.findByRole("dialog", { name: "Reply to Anna" });
+  expect(parked).toHaveAttribute("data-window-state", "minimized");
+  fireEvent.change(ben, { target: { value: "Ben's own reply" } });
+  fireEvent.click(within(parked).getByRole("button", { name: "Restore" }));
+  expect(within(parked).getByRole("textbox", { name: "Write a reply" })).toHaveValue("Dear Anna, the villa is free");
+
+  // Sent from the window, the reply goes to Anna's conversation and the window closes; Ben's draft stays.
+  fireEvent.click(within(parked).getByRole("button", { name: "Send reply" }));
+  await waitFor(() => expect(sent()).toHaveLength(1));
+  expect(sent()[0]).toMatchObject({ url: expect.stringContaining("chat-anna"), body: { body: "Dear Anna, the villa is free" } });
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(await replyBox()).toHaveValue("Ben's own reply");
+
+  // Back on Anna: her composer is inline again and empty.
+  expect(await openChat("Anna")).toHaveValue("");
+});
+
+it("hands the window back to the chat's own composer when that chat is chosen again", async () => {
+  mount();
+  await openChat("Anna");
+  fireEvent.click(screen.getByRole("button", { name: "Open in a larger window" }));
+  const window = await screen.findByRole("dialog", { name: "Reply to Anna" });
+  fireEvent.change(within(window).getByRole("textbox", { name: "Write a reply" }), { target: { value: "Still writing" } });
+  fireEvent.click(within(window).getByRole("button", { name: "Minimize" }));
+  await openChat("Ben");
+  fireEvent.click(await screen.findByRole("button", { name: /^Anna/ }));
+  await screen.findByText("Hello from anna");
+  // One window, the same one, still minimised; the inline composer says the draft is in the window.
+  const dialogs = await screen.findAllByRole("dialog", { name: "Reply to Anna" });
+  expect(dialogs).toHaveLength(1);
+  expect(dialogs[0]).toHaveAttribute("data-window-state", "minimized");
+  expect(screen.queryByRole("textbox", { name: "Write a reply" })).not.toBeInTheDocument();
+  fireEvent.click(within(dialogs[0]).getByRole("button", { name: "Close" }));
+  expect(await replyBox()).toHaveValue("Still writing");
+});
+
 it("keeps insertDraft adding to the open conversation's draft", async () => {
   extensions = [{ id: "test.insert-draft", slot: "crm.chat.composer",
     component: ({ context }) => <button type="button" onClick={() => context.insertDraft?.("Suggested reply")}>Suggest</button> }];
@@ -177,4 +226,120 @@ it("keeps insertDraft adding to the open conversation's draft", async () => {
     await openChat("Ben");
     expect(await openChat("Anna")).toHaveValue("Hi Anna\n\nSuggested reply");
   } finally { extensions = []; }
+});
+
+it("puts stored files from insertDraft in the tray, sends them with the reply, and refuses them where files can't go", async () => {
+  const pdf = { url: "/media/estimate.pdf", filename: "Estimate.pdf", contentType: "application/pdf", size: 2048 };
+  const problems: string[] = [];
+  extensions = [{ id: "test.insert-files", slot: "crm.chat.composer",
+    component: ({ context }) => <button type="button" onClick={() => {
+      try { context.insertDraft?.("Your estimate is attached.", [pdf]); } catch (e) { problems.push((e as Error).message); }
+    }}>Prepare</button> }];
+  try {
+    const { sent } = mount({ "chat-ben": { maxAttachments: 0, attachmentReason: "This channel can't carry files" } });
+    const body = await openChat("Anna");
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Prepare" })); });
+    expect(body).toHaveValue("Your estimate is attached.");
+    expect(screen.getByText("Estimate.pdf")).toBeInTheDocument();
+    // Inserting the same file again adds the text but not a second copy.
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Prepare" })); });
+    expect(screen.getAllByText("Estimate.pdf")).toHaveLength(1);
+    await act(async () => { fireEvent.keyDown(body, { key: "Enter", ctrlKey: true }); });
+    await waitFor(() => expect(sent()).toHaveLength(1));
+    expect(sent()[0].body.attachments).toEqual(["/media/estimate.pdf"]);
+
+    const ben = await openChat("Ben");
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Prepare" })); });
+    expect(problems).toEqual(["This channel can't carry files"]);
+    expect(ben).toHaveValue("");
+  } finally { extensions = []; }
+});
+
+/** A stand-in for an app's formatting editor: "Bold" reports the text with its HTML. */
+function FormattingInput({ value, html, formatting, onChange, onSubmit, label }: CrmReplyInputProps) {
+  return <div>
+    <textarea aria-label={label} data-composer-reply="" value={value} onChange={event => onChange(event.target.value)}
+      onKeyDown={event => { if (event.key === "Enter" && event.ctrlKey) onSubmit(); }} />
+    <span data-testid="formatting">{formatting ? "formatting" : "plain"}</span>
+    <span data-testid="html">{html ?? ""}</span>
+    <button type="button" onClick={() => onChange(value, `<b>${value}</b>`)}>Bold</button>
+  </div>;
+}
+const formattingComposer = { Composer: (props: CrmComposerProps) => <CrmComposer {...props} renderReplyInput={input => <FormattingInput {...input} />} /> };
+
+it("sends an email reply's formatting with its text, and drops it when the text changes without it", async () => {
+  const { sent } = mount({}, { components: formattingComposer });
+  const body = await openChat("Anna");
+  expect(screen.getByTestId("formatting")).toHaveTextContent("formatting");
+  fireEvent.change(body, { target: { value: "See you Monday" } });
+  fireEvent.click(screen.getByRole("button", { name: "Bold" }));
+  expect(screen.getByTestId("html")).toHaveTextContent("<b>See you Monday</b>");
+
+  // Kept per conversation like the text, across a switch of chat.
+  await openChat("Ben");
+  expect(screen.getByTestId("html")).toHaveTextContent("");
+  await openChat("Anna");
+  expect(screen.getByTestId("html")).toHaveTextContent("<b>See you Monday</b>");
+
+  fireEvent.keyDown(await replyBox(), { key: "Enter", ctrlKey: true });
+  await waitFor(() => expect(sent()).toHaveLength(1));
+  expect(sent()[0].body).toMatchObject({ body: "See you Monday", html: "<b>See you Monday</b>" });
+
+  // Plain text written over formatting sends no HTML.
+  const ben = await openChat("Ben");
+  fireEvent.change(ben, { target: { value: "Dates" } });
+  fireEvent.click(screen.getByRole("button", { name: "Bold" }));
+  fireEvent.change(ben, { target: { value: "Dates confirmed" } });
+  expect(screen.getByTestId("html")).toHaveTextContent("");
+  fireEvent.keyDown(ben, { key: "Enter", ctrlKey: true });
+  await waitFor(() => expect(sent()).toHaveLength(2));
+  expect(sent()[1].body).toMatchObject({ body: "Dates confirmed" });
+  expect(sent()[1].body).not.toHaveProperty("html");
+});
+
+it("keeps a formatted insert's HTML in an email reply, joined to what the draft already holds, and sends it", async () => {
+  extensions = [{ id: "test.insert-letter", slot: "crm.chat.composer",
+    component: ({ context }) => <button type="button" onClick={() => context.insertDraft?.("Dear Anna,\n\nThe villa is free.", [], "<p>Dear <b>Anna</b>,</p><p>The villa is free.</p>")}>Letter</button> }];
+  try {
+    const { sent } = mount({}, { components: formattingComposer });
+    const body = await openChat("Anna");
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Letter" })); });
+    expect(body).toHaveValue("Dear Anna,\n\nThe villa is free.");
+    expect(screen.getByTestId("html")).toHaveTextContent("<p>Dear <b>Anna</b>,</p><p>The villa is free.</p>");
+
+    // Into a plain draft: its text, escaped, comes first.
+    fireEvent.change(body, { target: { value: "Hi <Anna>" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Letter" })); });
+    expect(body).toHaveValue("Hi <Anna>\n\nDear Anna,\n\nThe villa is free.");
+    expect(screen.getByTestId("html")).toHaveTextContent("Hi &lt;Anna&gt;<br><br><p>Dear <b>Anna</b>,</p><p>The villa is free.</p>");
+    fireEvent.keyDown(body, { key: "Enter", ctrlKey: true });
+    await waitFor(() => expect(sent()).toHaveLength(1));
+    expect(sent()[0].body.html).toBe("Hi &lt;Anna&gt;<br><br><p>Dear <b>Anna</b>,</p><p>The villa is free.</p>");
+  } finally { extensions = []; }
+});
+
+it("lets an app draw its own paperclip, which still opens the composer's file picker", async () => {
+  const picked = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
+  const surfaces: string[] = [];
+  mount({}, { components: { Composer: (props: CrmComposerProps) => <CrmComposer {...props} renderAttach={({ chooseFiles, surface, labelled }) => {
+    surfaces.push(`${surface}${labelled ? ":labelled" : ""}`);
+    return <button type="button" onClick={chooseFiles}>Files and letters</button>;
+  }} /> } });
+  await openChat("Anna");
+  expect(screen.queryByRole("button", { name: "Attach files" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getAllByRole("button", { name: "Files and letters" })[0]);
+  expect(picked).toHaveBeenCalledTimes(1);
+  expect(surfaces).toContain("inline");
+});
+
+it("lets an app fold the fields above the reply and open the larger window from its own line", async () => {
+  mount({}, { components: { Composer: (props: CrmComposerProps) => <CrmComposer {...props} renderFields={parts => parts.surface === "inline"
+    ? <p>{parts.summary.recipient} · {parts.summary.subject}{parts.expand && <button type="button" onClick={parts.expand}>Bigger</button>}</p>
+    : <>{parts.header}{parts.recipient}{parts.subject}</>} /> } });
+  await openChat("Anna");
+  expect(screen.getByText("chat-anna@example.com · Villa")).toBeInTheDocument();
+  expect(screen.queryByRole("textbox", { name: "Subject" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Bigger" }));
+  // The larger window draws every field.
+  expect(await screen.findByRole("textbox", { name: "Subject" })).toHaveValue("Villa");
 });
