@@ -21,9 +21,10 @@ export interface ExtensionContext {
   readonly openRecord?: (kind: string, name: string, id: string) => void;
   /**
    * Adds text, and optionally files already stored through `/api/media` (a generated PDF), to the reply.
+   * `html` is the same text formatted (a letter template): an email reply keeps it, other channels send the text.
    * Host preserves the draft and enforces its length and attachment limits. This never sends a message.
    */
-  readonly insertDraft?: (text: string, files?: readonly DraftFile[]) => void;
+  readonly insertDraft?: (text: string, files?: readonly DraftFile[], html?: string | null) => void;
   /** Only named commands supplied by this outlet are accepted. Backend authorization still applies. */
   readonly execute?: (command: string, input: Readonly<Record<string, unknown>>) => Promise<unknown>;
   readonly closeMenu?: () => void;

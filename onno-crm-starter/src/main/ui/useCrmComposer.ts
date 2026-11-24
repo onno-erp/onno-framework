@@ -198,10 +198,13 @@ export function useCrmComposer(conversation: CrmConversationState, config: Confi
    * Adds text to the reply (a template, a quoted date) and files already stored through `/api/media`
    * (a generated PDF) to its tray; it is never sent by this call. Files the channel can't carry, or
    * more than its limit, are refused with the composer's own reason, before anything changes.
+   * `html` is the text formatted (a letter template): where the reply is formatted (email) it joins the
+   * draft's HTML and is sent with it; elsewhere it is ignored and the text goes as it is.
    */
-  const insertDraft = (text: string, files: readonly DraftFile[] = []) => {
+  const insertDraft = (text: string, files: readonly DraftFile[] = [], html?: string | null) => {
     if (replyState.disabled) throw new Error(t("crm.error.replyUnavailable"));
     const next = !text.trim() ? draft : draft.trim() ? `${draft}\n\n${text}` : text;
+    const formatted = conversationChannel(row) === "EMAIL" && !!html?.trim() && !!text.trim();
     if (next.length > (delivery?.maxTextLength ?? 4096)) throw new Error(t("crm.error.replyTooLong"));
     const added = files.filter(file => file?.url && !pending.some(item => item.url === file.url));
     if (added.length) {
@@ -210,7 +213,9 @@ export function useCrmComposer(conversation: CrmConversationState, config: Confi
       if (pending.length + added.length > limit) throw new Error(t("crm.chat.attachLimit", { count: limit }));
     }
     setMode("reply");
-    if (next !== draft) setDraft(next);
+    // A formatted insert joins the draft's own HTML (or its text, escaped, when it has none).
+    if (formatted) setFormattedDraft(next, draft.trim() ? `${draftHtml ?? plainHtml(draft)}<br><br>${html}` : html!);
+    else if (next !== draft) setDraft(next);
     if (added.length) setPending(current => [...current, ...added.map(file => {
       const contentType = file.contentType || "application/octet-stream";
       return { url: file.url, filename: file.filename, contentType, size: file.size ?? 0, image: /^image\/(png|jpeg|gif|webp|avif)$/.test(contentType) };
@@ -264,3 +269,8 @@ export function useCrmComposer(conversation: CrmConversationState, config: Confi
 }
 
 export type CrmComposerState = ReturnType<typeof useCrmComposer>;
+
+/** Plain text as HTML, for joining a formatted insert to a draft that has none: escaped, line breaks kept. */
+function plainHtml(text: string) {
+  return text.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!).replace(/\n/g, "<br>");
+}
