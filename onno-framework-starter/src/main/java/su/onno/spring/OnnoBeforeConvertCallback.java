@@ -16,6 +16,8 @@ import su.onno.validation.AttributeValidator;
 import su.onno.validation.ValidationErrors;
 
 import org.springframework.data.relational.core.mapping.event.BeforeConvertCallback;
+import org.jdbi.v3.core.Jdbi;
+import org.springframework.dao.OptimisticLockingFailureException;
 
 import java.lang.reflect.Field;
 import java.util.List;
@@ -24,6 +26,7 @@ import java.util.UUID;
 public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> {
 
     private final MetadataRegistry registry;
+    private final Jdbi jdbi;
     private final NumberGenerator numberGenerator;
     private final SecretCipher secretCipher;
     private final OnnoMetrics metrics;
@@ -32,12 +35,19 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
 
     public OnnoBeforeConvertCallback(MetadataRegistry registry, NumberGenerator numberGenerator,
                                      SecretCipher secretCipher) {
-        this(registry, numberGenerator, secretCipher, new OnnoMetrics(null));
+        this(registry, numberGenerator, secretCipher, null, new OnnoMetrics(null));
+    }
+
+    @SuppressWarnings("unused") // Retained as a convenience overload for framework consumers.
+    public OnnoBeforeConvertCallback(MetadataRegistry registry, NumberGenerator numberGenerator,
+                                     SecretCipher secretCipher, OnnoMetrics metrics) {
+        this(registry, numberGenerator, secretCipher, null, metrics);
     }
 
     public OnnoBeforeConvertCallback(MetadataRegistry registry, NumberGenerator numberGenerator,
-                                     SecretCipher secretCipher, OnnoMetrics metrics) {
+                                     SecretCipher secretCipher, Jdbi jdbi, OnnoMetrics metrics) {
         this.registry = registry;
+        this.jdbi = jdbi;
         this.numberGenerator = numberGenerator;
         this.secretCipher = secretCipher;
         this.metrics = metrics;
@@ -89,22 +99,29 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
             }
         }
 
-        // Call BeforeWriteHandler
-        if (aggregate instanceof BeforeWriteHandler handler) {
+        // A soft-delete is a distinct lifecycle: BeforeDeleteHandler ran in EntityDeleteService.
+        // Do not run recalculation hooks or current-state validation on a record being deleted.
+        boolean deleting = DeleteWriteContext.isDeleting(aggregate);
+        if (deleting && aggregate instanceof DocumentObject document) {
+            requireDraftDocumentForDelete(document);
+        }
+        if (!deleting && aggregate instanceof BeforeWriteHandler handler) {
             time(operationName("before-write", aggregate), aggregate, handler::beforeWrite);
         }
 
         // Validate: declarative attribute constraints (required, length, min/max, pattern, email)
         // and custom business rules, collected together so the user sees every problem at once.
-        time(operationName("validate", aggregate), aggregate, () -> {
-            ValidationErrors errors = new ValidationErrors();
-            List<AttributeDescriptor> attributes = attributesOf(aggregate);
-            if (attributes != null) {
-                attributeValidator.validate(aggregate, attributes, errors);
-            }
-            businessRuleValidator.collect(aggregate, errors);
-            errors.throwIfAny();
-        });
+        if (!deleting) {
+            time(operationName("validate", aggregate), aggregate, () -> {
+                ValidationErrors errors = new ValidationErrors();
+                List<AttributeDescriptor> attributes = attributesOf(aggregate);
+                if (attributes != null) {
+                    attributeValidator.validate(aggregate, attributes, errors);
+                }
+                businessRuleValidator.collect(aggregate, errors);
+                errors.throwIfAny();
+            });
+        }
 
         // Encrypt secret attributes so the row written holds ciphertext. The plaintext is
         // restored on the in-memory instance by OnnoAfterSaveCallback once the write lands.
@@ -112,6 +129,24 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
                 SecretFields.apply(aggregate, registry, secretCipher::encrypt));
 
         return aggregate;
+    }
+
+    private void requireDraftDocumentForDelete(DocumentObject document) {
+        if (jdbi == null) return;
+        var descriptor = registry.getDocumentDescriptor(document.getClass());
+        var row = jdbi.withHandle(handle -> handle.createQuery("SELECT _posted, _deletion_mark FROM "
+                        + descriptor.tableName() + " WHERE _id = :id FOR UPDATE")
+                .bind("id", document.getId())
+                .mapToMap()
+                .findOne());
+        if (row.isEmpty() || Boolean.TRUE.equals(row.get().get("_deletion_mark"))) {
+            throw new OptimisticLockingFailureException(
+                    "Cannot delete missing or already deleted " + descriptor.logicalName() + " " + document.getId());
+        }
+        if (Boolean.TRUE.equals(row.get().get("_posted"))) {
+            throw new IllegalStateException(
+                    "Posted document " + document.getId() + " must be unposted before deletion");
+        }
     }
 
     @SuppressWarnings("unchecked")

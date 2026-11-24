@@ -134,7 +134,7 @@ public class MetadataToolFactory implements McpToolProvider {
                 (exchange, args) -> {
                     CatalogDescriptor desc = catalogQuery.require(requireString(args, "name"));
                     access.requireRead(subject(exchange), desc);
-                    Integer limit = optInt(args, "limit");
+                    Integer limit = optLimit(args);
                     KeysetPage page = catalogQuery.keysetPage(subject(exchange),
                             desc, optString(args, "cursor"), limit == null ? 100 : limit,
                             null, false, optString(args, "query"),
@@ -166,7 +166,7 @@ public class MetadataToolFactory implements McpToolProvider {
                 (exchange, args) -> {
                     DocumentDescriptor desc = documentQuery.require(requireString(args, "name"));
                     access.requireRead(subject(exchange), desc);
-                    Integer limit = optInt(args, "limit");
+                    Integer limit = optLimit(args);
                     KeysetPage page = documentQuery.keysetPage(subject(exchange),
                             desc, optString(args, "cursor"), limit == null ? 100 : limit,
                             null, true, optString(args, "query"),
@@ -195,7 +195,7 @@ public class MetadataToolFactory implements McpToolProvider {
                 (exchange, args) -> {
                     AccumulationRegisterDescriptor desc = registerQuery.require(requireString(args, "name"));
                     access.requireRead(subject(exchange), desc);
-                    Integer limit = optInt(args, "limit");
+                    Integer limit = optLimit(args);
                     return ok(su.onno.ui.KeysetWindow.envelope(registerQuery.balancePage(subject(exchange), desc,
                             registerQuery.dimensionFilters(desc, stringMap(args.get("filters"))), null, false,
                             optString(args, "cursor"), limit == null ? 100 : limit, optString(args, "asOf"))));
@@ -218,7 +218,7 @@ public class MetadataToolFactory implements McpToolProvider {
                 (exchange, args) -> {
                     AccumulationRegisterDescriptor desc = registerQuery.require(requireString(args, "name"));
                     access.requireRead(subject(exchange), desc);
-                    Integer limit = optInt(args, "limit");
+                    Integer limit = optLimit(args);
                     if (limit != null && (limit < 1 || limit > 500)) {
                         throw new IllegalArgumentException("limit must be between 1 and 500");
                     }
@@ -295,7 +295,7 @@ public class MetadataToolFactory implements McpToolProvider {
 
             tools.add(destructiveTool("delete_document",
                     "Delete a document",
-                    "Soft-deletes an existing document by id. If it is posted, it is unposted first. "
+                    "Soft-deletes an existing document by id. Posted documents must be explicitly unposted first. "
                             + "Returns a small acknowledgement.",
                     idSchema("Document logical name (see describe_metadata)."),
                     (exchange, args) -> {
@@ -549,8 +549,8 @@ public class MetadataToolFactory implements McpToolProvider {
         return v == null || v.toString().isBlank() ? null : v.toString();
     }
 
-    private static Integer optInt(Map<String, Object> args, String key) {
-        Object v = args.get(key);
+    private static Integer optLimit(Map<String, Object> args) {
+        Object v = args.get("limit");
         if (v == null) return null;
         if (v instanceof Number n) return n.intValue();
         return Integer.parseInt(v.toString());

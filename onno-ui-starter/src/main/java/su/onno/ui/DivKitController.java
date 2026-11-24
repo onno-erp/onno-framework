@@ -369,11 +369,8 @@ public class DivKitController implements DisposableBean {
         if (content == null) {
             List<PageWidgetDescriptor> widgets = layoutResolver.resolveWidgets(active).stream()
                     .filter(w -> access.canRead(principal, w.entityType(), w.entityName()))
-                    .map(w -> {
-                        validateWidgetFilter(w);
-                        return w;
-                    })
                     .toList();
+            widgets.forEach(this::validateWidgetFilter);
             // No authored "/" page and no (readable) widgets means the app has no dashboard.
             // Render a neutral, empty surface rather than a phantom "Dashboard" / "Welcome
             // back" / "Nothing here yet" card — the client lands the user on the first real
@@ -582,14 +579,12 @@ public class DivKitController implements DisposableBean {
 
     /** Resolve a builder's widget configs to descriptors, dropping any the caller can't read. */
     private List<PageWidgetDescriptor> resolvePageWidgets(PageBuilder pb, Principal principal) {
-        return layoutResolver.resolveWidgetConfigs(pb.widgets()).stream()
+        List<PageWidgetDescriptor> widgets = layoutResolver.resolveWidgetConfigs(pb.widgets()).stream()
                 // An entity-less widget (e.g. the shared time-range picker) has no entity to gate on.
                 .filter(w -> w.entityType() == null || access.canRead(principal, w.entityType(), w.entityName()))
-                .map(w -> {
-                    validateWidgetFilter(w);
-                    return w;
-                })
                 .toList();
+        widgets.forEach(this::validateWidgetFilter);
+        return widgets;
     }
 
     private void validateWidgetFilter(PageWidgetDescriptor widget) {
@@ -1150,7 +1145,6 @@ public class DivKitController implements DisposableBean {
 
         List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
         // Posting rights can be narrower than write access (@AccessControl postRoles/unpostRoles, #546).
-        boolean canPost = canWrite && access.canPost(principal, desc);
         boolean canUnpost = canWrite && access.canUnpost(principal, desc);
         if (canUnpost && postable && posted) {
             actions.add(new SurfaceDivBuilder.HeaderAction("rotate-ccw", messages.get("action.unpost"), "normal",
@@ -1165,8 +1159,8 @@ public class DivKitController implements DisposableBean {
                     "onno://documents/" + name + "/" + id + "/duplicate",
                     placement.getOrDefault("duplicate", "menu"),
                     List.of(), Map.of(), false, false));
-            // Deleting a posted document unposts it, so it is offered only with the unpost right.
-            if (!posted || canUnpost) {
+            // A posted document must be explicitly unposted before it can be deleted.
+            if (!posted) {
                 actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", messages.get("action.delete"), "danger",
                         "onno://delete/documents/" + name + "/" + id,
                         placement.getOrDefault("delete", "menu"),

@@ -19,8 +19,9 @@ Posting is typed Java. There is no string-mapped posting rule or validation expr
 - Posting atomically claims an existing live, unposted document. A repeated core `post(...)` is
   rejected before movements are persisted; use atomic `repost(...)` for an intentional recalculation.
 - Who may post is its own right: `@AccessControl(postRoles = …, unpostRoles = …)` narrows posting /
-  re-posting and unposting on top of write access for the REST/MCP/UI command path (`403` otherwise;
-  deleting a posted document needs the unpost right). Direct `PostingService` calls are trusted code.
+  re-posting and unposting on top of write access for the REST/MCP/UI command path (`403` otherwise).
+  A posted document must be explicitly unposted before deletion; delete does not unpost it. Direct
+  `PostingService` calls are trusted code.
 - `BeforeUnpostHandler.beforeUnpost()` runs before an unpost (not a re-post); throw to veto it and
   keep the document posted.
 - A posting `@DomainEvent` outbox row is inserted on the posting transaction's JDBI handle. An

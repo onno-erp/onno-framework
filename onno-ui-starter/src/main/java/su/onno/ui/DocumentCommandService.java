@@ -13,6 +13,7 @@ import su.onno.numbering.NumberGenerator;
 import su.onno.posting.PostingPreview;
 import su.onno.posting.PostingService;
 import su.onno.security.SecretCipher;
+import su.onno.spring.EntityDeleteService;
 import su.onno.types.Ref;
 import su.onno.types.PolyRef;
 import su.onno.validation.AttributeValidator;
@@ -64,11 +65,21 @@ public class DocumentCommandService {
     private final AttributeValidator attributeValidator = new AttributeValidator();
     private final WriteLifecycle lifecycle;
     private final RecordWriteGuard guard;
+    private final EntityDeleteService deleteService;
 
     public DocumentCommandService(MetadataRegistry registry, Jdbi jdbi, UiProperties properties,
                                   NumberGenerator numberGenerator, PostingService postingService,
                                   DocumentQueryService query, UiAccessService access,
                                   ApplicationEventPublisher events, SecretCipher secretCipher) {
+        this(registry, jdbi, properties, numberGenerator, postingService, query, access, events,
+                secretCipher, null);
+    }
+
+    public DocumentCommandService(MetadataRegistry registry, Jdbi jdbi, UiProperties properties,
+                                  NumberGenerator numberGenerator, PostingService postingService,
+                                  DocumentQueryService query, UiAccessService access,
+                                  ApplicationEventPublisher events, SecretCipher secretCipher,
+                                  EntityDeleteService deleteService) {
         this.registry = registry;
         this.jdbi = jdbi;
         this.properties = properties;
@@ -80,6 +91,7 @@ public class DocumentCommandService {
         this.secretCipher = secretCipher;
         this.lifecycle = new WriteLifecycle(registry, secretCipher);
         this.guard = new RecordWriteGuard(registry, query.scopes(), access, jdbi);
+        this.deleteService = deleteService;
     }
 
     public Map<String, Object> create(DocumentDescriptor desc, Map<String, Object> requestBody, AccessSubject subject) {
@@ -349,43 +361,15 @@ public class DocumentCommandService {
         access.requireWrite(subject, desc);
         guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
 
-        // Honour the domain's BeforeDeleteHandler on the UI path too, not only repository.delete
-        // (OnnoBeforeDeleteCallback): the loaded aggregate may veto the soft-delete by throwing —
-        // a ValidationException maps to the standard 4xx.
         DocumentObject stored = loadDocumentObject(desc, id);
-        // Deleting a posted document unposts it, so it needs the unpost right too (#546) — checked
-        // before any hook runs so a caller without it changes nothing.
         if (stored.isPosted()) {
-            access.requireUnpost(subject, desc);
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Unpost the document before deleting it");
         }
-        if (stored instanceof su.onno.lifecycle.BeforeDeleteHandler handler) {
-            handler.beforeDelete();
+        if (deleteService == null) {
+            throw new IllegalStateException("EntityDeleteService is required for document deletion");
         }
-
-        // Unpost first if posted
-        Map<String, Object> row = jdbi.withHandle(h ->
-                h.createQuery("SELECT _posted FROM " + desc.tableName() + " WHERE _id = :id")
-                        .bind("id", id)
-                        .mapToMap()
-                        .findOne()
-        ).orElse(null);
-        if (row != null && Boolean.TRUE.equals(row.get("_posted"))) {
-            DocumentObject doc = loadDocumentObject(desc, id);
-            postingService.unpost(doc);
-        }
-
-        String number = jdbi.withHandle(h ->
-                h.createQuery("SELECT _number FROM " + desc.tableName() + " WHERE _id = :id")
-                        .bind("id", id)
-                        .mapTo(String.class)
-                        .findOne()).orElse(null);
-        jdbi.useHandle(h ->
-                h.createUpdate("UPDATE " + desc.tableName() + " SET _deletion_mark = true WHERE _id = :id")
-                        .bind("id", id)
-                        .execute()
-        );
-        events.publishEvent(new EntityChangedEvent(EntityChangedEvent.DELETED, EntityChangedEvent.DOCUMENT,
-                desc.logicalName(), id, number));
+        deleteService.delete(stored);
     }
 
     /** Header refs and the refs of every submitted line must point at records the subject may read. */

@@ -9,6 +9,7 @@ import su.onno.metadata.MetadataRegistry;
 import su.onno.model.CatalogObject;
 import su.onno.numbering.NumberGenerator;
 import su.onno.security.SecretCipher;
+import su.onno.spring.EntityDeleteService;
 import su.onno.validation.AttributeValidator;
 import su.onno.validation.ValidationErrors;
 
@@ -44,11 +45,19 @@ public class CatalogCommandService {
     private final AttributeValidator attributeValidator = new AttributeValidator();
     private final WriteLifecycle lifecycle;
     private final RecordWriteGuard guard;
+    private final EntityDeleteService deleteService;
 
     public CatalogCommandService(MetadataRegistry registry, Jdbi jdbi, UiProperties properties,
                                  NumberGenerator numberGenerator, CatalogQueryService query,
                                  UiAccessService access, ApplicationEventPublisher events,
                                  SecretCipher secretCipher) {
+        this(registry, jdbi, properties, numberGenerator, query, access, events, secretCipher, null);
+    }
+
+    public CatalogCommandService(MetadataRegistry registry, Jdbi jdbi, UiProperties properties,
+                                 NumberGenerator numberGenerator, CatalogQueryService query,
+                                 UiAccessService access, ApplicationEventPublisher events,
+                                 SecretCipher secretCipher, EntityDeleteService deleteService) {
         this.jdbi = jdbi;
         this.properties = properties;
         this.numberGenerator = numberGenerator;
@@ -58,6 +67,7 @@ public class CatalogCommandService {
         this.secretCipher = secretCipher;
         this.lifecycle = new WriteLifecycle(registry, secretCipher);
         this.guard = new RecordWriteGuard(registry, query.scopes(), access, jdbi);
+        this.deleteService = deleteService;
     }
 
     public Map<String, Object> create(CatalogDescriptor desc, Map<String, Object> requestBody, AccessSubject subject) {
@@ -304,27 +314,18 @@ public class CatalogCommandService {
         EntityWriteSupport.requireWritable(properties);
         access.requireWrite(subject, desc);
         guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
-        // Honour the domain's BeforeDeleteHandler on the UI path too, not only repository.delete
-        // (OnnoBeforeDeleteCallback): load the stored aggregate and let it veto the soft-delete —
-        // a thrown ValidationException maps to the standard 4xx. This is what lets a catalog
-        // protect system rows (e.g. seeded statuses) from the list's Delete.
+        // The shared delete command loads the aggregate's stored state, runs its delete hook,
+        // and persists the mark through Spring Data JDBC.
         CatalogObject stored = loadCatalogObject(desc, id);
-        if (stored instanceof su.onno.lifecycle.BeforeDeleteHandler handler) {
-            handler.beforeDelete();
+        if (stored == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        requireDeleteService().delete(stored);
+    }
+
+    private EntityDeleteService requireDeleteService() {
+        if (deleteService == null) {
+            throw new IllegalStateException("EntityDeleteService is required for catalog deletion");
         }
-        // Capture the natural key before the soft-delete so listeners can target the resource.
-        String code = jdbi.withHandle(h ->
-                h.createQuery("SELECT _code FROM " + desc.tableName() + " WHERE _id = :id")
-                        .bind("id", id)
-                        .mapTo(String.class)
-                        .findOne()).orElse(null);
-        jdbi.useHandle(h ->
-                h.createUpdate("UPDATE " + desc.tableName() + " SET _deletion_mark = true WHERE _id = :id")
-                        .bind("id", id)
-                        .execute()
-        );
-        events.publishEvent(new EntityChangedEvent(EntityChangedEvent.DELETED, EntityChangedEvent.CATALOG,
-                desc.logicalName(), id, code));
+        return deleteService;
     }
 
     /** A record-scoped subject may only file a record under a parent it can read. */

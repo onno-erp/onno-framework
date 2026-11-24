@@ -48,12 +48,14 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
             org.springframework.beans.factory.ObjectProvider<AccessSubjectResolver> accessSubjectResolver) {
         return new org.springframework.beans.factory.config.BeanPostProcessor() {
             @Override
-            public Object postProcessAfterInitialization(Object bean, String beanName) {
+            @org.springframework.lang.NonNull
+            public Object postProcessAfterInitialization(@org.springframework.lang.NonNull Object bean,
+                                                         @org.springframework.lang.NonNull String beanName) {
                 if (bean instanceof org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter adapter
                         && adapter.getArgumentResolvers() != null) {
                     java.util.List<org.springframework.web.method.support.HandlerMethodArgumentResolver> resolvers =
                             new java.util.ArrayList<>(adapter.getArgumentResolvers());
-                    resolvers.add(0, new AccessSubjectArgumentResolver(accessSubjectResolver));
+                    resolvers.addFirst(new AccessSubjectArgumentResolver(accessSubjectResolver));
                     adapter.setArgumentResolvers(resolvers);
                 }
                 return bean;
@@ -62,7 +64,7 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Override
-    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+    public void addResourceHandlers(@org.springframework.lang.NonNull ResourceHandlerRegistry registry) {
         String base = "/".equals(spaIndexHtml.basePath()) ? "" : spaIndexHtml.basePath();
 
         // Serve compiled widget plugins under {path}/plugins/** before the SPA deep-link handler.
@@ -109,7 +111,7 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    public SpaIndexController spaIndexController() {
+    SpaIndexController spaIndexController() {
         return new SpaIndexController(spaIndexHtml);
     }
 
@@ -153,7 +155,7 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
 
     @Bean
     public UiActionResolver uiActionResolver(
-            org.springframework.beans.factory.ObjectProvider<su.onno.ui.EntityView> entityViews) {
+            org.springframework.beans.factory.ObjectProvider<su.onno.ui.EntityView<?>> entityViews) {
         return new UiActionResolver(entityViews.orderedStream().toList());
     }
 
@@ -321,7 +323,7 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
 
     @Bean
     public FieldHintResolver fieldHintResolver(
-            org.springframework.beans.factory.ObjectProvider<su.onno.ui.EntityView> entityViews) {
+            org.springframework.beans.factory.ObjectProvider<su.onno.ui.EntityView<?>> entityViews) {
         return new FieldHintResolver(entityViews.orderedStream().toList());
     }
 
@@ -457,9 +459,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                                        CatalogQueryService catalogQueryService,
                                                        UiAccessService access,
                                                        org.springframework.context.ApplicationEventPublisher events,
-                                                       su.onno.security.SecretCipher secretCipher) {
+                                                       su.onno.security.SecretCipher secretCipher,
+                                                       su.onno.spring.EntityDeleteService deleteService) {
         return new CatalogCommandService(registry, jdbi, properties, numberGenerator, catalogQueryService,
-                access, events, secretCipher);
+                access, events, secretCipher, deleteService);
     }
 
     @Bean
@@ -470,9 +473,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                                          DocumentQueryService documentQueryService,
                                                          UiAccessService access,
                                                          org.springframework.context.ApplicationEventPublisher events,
-                                                         su.onno.security.SecretCipher secretCipher) {
+                                                         su.onno.security.SecretCipher secretCipher,
+                                                         su.onno.spring.EntityDeleteService deleteService) {
         return new DocumentCommandService(registry, jdbi, properties, numberGenerator, postingService,
-                documentQueryService, access, events, secretCipher);
+                documentQueryService, access, events, secretCipher, deleteService);
     }
 
     @Bean
@@ -523,7 +527,7 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
 
     @Bean
     public UiViewResolver uiViewResolver(ResolvedMetadataService resolvedMetadata,
-                                         org.springframework.beans.factory.ObjectProvider<su.onno.ui.EntityView> entityViews,
+                                         org.springframework.beans.factory.ObjectProvider<su.onno.ui.EntityView<?>> entityViews,
                                          UiProperties properties) {
         return new UiViewResolver(resolvedMetadata, entityViews.orderedStream().toList(),
                 properties.getList().getPageSize());

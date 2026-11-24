@@ -471,8 +471,10 @@ is `422`. Policy defaults (e.g. `owner`) are filled on create and cannot be over
 `list` returns only live rows (`deletionMark = false`; `_deletion_mark` in storage representation).
 Deletes are soft (the mark is set), so a
 deleted row disappears from `list` but is still reachable by `get` until purged. Spring Data
-`CatalogRepository`/`DocumentRepository` delete methods use the same tombstone contract; posted
-documents must be unposted before repository deletion.
+`CatalogRepository`/`DocumentRepository` and generic UI/REST delete commands use the same
+tombstone contract. Both run `BeforeDeleteHandler`, skip `beforeWrite` and validation, increment
+the optimistic version, and publish delete events with the deletion mark in one transaction.
+Posted documents must be explicitly unposted before deletion.
 
 ## Reacting to changes
 

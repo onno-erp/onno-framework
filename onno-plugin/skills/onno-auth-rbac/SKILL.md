@@ -38,7 +38,8 @@ change.
 - On documents, `postRoles` / `unpostRoles` separate posting from editing: the caller needs write
   access *and* one of the roles (empty = every writer). `@AccessControl(readRoles = {"RECEPTION",
   "MANAGER"}, unpostRoles = "MANAGER")` lets reception create and post invoices but only a manager
-  unpost (or delete a posted) one. REST/MCP answer `403`; the UI hides the Post/Unpost actions.
+  unpost one. A posted document must be explicitly unposted before delete. REST/MCP answer `403`
+  for forbidden post/unpost; the UI hides the Post/Unpost actions.
 - Record-level access (external users seeing only their own records) is a `RecordAccessPolicy`
   bean: `RecordAccessPolicy.forCatalog(Tenant.class).appliesTo("CUSTOMER")
   .read(RecordScope.eq("owner", Subject.recordId()))`; `via("tenant")` scopes through a ref;

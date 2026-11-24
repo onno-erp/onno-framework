@@ -187,12 +187,11 @@ public class GenericDocumentController {
     }
 
     /**
-     * Soft-delete a set of documents in one request (auto-unposting posted ones, like the single
-     * DELETE). Per-id failures are recorded and the batch continues; returns {@code {ok, failed,
+     * Soft-delete a set of documents in one request. Posted documents must be explicitly unposted
+     * first. Per-id failures are recorded and the batch continues; returns {@code {ok, failed,
      * total}}. Ids run concurrently on the shared {@link BatchRunner} pool
-     * ({@code onno.ui.batch.parallelism}) — note that parallel unposting reverses register entries
-     * concurrently, so heavily-shared accumulation registers may see lock contention. Capped like the
-     * action batch (see ActionController.BATCH_LIMIT).
+     * ({@code onno.ui.batch.parallelism}). Capped like the action batch (see
+     * ActionController.BATCH_LIMIT).
      */
     @PostMapping("/{name}/batch-delete")
     public Map<String, Object> batchDelete(@PathVariable String name,

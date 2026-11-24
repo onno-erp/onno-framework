@@ -188,8 +188,9 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
     public OnnoBeforeConvertCallback onnoBeforeConvertCallback(MetadataRegistry registry,
                                                                 su.onno.numbering.NumberGenerator numberGenerator,
                                                                 su.onno.security.SecretCipher secretCipher,
+                                                                Jdbi jdbi,
                                                                 OnnoMetrics metrics) {
-        return new OnnoBeforeConvertCallback(registry, numberGenerator, secretCipher, metrics);
+        return new OnnoBeforeConvertCallback(registry, numberGenerator, secretCipher, jdbi, metrics);
     }
 
     /**
@@ -279,6 +280,12 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
     public OnnoAfterDeleteCallback onnoAfterDeleteCallback(OutboxWriter outboxWriter, MetadataRegistry registry,
                                                            su.onno.events.EntityChangePublisher entityChangePublisher) {
         return new OnnoAfterDeleteCallback(outboxWriter, registry, entityChangePublisher);
+    }
+
+    @Bean
+    public EntityDeleteService entityDeleteService(
+            org.springframework.data.jdbc.core.JdbcAggregateOperations operations) {
+        return new EntityDeleteService(operations);
     }
 
     @Bean

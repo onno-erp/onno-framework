@@ -25,6 +25,7 @@ public class OnnoAfterSaveCallback implements AfterSaveCallback<Object>, AfterCo
     private final EntityChangePublisher entityChangePublisher;
     private final OnnoMetrics metrics;
 
+    @SuppressWarnings("unused") // Kept for framework consumers that construct callbacks directly.
     public OnnoAfterSaveCallback() {
         this(null, null, null, null);
     }
@@ -48,7 +49,8 @@ public class OnnoAfterSaveCallback implements AfterSaveCallback<Object>, AfterCo
     }
 
     @Override
-    public Object onAfterSave(Object aggregate) {
+    @org.springframework.lang.NonNull
+    public Object onAfterSave(@org.springframework.lang.NonNull Object aggregate) {
         return time(operationName("after-save", aggregate), aggregate, () -> afterSave(aggregate));
     }
 
@@ -66,7 +68,7 @@ public class OnnoAfterSaveCallback implements AfterSaveCallback<Object>, AfterCo
         }
 
         // A repository delete is implemented as a deletion-mark save. It has already run
-        // BeforeDeleteHandler in OnnoSimpleJdbcRepository and must publish delete semantics,
+        // BeforeDeleteHandler in EntityDeleteService and must publish delete semantics,
         // not masquerade as an ordinary update/after-write.
         if (!deleted && aggregate instanceof AfterWriteHandler handler) {
             time(operationName("after-write", aggregate), aggregate, handler::afterWrite);
@@ -80,7 +82,8 @@ public class OnnoAfterSaveCallback implements AfterSaveCallback<Object>, AfterCo
     }
 
     @Override
-    public Object onAfterConvert(Object aggregate) {
+    @org.springframework.lang.NonNull
+    public Object onAfterConvert(@org.springframework.lang.NonNull Object aggregate) {
         return time(operationName("after-convert", aggregate), aggregate, () -> {
             markNotNew(aggregate);
             return aggregate;

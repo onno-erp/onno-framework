@@ -42,6 +42,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -113,6 +114,28 @@ class SoftDeleteFinderIT {
 
     @Test
     void repositoryDelete_marksCatalogRowInsteadOfRemovingIt() {
+        TestService.resetDeleteHookCalls();
+        TestService stale = repository.findById(liveId).orElseThrow();
+        // The fixture's current business rule rejects deletion-marked state if write validation
+        // is mistakenly run during delete.
+        int versionBefore = stale.getVersion();
+        TestService.assertDeleteSkipsWriteLifecycle(true);
+        try {
+            repository.delete(stale);
+
+            assertThat(TestService.deleteHookCalls()).isEqualTo(1);
+            assertThat(repository.findById(liveId)).get()
+                    .satisfies(deleted -> {
+                        assertThat(deleted.isDeletionMark()).isTrue();
+                        assertThat(deleted.getVersion()).isEqualTo(versionBefore + 1);
+                    });
+        } finally {
+            TestService.assertDeleteSkipsWriteLifecycle(false);
+        }
+    }
+
+    @Test
+    void repositoryDeleteById_usesSoftDeletePath() {
         repository.deleteById(liveId);
 
         assertThat(repository.findActiveById(liveId)).isEmpty();
@@ -128,7 +151,7 @@ class SoftDeleteFinderIT {
         documentRepository.save(draft);
         documentRepository.delete(draft);
 
-        assertThat(documentRepository.findById(draft.getId()))
+        assertThat(documentRepository.findById(Objects.requireNonNull(draft.getId())))
                 .get()
                 .extracting(TestStarterInvoice::isDeletionMark)
                 .isEqualTo(true);
@@ -139,7 +162,7 @@ class SoftDeleteFinderIT {
         assertThatThrownBy(() -> documentRepository.delete(posted))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("must be unposted");
-        assertThat(documentRepository.findById(posted.getId()))
+        assertThat(documentRepository.findById(Objects.requireNonNull(posted.getId())))
                 .get()
                 .extracting(TestStarterInvoice::isDeletionMark)
                 .isEqualTo(false);
@@ -151,7 +174,7 @@ class SoftDeleteFinderIT {
         s.setDescription(name);
         s.setName(name);
         s.setCategory(TestServiceCategory.VACCINATION);
-        UUID id = repository.save(s).getId();
+        UUID id = Objects.requireNonNull(repository.save(s).getId());
         if (deletionMark) {
             TestService loaded = repository.findById(id).orElseThrow(); // isNew=false -> next save UPDATEs
             loaded.setDeletionMark(true);
@@ -216,6 +239,7 @@ class SoftDeleteFinderIT {
         }
 
         @Override
+        @org.springframework.lang.NonNull
         protected List<?> userConverters() {
             MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
             EnumerationDescriptor category = scanner.scanEnumeration(TestServiceCategory.class);
@@ -223,20 +247,24 @@ class SoftDeleteFinderIT {
         }
 
         @Override
-        public JdbcMappingContext jdbcMappingContext(Optional<NamingStrategy> namingStrategy,
-                                                     JdbcCustomConversions customConversions,
-                                                     RelationalManagedTypes jdbcManagedTypes) {
+        @org.springframework.lang.NonNull
+        public JdbcMappingContext jdbcMappingContext(
+                @org.springframework.lang.NonNull Optional<NamingStrategy> namingStrategy,
+                @org.springframework.lang.NonNull JdbcCustomConversions customConversions,
+                @org.springframework.lang.NonNull RelationalManagedTypes jdbcManagedTypes) {
             OnnoMappingContext context = new OnnoMappingContext(namingStrategy.orElseGet(OnnoNamingStrategy::new));
             context.setSimpleTypeHolder(customConversions.getSimpleTypeHolder());
             return context;
         }
 
         @Override
-        public JdbcConverter jdbcConverter(JdbcMappingContext mappingContext,
-                                           NamedParameterJdbcOperations operations,
+        @org.springframework.lang.NonNull
+        public JdbcConverter jdbcConverter(@org.springframework.lang.NonNull JdbcMappingContext mappingContext,
+                                           @org.springframework.lang.NonNull NamedParameterJdbcOperations operations,
+                                           @org.springframework.lang.NonNull
                                            @org.springframework.context.annotation.Lazy RelationResolver relationResolver,
-                                           JdbcCustomConversions conversions,
-                                           Dialect dialect) {
+                                           @org.springframework.lang.NonNull JdbcCustomConversions conversions,
+                                           @org.springframework.lang.NonNull Dialect dialect) {
             var arrayColumns = dialect instanceof org.springframework.data.jdbc.core.dialect.JdbcDialect jdbcDialect
                     ? jdbcDialect.getArraySupport()
                     : org.springframework.data.jdbc.core.convert.JdbcArrayColumns.DefaultSupport.INSTANCE;

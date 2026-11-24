@@ -15,6 +15,7 @@ import su.onno.posting.PostingEngine;
 import su.onno.posting.PostingService;
 import su.onno.schema.SchemaGenerator;
 import su.onno.security.SecretCipher;
+import su.onno.spring.EntityDeleteService;
 
 import org.h2.jdbcx.JdbcDataSource;
 import org.jdbi.v3.core.Jdbi;
@@ -30,6 +31,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 
 /**
  * Post / unpost rights are separate from write access (#546): {@code @AccessControl(postRoles,
@@ -86,10 +90,20 @@ class DocumentPostingAccessTest {
 
         access = new UiAccessService(registry);
         PostingService posting = new PostingService(new PostingEngine(jdbi, registry, Map.of()));
+        EntityDeleteService deleteService = mock(EntityDeleteService.class);
+        doAnswer(invocation -> {
+            DocumentObject document = invocation.getArgument(0);
+            String table = document instanceof GatedInvoice ? gated.tableName() : open.tableName();
+            jdbi.useHandle(handle -> handle.createUpdate("UPDATE " + table +
+                            " SET _deletion_mark = TRUE, _version = _version + 1 WHERE _id = :id")
+                    .bind("id", document.getId()).execute());
+            document.setDeletionMark(true);
+            return null;
+        }).when(deleteService).delete(any());
         commands = new DocumentCommandService(registry, jdbi, new UiProperties(),
                 new WriteLifecycleCommandServiceTest.SequentialNumbers(),
                 posting, new DocumentQueryService(registry, jdbi), access, event -> { },
-                new SecretCipher(null));
+                new SecretCipher(null), deleteService);
     }
 
     @Test
@@ -102,7 +116,7 @@ class DocumentPostingAccessTest {
 
     @Test
     void writerWithoutPostRoleCannotPost() {
-        UUID id = create(gated, CLERK);
+        UUID id = create(gated);
 
         assertForbidden(() -> commands.post(gated, id, CLERK), "post");
         assertThat(posted(gated, id)).isFalse();
@@ -113,7 +127,7 @@ class DocumentPostingAccessTest {
 
     @Test
     void postRoleMayPostAndRepostButNotUnpost() {
-        UUID id = create(gated, CLERK);
+        UUID id = create(gated);
 
         commands.post(gated, id, POSTER);
         assertThat(posted(gated, id)).isTrue();
@@ -126,7 +140,7 @@ class DocumentPostingAccessTest {
 
     @Test
     void unpostRoleMayUnpost() {
-        UUID id = create(gated, CLERK);
+        UUID id = create(gated);
         commands.post(gated, id, MANAGER);
 
         commands.unpost(gated, id, MANAGER);
@@ -135,21 +149,25 @@ class DocumentPostingAccessTest {
     }
 
     @Test
-    void deletingPostedDocumentNeedsUnpostRight() {
-        UUID id = create(gated, CLERK);
+    void postedDocumentMustBeExplicitlyUnpostedBeforeDelete() {
+        UUID id = create(gated);
         commands.post(gated, id, POSTER);
 
-        assertForbidden(() -> commands.delete(gated, id, CLERK), "unpost");
+        assertThatThrownBy(() -> commands.delete(gated, id, CLERK))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.CONFLICT);
         assertThat(posted(gated, id)).isTrue();
         assertThat(deleted(gated, id)).isFalse();
 
-        commands.delete(gated, id, MANAGER);
+        commands.unpost(gated, id, MANAGER);
+        commands.delete(gated, id, CLERK);
         assertThat(deleted(gated, id)).isTrue();
     }
 
     @Test
     void deletingDraftNeedsOnlyWriteAccess() {
-        UUID id = create(gated, CLERK);
+        UUID id = create(gated);
 
         commands.delete(gated, id, CLERK);
 
@@ -159,7 +177,7 @@ class DocumentPostingAccessTest {
     @Test
     void adminAndSystemAlwaysPass() {
         for (AccessSubject subject : new AccessSubject[] {ADMIN, AccessSubject.system()}) {
-            UUID id = create(gated, CLERK);
+            UUID id = create(gated);
             commands.post(gated, id, subject);
             assertThat(posted(gated, id)).isTrue();
             commands.unpost(gated, id, subject);
@@ -169,7 +187,7 @@ class DocumentPostingAccessTest {
 
     @Test
     void unsetListsLeaveBothRightsWithEveryWriter() {
-        UUID id = create(open, CLERK);
+        UUID id = create(open);
 
         commands.post(open, id, CLERK);
         assertThat(posted(open, id)).isTrue();
@@ -197,8 +215,8 @@ class DocumentPostingAccessTest {
         assertThat(access.canPost(CLERK, open)).isTrue();
     }
 
-    private UUID create(DocumentDescriptor desc, AccessSubject subject) {
-        return UUID.fromString(commands.create(desc, Map.of("title", "draft"), subject).get("_id").toString());
+    private UUID create(DocumentDescriptor desc) {
+        return UUID.fromString(commands.create(desc, Map.of("title", "draft"), CLERK).get("_id").toString());
     }
 
     private boolean posted(DocumentDescriptor desc, UUID id) {

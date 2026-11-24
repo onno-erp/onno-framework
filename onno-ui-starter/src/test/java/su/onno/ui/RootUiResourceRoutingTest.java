@@ -17,6 +17,7 @@ import static org.springframework.http.MediaType.TEXT_HTML;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class RootUiResourceRoutingTest {
 
@@ -56,7 +57,8 @@ class RootUiResourceRoutingTest {
     void rootMountedUiServesConsumerStaticResources() throws Exception {
         mvc.perform(get("/consumer-static.txt"))
                 .andExpect(status().isOk())
-                .andExpect(content().string("consumer resource\n"));
+                .andExpect(result -> assertThat(result.getResponse().getContentAsString()
+                        .replace("\r\n", "\n")).isEqualTo("consumer resource\n"));
     }
 
     @Configuration
@@ -72,7 +74,7 @@ class RootUiResourceRoutingTest {
         }
 
         @Override
-        public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        public void addResourceHandlers(@org.springframework.lang.NonNull ResourceHandlerRegistry registry) {
             configuration.addResourceHandlers(registry);
         }
 

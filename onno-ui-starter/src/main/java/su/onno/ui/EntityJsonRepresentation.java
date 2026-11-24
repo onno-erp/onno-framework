@@ -20,9 +20,10 @@ import java.util.Map;
  * generated REST API. Storage-shaped responses remain available explicitly for existing headless
  * clients while they migrate; the bundled UI consumes the logical representation.
  */
-final class EntityJsonRepresentation {
+public final class EntityJsonRepresentation {
 
-    enum Mode {
+    /** Representation selected by Java callers of entity and related-list query adapters. */
+    public enum Mode {
         LOGICAL,
         STORAGE
     }

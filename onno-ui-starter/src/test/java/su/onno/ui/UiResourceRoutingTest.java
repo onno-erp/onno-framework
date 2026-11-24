@@ -91,7 +91,8 @@ class UiResourceRoutingTest {
         mvc.perform(get("/assets/routing-test.css"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith("text/css"))
-                .andExpect(content().string(".routing-test { color: green; }\n"));
+                .andExpect(result -> assertThat(result.getResponse().getContentAsString()
+                        .replace("\r\n", "\n")).isEqualTo(".routing-test { color: green; }\n"));
     }
 
     @Test
@@ -106,12 +107,14 @@ class UiResourceRoutingTest {
     void consumerStaticResourceIsNotShadowed() throws Exception {
         mvc.perform(get("/consumer-static.txt"))
                 .andExpect(status().isOk())
-                .andExpect(content().string("consumer resource\n"));
+                .andExpect(result -> assertThat(result.getResponse().getContentAsString()
+                        .replace("\r\n", "\n")).isEqualTo("consumer resource\n"));
     }
 
     @Test
     void resourceHandlerIsScopedToUiPath() {
-        ResourceHandlerRegistry registry = new ResourceHandlerRegistry(context, context.getServletContext());
+        ResourceHandlerRegistry registry = new ResourceHandlerRegistry(context,
+                java.util.Objects.requireNonNull(context.getServletContext()));
 
         new UiAutoConfiguration(new UiProperties()).addResourceHandlers(registry);
 
@@ -127,7 +130,7 @@ class UiResourceRoutingTest {
         private final UiRouting routing = new UiRouting(new UiProperties());
 
         @Override
-        public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        public void addResourceHandlers(@org.springframework.lang.NonNull ResourceHandlerRegistry registry) {
             routing.configuration.addResourceHandlers(registry);
             registry.addResourceHandler("/**")
                     .addResourceLocations("classpath:/META-INF/resources/", "classpath:/resources/",

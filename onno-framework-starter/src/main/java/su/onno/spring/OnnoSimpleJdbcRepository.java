@@ -1,6 +1,5 @@
 package su.onno.spring;
 
-import su.onno.lifecycle.BeforeDeleteHandler;
 import su.onno.model.CatalogObject;
 import su.onno.model.DocumentObject;
 
@@ -17,38 +16,30 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class OnnoSimpleJdbcRepository<T, ID> extends SimpleJdbcRepository<T, ID> {
 
-    private final JdbcAggregateOperations operations;
+    private final EntityDeleteService deleteService;
 
     public OnnoSimpleJdbcRepository(JdbcAggregateOperations operations,
                                     PersistentEntity<T, ?> entity,
                                     JdbcConverter converter) {
         super(operations, entity, converter);
-        this.operations = operations;
+        this.deleteService = new EntityDeleteService(operations);
     }
 
     @Override
     @Transactional
-    public void deleteById(ID id) {
+    public void deleteById(@org.springframework.lang.NonNull ID id) {
         findById(id).ifPresent(this::delete);
     }
 
     @Override
     @Transactional
-    public void delete(T aggregate) {
+    public void delete(@org.springframework.lang.NonNull T aggregate) {
         if (aggregate instanceof CatalogObject catalog) {
-            beforeDelete(aggregate);
-            catalog.setDeletionMark(true);
-            operations.save(aggregate);
+            deleteService.delete(catalog);
             return;
         }
         if (aggregate instanceof DocumentObject document) {
-            if (document.isPosted()) {
-                throw new IllegalStateException(
-                        "Posted document " + document.getId() + " must be unposted before deletion");
-            }
-            beforeDelete(aggregate);
-            document.setDeletionMark(true);
-            operations.save(aggregate);
+            deleteService.delete(document);
             return;
         }
         super.delete(aggregate);
@@ -70,11 +61,5 @@ public class OnnoSimpleJdbcRepository<T, ID> extends SimpleJdbcRepository<T, ID>
     @Transactional
     public void deleteAll() {
         findAll().forEach(this::delete);
-    }
-
-    private static void beforeDelete(Object aggregate) {
-        if (aggregate instanceof BeforeDeleteHandler handler) {
-            handler.beforeDelete();
-        }
     }
 }

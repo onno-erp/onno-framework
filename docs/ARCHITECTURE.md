@@ -230,11 +230,12 @@ on `CatalogRepository`/`DocumentRepository` — `findAllActive()`, `findActiveBy
 `findActiveByCode(String)` / `findActiveByNumber(String)`, `findActiveByDateBetween(from, to)`
 (backed by derived `findByDeletionMarkFalse()`-style queries) — or filter `!isDeletionMark()`.
 
-The framework's Spring Data repository base class also turns `delete(...)`, `deleteById(...)`, and
-bulk deletes of catalog/document aggregates into deletion-mark saves. It runs
-`BeforeDeleteHandler.beforeDelete()` first, publishes delete events only after the mark is stored,
-and refuses to delete a posted document; explicitly unpost it first. Repositories for ordinary,
-non-onno aggregates keep Spring Data JDBC's physical-delete behavior.
+The framework's `EntityDeleteService` is the shared path for repository deletes and generic UI/REST
+deletes of catalog/document aggregates. It runs `BeforeDeleteHandler.beforeDelete()`, then saves the
+deletion mark through Spring Data JDBC. This skips `beforeWrite` and validation, increments the
+optimistic version, and writes `AFTER_DELETE` outbox events in the same transaction. A posted
+document must be explicitly unposted first; deletion never performs an implicit unpost. Repositories
+for ordinary, non-onno aggregates keep Spring Data JDBC's physical-delete behavior.
 
 Because Spring Data JDBC has no global soft-delete filter (no JPA `@Where` equivalent), a
 **boot-time guardrail** catches the cases people forget: at startup every
