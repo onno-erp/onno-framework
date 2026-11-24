@@ -696,6 +696,10 @@ connections ask for `gmail.readonly`, `gmail.send` and `gmail.modify`; only the 
 The delivery connection (`GET /api/crm/conversations/{id}/delivery`) adds `senders:[{id,label}]` and
 the default `sender` (the conversation's own mailbox address); the reply command accepts an optional
 `from` among those ids (else 400). Gmail offers shared mailboxes and the caller's own personal one.
+It also adds `cc`, the suggested Cc of a reply (reply-all: the latest received email's To and Cc without the
+deployment's mailboxes and the recipient). The reply command accepts an optional `cc` list (at most 20 single
+addresses; else 422), stored on the message as `copyTo`; messages and activity entries carry an email's `sentTo`
+and `copyTo` (comma-joined `Name <address>` entries, null when unknown).
 
 Mail search and restore, all requiring inbox workspace access (restore: write access) and limited to
 shared mailboxes and the caller's own personal ones (any other `account` is 404):
@@ -762,7 +766,7 @@ With `onno.crm.channels.whatsapp.enabled=true`, `GET /api/crm/whatsapp/webhook` 
 
 The CRM Inbox presents one row per contact and a chronological timeline across its channel conversations, internal comments and system events. Underlying conversations retain provider routing and email thread identifiers. The reply selector changes only the destination, and defaults to the latest incoming message's conversation; an unsent draft keeps its selected destination.
 
-`GET /api/crm/contacts/{customer}/activity?cursor=&limit=100` returns `{rows,nextCursor,hasMore}` (newest first, default 100, maximum 500). Only the `rows` key and cursor continuation are supported. No total is calculated. Messages and internal notes are combined by SQL UNION ALL, restricted to authorized conversation keys before seeking on `(time DESC, source DESC, UUID DESC)`. Files, HTML, author photos and account labels are resolved only for the selected page. Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`; message entries also retain `senderAccount`, the account used to send the reply, or null. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
+`GET /api/crm/contacts/{customer}/activity?cursor=&limit=100` returns `{rows,nextCursor,hasMore}` (newest first, default 100, maximum 500). Only the `rows` key and cursor continuation are supported. No total is calculated. Messages and internal notes are combined by SQL UNION ALL, restricted to authorized conversation keys before seeking on `(time DESC, source DESC, UUID DESC)`. Files, HTML, author photos and account labels are resolved only for the selected page. Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`; message entries also retain `senderAccount`, the account used to send the reply, or null, and an email's `sentTo`/`copyTo` recipient lists. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
 
 `POST /api/crm/contacts/{customer}/activity` accepts `conversationId`, `type` (`QUOTED`, `CALL_PLANNED`, `CALL_COMPLETED`, `MEETING_PLANNED`, `OTHER`), nonblank `details` up to 7000 characters, and optional local `scheduledFor`. It requires write access to the matching contact's conversation. It stores an internal `SYSTEM_EVENT` without sending a channel message or changing the sales stage. Planned dates are descriptive event text, not reminders or calendar invitations. Domain workflows can also append system events through the existing conversation-message repository.
 

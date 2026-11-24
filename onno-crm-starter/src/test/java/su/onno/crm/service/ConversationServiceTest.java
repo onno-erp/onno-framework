@@ -81,6 +81,35 @@ class ConversationServiceTest {
     }
 
     @Test
+    void ccIsValidatedAndKeptOnTheQueuedReply() {
+        when(transport.connection(conversation)).thenReturn(new CrmMessageTransport.Connection(true,"Email",8000)
+            .withRecipients("client@example.com",java.util.List.of("client@example.com")));
+        var reply=service.addMessage(conversationId,new ConversationService.Reply("Hi",java.util.List.of(),"Agent",null,null,null,null,null,
+            java.util.List.of("Marco Rossi <marco@venue.test>"," giulia@venue.test ","GIULIA@venue.test","client@example.com","Smith, Jo <jo@venue.test>")));
+        assertThat(reply.getSentTo()).isEqualTo("client@example.com");
+        // Duplicates and the recipient leave; a name with a comma is quoted, so the list splits back the same.
+        assertThat(reply.getCopyTo()).isEqualTo("Marco Rossi <marco@venue.test>, giulia@venue.test, \"Smith, Jo\" <jo@venue.test>");
+        assertThat(EmailAddresses.split(reply.getCopyTo())).hasSize(3);
+
+        var none=service.addMessage(conversationId,new ConversationService.Reply("Hi","Agent"));
+        assertThat(none.getCopyTo()).isNull();
+
+        for(String bad:java.util.List.of("marco@venue.test\r\nBcc: spy@example.com","not an address","a@b.test, c@d.test","Marco <marco@venue>"))
+            assertThatThrownBy(()->service.addMessage(conversationId,new ConversationService.Reply("Hi",java.util.List.of(),"Agent",null,null,null,null,null,java.util.List.of(bad))))
+                .isInstanceOf(IllegalArgumentException.class);
+        var many=java.util.stream.IntStream.range(0,21).mapToObj(i->"guest"+i+"@example.com").toList();
+        assertThatThrownBy(()->service.addMessage(conversationId,new ConversationService.Reply("Hi",java.util.List.of(),"Agent",null,null,null,null,null,many)))
+            .hasMessage("Copy at most 20 people");
+    }
+
+    @Test
+    void onlyEmailRepliesCarryACc() {
+        conversation.setChannel(Channel.TELEGRAM);
+        assertThatThrownBy(()->service.addMessage(conversationId,new ConversationService.Reply("Hi",java.util.List.of(),"Agent",null,null,null,null,null,
+            java.util.List.of("marco@venue.test")))).hasMessage("Only email replies have a Cc");
+    }
+
+    @Test
     void senderIsCapturedAndRestrictedToTheOfferedMailboxes() {
         var offered = new CrmMessageTransport.Connection(true, "Gmail", 8000).withSenders("info@studio.test", java.util.List.of(
                 new CrmMessageTransport.Sender("info@studio.test", "Info"), new CrmMessageTransport.Sender("office@studio.test", "Office")));

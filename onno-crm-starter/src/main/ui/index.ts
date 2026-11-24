@@ -37,9 +37,9 @@ export type { CrmInboxComponents, InboxContactPanelProps } from "./CrmInbox";
 export { ConversationRow, type ConversationRowProps, type ConversationRowComponent, type ConversationRowMenu } from "./ConversationRow";
 export { ContactRowMenu as ConversationMenu } from "./ContactRowMenu";
 export { ConversationList, ConversationRowContent, ConversationListSkeleton } from "./ConversationList";
-export { ChatTimeline, TimelineMessage, TimelineSystemEvent, TimelineComment, MessageAttachments, CrmAvatar, ChannelIcon,
+export { ChatTimeline, TimelineMessage, TimelineSystemEvent, TimelineComment, MessageAttachments, MessageRecipients, CrmAvatar, ChannelIcon,
   type ChatTimelineProps, type MessageActionsContext } from "./ChatTimeline";
-export { CrmComposer, CrmComposerFields, SenderControls, AttachButton, FileDropOverlay,
+export { CrmComposer, CrmComposerFields, SenderControls, CcField, AttachButton, FileDropOverlay,
   type CrmReplyInputProps, type CrmComposerProps, type CrmComposerPartProps, type CrmComposerLayouts, type CrmAttachProps, type CrmComposerFieldParts } from "./CrmComposer";
 export { composerWindows, type ComposerWindow } from "./composerWindows";
 export { ContactPanel as CrmContactPanel, CrmPresentationProvider, useCrmPresentation, type Config as CrmConfig } from "./CrmWorkspace";
@@ -50,3 +50,4 @@ export { ChatMessageBody, ChatMessageRenderers } from "./chatMessageRenderers";
 export { useCrmConversation, useTimelineWithSources, type CrmConversationState, type CrmTimelineSource, type CrmActivityEntry, type UseCrmConversationOptions } from "./useCrmConversation";
 export { useCrmComposer, type CrmComposerState } from "./useCrmComposer";
 export type { CrmMessage, CrmNote, CrmAttachment, CrmDelivery, CrmTimelineEntry, CrmConversationAction } from "./crmModel";
+export { splitAddresses, parseAddress, addressLabel } from "./emailAddresses";

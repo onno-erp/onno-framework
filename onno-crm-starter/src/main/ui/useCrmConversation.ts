@@ -8,6 +8,8 @@ export type CrmActivityEntry = {
   id: string; conversationId: string; kind: string; direction: string; channel: string;
   authorName: string; authorAvatarUrl: string | null; mine: boolean; body: string; at: string;
   deliveryStatus: string; attachments?: CrmAttachment[]; bodyHtml?: string | null; senderAccount?: string | null;
+  /** An email's To and Cc lists (`Name <address>` entries joined by ", "); null when not known. */
+  sentTo?: string | null; copyTo?: string | null;
 };
 
 /**

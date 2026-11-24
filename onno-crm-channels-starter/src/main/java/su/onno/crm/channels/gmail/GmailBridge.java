@@ -194,7 +194,9 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
      * authorised mailbox the reply may come from: shared ones and, when {@code principal} is known,
      * their own personal mailbox; never another person's personal mailbox.
      */
-    @Override public Connection connection(Conversation c,Principal principal){if(!ready||!Channel.EMAIL.equals(c.getChannel())||c.getInbox()==null)return new Connection(false,"Gmail is not connected",8000);var a=account(c);
+    @Override public Connection connection(Conversation c,Principal principal){return connection(c,principal,true);}
+    /** The connection; {@code suggestCc} adds the reply-all Cc, which only the composer needs (not enqueue or delivery). */
+    private Connection connection(Conversation c,Principal principal,boolean suggestCc){if(!ready||!Channel.EMAIL.equals(c.getChannel())||c.getInbox()==null)return new Connection(false,"Gmail is not connected",8000);var a=account(c);
         boolean mapped=a!=null&&a.inbox.equals(c.getInbox().id())&&a.active&&client(a).authorized()&&jdbc.queryForObject("SELECT COUNT(*) FROM onno_crm_gmail_thread WHERE account=? AND conversation_id=?",Integer.class,a.email,c.getId())>0;
         var connection=new Connection(mapped,mapped?"Gmail":"Gmail is not connected or is paused",8000)
             .withAttachments(attachments.limit(),attachments.unavailableReason());
@@ -207,7 +209,34 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
             if(!Channel.EMAIL.equals(identity.getChannel()))continue;
             String address=emailAddress(identity.getAddress());if(address!=null)addresses.add(address);
         }
-        return connection.withRecipients(recipient,List.copyOf(addresses)).withSenders(a.email,senders(a,principal));}
+        var offered=connection.withRecipients(recipient,List.copyOf(addresses)).withSenders(a.email,senders(a,principal));
+        return suggestCc?offered.withCc(suggestedCc(c,recipient)):offered;}
+    /**
+     * Reply-all: everyone else on the latest received email of this conversation (its To and Cc), without the
+     * deployment's own mailboxes and the reply's recipient, each address once (ignoring case), at most
+     * {@link EmailAddresses#MAX_CC}. Only addresses on mail this conversation shows, so a reader who can see the
+     * conversation already sees them. Email imported before recipients were kept suggests nobody.
+     */
+    List<String> suggestedCc(Conversation c,String recipient) {
+        var history=messages.findByConversationAndDeletionMarkFalseOrderBySentAtAsc(Ref.of(Conversation.class,c.getId()));
+        ConversationMessage latest=null;
+        for(int i=history.size()-1;i>=0 && latest==null;i--) {
+            var message=history.get(i);
+            if(message.getDirection()==MessageDirection.INBOUND && Channel.EMAIL.equals(message.getChannel()))latest=message;
+        }
+        if(latest==null)return List.of();
+        var excluded=new TreeSet<String>(String.CASE_INSENSITIVE_ORDER);
+        for(var mailbox:accounts())excluded.add(mailbox.email);
+        if(recipient!=null)excluded.add(recipient);
+        var cc=new ArrayList<String>();
+        for(String list:new String[]{latest.getSentTo(),latest.getCopyTo()})for(String entry:EmailAddresses.split(list)) {
+            String address=EmailAddresses.address(entry);
+            if(!EmailAddresses.valid(address) || !excluded.add(address))continue;
+            try { cc.add(EmailAddresses.normalize(entry)); } catch(IllegalArgumentException unreadable) { cc.add(address); }
+            if(cc.size()==EmailAddresses.MAX_CC)return List.copyOf(cc);
+        }
+        return List.copyOf(cc);
+    }
     /** The conversation's own mailbox first, then the others this reply may come from. */
     private List<Sender> senders(Account home,Principal principal) {
         var senders=new ArrayList<Sender>();senders.add(new Sender(home.email,mailboxLabel(home)));
@@ -241,7 +270,7 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
             parsed[0].validate();return parsed[0].getAddress();
         }catch(jakarta.mail.internet.AddressException ignored){return null;}
     }
-    public void enqueue(Conversation c,ConversationMessage message){if(!connection(c).connected())throw new IllegalArgumentException("Gmail is not connected");var a=account(c);
+    public void enqueue(Conversation c,ConversationMessage message){if(!connection(c,null,false).connected())throw new IllegalArgumentException("Gmail is not connected");var a=account(c);
         String thread=jdbc.queryForObject("SELECT thread_id FROM onno_crm_gmail_thread WHERE account=? AND conversation_id=? ORDER BY last_received DESC NULLS LAST,thread_id DESC FETCH FIRST 1 ROW ONLY",String.class,a.email,c.getId());
         if(jdbc.queryForObject("SELECT COUNT(*) FROM onno_crm_gmail_outbox WHERE message_id=?",Integer.class,message.getId())==0)jdbc.update("INSERT INTO onno_crm_gmail_outbox VALUES (?,?,?,'QUEUED')",message.getId(),a.email,thread);
         else if(jdbc.update("UPDATE onno_crm_gmail_outbox SET state='QUEUED' WHERE message_id=? AND state='FAILED'",message.getId())!=1)throw new IllegalArgumentException("Reply is already queued or sent");}
@@ -401,7 +430,8 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
                     reply.setKind(MessageKind.AGENT_REPLY);reply.setDirection(MessageDirection.OUTBOUND);reply.setDeliveryStatus(DeliveryStatus.SENT);
                     var files=mode==Mode.HISTORY?remoteFiles(a,id,mail):importFiles(mail);
                     reply.setAuthorName(cut(mail.name(),200));reply.setBody(cut(files.withNotes(mail.text()),8000));reply.setBodyHtml(files.html(mail));reply.setDescription(cut(mail.text(),100));
-                    reply.setSentAt(receivedAt);reply.setExternalMessageId("gmail:"+id);reply.setAttachments(files.urls());messages.save(reply);
+                    reply.setSentAt(receivedAt);reply.setExternalMessageId("gmail:"+id);reply.setAttachments(files.urls());
+                    reply.setSentTo(EmailAddresses.join(mail.to()));reply.setCopyTo(EmailAddresses.join(mail.cc()));messages.save(reply);
                     su.onno.crm.channels.ExternalReplyReadState.answered(c,reply,history,su.onno.crm.channels.ExternalReplyReadState.NO_TIE_BREAK);
                     if(c.getLastMessageAt()==null || !reply.getSentAt().isBefore(c.getLastMessageAt())){c.setLastMessageAt(reply.getSentAt());c.setLastMessagePreview(cut(mail.text(),180));}
                     conversations.save(c);
@@ -411,7 +441,8 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
                 if(linked==null||contacts.canonical(linked.getCustomer()).equals(canonical))contacts.link(canonical,Channel.EMAIL,a.inbox.toString(),mail.sender().toLowerCase(Locale.ROOT),mail.sender(),false);
                 var message=new ConversationMessage();message.setConversation(Ref.of(Conversation.class,c.getId()));message.setChannel(Channel.EMAIL);message.setKind(MessageKind.CUSTOMER_MESSAGE);message.setDirection(MessageDirection.INBOUND);message.setAuthorName(cut(mail.name(),200));
                 var files=mode==Mode.HISTORY?remoteFiles(a,id,mail):importFiles(mail);
-                message.setBody(cut(files.withNotes(mail.text()),8000));message.setBodyHtml(files.html(mail));message.setDescription(cut(mail.text(),100));message.setSentAt(receivedAt);message.setDeliveryStatus(DeliveryStatus.RECEIVED);message.setExternalMessageId(cut("gmail:"+a.email+":"+id,240));message.setAttachments(files.urls());messages.save(message);
+                message.setBody(cut(files.withNotes(mail.text()),8000));message.setBodyHtml(files.html(mail));message.setDescription(cut(mail.text(),100));message.setSentAt(receivedAt);message.setDeliveryStatus(DeliveryStatus.RECEIVED);message.setExternalMessageId(cut("gmail:"+a.email+":"+id,240));message.setAttachments(files.urls());
+                message.setSentTo(EmailAddresses.join(mail.to()));message.setCopyTo(EmailAddresses.join(mail.cc()));messages.save(message);
                 if(c.getLastMessageAt()==null||!message.getSentAt().isBefore(c.getLastMessageAt())){c.setLastMessageAt(message.getSentAt());c.setLastMessagePreview(cut(mail.text(),180));}
                 jdbc.update("UPDATE onno_crm_gmail_thread SET reply_to=?,subject=?,reference_id=?,last_received=? WHERE account=? AND thread_id=? AND (last_received IS NULL OR last_received<=?)",cut(mail.replyTo(),320),cut(mail.subject(),998),cut(mail.messageId(),998),message.getSentAt(),a.email,thread,message.getSentAt());
                 // A scanned (older) email counts as unread only if it is still unread in Gmail; history never does.
@@ -701,7 +732,7 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
     private void deliver(Account a){for(UUID id:jdbc.query("SELECT message_id FROM onno_crm_gmail_outbox WHERE account=? AND state='QUEUED'",(rs,n)->rs.getObject(1,UUID.class),a.email)){
         if(jdbc.update("UPDATE onno_crm_gmail_outbox SET state='SENDING' WHERE message_id=? AND state='QUEUED'",id)!=1)continue;
         Account from=a;
-        try{var message=messages.findActiveById(id).orElseThrow();var c=conversations.findActiveById(message.getConversation().id()).orElseThrow();if(!connection(c).connected())throw new IllegalStateException();
+        try{var message=messages.findActiveById(id).orElseThrow();var c=conversations.findActiveById(message.getConversation().id()).orElseThrow();if(!connection(c,null,false).connected())throw new IllegalStateException();
             from=sender(a,message);
             if(from!=a && paused(from)){requeue(id);continue;}
             send(a,from,id,message,c);
@@ -767,9 +798,11 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
         String signature=signature(from);
         // A formatted reply (sanitized when it was queued) goes out as the email's HTML; its text stays the plain part.
         String html=message.getBodyHtml();
+        // The Cc chosen when the reply was queued, on a new thread as on an existing one, and again on a retry.
+        var cc=EmailAddresses.split(message.getCopyTo());
         String raw=newThread
-            ? GmailMail.compose(from.email,recipient,outgoingSubject,"",body,html,files,id,signature)
-            : GmailMail.reply(from.email,recipient,Objects.toString(route.get("subject"),""),Objects.toString(route.get("reference_id"),""),body,html,files,id,signature);
+            ? GmailMail.compose(from.email,recipient,outgoingSubject,"",body,html,files,id,signature,cc)
+            : GmailMail.reply(from.email,recipient,Objects.toString(route.get("subject"),""),Objects.toString(route.get("reference_id"),""),body,html,files,id,signature,cc);
         var sent=client(from).send(raw,newThread?null:route.get("thread_id").toString());
         tx.executeWithoutResult(s->{
             if(newThread&&!sent.path("threadId").asText().isBlank()) {
