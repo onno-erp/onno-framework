@@ -1,7 +1,6 @@
 package su.onno.service;
 
 import su.onno.metadata.AttributeDescriptor;
-import su.onno.repository.EnumerationPersistence;
 import su.onno.types.PolyRef;
 import su.onno.types.Ref;
 
@@ -451,18 +450,15 @@ public final class Where {
         return node.asText();
     }
 
+    /** A UUID; on an enum column also a constant name, bound as its stored id ({@link EnumValues#filterId}). */
     private static UUID uuid(Column column, JsonNode node) {
         String raw = text(column, node).trim();
+        if (column.enumType() != null) {
+            return EnumValues.filterId(column.enumType(), raw, "where field " + column.name());
+        }
         try {
             return UUID.fromString(raw);
         } catch (IllegalArgumentException notAUuid) {
-            if (column.enumType() != null) {
-                for (Enum<?> constant : column.enumType().getEnumConstants()) {
-                    if (constant.name().equals(raw)) {
-                        return EnumerationPersistence.resolveId(column.enumType(), constant);
-                    }
-                }
-            }
             throw invalid("where field " + column.name() + ": expected a UUID, got '" + raw + "'");
         }
     }

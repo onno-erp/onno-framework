@@ -74,8 +74,9 @@ Use `from` / `to` as optional inclusive ISO local date-times (for example
 `2024-03-31T23:59:59`); the API reads stored periods without changing bucket granularity.
 Narrow with `where`, the structured JSON predicate, for example
 `?where={"customer":"<uuid>","region":"North"}`; its keys are the dimension, resource and
-attribute field names plus `id` and `period`. Reference and enumeration values use their stored
-UUIDs. Secret attributes are never filterable; an unknown field, and any other query parameter, is
+attribute field names plus `id` and `period`. Reference values use their stored UUIDs; enumeration
+values their stored UUID or constant name.
+Secret attributes are never filterable; an unknown field, and any other query parameter, is
 rejected with `400` instead of being ignored.
 
 `slice-last` returns the slice of last values as a plain list: for every dimension tuple, the record
@@ -559,7 +560,11 @@ Writes mirror the default logical reads:
 - **Request bodies canonically use camelCase `fieldName`.** System fields are catalog `code` /
   `description` / `folder` / `parent` / `version` and document `number` / `date` / `version`.
   Storage aliases (`tax_id`, `_description`, `_version`, and tabular-row storage columns) are also
-  accepted; conflicting duplicate spellings are `400`. A `Ref<>`/enum is written as its bare UUID string.
+  accepted; conflicting duplicate spellings are `400`. A `Ref<>` is written as its bare UUID string.
+  An enum is written as its constant name (`"status": "NEW"`) or its stored UUID string; a name that
+  is no constant of the enum (unknown, removed, a different case, or the `@EnumLabel` label) is a
+  field-specific `400` listing the accepted names. Tabular-section rows, CSV import and MCP writes
+  take the same values; a row's error is keyed by its position, e.g. `items[1].status`.
   A `PolyRef` accepts its raw `JavaType|UUID` string or `{ "type": "<logical-name-or-Java-type>",
   "id": "<uuid>" }`; the declared `@RefTargets` allowlist is enforced.
 - **Updates are partial.** `PUT /api/{catalogs|documents}/{name}/{id}` only touches the fields present
@@ -634,7 +639,8 @@ must `addEventListener("updated", …)` (etc.) per event name you care about.
 For authenticated MCP clients, `register_movements` and `register_balance` return the same
 `{rows,nextCursor,hasMore}` page in MCP's `result` wrapper, in the logical vocabulary above. Both
 accept `cursor`, `limit` (default 100, maximum 500) and `where` (the structured predicate; reference
-and enumeration values use UUID strings). Movements additionally accept inclusive `from`/`to`,
+values use UUID strings, enumeration values a UUID string or the constant name). Movements
+additionally accept inclusive `from`/`to`,
 validated `sort`, and `descending` (default true); balance accepts `asOf`. The predicate and record
 scope are applied in SQL before seeking. Unknown `where` fields and invalid page bounds produce an
 MCP error. See [Collection pagination](#collection-pagination) for the contract.

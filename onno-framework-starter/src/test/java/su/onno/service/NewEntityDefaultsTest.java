@@ -2,11 +2,13 @@ package su.onno.service;
 
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
+import su.onno.annotations.Enumeration;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DefaultNamingStrategy;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.MetadataScanner;
 import su.onno.model.CatalogObject;
+import su.onno.repository.EnumerationPersistence;
 
 import org.junit.jupiter.api.Test;
 
@@ -14,6 +16,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -78,5 +81,35 @@ class NewEntityDefaultsTest {
         NewEntityDefaults.applyPrefill(row, desc.attributes(),
                 Map.of("observedAt", "2026-06-04T10:00:00"));
         assertThat(row.get(column(desc, "observedAt"))).isEqualTo("2026-06-04T10:00");
+    }
+
+    @Enumeration(name = "DraftStatuses")
+    enum Status { NEW, APPROVED }
+
+    @Catalog(name = "DraftTickets")
+    static class Ticket extends CatalogObject {
+        @Attribute(displayName = "Status")
+        private Status status;
+    }
+
+    @Test
+    void prefillSeedsAnEnumByConstantNameOrIdAndSkipsAnUnknownOne() {
+        MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
+        CatalogDescriptor desc = scanner.scan(Ticket.class);
+        UUID approved = EnumerationPersistence.resolveId(Status.class, Status.APPROVED);
+
+        Map<String, Object> byName = new HashMap<>();
+        NewEntityDefaults.applyPrefill(byName, desc.attributes(), Map.of("status", "APPROVED"));
+        assertThat(byName.get(column(desc, "status"))).isEqualTo(approved);
+
+        Map<String, Object> byId = new HashMap<>();
+        NewEntityDefaults.applyPrefill(byId, desc.attributes(), Map.of("status", approved.toString()));
+        assertThat(byId.get(column(desc, "status"))).isEqualTo(approved);
+
+        // A malformed deep link degrades to a blank field rather than an error.
+        Map<String, Object> unknown = new HashMap<>();
+        NewEntityDefaults.applyPrefill(unknown, desc.attributes(), Map.of("status", "REMOVED"));
+        NewEntityDefaults.applyPrefill(unknown, desc.attributes(), Map.of("status", UUID.randomUUID().toString()));
+        assertThat(unknown).doesNotContainKey(column(desc, "status"));
     }
 }
