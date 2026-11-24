@@ -1,5 +1,6 @@
 package com.example.domain.catalogs;
 
+import jakarta.validation.constraints.Email;
 import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
@@ -19,7 +20,8 @@ import lombok.Setter;
 @Setter
 public class Supplier extends CatalogObject {
 
-    @Attribute(displayName = "Email", length = 200, email = true)
+    @Attribute(displayName = "Email", length = 200)
+    @Email
     private String email;
 
     @Attribute(displayName = "Phone", length = 50)

@@ -37,7 +37,7 @@ Implemented:
   and the live task inbox (`TaskInbox`)
 - Shared typed field tokens across Java APIs: getter references for register queries, command
   predicates and titles, and check dependencies
-- Declarative business rule metadata (`Validated` / `BusinessRule`) and lightweight validation
+- Business rules (`HasBusinessRules` / `BusinessRule`, formerly `Validated`) for cross-field invariants; single-field constraints are Jakarta Bean Validation annotations, enforced on every write path and mirrored into the model metadata
 - Diff-based schema migration: `onno_schema_history` with metadata snapshots, renames via `previousNames`, modes (`apply`/`plan`/`validate`/`off`), destructive-change gating, and versioned `AppMigration` data migrations
 - Hierarchical catalog children/tree APIs
 - Dry-run posting previews

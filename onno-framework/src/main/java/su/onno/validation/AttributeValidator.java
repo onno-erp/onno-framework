@@ -1,6 +1,7 @@
 package su.onno.validation;
 
 import su.onno.metadata.AttributeDescriptor;
+import su.onno.metadata.AttributeDescriptor.Constraints.Rule;
 
 import java.lang.reflect.Field;
 import java.util.List;
@@ -8,11 +9,16 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * Enforces the declarative {@code @Attribute} constraints (required, string length, numeric
- * min/max, regex pattern, email) on an entity before write, collecting every failure into a
+ * Enforces an attribute's metadata constraints (required, string length, numeric min/max, regex
+ * pattern, email) on an entity before write, collecting every failure into a
  * {@link ValidationErrors} keyed by field name. Works either against a typed aggregate (values
  * read reflectively) or against a submitted body map (the generic UI write path), so the same
  * rules apply however the write arrives.
+ *
+ * <p>The column's storage length is always checked here. A rule that came from a Jakarta annotation
+ * ({@link AttributeDescriptor.Constraints#beanValidated()}) is left to {@link BeanValidation} while a
+ * provider is active, so it keeps the Jakarta semantics and message and is not reported twice;
+ * without a provider this class enforces the representable ones itself.</p>
  */
 public final class AttributeValidator {
 
@@ -53,35 +59,46 @@ public final class AttributeValidator {
     private void check(AttributeDescriptor a, Object value, ValidationErrors errors) {
         String label = a.displayName();
         boolean empty = value == null || (value instanceof String s && s.isBlank());
+        AttributeDescriptor.Constraints c = a.constraints();
+        boolean delegate = BeanValidation.isActive();
 
         if (a.required() && empty) {
-            errors.field(a.fieldName(), label + " is required");
+            if (!(delegate && c.beanValidated(Rule.REQUIRED))) {
+                errors.field(a.fieldName(), label + " is required");
+            }
             return;
         }
         if (empty) {
             return; // optional + absent: nothing else to check
         }
 
-        AttributeDescriptor.Constraints c = a.constraints();
         if (value instanceof String s) {
-            if (a.length() > 0 && a.length() <= MAX_VARCHAR && s.length() > a.length()) {
-                errors.field(a.fieldName(), label + " must be at most " + a.length() + " characters");
+            int limit = a.length() > 0 && a.length() <= MAX_VARCHAR ? a.length() : 0;
+            if (c.hasMaxLength()) {
+                // @Size(max) never exceeds the column (checked at startup): the provider reporting it
+                // covers the column too; otherwise the tighter of the two is the limit.
+                limit = delegate && c.beanValidated(Rule.MAX_LENGTH) ? 0
+                        : limit == 0 ? c.maxLength() : Math.min(limit, c.maxLength());
             }
-            if (c.minLength() > 0 && s.length() < c.minLength()) {
+            if (limit > 0 && s.length() > limit) {
+                errors.field(a.fieldName(), label + " must be at most " + limit + " characters");
+            }
+            if (c.minLength() > 0 && s.length() < c.minLength() && !(delegate && c.beanValidated(Rule.MIN_LENGTH))) {
                 errors.field(a.fieldName(), label + " must be at least " + c.minLength() + " characters");
             }
-            if (!c.pattern().isBlank() && !Pattern.matches(c.pattern(), s)) {
+            if (!c.pattern().isBlank() && !(delegate && c.beanValidated(Rule.PATTERN))
+                    && !Pattern.matches(c.pattern(), s)) {
                 errors.field(a.fieldName(), label + " is not in the expected format");
             }
-            if (c.email() && !EMAIL.matcher(s).matches()) {
+            if (c.email() && !(delegate && c.beanValidated(Rule.EMAIL)) && !EMAIL.matcher(s).matches()) {
                 errors.field(a.fieldName(), label + " must be a valid email address");
             }
         } else if (value instanceof Number n) {
             double d = n.doubleValue();
-            if (c.hasMin() && d < c.min()) {
+            if (c.hasMin() && d < c.min() && !(delegate && c.beanValidated(Rule.MIN))) {
                 errors.field(a.fieldName(), label + " must be at least " + number(c.min()));
             }
-            if (c.hasMax() && d > c.max()) {
+            if (c.hasMax() && d > c.max() && !(delegate && c.beanValidated(Rule.MAX))) {
                 errors.field(a.fieldName(), label + " must be at most " + number(c.max()));
             }
         }

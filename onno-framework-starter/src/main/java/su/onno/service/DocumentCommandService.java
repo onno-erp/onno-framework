@@ -157,7 +157,7 @@ public class DocumentCommandService {
      * Dry-run the write lifecycle against a form's current values and report every failure without
      * persisting anything — the backend of the form's live (as-you-type) validation. Runs the same
      * checks as {@link #create}/{@link #update}: declarative attribute constraints, then the typed
-     * document's {@code onFilling}/{@code beforeWrite} hooks and {@link su.onno.rules.Validated}
+     * document's {@code onFilling}/{@code beforeWrite} hooks and {@link su.onno.rules.HasBusinessRules}
      * rules on the merged state (tabular rows included), so a conflict check written in Java
      * surfaces while the user is still on the field. No number is consumed from the sequence and no
      * events fire. Always returns 200 — the outcome is the {@code {valid, fieldErrors, formErrors}}

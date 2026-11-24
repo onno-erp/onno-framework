@@ -23,7 +23,7 @@ payment, timesheet, work order, adjustment, or check-in.
 5. Use field initializers for values that must appear on the blank New form. Use null-guarded
    `OnFillingHandler` for create/save defaults.
 6. Compute totals in `BeforeWriteHandler`.
-7. Validate with `Validated`.
+7. Validate single fields with Jakarta annotations (`@NotNull`, `@Size`, ...) and cross-field rules with `HasBusinessRules`.
 8. If the event affects registers, implement `Postable` or use `onno-posting`.
 9. Customize the list and form in the entity's TSX pages under `src/main/ui/pages/`
    (`onno-ui-entities`): header fields by name, line columns as `"items.quantity"` — all checked

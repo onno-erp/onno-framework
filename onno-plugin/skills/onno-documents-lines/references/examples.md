@@ -16,6 +16,7 @@
 ```java
 package com.acme.sales.domain;
 
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 import su.onno.annotations.AccessControl;
@@ -28,7 +29,7 @@ import su.onno.lifecycle.Postable;
 import su.onno.model.DocumentObject;
 import su.onno.posting.PostingContext;
 import su.onno.rules.BusinessRule;
-import su.onno.rules.Validated;
+import su.onno.rules.HasBusinessRules;
 import su.onno.types.Ref;
 
 import java.math.BigDecimal;
@@ -41,9 +42,9 @@ import java.util.List;
 @Getter
 @Setter
 public class SalesOrder extends DocumentObject
-        implements OnFillingHandler, BeforeWriteHandler, Validated, Postable {
+        implements OnFillingHandler, BeforeWriteHandler, HasBusinessRules, Postable {
 
-    @Attribute(displayName = "Customer", required = true)
+    @Attribute(displayName = "Customer") @NotNull
     private Ref<Customer> customer;
 
     @Attribute(displayName = "Status")
@@ -103,6 +104,7 @@ public class SalesOrder extends DocumentObject
 ```java
 package com.acme.sales.domain;
 
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 import su.onno.annotations.Attribute;
@@ -115,7 +117,7 @@ import java.math.BigDecimal;
 @Setter
 public class SalesOrderLine extends TabularSectionRow {
 
-    @Attribute(displayName = "Product", required = true)
+    @Attribute(displayName = "Product") @NotNull
     private Ref<Product> product;
 
     @Attribute(displayName = "Quantity", precision = 15, scale = 3)

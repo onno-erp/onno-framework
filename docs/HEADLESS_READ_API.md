@@ -565,7 +565,7 @@ Writes mirror the default logical reads:
 - **Updates are partial.** `PUT /api/{catalogs|documents}/{name}/{id}` only touches the fields present
   in the body — omitted fields keep their stored value, and an empty body is a no-op. So a
   `PUT { "startsAt": "…" }` moves just that field and does **not** null the rest. Validation follows
-  the same rule: `@Attribute(required = true)` fields absent from an update body are not flagged
+  the same rule: required fields (`@NotNull`/`@NotBlank`) absent from an update body are not flagged
   (they're unchanged) — but a key explicitly present with `null`/blank still fails, because that
   write would clear the column. Entity-level `rules()` always run on the merged state.
 

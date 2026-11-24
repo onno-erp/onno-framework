@@ -121,7 +121,7 @@ Map answers:
 | "The order has products/quantities/prices" | `@TabularSection` rows |
 | "Draft -> Approved -> Shipped -> Completed" | `@Enumeration` status + actions |
 | "Total is sum of lines" | `BeforeWriteHandler` |
-| "Can only post approved orders" | `Validated` or `BeforePostHandler` |
+| "Can only post approved orders" | `HasBusinessRules` or `BeforePostHandler` |
 | "Unposted cancellation should not affect stock" | no movements in `handlePosting` |
 
 Follow-up questions:
@@ -234,7 +234,7 @@ Map answers:
 | Answer pattern | onno concept |
 | --- | --- |
 | "Every order needs a customer" | `BusinessRule.onField("customer", ...)` |
-| "Cannot post with empty lines" | `Validated` |
+| "Cannot post with empty lines" | `HasBusinessRules` |
 | "Cannot ship more than stock" | BALANCE register negative guard |
 | "New orders default to today and Draft" | `OnFillingHandler` + field initializer |
 | "Only finance can delete posted invoices" | `@AccessControl` plus action/hook guard |

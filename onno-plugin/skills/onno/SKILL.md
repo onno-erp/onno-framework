@@ -108,14 +108,14 @@ authenticated inbox, claim, delegate, complete, cancel, and migrate loop.
 @Catalog(name = "Customers", codePrefix = "C-", context = "Sales")
 @Getter @Setter
 public class Customer extends CatalogObject {
-    @Attribute(required = true, length = 200) private String name;
+    @Attribute(length = 200) @NotBlank private String name;
 }
 
 // 2. Document with lines, validation, and posting
 @Document(name = "Sales Orders", numberPrefix = "SO-", context = "Sales")
 @Getter @Setter
-public class SalesOrder extends DocumentObject implements BeforeWriteHandler, Validated, Postable {
-    @Attribute(required = true) private Ref<Customer> customer;
+public class SalesOrder extends DocumentObject implements BeforeWriteHandler, HasBusinessRules, Postable {
+    @Attribute @NotNull private Ref<Customer> customer;
     @Attribute(precision = 15, scale = 2) private BigDecimal total;
     @TabularSection(name = "items") private List<SalesOrderLine> items = new ArrayList<>();
 
@@ -188,8 +188,11 @@ Summarize what you modeled and your assumptions.
   }
   ```
 
-Validation is typed Java: implement `Validated`, return `BusinessRule`s whose condition is a
-`BooleanSupplier` over the entity's fields. Rules run before write and before posting. There is no
+Validation: a rule about one field is a Jakarta Bean Validation annotation (`@NotNull`, `@NotBlank`,
+`@Size`, `@Min`, `@Pattern`, `@Email`, custom `@Constraint`; add `spring-boot-starter-validation`),
+enforced on every write and mirrored to the form. Rules across fields are typed Java: implement
+`HasBusinessRules` (formerly `Validated`), return `BusinessRule`s whose condition is a
+`BooleanSupplier` over the entity's fields; they run before write and before posting. There is no
 string-mapped declarative posting or rule grammar — posting is `Postable.handlePosting`, rules are
 `BusinessRule`, both compiler-checked.
 

@@ -217,6 +217,13 @@ function fmtNum(n: number): string {
   return Number.isInteger(n) ? String(n) : String(n);
 }
 
+/** The tighter of the column length and the `@Size(max)` validation limit, if either bounds the text. */
+function maxLengthOf(attr: AttributeMeta): number | undefined {
+  const column = attr.length > 0 && attr.length <= MAX_VARCHAR ? attr.length : undefined;
+  if (attr.maxLength && attr.maxLength > 0) return column === undefined ? attr.maxLength : Math.min(column, attr.maxLength);
+  return column;
+}
+
 /**
  * Client-side mirror of the server's AttributeValidator (required, length, min/max, pattern,
  * email) for instant inline feedback. The server re-checks authoritatively before write — this
@@ -234,8 +241,9 @@ function validateField(attr: AttributeMeta, value: unknown, t: Translate): strin
   }
 
   if (typeof value === "string") {
-    if (attr.length > 0 && attr.length <= MAX_VARCHAR && value.length > attr.length) {
-      return t("validation.maxLength", { field, n: attr.length });
+    const limit = maxLengthOf(attr);
+    if (limit !== undefined && value.length > limit) {
+      return t("validation.maxLength", { field, n: limit });
     }
     if (attr.minLength && value.length < attr.minLength) {
       return t("validation.minLength", { field, n: attr.minLength });
@@ -1658,7 +1666,7 @@ function AttrControl({
         aria-invalid={invalid}
         className={cn(invalidCls, compact && "min-h-9 resize-y")}
         placeholder={placeholder || undefined}
-        maxLength={attr.length > 0 && attr.length <= MAX_VARCHAR ? attr.length : undefined}
+        maxLength={maxLengthOf(attr)}
         value={(value as string) ?? ""}
         onChange={(e) => onChange(e.target.value)}
       />
@@ -1675,7 +1683,7 @@ function AttrControl({
       step={numeric && attr.scale > 0 ? Math.pow(10, -attr.scale).toString() : undefined}
       min={numeric && attr.min != null ? attr.min : undefined}
       max={numeric && attr.max != null ? attr.max : undefined}
-      maxLength={attr.length > 0 && attr.length <= MAX_VARCHAR && !numeric ? attr.length : undefined}
+      maxLength={numeric ? undefined : maxLengthOf(attr)}
       value={(value as string) ?? ""}
       onChange={(e) => onChange(numeric ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value)}
     />

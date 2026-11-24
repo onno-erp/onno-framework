@@ -32,7 +32,7 @@ import su.onno.model.TabularSectionRow;
 import su.onno.numbering.NumberGenerator;
 import su.onno.posting.PostingService;
 import su.onno.rules.BusinessRule;
-import su.onno.rules.Validated;
+import su.onno.rules.HasBusinessRules;
 import su.onno.schema.SchemaGenerator;
 import su.onno.security.SecretCipher;
 import su.onno.validation.ValidationException;
@@ -58,7 +58,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Proves the generic command path runs the entity write lifecycle ({@code onFilling},
- * {@code beforeWrite}, {@link Validated} rules) and persists fields a hook derives — the divergence
+ * {@code beforeWrite}, {@link HasBusinessRules} rules) and persists fields a hook derives — the divergence
  * issue #158 reported between {@code repository.save(...)} (which ran the lifecycle) and
  * {@code POST/PUT /api/{catalogs,documents}}, which bound the body straight into SQL.
  */
@@ -71,7 +71,7 @@ class WriteLifecycleCommandServiceTest {
     @AccessControl(readRoles = "ADMIN")
     @SuppressWarnings({"unused", "FieldMayBeFinal", "FieldCanBeLocal", "MismatchedQueryAndUpdateOfCollection"}) // Reflective model fixture.
     public static class LifecycleOrder extends DocumentObject
-            implements OnFillingHandler, BeforeWriteHandler, AfterWriteHandler, Validated {
+            implements OnFillingHandler, BeforeWriteHandler, AfterWriteHandler, HasBusinessRules {
         static final AtomicInteger AFTER_WRITES = new AtomicInteger();
         @Attribute(length = 60) private String title;
         @Attribute private LifecycleStatus status;
@@ -120,7 +120,7 @@ class WriteLifecycleCommandServiceTest {
     @AccessControl(readRoles = "ADMIN")
     @SuppressWarnings({"unused", "FieldMayBeFinal", "FieldCanBeLocal", "MismatchedQueryAndUpdateOfCollection"}) // Reflective model fixture.
     public static class LifecycleWidget extends CatalogObject
-            implements BeforeWriteHandler, AfterWriteHandler, Validated {
+            implements BeforeWriteHandler, AfterWriteHandler, HasBusinessRules {
         static final AtomicInteger AFTER_WRITES = new AtomicInteger();
         @Attribute(length = 60) private String label;
         @Attribute(length = 60) private String slug; // derived from label

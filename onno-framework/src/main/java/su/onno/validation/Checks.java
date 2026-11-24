@@ -6,7 +6,7 @@ package su.onno.validation;
  * merge. A client re-runs a check when one of its {@link CheckBuilder#dependsOn dependencies}
  * changes ({@code POST /api/checks/{kind}/{name}/{key}} — a dry run, nothing persists).
  *
- * <p>Checks are advisory. Rules that must hold on save belong in {@code Validated} /
+ * <p>Checks are advisory. Rules that must hold on save belong in {@code HasBusinessRules} /
  * {@code BeforeWriteHandler}, which stay authoritative.</p>
  *
  * <pre>

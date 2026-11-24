@@ -9,14 +9,14 @@ import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.model.CatalogObject;
 import su.onno.rules.BusinessRule;
-import su.onno.rules.Validated;
+import su.onno.rules.HasBusinessRules;
 import su.onno.types.Ref;
 
 @Catalog(name = "CrmConversationMessages", title = "Conversation message", codePrefix = "MSG-", context = "CRM")
 @AccessControl(readRoles = {"ADMIN"}, writeRoles = {"ADMIN"})
 @Getter
 @Setter
-public class ConversationMessage extends CatalogObject implements Validated {
+public class ConversationMessage extends CatalogObject implements HasBusinessRules {
 
     @Attribute(displayName = "Conversation", required = true)
     private Ref<Conversation> conversation;

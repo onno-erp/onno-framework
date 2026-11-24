@@ -5,7 +5,7 @@ import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.model.CatalogObject;
 import su.onno.rules.BusinessRule;
-import su.onno.rules.Validated;
+import su.onno.rules.HasBusinessRules;
 import su.onno.types.Ref;
 
 import java.util.List;
@@ -13,7 +13,7 @@ import java.util.List;
 /** The join entity: a doctor works at a clinic in a role. */
 @Catalog(name = "RlClinicDoctors")
 @AccessControl(readRoles = {"WRITER", "LIMITED"}, writeRoles = {"WRITER", "LIMITED"})
-public class RlClinicDoctor extends CatalogObject implements Validated {
+public class RlClinicDoctor extends CatalogObject implements HasBusinessRules {
     @Attribute(required = true)
     private Ref<RlClinic> clinic;
 

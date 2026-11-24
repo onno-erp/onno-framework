@@ -91,7 +91,7 @@ opaque `nextCursor` as the `cursor` query parameter instead of inventing offsets
 ## Dry-Run Validation (live form feedback)
 
 Runs the full write lifecycle — declarative constraints, `onFilling`/`beforeWrite` hooks,
-`Validated` business rules — without persisting. Always HTTP 200; the verdict is the payload.
+`HasBusinessRules` business rules — without persisting. Always HTTP 200; the verdict is the payload.
 For a successfully executed dry run, business validation returns HTTP 200 with the verdict payload.
 Authentication, RBAC, malformed paths, and missing update targets still fail normally. Works on
 catalogs and documents alike; omit the id to validate a create, include it to overlay

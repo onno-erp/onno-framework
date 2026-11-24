@@ -12,6 +12,7 @@ import su.onno.rules.BusinessRuleValidator;
 import su.onno.security.SecretRedactor;
 import su.onno.types.PolyRef;
 import su.onno.types.Ref;
+import su.onno.validation.BeanValidation;
 import su.onno.validation.ValidationErrors;
 
 import java.lang.reflect.Field;
@@ -111,8 +112,9 @@ class EntityBodyMapper {
 
     /**
      * The pre-save lifecycle for a dry-run validate: {@code onFilling()} (new only), then
-     * {@code beforeWrite()}, then the business rules on the result. A hook crashing on a half-filled
-     * form is swallowed — the real save runs it again and surfaces the failure.
+     * {@code beforeWrite()}, then the business rules on the result, then Jakarta Bean Validation
+     * of the entity and its rows. A hook crashing on a half-filled form is swallowed — the real save
+     * runs it again and surfaces the failure; the field constraints are still reported.
      */
     void dryRun(Object entity, boolean isNew, ValidationErrors errors) {
         try {
@@ -125,6 +127,11 @@ class EntityBodyMapper {
             businessRuleValidator.collect(entity, errors);
         } catch (RuntimeException hookCrashedOnPartialInput) {
             // report what was collected; the actual write re-runs and surfaces this
+        }
+        try {
+            BeanValidation.validate(entity, errors);
+        } catch (RuntimeException validatorCrashedOnPartialInput) {
+            // a custom ConstraintValidator failing on a half-filled form; the save re-runs it
         }
     }
 

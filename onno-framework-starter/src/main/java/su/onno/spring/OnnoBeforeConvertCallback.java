@@ -15,6 +15,7 @@ import su.onno.rules.BusinessRuleValidator;
 import su.onno.security.SecretCipher;
 import su.onno.security.SecretFields;
 import su.onno.validation.AttributeValidator;
+import su.onno.validation.BeanValidation;
 import su.onno.validation.ValidationErrors;
 
 import org.springframework.data.relational.core.mapping.event.BeforeConvertCallback;
@@ -109,13 +110,15 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
             time(operationName("before-write", aggregate), aggregate, handler::beforeWrite);
         }
 
-        // Validate: declarative attribute constraints (required, length, min/max, pattern, email)
-        // and custom business rules, collected together so the user sees every problem at once.
+        // Validate: attribute constraints (column length plus rules a Bean Validation provider does
+        // not own), Jakarta Bean Validation on the entity and its rows, and the business rules,
+        // collected together so the user sees every problem at once.
         time(operationName("validate", aggregate), aggregate, () -> {
             ValidationErrors errors = new ValidationErrors();
             List<AttributeDescriptor> attributes = attributesOf(aggregate);
             if (attributes != null) {
                 attributeValidator.validate(aggregate, attributes, errors);
+                BeanValidation.validate(aggregate, errors);
             }
             businessRuleValidator.collect(aggregate, errors);
             errors.throwIfAny();

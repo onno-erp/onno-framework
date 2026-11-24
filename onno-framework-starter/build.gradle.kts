@@ -16,6 +16,8 @@ dependencies {
     // The service layer (su.onno.service) caches the resolved AccessSubject on the current request
     // when spring-web is present; it is optional so a non-web app does not need it.
     compileOnly(libs.spring.web)
+    // Optional Bean Validation: OnnoBeanValidationAutoConfiguration applies only when it is present.
+    compileOnly(libs.jakarta.validation.api)
 
     api(libs.jobrunr.spring.boot3.starter)
 

@@ -60,13 +60,13 @@ language for the logic that makes the business unique.
 ```java
 @Catalog(name = "Customers", codePrefix = "C-", context = "Sales")
 public class Customer extends CatalogObject {
-    @Attribute(required = true, length = 200)
+    @Attribute(length = 200) @NotBlank
     private String name;
 }
 
 @Document(name = "Sales Orders", numberPrefix = "SO-", context = "Sales")
 public class SalesOrder extends DocumentObject implements Postable {
-    @Attribute(required = true)
+    @Attribute @NotNull
     private Ref<Customer> customer;
 
     @TabularSection(name = "items")

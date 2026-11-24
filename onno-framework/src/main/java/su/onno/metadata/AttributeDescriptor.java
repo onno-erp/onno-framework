@@ -1,6 +1,7 @@
 package su.onno.metadata;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * One attribute (or register dimension/resource) as the model declares it: name, storage, type,
@@ -39,14 +40,40 @@ public record AttributeDescriptor(
     }
 
     /**
-     * Declarative validation bounds for an attribute, from {@code @Attribute}. {@code min}/{@code max}
-     * are {@code NaN} when unset; {@code minLength} is {@code 0} when unset; {@code pattern} blank when
-     * unset. The maximum string length is the descriptor's {@link #length()}.
+     * Single-field validation bounds, merged from the Jakarta Bean Validation annotations on the field
+     * ({@code @Size}, {@code @Min}/{@code @Max}, {@code @Pattern}, {@code @Email}, ...) and the
+     * deprecated {@code @Attribute} flags, so clients and the schema read one view whichever was used.
+     * {@code min}/{@code max} are inclusive and {@code NaN} when unset; {@code minLength} and
+     * {@code maxLength} are {@code 0} when unset; {@code pattern} is blank when unset. The column's
+     * storage length is the descriptor's {@link #length()}; {@code maxLength} is the validation limit
+     * ({@code @Size(max)}), never above it.
+     *
+     * <p>{@code beanValidated} names the rules that come from a Jakarta annotation. When a Bean
+     * Validation provider is active it enforces them (its semantics and messages), and
+     * {@link su.onno.validation.AttributeValidator} skips them so a value is not reported twice.</p>
      */
-    public record Constraints(double min, double max, int minLength, String pattern, boolean email) {
-        public static final Constraints NONE = new Constraints(Double.NaN, Double.NaN, 0, "", false);
+    public record Constraints(double min, double max, int minLength, int maxLength, String pattern,
+                              boolean email, Set<Rule> beanValidated) {
+        public static final Constraints NONE = new Constraints(Double.NaN, Double.NaN, 0, 0, "", false, Set.of());
+
+        public Constraints {
+            pattern = pattern == null ? "" : pattern;
+            beanValidated = beanValidated == null || beanValidated.isEmpty() ? Set.of() : Set.copyOf(beanValidated);
+        }
+
+        /** Bounds declared through {@code @Attribute} only (no {@code maxLength}, nothing bean-validated). */
+        public Constraints(double min, double max, int minLength, String pattern, boolean email) {
+            this(min, max, minLength, 0, pattern, email, Set.of());
+        }
 
         public boolean hasMin() { return !Double.isNaN(min); }
         public boolean hasMax() { return !Double.isNaN(max); }
+        public boolean hasMaxLength() { return maxLength > 0; }
+
+        /** Whether {@code rule} was declared with a Jakarta annotation. */
+        public boolean beanValidated(Rule rule) { return beanValidated.contains(rule); }
+
+        /** A single-field rule, for {@link #beanValidated()}. */
+        public enum Rule { REQUIRED, MIN, MAX, MIN_LENGTH, MAX_LENGTH, PATTERN, EMAIL }
     }
 }

@@ -33,7 +33,7 @@ render it, or pass it as a prop.
 | The app's own pages and nav | `src/main/ui/pages/*.tsx` + `pages`/`navigation` in `main.tsx` | `onno-ui-pages` |
 | The app's own components (widgets, custom list views, record panels) | `src/main/ui/components/*.tsx` | `onno-ui-pages` |
 | What can be *done* with a record (buttons, MCP tools), live form checks, picker badges, login → record link | Java beans: `Commands<E>`, `Checks<E>`, `PickerOptions<E>`, `IdentityLink` | `onno-commands` |
-| Rules that must hold on save, posting | Java domain (`Validated`, `BeforeWriteHandler`, `Postable`) | `onno-rules-lifecycle`, `onno-posting` |
+| Rules that must hold on save, posting | Java domain (`HasBusinessRules`, `BeforeWriteHandler`, `Postable`) | `onno-rules-lifecycle`, `onno-posting` |
 | Branding, chrome language, chrome strings | `onno.ui.*` config | this one |
 | Read-only mode, list page size, dev reload | `onno.web.*` config | `onno-runtime` |
 

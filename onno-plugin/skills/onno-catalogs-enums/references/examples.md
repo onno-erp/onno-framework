@@ -14,6 +14,7 @@
 ```java
 package com.acme.sales.domain;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.Setter;
 import su.onno.annotations.AccessControl;
@@ -30,7 +31,7 @@ import java.math.BigDecimal;
 @Setter
 public class Product extends CatalogObject {
 
-    @Attribute(displayName = "Name", required = true, length = 200)
+    @Attribute(displayName = "Name", length = 200) @NotBlank
     private String name;
 
     @Attribute(displayName = "Group")
@@ -112,7 +113,7 @@ migration plan.
 @Setter
 public class ApiAccount extends CatalogObject {
 
-    @Attribute(displayName = "Provider", required = true)
+    @Attribute(displayName = "Provider") @NotNull
     private String provider;
 
     @Attribute(displayName = "API key", secret = true, length = 2000)

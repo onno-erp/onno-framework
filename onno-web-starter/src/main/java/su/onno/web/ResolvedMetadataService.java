@@ -162,8 +162,8 @@ public class ResolvedMetadataService {
             // Tell the UI to render a write-only password control and a "set / not set"
             // indicator instead of the value (which the read API never returns).
             map.put("secret", a.secret());
-            // The declarative validation constraints the client mirrors for instant inline
-            // errors. Bounds are emitted only when set.
+            // The single-field constraints (Jakarta annotations merged with @Attribute) the client
+            // mirrors for instant inline errors. Bounds are emitted only when set.
             su.onno.metadata.AttributeDescriptor.Constraints c = a.constraints();
             if (c.hasMin()) {
                 map.put("min", c.min());
@@ -173,6 +173,10 @@ public class ResolvedMetadataService {
             }
             if (c.minLength() > 0) {
                 map.put("minLength", c.minLength());
+            }
+            if (c.hasMaxLength()) {
+                // The validation limit (@Size(max)); "length" stays the column's storage length.
+                map.put("maxLength", c.maxLength());
             }
             if (!c.pattern().isBlank()) {
                 map.put("pattern", c.pattern());

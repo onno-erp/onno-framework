@@ -147,7 +147,7 @@ public class GenericDocumentController {
 
     /**
      * Dry-run validation for the form's live (as-you-type) feedback: runs the full write lifecycle —
-     * declarative constraints, hooks, {@code Validated} business rules (tabular rows included) —
+     * declarative constraints, hooks, {@code HasBusinessRules} business rules (tabular rows included) —
      * against the submitted values without persisting, and reports
      * {@code {valid, fieldErrors, formErrors}} with 200 either way. The id-less form validates a
      * create; with {@code id}, the changes are overlaid onto the stored document first, exactly
