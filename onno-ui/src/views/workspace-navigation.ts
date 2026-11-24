@@ -4,7 +4,8 @@
  *
  * Navigation works like a browser window: an ordinary open replaces what the island's active tab
  * shows and remembers the previous surface in that tab's own history, so Back / Forward walk it.
- * A new tab appears only when one is asked for explicitly ({@link openInNewTab}), when the surface
+ * A new tab appears only when one is asked for explicitly ({@link openInNewTab}, or a whole new
+ * island with {@link openInNewIsland}), when the surface
  * is already open elsewhere (that tab is activated instead of duplicating it), or when the active
  * tab holds unsaved edits (they are never discarded by a navigation). An island holding more than
  * {@link SOFT_TAB_LIMIT} tabs quietly closes its least recently used clean background tab.
@@ -197,6 +198,44 @@ export function openInNewTab(ws: Workspace, paneId: string, path: string, isDirt
     tabs.splice(at < 0 ? tabs.length : at + 1, 0, tabForPath(path));
     return enforceSoftLimit({ ...pane, tabs, activePath: path }, isDirty);
   });
+}
+
+/**
+ * Scale flex weights so they sum to the island count (mean 1 each). Flexbox only distributes the
+ * fraction of free space equal to the sum of grow factors when that sum is below 1, so the weights
+ * are renormalised on every structural change and the islands always fill the row.
+ */
+export function normalizeSizes(sizes: number[]): number[] {
+  const sum = sizes.reduce((a, b) => a + b, 0) || 1;
+  const k = sizes.length / sum;
+  return sizes.map((s) => s * k);
+}
+
+/**
+ * Open `path` in a new island right of the island `besidePaneId`, which gives up half of its width
+ * (a browser's "open in new window", kept inside the workspace). A surface that is already open
+ * anywhere is activated instead of being duplicated. `newPaneId` names the island when one is made.
+ */
+export function openInNewIsland(ws: Workspace, besidePaneId: string, path: string, newPaneId: string): Workspace {
+  const existing = findSurface(ws, path);
+  if (existing) return activateExisting(ws, existing.pane.id, existing.tab, path);
+  const found = ws.panes.findIndex((p) => p.id === besidePaneId);
+  const at = found < 0 ? ws.panes.length - 1 : found;
+  const neighbour = ws.panes[at];
+  // An island with nothing in it is filled rather than split.
+  if (neighbour && neighbour.tabs.length === 0) {
+    return replacePane(ws, neighbour.id, (pane) => ({ ...pane, tabs: [tabForPath(path)], activePath: path }));
+  }
+  const panes = [
+    ...ws.panes.slice(0, at + 1),
+    { id: newPaneId, tabs: [tabForPath(path)], activePath: path },
+    ...ws.panes.slice(at + 1),
+  ];
+  const sizes = [...ws.sizes];
+  const share = (sizes[at] ?? 1) / 2;
+  sizes[at] = share;
+  sizes.splice(at + 1, 0, share);
+  return { panes, sizes: normalizeSizes(sizes), focused: newPaneId };
 }
 
 /**

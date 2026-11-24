@@ -110,8 +110,9 @@ state, so a component's behaviour depends only on its props and the providers ab
 - Per-session state (notifications, presence, dirty forms, the quick-create hand-off): providers
   mounted in `App.tsx`. Opening and closing screens goes through `openRoute`/`closeRoute`
   (`lib/navigation.ts`), which the shell alone listens to. The workspace rules (an open replaces the
-  active tab's screen and records it for that tab's Back / Forward, explicit new tabs, the soft tab
-  limit) are pure functions in `views/workspace-navigation.ts`.
+  active tab's screen and records it for that tab's Back / Forward, explicit new tabs and islands,
+  the soft tab limit) are pure functions in `views/workspace-navigation.ts`; the tab strip's "+"
+  palette is `components/shell/new-tab-palette.tsx` over `lib/new-tab-destinations.ts`.
 - Shared page state (theme, messages, the page's time range): their providers.
 - A component's own UI state: inside it, and *controllable* where a page may care.
   `EntityList` works like an `<input>`: `defaultGroupBy`/`defaultSort`/`defaultView` set where it

@@ -169,28 +169,38 @@ describe("AppShell tab history", () => {
     expect(screen.getByRole("button", { name: "Forward" })).toBeDisabled();
   });
 
-  it("opens a new tab on the home page from the strip's + button", async () => {
-    renderShell("/reports");
-    await screen.findByTestId("content-/reports");
-    // A dashboard-less app's home is its first reachable surface (customers here).
-    await screen.findByRole("button", { name: "Клиенты" });
-    fireEvent.click(screen.getByRole("button", { name: "New tab" }));
-    await screen.findByTestId("content-/catalogs/customers");
-    expect(tabs()).toEqual(["/reports", "/catalogs/customers"]);
-    expect(route()).toBe("/catalogs/customers");
-    // Home already open: + activates it instead of duplicating it.
-    fireEvent.click(document.querySelector<HTMLElement>('[data-tab="/reports"] button')!);
-    fireEvent.click(screen.getByRole("button", { name: "New tab" }));
-    await waitFor(() => expect(route()).toBe("/catalogs/customers"));
-    expect(tabs()).toEqual(["/reports", "/catalogs/customers"]);
-  });
-
-  it("offers new records, not home, from the + of a detail island", async () => {
+  it("offers every screen and New form from the strip's + and opens the pick as a new tab", async () => {
     vi.restoreAllMocks();
     mockShell(
       entity("catalogs", "customers", { title: "Клиенты", context: "Sales" }),
       entity("documents", "orders", { title: "Orders", context: "Sales" }),
       entity("catalogs", "suppliers", { title: "Suppliers", context: "Sales", canWrite: false }),
+    );
+    renderShell("/documents/orders");
+    await screen.findByRole("button", { name: "Клиенты" });
+    fireEvent.click(screen.getByRole("button", { name: "New tab" }));
+    const options = () => screen.getAllByRole("option").map((option) => option.dataset.path);
+    await screen.findByRole("listbox");
+    // Screens in navigation order, then New forms: the shown entity first, read-only ones absent.
+    expect(options()).toEqual([
+      "/catalogs/customers", "/documents/orders", "/catalogs/suppliers",
+      "/documents/orders/new", "/catalogs/customers/new",
+    ]);
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "кли" } });
+    expect(options()).toEqual(["/catalogs/customers", "/catalogs/customers/new"]);
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+    await screen.findByTestId("content-/catalogs/customers");
+    expect(tabs()).toEqual(["/documents/orders", "/catalogs/customers"]);
+    expect(route()).toBe("/catalogs/customers");
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("means the same in a detail island: the pick opens as a new tab there", async () => {
+    vi.restoreAllMocks();
+    mockShell(
+      entity("catalogs", "customers", { title: "Клиенты", context: "Sales" }),
+      entity("documents", "orders", { title: "Orders", context: "Sales" }),
     );
     renderShell("/documents/orders");
     // Record placement depends on the shell's nav style, so wait for the model's navigation.
@@ -201,17 +211,34 @@ describe("AppShell tab history", () => {
     expect(panes).toHaveLength(2);
 
     fireEvent.click(within(panes[1]).getByRole("button", { name: "New tab" }));
-    const items = (await screen.findAllByRole("menuitem")).map((item) => item.textContent);
-    // The opening click must not reach the menu's own window-level "click outside" listener.
-    await new Promise((resolve) => window.setTimeout(resolve, 20));
-    expect(screen.getAllByRole("menuitem")).toHaveLength(2);
-    // The active record's entity first, then documents before catalogs; read-only entities are absent.
-    expect(items).toEqual(["Клиенты", "Orders"]);
-
-    fireEvent.click(screen.getByRole("menuitem", { name: "Orders" }));
+    // The entity the island shows leads the New forms.
+    const create = (await screen.findAllByRole("option")).map((o) => o.dataset.path).filter((p) => p?.endsWith("/new"));
+    expect(create).toEqual(["/catalogs/customers/new", "/documents/orders/new"]);
+    fireEvent.click(document.querySelector<HTMLElement>('[role="option"][data-path="/documents/orders/new"]')!);
     await screen.findByTestId("content-/documents/orders/new");
     const detailTabs = [...panes[1].querySelectorAll<HTMLElement>("[data-tab]")].map((el) => el.dataset.tab);
     expect(detailTabs).toEqual(["/catalogs/customers/c1", "/documents/orders/new"]);
     expect(route()).toBe("/documents/orders/new");
+  });
+
+  it("opens the pick in a new island with Shift+Enter, and switches to a screen that is already open", async () => {
+    renderShell("/reports");
+    await screen.findByTestId("content-/reports");
+    await screen.findByRole("button", { name: "Клиенты" });
+    fireEvent.click(screen.getByRole("button", { name: "New tab" }));
+    fireEvent.change(await screen.findByRole("combobox"), { target: { value: "Клиенты" } });
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter", shiftKey: true });
+    await screen.findByTestId("content-/catalogs/customers");
+    const panes = document.querySelectorAll<HTMLElement>("[data-workspace-pane-id]");
+    expect(panes).toHaveLength(2);
+    expect(panes[1].querySelector("[data-tab]")?.getAttribute("data-tab")).toBe("/catalogs/customers");
+
+    // Already open: the palette marks it and a pick activates that tab rather than duplicating it.
+    fireEvent.click(within(panes[0]).getByRole("button", { name: "New tab" }));
+    fireEvent.change(await screen.findByRole("combobox"), { target: { value: "Клиенты" } });
+    expect(screen.getAllByRole("option")[0]).toHaveTextContent("Open");
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+    await waitFor(() => expect(route()).toBe("/catalogs/customers"));
+    expect(document.querySelectorAll("[data-tab]")).toHaveLength(2);
   });
 });

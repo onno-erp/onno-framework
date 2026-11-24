@@ -360,7 +360,12 @@ public final class UiMessages {
         d.put("workspace.openInNewTab", "Open in new tab");
         d.put("workspace.closeOtherTabs", "Close other tabs");
         d.put("workspace.newTab", "New tab");
-        d.put("workspace.createRecord", "Create a record");
+        d.put("workspace.openBeside", "Open beside");
+        d.put("workspace.newTab.search", "Search screens…");
+        d.put("workspace.newTab.screens", "Go to");
+        d.put("workspace.newTab.create", "Create");
+        d.put("workspace.newTab.alreadyOpen", "Open");
+        d.put("workspace.newTab.empty", "Nothing found");
 
         // Record change history panel (@Catalog/@Document(history = true)).
         d.put("history.title", "History");

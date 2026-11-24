@@ -3721,8 +3721,16 @@ export function EntityListView({
                       // omitted when writable so rows from older servers keep the full menu.
                       data-onno-row-writable={canWrite ? undefined : "0"}
                       // Shift-click extends the selection — suppress the browser's text-range drag.
+                      // …and a middle press the browser's autoscroll (it opens a new tab instead).
                       onMouseDown={(e) => {
-                        if (e.shiftKey && recordId) e.preventDefault();
+                        if ((e.shiftKey && recordId) || (e.button === 1 && url)) e.preventDefault();
+                      }}
+                      // Middle-click opens the record in a new workspace tab, like a link in a
+                      // browser. (⌘/Ctrl- and Shift-click belong to the selection.)
+                      onAuxClick={(e) => {
+                        if (e.button !== 1 || !url) return;
+                        e.preventDefault();
+                        openRoute(url, { newWorkspaceTab: true });
                       }}
                       onClick={(e) => {
                         // ⌘/Ctrl toggles a row in and out; Shift selects the range from the last

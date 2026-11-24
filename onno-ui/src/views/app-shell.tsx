@@ -4,7 +4,7 @@ import type { IconSource } from "../lib/icons";
 import { isAppRoute, listenForNavigation } from "../lib/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useNavigationType } from "react-router";
-import { ArrowLeft, ArrowRight, BookPlus, Copy, ExternalLink, FilePlus, Link2, Plus, SquarePlus, Trash2, X, type LucideIcon } from "lucide-react";
+import { ArrowLeft, ArrowRight, Copy, ExternalLink, Link2, SquarePlus, Trash2, X, type LucideIcon } from "lucide-react";
 import { toast } from "../components/ui/toast";
 import { useAuth } from "../providers/auth-provider";
 import { useTheme } from "../providers/theme-provider";
@@ -25,6 +25,8 @@ import {
   humanizeRouteToken,
   leaveSurface,
   navigateInTab,
+  normalizeSizes,
+  openInNewIsland,
   openInNewTab,
   recordBasePath,
   sameRecordTab,
@@ -39,6 +41,9 @@ import {
   type WorkspaceTab,
 } from "./workspace-navigation";
 import { invalidateEntity } from "../lib/query";
+import { NEW_TAB_SHORTCUT, NewTabPalette } from "../components/shell/new-tab-palette";
+import { newTabDestinations } from "../lib/new-tab-destinations";
+import type { OpenPlacement } from "../lib/open-placement";
 import { Icon } from "../lib/icons";
 import { BottomTabBar, MobileMenu, ShellContext, type ShellContextValue } from "../components/shell/mobile-shell";
 import { shellBrand, shellFromModel } from "../lib/app-model";
@@ -220,16 +225,6 @@ function initialWorkspace(): Workspace {
   return { panes: [{ id, tabs: [tabForPath(path)], activePath: path }], sizes: [1], focused: id };
 }
 
-// Scale flex weights so they sum to the island count (mean 1 each). Flexbox only
-// distributes the *fraction* of free space equal to the sum of grow factors when that
-// sum is < 1 — so a lone survivor weighted 0.5 would fill only half. Renormalising on
-// every structural change keeps the sum >= 1, so the islands always fill the row.
-function normalize(sizes: number[]): number[] {
-  const sum = sizes.reduce((a, b) => a + b, 0) || 1;
-  const k = sizes.length / sum;
-  return sizes.map((s) => s * k);
-}
-
 // Drop the tab from whichever island holds it. If that empties the island, remove it
 // (and its size weight), keeping at least one island alive. Returns the trimmed
 // workspace; the caller re-points focus afterwards.
@@ -254,7 +249,7 @@ function detachTab(ws: Workspace, path: string): Workspace {
     return initialWorkspace();
   }
   const focused = panes.some((p) => p.id === ws.focused) ? ws.focused : panes[panes.length - 1].id;
-  return { panes, sizes: normalize(sizes), focused };
+  return { panes, sizes: normalizeSizes(sizes), focused };
 }
 
 export function AppShell() {
@@ -298,8 +293,8 @@ function Shell() {
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; url: string; writable: boolean } | null>(null);
   // Right-click menu for a workspace tab: screen position + the tab's route path.
   const [tabMenu, setTabMenu] = useState<{ x: number; y: number; path: string } | null>(null);
-  // The "+" menu of a detail island: which new record to create there.
-  const [createMenu, setCreateMenu] = useState<{ x: number; y: number; paneId: string } | null>(null);
+  // The island whose "+" palette (search a screen or a New form, open it as a new tab) is open.
+  const [newTabPane, setNewTabPane] = useState<string | null>(null);
   // The in-app confirmation modal (delete, etc.); null when closed.
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   // Mirror the menu/modal open-state into refs so the window-level Delete-key handler can read
@@ -461,11 +456,29 @@ function Shell() {
     [navigate, updateWorkspace, dirtyForms]
   );
 
+  // Open a route next to an island instead of in its active tab: as a new tab of that island, or in
+  // a new island to its right. The explicit island wins over the usual list / record placement.
+  const openBeside = useCallback(
+    (paneId: string | null, path: string, placement: Exclude<OpenPlacement, "tab">) => {
+      updateWorkspace((ws) => {
+        const pane = ws.panes.find((p) => p.id === (paneId ?? ws.focused)) ?? ws.panes[0];
+        return placement === "new-island"
+          ? openInNewIsland(ws, pane.id, path, newPaneId())
+          : openInNewTab(ws, pane.id, path, dirtyForms.isDirty);
+      });
+      navigate(path);
+    },
+    [navigate, updateWorkspace, dirtyForms]
+  );
+
   // The sidebar's dispatcher: a plain click navigates the focused tab, a middle- or Ctrl-click
-  // opens a new tab.
+  // opens a new tab, a Shift-click a new island beside the focused one.
   const navigateFromMenu = useCallback(
-    (path: string, options?: { newWorkspaceTab?: boolean }) => openPath(path, options?.newWorkspaceTab === true),
-    [openPath]
+    (path: string, options?: { newWorkspaceTab?: boolean; newIsland?: boolean }) => {
+      if (options?.newIsland) openBeside(null, path, "new-island");
+      else openPath(path, options?.newWorkspaceTab === true);
+    },
+    [openPath, openBeside]
   );
 
   // Opening a rail section transfers command focus to navigation without closing or hiding
@@ -545,7 +558,7 @@ function Shell() {
         const share = sizes[idx] / 2;
         sizes[idx] = share;
         sizes.splice(idx + 1, 0, share);
-        return { panes, sizes: normalize(sizes), focused: id };
+        return { panes, sizes: normalizeSizes(sizes), focused: id };
       });
       if (path !== location.pathname) navigate(path);
     },
@@ -927,60 +940,40 @@ function Shell() {
   );
   stepHistoryRef.current = stepHistory;
 
-  // The strip's "+" button: a new tab on the app's home page (the first reachable surface when the
-  // app has no dashboard). Home already open somewhere is activated instead of duplicated.
-  const openHomeTab = useCallback(
-    (paneId: string) => {
-      const home = shell?.home ?? "/";
-      updateWorkspace((ws) => openInNewTab(ws, paneId, home, dirtyForms.isDirty));
-      navigate(home);
-    },
-    [navigate, updateWorkspace, dirtyForms, shell?.home]
+  // What an island's "+" palette offers: every navigation screen, then a New form per entity the
+  // viewer may create — the entity the island shows first.
+  const paletteDestinations = useMemo(() => {
+    const pane = workspace.panes.find((p) => p.id === newTabPane);
+    return newTabDestinations({
+      navigation: shell?.navigation ?? [],
+      entities: model?.entities ?? [],
+      home: shell?.home ?? "/",
+      homeLabel: tabTitle(shell?.home ?? "/"),
+      homeIcon: tabIcon(shell?.home ?? "/"),
+      titles: shell?.titles,
+      icons: shell?.icons,
+      currentEntityRoute: recordBasePath(pane?.activePath ?? "")?.split("/").slice(0, 3).join("/"),
+    });
+  }, [workspace.panes, newTabPane, shell, model, tabTitle, tabIcon]);
+  const openTabPaths = useMemo(
+    () => new Set(workspace.panes.flatMap((pane) => pane.tabs.map((tab) => stripQuery(tab.path)))),
+    [workspace.panes]
   );
 
-  // A detail island's "+" offers new records instead of home: the entities the viewer may create,
-  // the entity its active tab shows first, then documents and catalogs by title.
-  const creatableEntities = useCallback(
-    (paneId: string) => {
-      const pane = wsRef.current.panes.find((p) => p.id === paneId);
-      const current = recordBasePath(pane?.activePath ?? "")?.split("/").slice(0, 3).join("/");
-      const title = (e: { route: string; title: string }) => shell?.titles?.[e.route] ?? e.title;
-      return (model?.entities ?? [])
-        .filter((e) => e.canWrite && (e.kind === "documents" || e.kind === "catalogs"))
-        .sort((a, b) =>
-          Number(b.route === current) - Number(a.route === current)
-          || (a.kind === b.kind ? 0 : a.kind === "documents" ? -1 : 1)
-          || title(a).localeCompare(title(b)))
-        .map((e) => ({ route: e.route, kind: e.kind, title: title(e) }));
-    },
-    [model, shell?.titles]
+  // Alt+T opens the palette of the focused island (⌘T / Ctrl+T is the browser's own).
+  const newTabKeybindings = useMemo(
+    () => [{
+      ...NEW_TAB_SHORTCUT,
+      enabled: viewport === "desktop",
+      run: () => {
+        if (isInteractiveLayerOpen()) return;
+        const ws = wsRef.current;
+        setNewTabPane((ws.panes.find((p) => p.id === ws.focused) ?? ws.panes[0])?.id ?? null);
+      },
+    }],
+    [viewport]
   );
-
-  const createInPane = useCallback(
-    (paneId: string, route: string) => {
-      const path = `${route}/new`;
-      updateWorkspace((ws) => openInNewTab(ws, paneId, path, dirtyForms.isDirty));
-      navigate(path);
-    },
-    [navigate, updateWorkspace, dirtyForms]
-  );
-
-  // The strip's "+": the first (main) island opens home in a new tab; a detail island to its right
-  // asks which new record to create.
-  const onNewTab = useCallback(
-    (paneId: string, anchor: HTMLElement) => {
-      const index = wsRef.current.panes.findIndex((p) => p.id === paneId);
-      if (index <= 0 || creatableEntities(paneId).length === 0) {
-        openHomeTab(paneId);
-        return;
-      }
-      const r = anchor.getBoundingClientRect();
-      setRowMenu(null);
-      setTabMenu(null);
-      setCreateMenu({ x: r.left, y: r.bottom + 4, paneId });
-    },
-    [creatableEntities, openHomeTab]
-  );
+  useGlobalKeybindings(newTabKeybindings);
 
   // "Close other tabs" in a tab's menu: keeps that tab and any tab with unsaved edits.
   const closeOthers = useCallback(
@@ -1114,7 +1107,7 @@ function Shell() {
       const share = sizes[idx] / 2;
       sizes[idx] = share;
       sizes.splice(idx + 1, 0, share);
-      setWorkspace({ panes, sizes: normalize(sizes), focused: id });
+      setWorkspace({ panes, sizes: normalizeSizes(sizes), focused: id });
       if (path !== location.pathname) navigate(path);
     },
     [activateTab, moveTabInto, location.pathname, navigate]
@@ -1148,7 +1141,7 @@ function Shell() {
       const share = sizes[idx] / 2;
       sizes[idx] = share;
       sizes.splice(idx, 0, share);
-      setWorkspace({ panes, sizes: normalize(sizes), focused: id });
+      setWorkspace({ panes, sizes: normalizeSizes(sizes), focused: id });
       if (path !== location.pathname) navigate(path);
     },
     [activateTab, moveTabInto, location.pathname, navigate]
@@ -1604,19 +1597,6 @@ function Shell() {
       )
     : null;
 
-  // The detail island's "+" menu: one "New …" entry per creatable entity, opened as a new tab there.
-  const createMenuEl = createMenu && workspace.panes.some((p) => p.id === createMenu.paneId)
-    ? contextMenu(
-        createMenu,
-        creatableEntities(createMenu.paneId).map((entity) => ({
-          label: entity.title,
-          icon: entity.kind === "documents" ? FilePlus : BookPlus,
-          run: () => createInPane(createMenu.paneId, entity.route),
-        })),
-        () => setCreateMenu(null)
-      )
-    : null;
-
   // The in-app confirmation modal (replaces window.confirm): a backdrop over a centered
   // card with Cancel / confirm actions. Backdrop click or Esc cancels.
   const confirmEl = confirm ? (
@@ -1851,22 +1831,15 @@ function Shell() {
               </div>
             );
           })}
-          {/* New tab on the home page, right after the last tab, browser-style. */}
-          <button
-            type="button"
-            aria-label={t("workspace.newTab")}
-            title={t(workspace.panes[0]?.id === pane.id ? "workspace.newTab" : "workspace.createRecord")}
-            aria-haspopup={workspace.panes[0]?.id === pane.id ? undefined : "menu"}
-            data-new-tab
-            className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition hover:bg-foreground/10 hover:text-foreground"
-            onClick={(event) => {
-              // The menu closes on any window click; keep this one from reaching it.
-              event.stopPropagation();
-              onNewTab(pane.id, event.currentTarget);
-            }}
-          >
-            <Plus className="size-4" aria-hidden="true" />
-          </button>
+          {/* New tab, right after the last tab, browser-style: pick a screen or a New form. */}
+          <NewTabPalette
+            open={newTabPane === pane.id}
+            onOpenChange={(open) => setNewTabPane((current) => (open ? pane.id : current === pane.id ? null : current))}
+            destinations={paletteDestinations}
+            openPaths={openTabPaths}
+            onPick={(path, placement) => openBeside(pane.id, path, placement)}
+            t={t}
+          />
           {/* Collaborator avatars for the focused pane's record — pinned right of the tabs. */}
           {showFocusedChrome && pane.activePath ? (
             <div className="ml-auto flex shrink-0 items-center pl-2 pr-1">
@@ -2011,7 +1984,6 @@ function Shell() {
         </div>
         {rowMenuEl}
         {tabMenuEl}
-        {createMenuEl}
         {confirmEl}
       </div>
       </ShellContext.Provider>

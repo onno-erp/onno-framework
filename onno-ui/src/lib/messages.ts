@@ -335,7 +335,12 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "workspace.openInNewTab": "Open in new tab",
   "workspace.closeOtherTabs": "Close other tabs",
   "workspace.newTab": "New tab",
-  "workspace.createRecord": "Create a record",
+  "workspace.openBeside": "Open beside",
+  "workspace.newTab.search": "Search screens…",
+  "workspace.newTab.screens": "Go to",
+  "workspace.newTab.create": "Create",
+  "workspace.newTab.alreadyOpen": "Open",
+  "workspace.newTab.empty": "Nothing found",
 
   // Record change history panel (@Catalog/@Document(history = true)).
   "history.title": "History",

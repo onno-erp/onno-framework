@@ -7,6 +7,8 @@ import {
   followBrowserHistory,
   leaveSurface,
   navigateInTab,
+  normalizeSizes,
+  openInNewIsland,
   openInNewTab,
   tabBack,
   tabForPath,
@@ -144,5 +146,29 @@ describe("workspace navigation", () => {
     const ws = closeOtherTabs(workspace(["/a", "/b", "/c"]), "p0", "/b", (p) => p === "/c");
     expect(paths(ws.panes[0])).toEqual(["/b", "/c"]);
     expect(ws.panes[0].activePath).toBe("/b");
+  });
+
+  it("opens a new island right of the given one, taking half of its width", () => {
+    const ws = openInNewIsland(workspace(["/a"], ["/documents/orders/1"]), "p0", "/b", "p9");
+    expect(ws.panes.map((p) => p.id)).toEqual(["p0", "p9", "p1"]);
+    expect(paths(ws.panes[1])).toEqual(["/b"]);
+    expect(ws.focused).toBe("p9");
+    expect(ws.sizes[0]).toBeCloseTo(ws.sizes[1]);
+    expect(ws.sizes[2]).toBeCloseTo(ws.sizes[0] * 2);
+    expect(ws.sizes.reduce((a, b) => a + b, 0)).toBeCloseTo(3);
+  });
+
+  it("activates an open surface, and fills an empty island, instead of splitting", () => {
+    const open = openInNewIsland(workspace(["/a"], ["/b"]), "p0", "/b", "p9");
+    expect(open.panes).toHaveLength(2);
+    expect(open.focused).toBe("p1");
+    const filled = openInNewIsland(workspace([]), "p0", "/a", "p9");
+    expect(filled.panes).toHaveLength(1);
+    expect(filled.panes[0]).toMatchObject({ id: "p0", activePath: "/a" });
+  });
+
+  it("keeps island weights summing to the island count", () => {
+    expect(normalizeSizes([0.5])).toEqual([1]);
+    expect(normalizeSizes([1, 3])).toEqual([0.5, 1.5]);
   });
 });

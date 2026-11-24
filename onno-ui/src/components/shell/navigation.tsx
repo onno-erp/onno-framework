@@ -11,6 +11,7 @@ import {
 } from "react";
 import { ChevronRight } from "lucide-react";
 import { Icon } from "../../lib/icons";
+import { placementForClick, type OpenPlacement } from "../../lib/open-placement";
 import type { IconSource } from "../../lib/icons";
 import type {
   ShellNavItem,
@@ -31,27 +32,34 @@ export type NavigationProps = {
   header?: ReactNode;
   footer?: ReactNode;
 };
-/** Opens a navigation item; `newWorkspaceTab` asks for a new workspace tab (middle- or Ctrl/⌘-click). */
-export type NavigateHandler = (path: string, options?: { newWorkspaceTab?: boolean }) => void;
+/**
+ * Opens a navigation item. `newWorkspaceTab` asks for a new workspace tab (middle- or Ctrl/⌘-click),
+ * `newIsland` for a new island beside the focused one (Shift-click).
+ */
+export type NavigateHandler = (path: string, options?: { newWorkspaceTab?: boolean; newIsland?: boolean }) => void;
+
+function navigateWith(onNavigate: NavigateHandler, path: string, placement: OpenPlacement) {
+  if (placement === "new-island") onNavigate(path, { newIsland: true });
+  else if (placement === "new-tab") onNavigate(path, { newWorkspaceTab: true });
+  else onNavigate(path);
+}
 
 /**
- * Click handlers for a navigation button: a plain click navigates the active tab, a middle-click
- * or a Ctrl/⌘-click opens a new workspace tab.
+ * Click handlers for a navigation button, with a browser's modifiers: a plain click navigates the
+ * active tab, a middle-click or a Ctrl/⌘-click opens a new workspace tab, a Shift-click opens a new
+ * island beside the focused one.
  */
 export function navigationClickHandlers(path: string, onNavigate: NavigateHandler) {
   return {
-    onClick: (event: MouseEvent) => {
-      if (event.ctrlKey || event.metaKey) onNavigate(path, { newWorkspaceTab: true });
-      else onNavigate(path);
-    },
+    onClick: (event: MouseEvent) => navigateWith(onNavigate, path, placementForClick(event)),
     onAuxClick: (event: MouseEvent) => {
       if (event.button !== 1) return;
       event.preventDefault();
-      onNavigate(path, { newWorkspaceTab: true });
+      navigateWith(onNavigate, path, "new-tab");
     },
-    // A middle press would otherwise start the browser's autoscroll.
+    // A middle press would otherwise start the browser's autoscroll, a Shift press a text selection.
     onMouseDown: (event: MouseEvent) => {
-      if (event.button === 1) event.preventDefault();
+      if (event.button === 1 || event.shiftKey) event.preventDefault();
     },
   };
 }

@@ -8,6 +8,7 @@ import type { Translate } from "../../lib/messages";
 import type { ShellNavSection } from "../../lib/view-types";
 export type { ShellNavItem, ShellNavSection } from "../../lib/view-types";
 import { navigationActive, navigationLinks } from "../../lib/navigation-tree";
+import { placementForClick } from "../../lib/open-placement";
 import { NavigationItems, NavigationProvider, type NavigateHandler } from "./navigation";
 
 type DesktopNavigationProps = {
@@ -166,7 +167,9 @@ export function DesktopNavigation({
                 onClick={(event) => {
                   if (direct && item) {
                     setSelected(index);
-                    if (event.ctrlKey || event.metaKey) onNavigate(item.path, { newWorkspaceTab: true });
+                    const placement = placementForClick(event);
+                    if (placement === "new-island") onNavigate(item.path, { newIsland: true });
+                    else if (placement === "new-tab") onNavigate(item.path, { newWorkspaceTab: true });
                     else onNavigate(item.path);
                     return;
                   }
