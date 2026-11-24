@@ -663,7 +663,10 @@ There are no CRM contact edit, duplicate-search, merge-preview, merge, history o
 (ADMIN by default). Unknown connectors return 404; invalid commands return 422.
 `POST /api/crm/contacts/{id}/identities` accepts manual `{channel,address}` email/phone identities,
 requiring writable workspace membership and host customer write permission. Telegram's cached JPEG
-endpoint `/api/crm/telegram/avatars/{identityId}` requires customer/workspace access as well.
+endpoint `/api/crm/telegram/avatars/{identityId}` requires customer/workspace access as well, and so does
+Instagram's `/api/crm/instagram/avatars/{identityId}`: the adapter downloads the profile picture of each person who
+messages the account (a few per poll, each re-checked weekly) and serves its own copy, since Instagram's signed CDN
+URLs expire within days and never leave the server.
 
 The starter activates only with a `CrmCustomerBinding`; it creates no customer, employee or sales
 catalog. Customer/assignee keys in CRM persistence are UUIDs scoped to explicit host bindings.
