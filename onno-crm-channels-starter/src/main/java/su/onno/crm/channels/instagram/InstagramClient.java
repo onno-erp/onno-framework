@@ -35,6 +35,39 @@ public class InstagramClient {
     public Page conversations(String account,String after){return page(get(encode(account)+"/conversations?platform=instagram&fields=id,updated_time&limit="+CONVERSATION_PAGE_SIZE+cursor(after)));}
     /** The most recent messages of one conversation (newest first) — the only ones Instagram details. */
     public Page messages(String conversation){return page(get(encode(conversation)+"/messages?fields=id,created_time,from,to,message&limit="+MESSAGE_PAGE_SIZE));}
+    /**
+     * The profile picture URL of someone who messaged the account (an Instagram-scoped user id), or
+     * null when Instagram gives none. The URL is signed and expires within days: download, don't keep it.
+     */
+    public String profilePicture(String user){String url=get(encode(user)+"?fields=profile_pic").path("profile_pic").asText();return url.isBlank()?null:url;}
+    /** A downloaded image and its media type. */
+    public record Image(byte[] content,String contentType){}
+    /** Largest profile picture kept; Instagram serves them at a few hundred pixels, well under this. */
+    static final int MAX_PICTURE_BYTES=1024*1024;
+    /**
+     * Downloads a profile picture from Instagram's CDN. The token is never sent: only https URLs on
+     * Instagram's or Facebook's CDN are fetched, and anything that isn't an image of at most
+     * {@link #MAX_PICTURE_BYTES} gives null.
+     */
+    public Image picture(String url){
+        URI uri;try{uri=URI.create(url);}catch(IllegalArgumentException e){return null;}
+        if(!cdn(uri))return null;
+        try{
+            var response=http.send(HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(30)).build(),HttpResponse.BodyHandlers.ofInputStream());
+            try(var body=response.body()){
+                String type=response.headers().firstValue("Content-Type").orElse("").split(";")[0].trim().toLowerCase(Locale.ROOT);
+                if(response.statusCode()!=200||!type.startsWith("image/"))return null;
+                byte[] content=body.readNBytes(MAX_PICTURE_BYTES+1);
+                return content.length==0||content.length>MAX_PICTURE_BYTES?null:new Image(content,type);
+            }
+        }catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("Instagram request interrupted");}
+        catch(Exception e){throw new IllegalStateException("Instagram profile picture download failed");}
+    }
+    static boolean cdn(URI uri){
+        String host=uri.getHost()==null?"":uri.getHost().toLowerCase(Locale.ROOT);
+        return "https".equalsIgnoreCase(uri.getScheme())&&uri.getUserInfo()==null&&(uri.getPort()==-1||uri.getPort()==443)
+            &&(host.endsWith(".cdninstagram.com")||host.endsWith(".fbcdn.net"));
+    }
     public String send(String account,String recipient,String body){
         var request=json.createObjectNode();request.putObject("recipient").put("id",recipient);request.putObject("message").put("text",body);
         return required(call(encode(account)+"/messages",request),"message_id");
