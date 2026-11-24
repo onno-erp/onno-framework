@@ -1,8 +1,9 @@
 name: CI
 
+# Not on pull_request: a PR is verified on request, from the Actions tab or with
+# `gh workflow run CI --ref <branch>`, and always once more when it lands on main.
 on:
   workflow_dispatch:
-  pull_request:
   push:
     branches:
       - main
@@ -39,7 +40,7 @@ jobs:
         run: ./gradlew publishToMavenLocal
 
       # The Docs and Publish workflows build the aggregated Javadoc; a broken {@link} fails them
-      # after merge or after a release tag, so check it on every PR too.
+      # after merge or after a release tag, so check it here too.
       - name: Verify aggregated Javadoc
         run: ./gradlew aggregateJavadoc
 
@@ -52,10 +53,10 @@ jobs:
             docs/package-lock.json
             package-lock.json
 
-      # The same audits the release workflow runs, here on main and every PR. An advisory can be
-      # published against a transitive dependency at any time; catching it here blocks a merge and
-      # gets fixed on its own schedule, instead of first surfacing on a release tag that then has
-      # to be re-cut (what happened to v2.2.0). Tolerated advisories live in npm-audit.mjs.
+      # The same audits the release workflow runs, here on main and on a requested PR run. An
+      # advisory can be published against a transitive dependency at any time; caught here it gets
+      # fixed on its own schedule, instead of first surfacing on a release tag that then has to be
+      # re-cut (what happened to v2.2.0). Tolerated advisories live in npm-audit.mjs.
       - name: Test the onno-drive verification CLI
         run: node --test onno-plugin/skills/onno-verify/onno-drive.test.mjs
 

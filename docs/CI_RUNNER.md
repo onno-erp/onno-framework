@@ -10,6 +10,15 @@ gh variable set CI_RUNNER --body onno-ci     # use the self-hosted runner
 gh variable delete CI_RUNNER                 # back to GitHub-hosted
 ```
 
+## Pull requests
+
+`CI` runs on pushes to `main` and on release tags, not on pull requests. Verify a branch on request:
+
+```bash
+gh workflow run CI --ref feat/my-branch
+gh run watch
+```
+
 ## The runner
 
 `onno-ci-1` (label `onno-ci`) is a repository-level runner. It runs as the unprivileged `runner`
