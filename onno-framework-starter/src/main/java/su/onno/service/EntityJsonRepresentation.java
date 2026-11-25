@@ -149,6 +149,12 @@ public final class EntityJsonRepresentation {
     private static Map<String, Object> logicalCatalog(CatalogDescriptor descriptor,
                                                        Map<String, Object> row) {
         Map<String, Object> logical = logicalRow(row, CATALOG_SYSTEM_KEYS, descriptor.attributes());
+        if (!descriptor.hierarchical()) {
+            logical.remove("folder");
+            logical.remove("parent");
+            logical.remove("parentRestricted");
+            logical.remove("hasChildFolders");
+        }
         sections(logical, row, descriptor.tabularSections());
         Object children = valueIgnoreCase(row, "children");
         if (children instanceof List<?> rows) {

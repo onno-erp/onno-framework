@@ -13,6 +13,11 @@ HTTP with no per-entity controller to write:
 - **serving the UI**: the application's own build or the bundled default shell, plus the `/api/ui`
   model the UI renders from.
 
+Catalog `folder`/`parent` fields belong only to `@Catalog(hierarchical = true)` entities extending
+`HierarchicalCatalogObject<Self>`. Java uses `Ref<Self>` for the parent; HTTP keeps UUID or `null`.
+Flat writes reject hierarchy fields and flat logical responses omit them, including on legacy
+databases whose old columns are retained by safe schema reconciliation.
+
 The UI itself is not in this module. It is the npm package `@onno/ui` in [`../onno-ui`](../onno-ui)
 (see [its README](../onno-ui/README.md)); this module's Gradle build compiles it into the default
 shell it ships. An application's own UI (`src/main/ui`) is built by the `su.onno.ui` Gradle plugin

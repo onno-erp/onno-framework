@@ -1,5 +1,6 @@
 package su.onno.service;
 
+import su.onno.model.HierarchicalCatalogObject;
 import org.h2.jdbcx.JdbcDataSource;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,7 +22,7 @@ class CollectionPaginationTest {
         @Resource @SuppressWarnings("unused") /* Read by metadata reflection. */ private BigDecimal amount;
     }
     @Catalog(name="PageNodes", hierarchical=true)
-    static class Node extends CatalogObject { @Attribute @SuppressWarnings("unused") /* Read by metadata reflection. */ private UUID parentRecord; }
+    static class Node extends HierarchicalCatalogObject<Node> { @Attribute @SuppressWarnings("unused") /* Read by metadata reflection. */ private UUID parentRecord; }
     Jdbi jdbi;
     RegisterQueryService registers;
     CatalogQueryService catalogs;

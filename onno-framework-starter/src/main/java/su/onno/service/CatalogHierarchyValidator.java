@@ -2,6 +2,7 @@ package su.onno.service;
 
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.model.CatalogObject;
+import su.onno.model.HierarchicalCatalogObject;
 import su.onno.validation.ValidationErrors;
 
 import org.jdbi.v3.core.Handle;
@@ -35,6 +36,11 @@ public final class CatalogHierarchyValidator {
     private void collect(CatalogDescriptor descriptor, CatalogObject entity, ValidationErrors errors,
                          boolean lock) {
         if (!descriptor.hierarchical()) return;
+        var hierarchical = (HierarchicalCatalogObject<?>) entity;
+        if (hierarchical.getParent() != null && hierarchical.getParent().type() != descriptor.javaClass()) {
+            errors.field("parent", "Parent must reference the same catalog entity type");
+            return;
+        }
         jdbi.useHandle(handle -> {
             String table = descriptor.tableName();
             if (lock && entity.getId() != null) {
@@ -42,7 +48,7 @@ public final class CatalogHierarchyValidator {
                         .bind("id", entity.getId()).mapTo(UUID.class).findOne();
             }
             // A folder's children must not lose their parent through a flag-only update.
-            if ((!entity.isFolder() || entity.isDeletionMark()) && entity.getId() != null
+            if ((!hierarchical.isFolder() || entity.isDeletionMark()) && entity.getId() != null
                     && handle.createQuery("SELECT _id FROM " + table
                             + " WHERE _parent = :id AND _deletion_mark = false LIMIT 1")
                             .bind("id", entity.getId()).mapTo(UUID.class).findFirst().isPresent()) {
@@ -50,7 +56,7 @@ public final class CatalogHierarchyValidator {
             }
             var visited = new HashSet<UUID>();
             if (entity.getId() != null) visited.add(entity.getId());
-            UUID parent = entity.getParent();
+            UUID parent = hierarchical.getParent() == null ? null : hierarchical.getParent().id();
             while (parent != null) {
                 if (!visited.add(parent)) {
                     errors.field("parent", "Parent would create a cycle in the catalog hierarchy");

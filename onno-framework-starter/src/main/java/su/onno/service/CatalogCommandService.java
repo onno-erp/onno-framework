@@ -8,6 +8,8 @@ import su.onno.lifecycle.BeforeDeleteHandler;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.model.CatalogObject;
+import su.onno.model.HierarchicalCatalogObject;
+import su.onno.types.Ref;
 import su.onno.validation.AttributeValidator;
 import su.onno.validation.ValidationErrors;
 
@@ -86,8 +88,7 @@ public class CatalogCommandService {
         // Blank leaves an auto-numbered catalog to the numbering callback; otherwise "" is stored.
         entity.setCode(code == null || code.toString().isBlank() ? (desc.autoNumber() ? null : "") : code.toString());
         entity.setDescription(asString(body.getOrDefault("description", "")));
-        entity.setFolder(Boolean.TRUE.equals(body.get("folder")));
-        entity.setParent(parseUuid(body.get("parent")));
+        applyHierarchy(entity, body, errors, false);
         mapBody(desc, entity, body, true, errors);
 
         UUID id = save(desc, entity, subject);
@@ -113,8 +114,7 @@ public class CatalogCommandService {
         CatalogObject entity = load(desc, id);
         if (body.containsKey("code")) entity.setCode(asString(body.get("code")));
         if (body.containsKey("description")) entity.setDescription(asString(body.get("description")));
-        if (body.containsKey("folder")) entity.setFolder(Boolean.TRUE.equals(body.get("folder")));
-        if (body.containsKey("parent")) entity.setParent(parseUuid(body.get("parent")));
+        applyHierarchy(entity, body, errors, false);
         Object expectedVersion = body.containsKey("version") ? body.get("version") : body.get("_version");
         if (expectedVersion != null) entity.setVersion(parseInt(expectedVersion));
         mapBody(desc, entity, body, false, errors);
@@ -156,20 +156,19 @@ public class CatalogCommandService {
             entity.setId(UUID.randomUUID());
             entity.setCode(asString(body.getOrDefault("code", "")));
             entity.setDescription(asString(body.getOrDefault("description", "")));
-            entity.setFolder(Boolean.TRUE.equals(body.get("folder")));
-            entity.setParent(previewParent(body.get("parent"), errors));
         } else {
             if (body.containsKey("code")) entity.setCode(asString(body.get("code")));
             if (body.containsKey("description")) entity.setDescription(asString(body.get("description")));
-            if (body.containsKey("folder")) entity.setFolder(Boolean.TRUE.equals(body.get("folder")));
-            if (body.containsKey("parent")) entity.setParent(previewParent(body.get("parent"), errors));
         }
+        applyHierarchy(entity, body, errors, true);
         mapper.applyBody(entity, desc.attributes(), body, errors);
         mapper.applySections(entity, desc.tabularSections(), body, errors);
         mapper.dryRun(entity, isNew, errors);
-        if (desc.hierarchical() && body.containsKey("parent") && entity.getParent() != null
+        UUID parent = entity instanceof HierarchicalCatalogObject<?> node && node.getParent() != null
+                ? node.getParent().id() : null;
+        if (desc.hierarchical() && body.containsKey("parent") && parent != null
                 && query.scopes().isScoped(desc.javaClass(), subject, AccessMode.READ)
-                && !query.inScope(subject, desc, entity.getParent(), AccessMode.READ)) {
+                && !query.inScope(subject, desc, parent, AccessMode.READ)) {
             errors.field("parent", "Unknown or inaccessible reference for parent");
         } else {
             hierarchy.collect(desc, entity, errors);
@@ -230,6 +229,21 @@ public class CatalogCommandService {
             throw new ServiceException(ServiceException.Status.NOT_FOUND);
         }
         return entity;
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"}) // Dynamic REST mapping uses the concrete entity's runtime type.
+    private static void applyHierarchy(CatalogObject entity, Map<String, Object> body,
+                                       ValidationErrors errors, boolean preview) {
+        if (!(entity instanceof HierarchicalCatalogObject node)) {
+            if (body.containsKey("parent")) errors.field("parent", "Catalog is not hierarchical");
+            if (body.containsKey("folder")) errors.field("folder", "Catalog is not hierarchical");
+            return;
+        }
+        if (body.containsKey("folder")) node.setFolder(Boolean.TRUE.equals(body.get("folder")));
+        if (body.containsKey("parent")) {
+            UUID parent = preview ? previewParent(body.get("parent"), errors) : parseUuid(body.get("parent"));
+            node.setParent(parent == null ? null : Ref.of(entity.getClass(), parent));
+        }
     }
 
     private static boolean changesAnything(CatalogDescriptor desc, Map<String, Object> body) {

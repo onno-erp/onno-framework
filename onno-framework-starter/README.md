@@ -42,7 +42,11 @@ property the starter exposes. Everything else is derived from your annotated met
   - `SchemaInitializer` (see below)
   - the lifecycle callbacks (`OnnoBeforeConvertCallback`, `OnnoAfterSaveCallback`,
     `OnnoAfterConvertCallback`, `OnnoBeforeDeleteCallback`)
-    validate hierarchical catalog parents after filling/before-write hooks: a parent must be an
+    validate hierarchical catalog parents after filling/before-write hooks. Hierarchical entities
+    extend `HierarchicalCatalogObject<Self>` with `Ref<Self> parent`; flat entities extend
+    `CatalogObject` without parent/folder properties or columns. Parent UUID storage is unchanged.
+    Old flat hierarchy columns are retained by default as pending destructive schema drops.
+    A parent must be an
     existing, non-deleted folder in the same catalog, with an acyclic ancestor chain. Saves lock
     the written row and ancestors in their Spring transaction. Non-empty folders cannot be
     demoted or soft-deleted. Failures use `ValidationException` with the `parent` field, including

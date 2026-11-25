@@ -23,8 +23,6 @@ public abstract class CatalogObject implements Persistable<UUID> {
     private String code;
     private String description;
     private boolean deletionMark;
-    private boolean folder;
-    private UUID parent;
 
     @Version
     private Integer version;

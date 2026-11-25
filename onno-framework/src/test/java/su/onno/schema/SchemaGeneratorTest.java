@@ -39,8 +39,7 @@ class SchemaGeneratorTest {
         assertThat(sql).contains("_code VARCHAR(9)");
         assertThat(sql).contains("_description VARCHAR(255)");
         assertThat(sql).contains("_deletion_mark BOOLEAN DEFAULT FALSE");
-        assertThat(sql).contains("_is_folder BOOLEAN DEFAULT FALSE");
-        assertThat(sql).contains("_parent UUID");
+        assertThat(sql).doesNotContain("_is_folder", "_parent");
         assertThat(sql).contains("_version INTEGER DEFAULT 0");
         assertThat(sql).contains("full_name VARCHAR(100)");
         assertThat(sql).contains("unit_price DECIMAL(15,2)");

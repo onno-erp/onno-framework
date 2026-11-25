@@ -67,8 +67,6 @@ class EntityJsonRepresentationTest {
                 .containsEntry("code", "C-1")
                 .containsEntry("description", "Acme")
                 .containsEntry("deletionMark", false)
-                .containsEntry("folder", true)
-                .containsEntry("parent", null)
                 .containsEntry("version", 4)
                 .containsEntry("taxId", "123")
                 .containsEntry("customerDisplay", "Primary contact")
@@ -78,7 +76,7 @@ class EntityJsonRepresentationTest {
                 .containsEntry("apiKey", SecretRedactor.SET)
                 .containsEntry("style", "success")
                 .containsKeys("customerRef", "actions")
-                .doesNotContainKeys("_id", "tax_id", "customer_id_display", "api_key");
+                .doesNotContainKeys("_id", "tax_id", "customer_id_display", "api_key", "folder", "parent");
         assertThat(castRows(logical.get("children"))).singleElement().satisfies(row -> assertThat(row)
                 .containsEntry("description", "Child")
                 .containsEntry("taxId", "CHILD-TAX")

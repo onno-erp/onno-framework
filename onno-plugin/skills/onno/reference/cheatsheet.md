@@ -170,7 +170,8 @@ see the UI and commands sections below.
 
 | Type | Carries |
 | --- | --- |
-| `CatalogObject` | `UUID id`, `String code`, `String description`, `boolean deletionMark`, `boolean folder`, `UUID parent`, `@Version Integer version`, `@Transient boolean isNew=true`. |
+| `CatalogObject` | `UUID id`, `String code`, `String description`, `boolean deletionMark`, `@Version Integer version`, `@Transient boolean isNew=true`. Flat catalogs have no hierarchy columns. |
+| `HierarchicalCatalogObject<E>` | Extends `CatalogObject`, adding `boolean folder` and `Ref<E> parent` (`null` = root). Use `Category extends HierarchicalCatalogObject<Category>` with `@Catalog(hierarchical = true)`; set parents via `Ref.of(Category.class, id)`. UUID storage is unchanged. Legacy flat columns are retained unless destructive schema changes are explicitly enabled. |
 | `DocumentObject` | `UUID id`, `String number`, `LocalDateTime date`, `boolean posted`, `boolean deletionMark`, `@Version Integer version`, `isNew=true`. |
 | `TabularSectionRow` | `UUID id`, `@Transient int lineNumber` (1-based). |
 | `AccumulationRecord` | `UUID id`, `LocalDateTime period`, `boolean active=true`, `UUID documentRef`, `MovementType movementType=RECEIPT`, `isNew=true`. |

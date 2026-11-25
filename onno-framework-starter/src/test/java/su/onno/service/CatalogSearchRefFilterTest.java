@@ -103,15 +103,15 @@ class CatalogSearchRefFilterTest {
 
     private void supplier(UUID id, String name) {
         jdbi.useHandle(h -> h.createUpdate(
-                        "INSERT INTO " + supplierDesc.tableName() + " (_id, _code, _description, _deletion_mark, _is_folder, _version) "
-                                + "VALUES (:id, '', :name, false, false, 0)")
+                        "INSERT INTO " + supplierDesc.tableName() + " (_id, _code, _description, _deletion_mark, _version) "
+                                + "VALUES (:id, '', :name, false, 0)")
                 .bind("id", id).bind("name", name).execute());
     }
 
     private void book(String title, UUID supplierId) {
         jdbi.useHandle(h -> h.createUpdate(
-                        "INSERT INTO " + bookDesc.tableName() + " (_id, _code, _description, _deletion_mark, _is_folder, _version, supplier) "
-                                + "VALUES (:id, '', :name, false, false, 0, :supplier)")
+                        "INSERT INTO " + bookDesc.tableName() + " (_id, _code, _description, _deletion_mark, _version, supplier) "
+                                + "VALUES (:id, '', :name, false, 0, :supplier)")
                 .bind("id", UUID.randomUUID()).bind("name", title).bind("supplier", supplierId).execute());
     }
 }

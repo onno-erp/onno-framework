@@ -196,8 +196,8 @@ class RecordScopeCompilerTest {
     private void insertTenant(UUID id, UUID owner, UUID status, String region) {
         jdbi.useHandle(h -> {
             var u = h.createUpdate("INSERT INTO " + tenants.tableName()
-                    + " (_id, _code, _description, _deletion_mark, _is_folder, _version, owner, status, region)"
-                    + " VALUES (:id, :code, :d, false, false, 0, :owner, :status, :region)")
+                    + " (_id, _code, _description, _deletion_mark, _version, owner, status, region)"
+                    + " VALUES (:id, :code, :d, false, 0, :owner, :status, :region)")
                     .bind("id", id).bind("code", id.toString().substring(0, 8)).bind("d", "t")
                     .bind("status", status).bind("region", region);
             SqlBind.nullable(u, "owner", owner);
@@ -207,8 +207,8 @@ class RecordScopeCompilerTest {
 
     private void insertProject(UUID id, UUID tenant) {
         jdbi.useHandle(h -> h.createUpdate("INSERT INTO " + projects.tableName()
-                        + " (_id, _code, _description, _deletion_mark, _is_folder, _version, tenant)"
-                        + " VALUES (:id, :code, 'p', false, false, 0, :tenant)")
+                        + " (_id, _code, _description, _deletion_mark, _version, tenant)"
+                        + " VALUES (:id, :code, 'p', false, 0, :tenant)")
                 .bind("id", id).bind("code", id.toString().substring(0, 8)).bind("tenant", tenant).execute());
     }
 }

@@ -65,12 +65,15 @@ Use hierarchy when users organize a list into folders or parent-child trees.
 @AccessControl(readRoles = {"SALES", "ADMIN"}, writeRoles = {"ADMIN"})
 @Getter
 @Setter
-public class ProductGroup extends CatalogObject {
+public class ProductGroup extends HierarchicalCatalogObject<ProductGroup> {
 }
 ```
 
-`CatalogObject` already has `folder` and `parent`. Do not add your own parent column unless the
-business has a second, distinct hierarchy.
+`HierarchicalCatalogObject<ProductGroup>` provides `boolean folder` and `Ref<ProductGroup> parent`.
+Set a parent with `group.setParent(Ref.of(ProductGroup.class, parentId))`, or `null` for a root.
+The hierarchy flag and this base must be used together. Flat catalogs extend `CatalogObject`
+and have no folder/parent columns. Existing parent UUID values need no conversion; legacy flat
+columns are retained by safe schema reconciliation until destructive changes are explicitly allowed.
 
 ## Enumeration With Labels And Colors
 

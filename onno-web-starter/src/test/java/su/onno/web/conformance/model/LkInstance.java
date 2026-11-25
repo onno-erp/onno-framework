@@ -3,7 +3,7 @@ package su.onno.web.conformance.model;
 import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
-import su.onno.model.CatalogObject;
+import su.onno.model.HierarchicalCatalogObject;
 import su.onno.types.Ref;
 
 /**
@@ -12,7 +12,7 @@ import su.onno.types.Ref;
  */
 @Catalog(name = "LkInstances", hierarchical = true, history = true)
 @AccessControl(readRoles = {"CUSTOMER", "STAFF"})
-public class LkInstance extends CatalogObject {
+public class LkInstance extends HierarchicalCatalogObject<LkInstance> {
 
     @Attribute
     private Ref<LkTenant> tenant;

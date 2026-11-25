@@ -34,6 +34,11 @@ public @interface Catalog {
 
     int codeLength() default 9;
 
+    /**
+     * Enables folders and same-catalog parents. Requires a domain class extending
+     * {@code HierarchicalCatalogObject<Self>}; flat catalogs extend {@code CatalogObject}.
+     * Only hierarchical tables declare {@code _is_folder} and {@code _parent} columns.
+     */
     boolean hierarchical() default false;
 
     boolean autoNumber() default true;
