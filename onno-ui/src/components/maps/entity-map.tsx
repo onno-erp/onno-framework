@@ -1,3 +1,4 @@
+import { shortRecordNumber } from "../../lib/record-number";
 import { useMemo, useRef } from "react";
 import type { Feature } from "geojson";
 import { useEntityRows } from "../../lib/aggregate-data";
@@ -45,7 +46,7 @@ const MAP_HEIGHT = 360;
 
 /** The default marker/shape label: a system identifier. */
 export function defaultMapLabel(row: EntityRecord): string {
-  for (const c of [row.description, row.number, row.code, row.name]) {
+  for (const c of [row.description, shortRecordNumber(row.number), shortRecordNumber(row.code), row.name]) {
     if (c != null && String(c).trim() !== "") return String(c);
   }
   return "";

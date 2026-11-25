@@ -5,7 +5,7 @@
  */
 import { expectTypeOf } from "vitest";
 import {
-  Chart, EntityList, Row, Stat, count, links, openRoute, sum, useRecords,
+  Chart, EntityList, Row, Stat, count, formatRecordNumber, links, openRoute, sum, useRecords,
   type AppDefinition, type DateField, type EntityCustomization, type LucideIcon, type Measure,
   type NumericField, type ValueFormat, type Where,
 } from "@onno/ui";
@@ -235,3 +235,6 @@ function OwnRecord({ descriptor }: { descriptor: FormDescriptor }) {
   return <RecordField form={form} field="note">{(field) => <textarea value={field.value ?? ""} disabled={field.disabled} onChange={(event) => field.onChange(event.target.value)} />}</RecordField>;
 }
 void OwnRecord;
+
+expectTypeOf(formatRecordNumber("CON-00000001")).toEqualTypeOf<string>();
+expectTypeOf(formatRecordNumber(null)).toEqualTypeOf<string>();

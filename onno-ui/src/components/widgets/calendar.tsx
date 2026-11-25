@@ -1,3 +1,4 @@
+import { shortRecordNumber } from "../../lib/record-number";
 import { openRoute } from "../../lib/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import FullCalendar from "@fullcalendar/react";
@@ -261,8 +262,8 @@ interface CalendarData {
 
 /** The default item headline: description for catalogs, number for documents. */
 export function defaultItemTitle(row: EntityRecord, kind: "catalog" | "document" | null): string {
-  const v = kind === "catalog" ? row.description ?? row.number : row.number ?? row.description;
-  return v == null ? "" : String(v);
+  if (kind === "catalog" && row.description != null) return String(row.description);
+  return row.number == null ? String(row.description ?? "") : shortRecordNumber(row.number);
 }
 
 const DEFAULT_SUBTITLE = ["customerDisplay", "clientDisplay", "propertyDisplay", "warehouseDisplay", "description", "name"];

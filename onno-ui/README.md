@@ -382,3 +382,14 @@ backend port 8080 unless configured; this repository's example explicitly defaul
 
 For framework contributors, the [component organization](DESIGN.md#component-organization) describes
 the internal folders. Application imports continue to use the public `@onno/ui` entry point.
+
+### Record numbers
+
+Default UI lists and record labels omit leading zeros in codes and document numbers
+(`CON-00000001` → `CON-1`). This is presentation only: persisted values, API payloads,
+server sorting, filters and pagination cursors retain the original identifiers. Authored cell
+renderers and explicit value formats keep control of their own presentation.
+
+Custom React labels can use the same formatter: `import { formatRecordNumber } from "@onno/ui";`
+and `formatRecordNumber(order.number)` (also accepts catalog codes). Format only the identifier,
+not the whole label or a business description.

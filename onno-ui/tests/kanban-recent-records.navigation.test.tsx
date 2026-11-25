@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { setModel } from "@/lib/model-store";
-import { Kanban } from "@/components/widgets/kanban";
-import { RecentRecords } from "@/components/widgets/recent-records";
+import { Kanban, defaultKanbanCaption } from "@/components/widgets/kanban";
+import { RecentRecords, defaultPrimary } from "@/components/widgets/recent-records";
 
 const api = vi.hoisted(() => ({ listCatalog: vi.fn(), listDocuments: vi.fn() }));
 vi.mock("@/lib/api", () => ({ api }));
@@ -127,4 +127,13 @@ describe("record components take typed where and render functions", () => {
     expect(screen.getByText("second line")).toBeTruthy();
     expect(api.listDocuments).toHaveBeenCalledWith("sales_orders", undefined, undefined, { total: { gte: 100 } });
   });
+});
+
+it("uses compact record identifiers in default dashboard card captions", () => {
+  const row = { number: "O-00000000001", code: "CON-00000001" };
+  expect(defaultKanbanCaption(row)).toBe("O-1");
+  expect(defaultPrimary(row)).toBe("O-1");
+  expect(defaultPrimary({ code: row.code })).toBe("CON-1");
+  expect(defaultPrimary({ description: "Studio-001" })).toBe("Studio-001");
+  expect(row.number).toBe("O-00000000001");
 });

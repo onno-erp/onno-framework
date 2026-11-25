@@ -1,3 +1,4 @@
+import { shortRecordNumber } from "../../lib/record-number";
 import { useEntityChanges } from "../../lib/query";
 import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
@@ -42,8 +43,8 @@ function labelFor(row: EntityRecord, label?: ListMapConfig["label"]): string {
   const candidates = [
     label?.(row),
     row.description,
-    row.number,
-    row.code,
+    shortRecordNumber(row.number),
+    shortRecordNumber(row.code),
   ];
   for (const c of candidates) {
     if (c != null && String(c).trim() !== "") return String(c);
@@ -54,7 +55,7 @@ function labelFor(row: EntityRecord, label?: ListMapConfig["label"]): string {
 /** A secondary popup line: the record's code/number, unless it already serves as the label. */
 function sublabelFor(row: EntityRecord, label: string): string | undefined {
   for (const c of [row.code, row.number]) {
-    const s = c != null ? String(c).trim() : "";
+    const s = c != null ? shortRecordNumber(c).trim() : "";
     if (s && s !== label) return s;
   }
   return undefined;

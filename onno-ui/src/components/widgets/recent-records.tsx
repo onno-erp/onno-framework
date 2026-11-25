@@ -1,3 +1,4 @@
+import { shortRecordNumber } from "../../lib/record-number";
 import { openRoute } from "../../lib/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { format } from "date-fns";
@@ -52,7 +53,7 @@ const DEFAULT_AMOUNT = ["total", "totalGross", "amount", "sum"];
 
 /** The default headline: the record's number/code/description/name. */
 export function defaultPrimary(row: EntityRecord): string {
-  return pickField(row, TITLE_FALLBACKS) ?? "";
+  return pickField({ ...row, number: shortRecordNumber(row.number), code: shortRecordNumber(row.code) }, TITLE_FALLBACKS) ?? "";
 }
 
 /** The default second line: a common reference display, else the first non-empty `…Display`. */

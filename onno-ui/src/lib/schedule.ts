@@ -1,3 +1,4 @@
+import { shortRecordNumber } from "./record-number";
 import { addDays, format } from "date-fns";
 import type { EntityRecord } from "./types";
 
@@ -109,8 +110,8 @@ export function rowTitle(row: EntityRecord, titleField?: string): string {
   const candidates = [
     titleField && (row[`${titleField}Display`] ?? row[titleField]),
     row.description,
-    row.number,
-    row.code,
+    shortRecordNumber(row.number),
+    shortRecordNumber(row.code),
   ];
   for (const c of candidates) {
     if (c != null && typeof c !== "object" && String(c).trim() !== "") return String(c);

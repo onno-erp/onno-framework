@@ -1,3 +1,4 @@
+import { shortRecordNumber } from "../../lib/record-number";
 import { openRoute } from "../../lib/navigation";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { format } from "date-fns";
@@ -83,7 +84,7 @@ export interface KanbanProps {
 const text = (v: unknown) => (v == null ? "" : String(v));
 
 /** The default card caption: the record's number, else its code. */
-export const defaultKanbanCaption = (row: EntityRecord): ReactNode => text(row.number ?? row.code);
+export const defaultKanbanCaption = (row: EntityRecord): ReactNode => shortRecordNumber(row.number ?? row.code);
 /** The default card headline: a customer/client display, else description/name. */
 export const defaultKanbanPrimary = (row: EntityRecord): ReactNode =>
   text(row.customerDisplay ?? row.clientDisplay ?? row.primaryClientDisplay ?? row.description ?? row.name);

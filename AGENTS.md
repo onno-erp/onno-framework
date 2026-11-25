@@ -1136,6 +1136,10 @@ The compiler checks the field references, the IDE refactors through them, and th
 
 ### UI: React on `@onno/ui`, behaviour in Java
 
+System code/number labels omit leading zeros for display. Use `formatRecordNumber(value)` from
+`@onno/ui` in authored React labels too. Keep stored identifiers, API payloads and server sort keys
+unchanged; never apply the formatter to business descriptions or edit payloads.
+
 The server describes the business model and enforces every rule; it never describes screens. The UI
 is the npm package **`@onno/ui`** (`onno-ui/`): a React shell that renders a default list and record
 form for every readable entity, navigation grouped by bounded context, and the register reports. An

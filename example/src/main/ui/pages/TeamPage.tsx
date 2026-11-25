@@ -1,4 +1,4 @@
-import { Button, Calendar, EntityList, Page, Row, openRecord, useHasRole } from "@onno/ui";
+import { Button, Calendar, EntityList, formatRecordNumber, Page, Row, openRecord, useHasRole } from "@onno/ui";
 
 /** The team's event calendar beside the staff list. */
 export function TeamPage() {
@@ -17,7 +17,7 @@ export function TeamPage() {
           end="endsAt"
           allDay={false}
           itemTitle={(event) => event.subject}
-          subtitle={(event) => event.number}
+          subtitle={(event) => formatRecordNumber(event.number)}
           hint="Open an event to manage participants; drag it to reschedule."
         />
         <EntityList entity="Employees" />

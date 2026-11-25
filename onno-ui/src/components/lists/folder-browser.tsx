@@ -1,3 +1,4 @@
+import { shortRecordNumber } from "../../lib/record-number";
 import { useRequestScope } from "../../hooks/use-request-scope";
 import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Folder, FolderOpen, Loader2 } from "lucide-react";
@@ -20,7 +21,10 @@ export type Crumb = { id: string | null; label: string };
 
 /** The human label of a catalog row (description, else number or code). */
 export function rowLabel(row: EntityRecord): string {
-  return String(row.description ?? row._description ?? row.number ?? row._number ?? row.code ?? entityRowId(row) ?? "");
+  const description = row.description ?? row._description;
+  if (description != null) return String(description);
+  const number = row.number ?? row._number ?? row.code;
+  return number == null ? String(entityRowId(row) ?? "") : shortRecordNumber(number);
 }
 
 /** Whether a catalog row is a folder. */

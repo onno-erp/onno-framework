@@ -1,3 +1,4 @@
+import { shortRecordNumber } from "../../lib/record-number";
 import { openRoute } from "../../lib/navigation";
 import { ResponsiveActionPanel } from "../ui/responsive-action-panel";
 import { nearestScrollAncestor, trailingPaddingTo } from "../../lib/fill-height";
@@ -412,7 +413,11 @@ function rawCellValue(row: EntityRecord, col: ListColumn, t: Translate): string 
  */
 function displayCellValue(raw: string, col: ListColumn): string {
   if (raw === "__SECRET_SET__") return "•••• set";
-  return formatValue(raw, col.format) ?? formatTimestampDefault(raw) ?? raw;
+  const formatted = formatValue(raw, col.format);
+  if (formatted !== null) return formatted;
+  const key = responseKey(col);
+  if (key === "code" || key === "number" || key === "_code" || key === "_number") return shortRecordNumber(raw);
+  return formatTimestampDefault(raw) ?? raw;
 }
 
 /** One list cell: an image thumbnail for image/avatar columns, otherwise formatted text. */
@@ -1539,7 +1544,7 @@ function useFilterOptions(filters: ListFilterControl[] | undefined): ListFilterC
           .filter((r) => r.id != null && !r.deletionMark)
           .map((r) => {
             const photo = IDENTITY_AVATAR_FIELDS.map((f) => r[f]).find((v) => typeof v === "string" && v);
-            return { value: String(r.id), label: String(r.description || r.code || r.id), ...(photo ? { avatarUrl: String(photo) } : {}) };
+            return { value: String(r.id), label: String(r.description || shortRecordNumber(r.code) || r.id), ...(photo ? { avatarUrl: String(photo) } : {}) };
           }),
     })),
   }, queryClient);

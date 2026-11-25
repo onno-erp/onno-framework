@@ -1,4 +1,4 @@
-import { Chart, Page, RecentRecords, Row, Stat, TimeRange } from "@onno/ui";
+import { Chart, formatRecordNumber, Page, RecentRecords, Row, Stat, TimeRange } from "@onno/ui";
 import { OrdersBoard } from "../components/OrdersBoard";
 import { OrderActivity } from "../components/OrderActivity";
 import { allOrders, openOrders, postedOrders, revenue } from "../lib/measures";
@@ -39,7 +39,7 @@ export function DashboardPage() {
         title="Recent orders"
         entity="Orders"
         limit={10}
-        primary={(o) => `${o.number} · ${o.customerDisplay ?? ""}`}
+        primary={(o) => `${formatRecordNumber(o.number)} · ${o.customerDisplay ?? ""}`}
         secondary={(o) => o.statusDisplay}
         amount={(o) => o.total}
         currency="USD"

@@ -259,6 +259,9 @@ export const useUiEvents = useUiEventsImpl as unknown as (listener: (event: UiEv
 
 // ---- text and formatting ----------------------------------------------------------------------
 
+/** A compact code/document number for UI labels; storage and sort keys stay unchanged. */
+export { shortRecordNumber as formatRecordNumber } from "./lib/record-number";
+
 /** The app's chrome strings (`onno.ui.messages` over the bundled defaults) as a hook. */
 export { useMessages as useTranslate, useAppLocale as useLocale } from "./providers/messages-provider";
 /** A chrome string outside React (module scope, handlers). */

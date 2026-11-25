@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Badge, Card, CardContent, Segmented, formatDate, formatMoney, openRecord, useRecords } from "@onno/ui";
+import { Badge, Card, CardContent, Segmented, formatDate, formatMoney, formatRecordNumber, openRecord, useRecords } from "@onno/ui";
 
 /**
  * A timeline of the latest orders: number, customer, total and day. Plain React over typed data —
@@ -38,7 +38,7 @@ export function OrderActivity({ limit = 10 }: { limit?: number }) {
                   className="-mx-2 flex w-[calc(100%+1rem)] items-center justify-between gap-3 rounded-field px-2 py-2 text-left transition-colors hover:bg-accent/40"
                 >
                   <div className="min-w-0">
-                    <div className="truncate text-[13px] font-medium leading-tight text-foreground">{o.number}</div>
+                    <div className="truncate text-[13px] font-medium leading-tight text-foreground">{formatRecordNumber(o.number)}</div>
                     <div className="truncate text-[11px] text-muted-foreground">{o.customerDisplay}</div>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-0.5">
