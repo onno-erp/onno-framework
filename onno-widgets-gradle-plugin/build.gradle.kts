@@ -1,3 +1,4 @@
+import java.security.MessageDigest
 import org.gradle.language.jvm.tasks.ProcessResources
 
 plugins {
@@ -24,7 +25,7 @@ dependencies {
     implementation("com.github.node-gradle:gradle-node-plugin:7.1.0")
     testImplementation(gradleTestKit())
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
-    testImplementation("org.assertj:assertj-core:3.27.3")
+    testImplementation("org.assertj:assertj-core:3.27.7")
 }
 
 tasks.test {
@@ -42,13 +43,21 @@ val sdkZip by tasks.registering(Zip::class) {
     }
 }
 
-// Stamp the plugin version into a resource so the plugin can bust its extracted-SDK cache on upgrade.
+// Stamp the plugin version and SDK archive hash so consumers refresh the extracted SDK when its
+// contents change without a plugin-version bump.
 val versionResource by tasks.registering {
     val out = layout.buildDirectory.file("version-resource/onno-widgets.version")
     val v = version.toString()
+    val sdkArchive = sdkZip.flatMap { it.archiveFile }
     inputs.property("version", v)
+    inputs.file(sdkArchive)
     outputs.file(out)
-    doLast { out.get().asFile.apply { parentFile.mkdirs() }.writeText(v) }
+    doLast {
+        val bytes = MessageDigest.getInstance("SHA-256")
+            .digest(sdkArchive.get().asFile.readBytes())
+        val sdkHash = bytes.joinToString("") { it.toUByte().toString(16).padStart(2, '0') }
+        out.get().asFile.apply { parentFile.mkdirs() }.writeText("$v:$sdkHash")
+    }
 }
 
 tasks.named<ProcessResources>("processResources") {

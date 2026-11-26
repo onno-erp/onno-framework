@@ -26,22 +26,22 @@ public class UiViewResolver {
     // Global fallback for lists that don't author their own keyset window size.
     private final int defaultPageSize;
     // entity -> (profile id | "" for default) -> view
-    private final Map<Class<?>, Map<String, EntityView>> views = new LinkedHashMap<>();
+    private final Map<Class<?>, Map<String, EntityView<?>>> views = new LinkedHashMap<>();
     // entity -> its authored rowStyle function (empty = none) — cached because the list-data feed
     // asks per request and building a ListSpec re-runs the view's list() authoring each time.
     private final Map<Class<?>, java.util.Optional<java.util.function.Function<?, ListSpec.RowStyle>>>
             rowStyles = new java.util.concurrent.ConcurrentHashMap<>();
 
     /** Resolver with the built-in 50-row keyset window. */
-    public UiViewResolver(ResolvedMetadataService metadata, List<EntityView> entityViews) {
+    public UiViewResolver(ResolvedMetadataService metadata, List<EntityView<?>> entityViews) {
         this(metadata, entityViews, 50);
     }
 
-    public UiViewResolver(ResolvedMetadataService metadata, List<EntityView> entityViews,
+    public UiViewResolver(ResolvedMetadataService metadata, List<EntityView<?>> entityViews,
                           int defaultPageSize) {
         this.metadata = metadata;
         this.defaultPageSize = defaultPageSize <= 0 ? 50 : defaultPageSize;
-        for (EntityView view : entityViews) {
+        for (EntityView<?> view : entityViews) {
             if (view.entity() == null) {
                 continue;
             }
@@ -76,13 +76,13 @@ public class UiViewResolver {
      * level, not per profile.
      */
     public boolean commentsEnabled(Class<?> entity) {
-        Map<String, EntityView> byProfile = entity == null ? null : views.get(entity);
+        Map<String, EntityView<?>> byProfile = entity == null ? null : views.get(entity);
         return byProfile != null && byProfile.values().stream().anyMatch(EntityView::comments);
     }
 
     /** Whether any view of this entity opts its records into the main pane ({@link EntityView#opensInMain()}). */
     public boolean opensInMain(Class<?> entity) {
-        Map<String, EntityView> byProfile = entity == null ? null : views.get(entity);
+        Map<String, EntityView<?>> byProfile = entity == null ? null : views.get(entity);
         return byProfile != null && byProfile.values().stream().anyMatch(EntityView::opensInMain);
     }
 
@@ -103,12 +103,12 @@ public class UiViewResolver {
             return null;
         }
         return (java.util.function.Function<ActionRow<E>, ListSpec.RowStyle>) rowStyles.computeIfAbsent(entity, e -> {
-            Map<String, EntityView> byProfile = views.get(e);
+            Map<String, EntityView<?>> byProfile = views.get(e);
             if (byProfile == null) {
                 return java.util.Optional.empty();
             }
-            List<EntityView> ordered = new ArrayList<>();
-            EntityView def = byProfile.get(DEFAULT);
+            List<EntityView<?>> ordered = new ArrayList<>();
+            EntityView<?> def = byProfile.get(DEFAULT);
             if (def != null) {
                 ordered.add(def);
             }
@@ -131,24 +131,26 @@ public class UiViewResolver {
     }
 
     /** Profile-specific view wins, then the default view, then auto-generated columns. */
-    private EntityView viewFor(Class<?> entity, String profileId) {
-        Map<String, EntityView> byProfile = views.get(entity);
+    private EntityView<?> viewFor(Class<?> entity, String profileId) {
+        Map<String, EntityView<?>> byProfile = views.get(entity);
         if (byProfile == null) {
             return null;
         }
-        EntityView specific = byProfile.get(profileId);
+        EntityView<?> specific = byProfile.get(profileId);
         return specific != null ? specific : byProfile.get(DEFAULT);
     }
 
-    @SuppressWarnings("unchecked")
     private ResolvedListView resolveList(Class<?> entity, String profileId, Map<String, Object> meta) {
-        ListSpec<Object> spec = new ListSpec<>();
-        EntityView view = viewFor(entity, profileId);
-        if (view != null) {
-            view.list(spec);
-        }
+        EntityView<?> view = viewFor(entity, profileId);
+        ListSpec<?> spec = view == null ? new ListSpec<>() : listSpec(view);
 
         return resolveList(spec, meta);
+    }
+
+    private static <E> ListSpec<E> listSpec(EntityView<E> view) {
+        ListSpec<E> spec = new ListSpec<>();
+        view.list(spec);
+        return spec;
     }
 
     /** Resolve an explicitly authored embedded list through the standard metadata pipeline. */
@@ -279,7 +281,7 @@ public class UiViewResolver {
      * missing/unknown — so a misconfigured map degrades to
      * "no map view" rather than a broken toggle.
      */
-    private static ResolvedListView.MapView resolveMap(ListSpec.MapSpec spec,
+    private static ResolvedListView.MapView resolveMap(ListSpec.MapSpec<?> spec,
                                                        Map<String, ColumnMeta> available) {
         if (spec == null) {
             return null;
@@ -293,15 +295,6 @@ public class UiViewResolver {
             return null;
         }
         return new ResolvedListView.MapView(lat, lng, geoJson, label, spec.isDefaultView());
-    }
-
-    /** Resolve a field name to its data column, or "" when the name is blank/unknown. */
-    private static String columnOf(String field, Map<String, ColumnMeta> available) {
-        if (field == null || field.isBlank()) {
-            return "";
-        }
-        ColumnMeta cm = available.get(field);
-        return cm == null ? "" : cm.columnName();
     }
 
     /** Resolve a field name to the logical response key used by the list's entity rows. */

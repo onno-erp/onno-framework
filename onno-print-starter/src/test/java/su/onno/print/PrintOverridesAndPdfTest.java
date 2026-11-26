@@ -9,6 +9,8 @@ import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.core.io.DefaultResourceLoader;
 
@@ -77,9 +79,9 @@ class PrintOverridesAndPdfTest {
     @Test
     void uploadedTemplateOverridesBuiltInUntilReset() throws IOException {
         PrintService service = service(new InvoiceForm(false), null);
-        PrintForm<?> form = service.allForms().get(0);
+        PrintForm<?> form = service.allForms().getFirst();
 
-        service.uploadTemplate(form, "C:\\Users\\me\\custom.docx", docx("Custom {{number}}"), "admin");
+        service.uploadTemplate(form, "C:\\Users\\me\\custom.docx", docx(), "admin");
 
         assertThat(text(service.render(form, invoice("INV-1")).content())).isEqualTo("Custom INV-1");
         PrintService.TemplateFile effective = service.effectiveTemplate(form);
@@ -98,7 +100,7 @@ class PrintOverridesAndPdfTest {
     void rejectsUploadsOfWrongFormatCorruptOrOversizedFiles() {
         PrintService service = new PrintService(List.of(new InvoiceForm(false)), SCOPES, refs,
                 new DefaultResourceLoader(), store, null, 2_000);
-        PrintForm<?> form = service.allForms().get(0);
+        PrintForm<?> form = service.allForms().getFirst();
 
         assertThatThrownBy(() -> service.uploadTemplate(form, "x.xlsx", new byte[] {1}, "a"))
                 .hasMessageContaining("must be a .docx");
@@ -110,7 +112,7 @@ class PrintOverridesAndPdfTest {
     }
 
     @Test
-    void pdfFormRequiresConverterAndConvertsFilledDocument() throws IOException {
+    void pdfFormRequiresConverterAndConvertsFilledDocument() {
         assertThatThrownBy(() -> service(new InvoiceForm(true), null))
                 .hasMessageContaining("declares pdf() but no PdfConverter");
 
@@ -124,7 +126,7 @@ class PrintOverridesAndPdfTest {
             }
         };
         PrintService service = service(new InvoiceForm(true), fake);
-        PrintForm<?> form = service.allForms().get(0);
+        PrintForm<?> form = service.allForms().getFirst();
 
         PrintResult pdf = service.render(form, invoice("INV-2"));
         assertThat(pdf.fileName()).isEqualTo("invoice-INV-2.pdf");
@@ -139,7 +141,7 @@ class PrintOverridesAndPdfTest {
     @Test
     void zipsBatchesWithUniqueNames() throws IOException {
         PrintService service = service(new InvoiceForm(false), null);
-        PrintForm<?> form = service.allForms().get(0);
+        PrintForm<?> form = service.allForms().getFirst();
 
         PrintResult zip = service.renderZip(form,
                 List.of(invoice("A"), invoice("B"), invoice("A")), PrintOutput.SOURCE);
@@ -221,6 +223,7 @@ class PrintOverridesAndPdfTest {
     }
 
     @Test
+    @EnabledOnOs({OS.LINUX, OS.MAC})
     void libreOfficeConverterRunsCommandInIsolatedDirectory(@TempDir Path tmp) throws IOException {
         // A stand-in soffice: writes "<outdir>/document.pdf" from the input, like the real one.
         Path soffice = tmp.resolve("soffice");
@@ -255,13 +258,13 @@ class PrintOverridesAndPdfTest {
 
     private static String text(byte[] docx) throws IOException {
         try (XWPFDocument doc = new XWPFDocument(new ByteArrayInputStream(docx))) {
-            return doc.getParagraphs().get(0).getText();
+            return doc.getParagraphs().getFirst().getText();
         }
     }
 
-    private static byte[] docx(String text) throws IOException {
+    private static byte[] docx() throws IOException {
         try (XWPFDocument doc = new XWPFDocument()) {
-            doc.createParagraph().createRun().setText(text);
+            doc.createParagraph().createRun().setText("Custom {{number}}");
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             doc.write(out);
             return out.toByteArray();

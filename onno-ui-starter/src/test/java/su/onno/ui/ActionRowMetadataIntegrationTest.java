@@ -40,9 +40,9 @@ class ActionRowMetadataIntegrationTest {
     private final DocumentQueryService documents = mock(DocumentQueryService.class);
     private final UiAccessService access = mock(UiAccessService.class);
 
-    private static Map<String, Object> storageRow(boolean approved) {
+    private static Map<String, Object> storageRow() {
         return new LinkedHashMap<>(Map.of("_id", ID, "assigned_to", EMPLOYEE_ID,
-                "assigned_to_display", "Alice", "approval_flag", approved,
+                "assigned_to_display", "Alice", "approval_flag", true,
                 "review_status", EnumerationPersistence.resolveId(Status.class, Status.APPROVED)));
     }
 
@@ -79,7 +79,7 @@ class ActionRowMetadataIntegrationTest {
     @SuppressWarnings("unchecked")
     void listActionsAndRowStyleUseMetadataForCatalogsAndDocuments(
             boolean document, boolean ids, String representation) {
-        Map<String, Object> source = storageRow(true);
+        Map<String, Object> source = storageRow();
         List<Map<String, Object>> rows = List.of(source);
         var catalog = scanner.scan(OrderCatalog.class);
         var doc = scanner.scanDocument(OrderDocument.class);
@@ -94,7 +94,7 @@ class ActionRowMetadataIntegrationTest {
         when(documents.keysetPage(isNull(), eq(doc), isNull(), isNull(), isNull(), eq(100),
                 isNull(), eq(true), isNull(), isNull(), isNull(), anyList(), anyList(), anyList(),
                 anyList(), anyList(), anyList(), isNull())).thenReturn(new KeysetPage(rows, null, false));
-        List<EntityView> views = List.of(view(entity));
+        List<EntityView<?>> views = List.of(view(entity));
         ListDataController controller = new ListDataController(catalogs, documents, access,
                 new UiActionResolver(views), new UiViewResolver(null, views));
         MockHttpServletRequest request = new MockHttpServletRequest();
@@ -123,7 +123,7 @@ class ActionRowMetadataIntegrationTest {
         Class<? extends OrderFields> entity = document ? OrderDocument.class : OrderCatalog.class;
         when(catalogs.require("orders")).thenReturn(catalog);
         when(documents.require("orders")).thenReturn(doc);
-        Map<String, Object> row = storageRow(true);
+        Map<String, Object> row = storageRow();
         when(catalogs.get(subject, catalog, ID)).thenReturn(row);
         when(documents.get(subject, doc, ID)).thenReturn(row);
         when(catalogs.inScope(subject, catalog, ID, AccessMode.WRITE)).thenReturn(true);
@@ -158,7 +158,7 @@ class ActionRowMetadataIntegrationTest {
                 .visibleWhen(ActionRowMetadataIntegrationTest::eligible)
                 .enabledWhen(ActionRowMetadataIntegrationTest::eligible)
                 .label(row -> row.text(OrderFields::getAssignedTo));
-        var state = UiActionResolver.recordActionState(spec.actions().getFirst(), storageRow(true),
+        var state = UiActionResolver.recordActionState(spec.actions().getFirst(), storageRow(),
                 scanner.scan(OrderCatalog.class).attributes());
         assertThat(state.visible()).isTrue();
         assertThat(state.enabled()).isTrue();
@@ -171,6 +171,7 @@ class ActionRowMetadataIntegrationTest {
         Status getReviewStatus();
     }
 
+    @SuppressWarnings("unused") // MetadataScanner reads these fixture fields reflectively.
     @Catalog(name = "ActionRowOrders")
     static class OrderCatalog extends CatalogObject implements OrderFields {
         @Attribute
@@ -184,6 +185,7 @@ class ActionRowMetadataIntegrationTest {
         public Status getReviewStatus() { return reviewStatus; }
     }
 
+    @SuppressWarnings("unused") // MetadataScanner reads these fixture fields reflectively.
     @Document(name = "ActionRowDocuments")
     static class OrderDocument extends DocumentObject implements OrderFields {
         @Attribute

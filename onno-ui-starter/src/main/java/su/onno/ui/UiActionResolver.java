@@ -22,7 +22,7 @@ public class UiActionResolver {
     private final Map<Class<?>, List<ActionSpec<?>>> specsByEntity = new LinkedHashMap<>();
     private final Map<Class<?>, List<InputField>> inputsByEntity = new LinkedHashMap<>();
 
-    public UiActionResolver(List<EntityView> views) {
+    public UiActionResolver(List<EntityView<?>> views) {
         for (EntityView<?> view : views) {
             collect(view);
         }
@@ -154,8 +154,8 @@ public class UiActionResolver {
                                                          List<AttributeDescriptor> attributes) {
         ActionRow<E> actionRow = new ActionRow<>(row, attributes);
         Map<String, Object> state = new LinkedHashMap<>();
-        state.put("visible", eval(a.visibleFn(), actionRow, true));
-        state.put("enabled", eval(a.enabledFn(), actionRow, true));
+        state.put("visible", eval(a.visibleFn(), actionRow));
+        state.put("enabled", eval(a.enabledFn(), actionRow));
         if (a.iconFn() != null) {
             String icon = evalString(a.iconFn(), actionRow);
             if (icon != null) {
@@ -192,20 +192,20 @@ public class UiActionResolver {
         String label = a.labelFn() != null ? evalString(a.labelFn(), row) : null;
         String icon = a.iconFn() != null ? evalString(a.iconFn(), row) : null;
         return new RecordActionState(
-                eval(a.visibleFn(), row, true),
-                eval(a.enabledFn(), row, true),
+                eval(a.visibleFn(), row),
+                eval(a.enabledFn(), row),
                 label != null ? label : a.label(),
                 icon != null ? icon : a.icon());
     }
 
-    private static <E> boolean eval(java.util.function.Predicate<ActionRow<E>> p, ActionRow<E> row, boolean fallback) {
+    private static <E> boolean eval(java.util.function.Predicate<ActionRow<E>> p, ActionRow<E> row) {
         if (p == null) {
-            return fallback;
+            return true;
         }
         try {
             return p.test(row);
         } catch (RuntimeException e) {
-            return fallback;
+            return true;
         }
     }
 
@@ -249,7 +249,7 @@ public class UiActionResolver {
     }
 
     /**
-     * An action's form-item descriptor maps ({@link ActionSpec.ActionBuilder#form}), empty when none.
+     * An action's {@code form(...)} item descriptor maps, empty when none.
      * Scalar fields come first (tagged {@code kind: "field"}), then the repeatable row groups
      * ({@code kind: "group"}, carrying their {@code columns}); the client renders each accordingly.
      */

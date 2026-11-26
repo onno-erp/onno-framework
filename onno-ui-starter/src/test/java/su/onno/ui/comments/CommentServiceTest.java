@@ -5,6 +5,7 @@ import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -20,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CommentServiceTest {
 
     private CommentService service;
+    private Jdbi jdbi;
     private final UUID property = UUID.randomUUID();
     private final UUID other = UUID.randomUUID();
     private final String alice = UUID.randomUUID().toString();
@@ -28,7 +30,8 @@ class CommentServiceTest {
     void setUp() {
         JdbcDataSource ds = new JdbcDataSource();
         ds.setURL("jdbc:h2:mem:comments" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
-        service = new CommentService(Jdbi.create(ds));
+        jdbi = Jdbi.create(ds);
+        service = new CommentService(jdbi);
     }
 
     @Test
@@ -43,12 +46,12 @@ class CommentServiceTest {
         List<Comment> thread = service.list("catalogs", "Properties", property);
 
         assertThat(thread).extracting(Comment::body).containsExactly("First", "Second");
-        assertThat(thread.get(0).id()).isEqualTo(first.id());
-        assertThat(thread.get(0).authorId()).isEqualTo(alice);
+        assertThat(thread.getFirst().id()).isEqualTo(first.id());
+        assertThat(thread.getFirst().authorId()).isEqualTo(alice);
         assertThat(thread.get(1).authorId()).isNull();
-        assertThat(thread.get(0).parentId()).isNull();
-        assertThat(thread.get(0).createdAt()).isNotNull();
-        assertThat(thread.get(0).editedAt()).isNull();
+        assertThat(thread.getFirst().parentId()).isNull();
+        assertThat(thread.getFirst().createdAt()).isNotNull();
+        assertThat(thread.getFirst().editedAt()).isNull();
     }
 
     @Test
@@ -59,7 +62,7 @@ class CommentServiceTest {
         List<Comment> thread = service.list("catalogs", "Properties", property);
 
         assertThat(thread).extracting(Comment::id).containsExactly(parent.id(), reply.id());
-        assertThat(thread.get(1).parentId()).isEqualTo(parent.id());
+        assertThat(thread.getLast().parentId()).isEqualTo(parent.id());
         assertThat(service.find(reply.id())).get().extracting(Comment::parentId).isEqualTo(parent.id());
     }
 
@@ -72,20 +75,38 @@ class CommentServiceTest {
         assertThat(service.toggleReaction(comment.id(), bob, "👍")).isTrue();
         assertThat(service.toggleReaction(comment.id(), bob, "🎉")).isTrue();
 
+        // H2 may store rapid Timestamp values in the same clock tick. Fix distinct timestamps so
+        // this test checks first-seen order instead of depending on the emoji tie-breaker.
+        Instant firstReaction = Instant.parse("2025-01-01T00:00:00Z");
+        setReactionCreatedAt(comment.id(), "record:" + alice, "👍", firstReaction);
+        setReactionCreatedAt(comment.id(), bob, "👍", firstReaction.plusSeconds(1));
+        setReactionCreatedAt(comment.id(), bob, "🎉", firstReaction.plusSeconds(2));
+
         List<CommentService.CommentReaction> reactions = service.reactionsFor(List.of(comment.id()), bob)
                 .get(comment.id());
 
         assertThat(reactions).extracting(CommentService.CommentReaction::emoji).containsExactly("👍", "🎉");
-        assertThat(reactions.get(0).count()).isEqualTo(2);
-        assertThat(reactions.get(0).mine()).isTrue();
-        assertThat(reactions.get(1).count()).isEqualTo(1);
-        assertThat(reactions.get(1).mine()).isTrue();
+        assertThat(reactions.getFirst().count()).isEqualTo(2);
+        assertThat(reactions.getFirst().mine()).isTrue();
+        assertThat(reactions.getLast().count()).isEqualTo(1);
+        assertThat(reactions.getLast().mine()).isTrue();
 
         assertThat(service.toggleReaction(comment.id(), bob, "👍")).isFalse();
         reactions = service.reactionsFor(List.of(comment.id()), bob).get(comment.id());
         assertThat(reactions).extracting(CommentService.CommentReaction::emoji).containsExactly("👍", "🎉");
-        assertThat(reactions.get(0).count()).isEqualTo(1);
-        assertThat(reactions.get(0).mine()).isFalse();
+        assertThat(reactions.getFirst().count()).isEqualTo(1);
+        assertThat(reactions.getFirst().mine()).isFalse();
+    }
+
+    private void setReactionCreatedAt(UUID commentId, String userKey, String emoji, Instant createdAt) {
+        jdbi.useHandle(handle -> handle.createUpdate("UPDATE " + CommentService.REACTIONS_TABLE
+                        + " SET _created_at = :createdAt"
+                        + " WHERE _comment_id = :commentId AND _user_key = :userKey AND _emoji = :emoji")
+                .bind("createdAt", Timestamp.from(createdAt))
+                .bind("commentId", commentId)
+                .bind("userKey", userKey)
+                .bind("emoji", emoji)
+                .execute());
     }
 
     @Test

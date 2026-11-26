@@ -34,20 +34,24 @@ public class FieldHintResolver {
 
     private static final Config EMPTY = new Config(Map.of(), Map.of(), List.of(), List.of(), List.of());
 
-    public FieldHintResolver(List<EntityView> views) {
-        for (EntityView view : views) {
+    public FieldHintResolver(List<EntityView<?>> views) {
+        for (EntityView<?> view : views) {
             if (view.entity() == null) {
                 continue;
             }
-            EntityConfigBuilder<Object> cfg = new EntityConfigBuilder<>();
-            view.fields(cfg);
-            DetailSpec<Object> detail = new DetailSpec<>();
-            view.detail(detail);
             String profile = view.profile() == null ? DEFAULT : view.profile();
             configs.computeIfAbsent(view.entity(), k -> new LinkedHashMap<>())
-                    .put(profile, new Config(cfg.buildFieldHints(), cfg.buildActions(),
-                            cfg.buildRelatedLists(), cfg.buildValidations(), detail.build()));
+                    .put(profile, configFor(view));
         }
+    }
+
+    private static <E> Config configFor(EntityView<E> view) {
+        EntityConfigBuilder<E> cfg = new EntityConfigBuilder<>();
+        view.fields(cfg);
+        DetailSpec<E> detail = new DetailSpec<>();
+        view.detail(detail);
+        return new Config(cfg.buildFieldHints(), cfg.buildActions(), cfg.buildRelatedLists(),
+                cfg.buildValidations(), detail.build());
     }
 
     /** The profile's own view configuration if it declares one, else the default view's. */
@@ -74,6 +78,7 @@ public class FieldHintResolver {
     }
 
     /** Detail-header action placement overrides for an entity ({@code action -> primary|menu|hidden}). */
+    @SuppressWarnings("unused") // Public convenience overload for callers using the default profile.
     public Map<String, String> actionsFor(Class<?> entity) {
         return actionsFor(entity, null);
     }
@@ -105,6 +110,7 @@ public class FieldHintResolver {
     }
 
     /** Live form validators authored on an entity's default view, in declaration order. */
+    @SuppressWarnings("unused") // Public convenience overload for callers using the default profile.
     public List<FormValidation> validationsFor(Class<?> entity) {
         return validationsFor(entity, null);
     }
@@ -123,6 +129,7 @@ public class FieldHintResolver {
     }
 
     /** Record-surface custom widgets authored on an entity's default view, in display order. */
+    @SuppressWarnings("unused") // Public convenience overload for callers using the default profile.
     public List<DetailWidget> detailWidgetsFor(Class<?> entity) {
         return detailWidgetsFor(entity, null);
     }
