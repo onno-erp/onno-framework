@@ -26,6 +26,6 @@ public class TestSecretDocument extends DocumentObject implements Postable {
 
     @Override
     public void handlePosting(PostingContext context) {
-        // This fixture only exercises the posting write-back path.
+        // Posting must preserve the encrypted header and rows even without register movements.
     }
 }

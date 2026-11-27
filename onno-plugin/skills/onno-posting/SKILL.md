@@ -16,6 +16,9 @@ Posting is typed Java. There is no string-mapped posting rule or validation expr
 
 - Save the document and let it commit, then post. Do not wrap save + post in one Spring
   `@Transactional` method.
+- Post, repost, preview and chronological restoration do not invoke `beforeWrite` or save
+  document attributes/tabular sections. Compute persisted derived fields in the ordinary save
+  pipeline. Values changed by `beforePost`/`handlePosting` are temporary movement inputs only.
 - Posting atomically claims an existing live, unposted document. A repeated core `post(...)` is
   rejected before movements are persisted; use atomic `repost(...)` for an intentional recalculation.
 - Who may post is its own right: `@AccessControl(postRoles = …, unpostRoles = …)` narrows posting /
@@ -70,7 +73,8 @@ public class SalesOrder extends DocumentObject implements BeforeWriteHandler, Va
 Use `addReceipt` and `addExpense` on the typed register repository returned by
 `context.movements(RegisterClass.class)`.
 
-`PostingService.preview` runs hooks/rules and stages movements without persistence. It does not
+`PostingService.preview` runs `beforePost`, rules and `handlePosting` (never `beforeWrite`) and
+stages movements without persistence. Posting hooks must be safe to replay. It does not
 claim the document, run the final negative-balance guard, or simulate chronological restoration, so
 preview success is not a guarantee that post succeeds. Direct/core repeated `post` rejects;
 `PostingService.repost` reverses the old movements and writes the recalculated movements in one

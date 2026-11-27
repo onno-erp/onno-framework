@@ -337,10 +337,13 @@ vetoes the unpost and leaves the document posted. It does not run on a re-post o
 reverse/replay of later documents during chronological restoration.
 
 `PostingEngine` (`onno-framework/src/main/java/su/onno/posting/PostingEngine.java`) runs
-`beforeWrite` → `beforePost` → business-rule validation, then **inside its own JDBI transaction**
+`beforePost` → business-rule validation, then **inside its own JDBI transaction**
 atomically claims an existing unposted document, inserts movements, updates register totals, rejects
 negative `BALANCE` results on dimension tuples touched by that post unless the register declares
-`allowNegative = true`, and writes back computed fields. Posting a missing or already-posted document
+`allowNegative = true`. It does not call `beforeWrite` or write document attributes or tabular-section
+rows: save derived fields through the ordinary write pipeline and commit before posting. Temporary
+values computed by `beforePost` / `handlePosting` are used for movements only, including during
+re-posting and chronological restoration. Posting a missing or already-posted document
 is rejected before any movement is persisted, so retries cannot double-count registers. Inside that
 same transaction it appends `@DomainEvent` outbox rows; after commit it calls `afterPost` and
 publishes a Spring
@@ -375,7 +378,8 @@ Two semantics that bite every integration:
   inside `handlePosting`. The domain `AfterPostHandler.afterPost()` hook has no Spring access.
 
 `GET /api/documents/{name}/{id}/posting-preview` (and the MCP `posting_preview` tool) dry-run the
-movements without writing them.
+movements without writing them. It runs `beforePost`, business rules and `handlePosting`, but never
+`beforeWrite`; these posting hooks must be safe to replay and free of external side effects.
 
 ### Period close
 

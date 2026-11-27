@@ -33,6 +33,10 @@ Lifecycle hooks run on domain objects, not Spring beans. Do not `@Autowired` ins
 There is no framework `BusinessRuleSet` type. Share rules with an ordinary Java factory returning
 `List<BusinessRule>`.
 
+`BeforeWriteHandler` belongs to saving (and write-validation previews), never posting. Save and
+commit derived fields before posting. Post, repost, posting preview and chronological restoration
+run posting hooks/rules but do not save document attributes or tabular sections.
+
 Repository saves and generic UI/API/import/MCP commands invoke `AfterWriteHandler` after a
 successful persist. Validation previews skip it. It is an immediate lifecycle hook, not a universal
 after-commit callback; use `EntityChangedEvent` for Spring-managed side effects after a write.

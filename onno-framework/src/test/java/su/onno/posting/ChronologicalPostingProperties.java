@@ -106,8 +106,8 @@ class ChronologicalPostingProperties {
         assertThat(shuffled.totals()).as("final totals").isEqualTo(reference.totals());
         for (int i = 0; i < specs.size(); i++) {
             if (specs.get(i).issue()) {
-                assertThat(shuffled.storedCost(i)).as("stored cost of issue #%s (day %s)", i, specs.get(i).day())
-                        .isEqualByComparingTo(reference.storedCost(i));
+                assertThat(shuffled.postedCost(i)).as("posted cost of issue #%s (day %s)", i, specs.get(i).day())
+                        .isEqualByComparingTo(reference.postedCost(i));
             }
             assertThat(shuffled.activeMovements(i)).as("active movements of #%s", i)
                     .isEqualTo(reference.activeMovements(i));
@@ -169,12 +169,12 @@ class ChronologicalPostingProperties {
                     "product = :product", Map.of("product", product)).getOrDefault(List.of(product), List.of());
         }
 
-        BigDecimal storedCost(int index) {
-            UUID id = documents.get(index).getId();
-            return HARNESS.jdbi.withHandle(h -> h.createQuery(
-                            "SELECT cost FROM " + HARNESS.registry.getDocumentDescriptor(TestCostIssue.class).tableName()
-                                    + " WHERE _id = :id")
-                    .bind("id", id).mapTo(BigDecimal.class).one());
+        BigDecimal postedCost(int index) {
+            // Posting calculations belong to the register; the document header is not written.
+            return HARNESS.cost.getRecordsByDocument(documents.get(index).getId()).stream()
+                    .filter(TestCostRegister::isActive)
+                    .map(TestCostRegister::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
         }
 
         List<String> activeMovements(int index) {

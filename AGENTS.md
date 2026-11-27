@@ -396,6 +396,11 @@ JDBI handle as the posting mutation, so both commit or roll back together. Repos
 outbox rows likewise join the active Spring JDBC transaction. Unposting a draft or deleted
 document is rejected.
 
+Posting, re-posting, posting previews and chronological restoration never call `beforeWrite` or
+save document attributes/tabular sections. Save derived fields through the ordinary write pipeline
+and let it commit first. `beforePost` and `handlePosting` may compute temporary movement values;
+those values are not written back to the document, including documents restored chronologically.
+
 Catalog/document deletes are soft and run one command, `EntityDeleteService`, for typed repository
 deletes (`delete(...)`, `deleteById(...)`, bulk) and the generic REST/UI/import/MCP delete alike: it
 runs `BeforeDeleteHandler`, saves `deletionMark = true` (bumping the version) and publishes delete

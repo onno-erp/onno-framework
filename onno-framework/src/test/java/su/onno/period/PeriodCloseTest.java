@@ -193,7 +193,12 @@ class PeriodCloseTest {
         BigDecimal storedCost = jdbi.withHandle(h -> h.createQuery(
                         "SELECT cost FROM document_pc_issues WHERE _id = :id")
                 .bind("id", issue.getId()).mapTo(BigDecimal.class).one());
-        assertThat(storedCost).isEqualByComparingTo("50.00");
+        // The original posting calculated cost for its movement without saving it to the header.
+        assertThat(storedCost).isNull();
+        BigDecimal movementCost = jdbi.withHandle(h -> h.createQuery(
+                        "SELECT amount FROM register_pc_cost WHERE _document_ref = :id AND _active = TRUE")
+                .bind("id", issue.getId()).mapTo(BigDecimal.class).one());
+        assertThat(movementCost).isEqualByComparingTo("50.00");
 
         // Unposting the opening receipt would recalculate the closed issue as well.
         assertThatThrownBy(() -> engine.unpost(opening)).isInstanceOf(PeriodClosedException.class);

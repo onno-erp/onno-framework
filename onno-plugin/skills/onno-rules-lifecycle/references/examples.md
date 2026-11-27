@@ -116,7 +116,7 @@ final class InvoiceRules {
 | repository insert | id → `onFilling` → number → `beforeWrite` → validation → write → `afterWrite` |
 | UI/API/import/MCP create | number/date → entity → `onFilling` → `beforeWrite` → validation → write → `afterWrite` → `EntityChangedEvent` |
 | update | create sequence without `onFilling` |
-| post/preview | `beforeWrite` → `beforePost` → rules → `handlePosting` |
+| post/repost/posting-preview/chronological restoration | `beforePost` → rules → `handlePosting`; never `beforeWrite` or a document save |
 
 `AfterWriteHandler` runs after successful repository and generic-command persistence, but it is not
 a universal after-commit hook. Validation previews never call it.
@@ -169,7 +169,9 @@ Deletion is soft, but delete hooks still matter for business invariants.
 - Entity hooks have no Spring DI.
 - `AfterPostHandler` exists but has no Spring DI; prefer `DocumentPostedEvent`.
 - `onFilling()` must be idempotent.
-- `BeforeWriteHandler` runs before save and before post.
+- `BeforeWriteHandler` runs in the save/write-validation pipeline only. Save and commit derived
+  document fields before posting; posting hooks may calculate temporary movement values but never
+  write document attributes or tabular sections back.
 - An event listener is after-the-fact and cannot veto a write. Cross-record pre-write validation
   belongs in an application command/service, a command-integrated validator, or a deliberate
   application-context bridge from the hook. Use events only for side effects after success.
