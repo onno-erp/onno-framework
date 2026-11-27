@@ -183,6 +183,7 @@ measure aggregates movements (receipts add, expenses subtract); its `where` may 
 | `Sparkline`, `Gauge` | `measure`, `by` / `target` (number or measure) |
 | `Chart` | `measure` + `by` (`"status"`, `{ date: "week" }`), `type` (`bar`, `line`, `area`, `pie`, …), `splitBy`, `stacked`; or `series=[{ measure, type, label, color, axis }]` with `axes`, `thresholds`, `legend`, `curve`, `bucketMode` |
 | `TimeRange` | `presets={["7d","30d","all"]}`, `default`, `id` — every stat and chart on the page follows it |
+| Data the page already has | `Chart` takes `data={rows}` with `x` (a category, or an ISO date / `Date`, bucketed by `bucket` or by span) and `value`, or `series=[{ value, type, axis }]`; `splitBy` names a row key; `headline="total" \| "last" \| "none"`. `Stat` takes `value`, `previous`, `points`; `Sparkline` takes `points` (and `value`). No entity, no request, no shared time range: the page fetches and windows its rows itself |
 | `Calendar` | `entity`, `start`, `end` or `duration`, `allDay`, `itemTitle`/`subtitle`/`color` (record → value), `where`, `fill`; drag reschedules |
 | `Kanban` | `entity`, `by` (an enum or reference field, or `posted`), `where`, `caption`/`primary`/`secondary`/`amount`; drag sets the field (or posts/unposts) |
 | `RecentRecords` | `entity`, `where`, `limit`, `dateField`, `primary`/`secondary`/`amount`, `currency` |
