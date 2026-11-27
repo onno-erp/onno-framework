@@ -52,7 +52,7 @@ class EntitySurfaceDescriptorTest {
         assertThat(surface.columnNames()).contains("public_name").doesNotContain("api_key");
         assertThat(surface.filterableColumns()).doesNotContain("api_key");
         assertThat(surface.sortableColumns()).doesNotContain("api_key");
-        assertThat(surface.safeSort("api_key")).isEqualTo("_code");
+        assertThat(surface.safeSort("api_key")).isEqualTo("_description");
     }
 
     private static AttributeDescriptor attribute(String name, boolean secret) {

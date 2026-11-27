@@ -235,3 +235,7 @@ function OwnRecord({ descriptor }: { descriptor: FormDescriptor }) {
   return <RecordField form={form} field="note">{(field) => <textarea value={field.value ?? ""} disabled={field.disabled} onChange={(event) => field.onChange(event.target.value)} />}</RecordField>;
 }
 void OwnRecord;
+
+function OrderedSortExample({ list }: ListPageProps<"Orders">) {
+  return <EntityList list={list} defaultSort="status,-total" sort="total,status" />;
+}

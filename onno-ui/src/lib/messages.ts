@@ -507,6 +507,7 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "list.searchLabel": "Search",
   "list.all": "All",
   "list.sortBy": "Sort by {column}",
+  "list.sortPriority": "Sort priority {priority}",
   "list.tableView": "Table",
   "list.mapView": "Map",
   "list.customView": "Cards",

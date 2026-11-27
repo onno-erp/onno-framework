@@ -914,3 +914,24 @@ Catalog header and section replacements share one transaction, including the ver
 
 `POST /api/catalogs/{name}/{id}/duplicate` also copies tabular-section rows in their original order.
 The copy receives fresh record and row IDs; secret attributes are omitted, as for documents.
+
+### Sorting multiple list columns
+
+`/api/list/catalogs/{name}`, `/api/list/documents/{name}` and accumulation-register list feeds
+accept `sort=status,-total&dir=asc`: priority is left to right, each `-` key descends and `+`
+ascends. Unsigned keys follow `dir`; existing single-column requests keep their behavior.
+Logical and storage field names are accepted through metadata allowlists. Invalid/secret fields
+are ignored, duplicate fields keep their first position. With no valid keys, catalogs order by
+description ascending, documents by date descending, and movements by period.
+
+Text sorts ignore case, references sort by readable target labels, enumerations by display labels.
+Restricted references have a constant null sort key and reveal no private label through ordering
+or cursors. Native numbers, dates and booleans retain typed order. Null values follow non-null
+values in either direction. Criteria apply before LIMIT; ties use the row id or balance dimensions.
+Forward, backward and focus windows use the same complete tuple. Changing any criterion invalidates
+an old cursor (400); restart without a cursor. Sorting does not change stored values or payload labels.
+
+Date-only local date/time columns request a `:day` sort modifier (e.g.
+`sort=date:day,total&dir=asc`). The server seeks on `CAST(date_column AS DATE)` so
+hidden time and fractional seconds do not override later criteria within a day. Plain
+`sort=date,total` retains timestamp precision. The derived date is included in the cursor.

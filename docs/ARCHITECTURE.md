@@ -1256,3 +1256,26 @@ bounded to 20 MB. ConversationMessage Body is optional; its business rule requir
 Filesystem media keeps private filename/content-type sidecars across restarts.
 
 CRM audio playback lives in the inbox component; common audio formats are served inline by `MediaController`. Audio files use the existing media upload and message attachment flow. Channel delivery remains attachment-based.
+
+### Ordered list sorting
+
+Catalog/document and accumulation-register list feeds accept an ordered comma-separated `sort`,
+with `-`/`+` prefixes for per-field directions (for example `sort=status,-total&dir=asc`).
+Existing one-column `sort=total&dir=desc` requests remain supported. Columns resolve from logical
+names or storage names through metadata allowlists; secret fields are excluded. Unrecognized keys
+are ignored and duplicates retain their first position. Catalog fallback order is description
+ascending; documents retain date descending.
+
+`ListSortProjection` creates SQL cursor keys for case-folded text, visible reference names and
+enumeration labels before seeking/LIMIT. Target RBAC and record scopes apply to reference label
+lookups; masked targets share a null key. Internal projection columns are removed before returning
+rows. Native code/number, numeric, date and boolean values retain their storage ordering.
+Entity `KeysetWindow` supports mixed-direction tuples for forward, backward and focus reads; the
+complete tuple and feed context are encoded in v2 cursors. Unique id/dimension tails break ties.
+The UI stores the full ordered sequence, shows arrow/priority in each header, and cycles each key
+ascending → descending → removed. New keys append; the first explicit choice replaces defaults.
+
+Date-only local date/time columns request a `:day` sort modifier (e.g.
+`sort=date:day,total&dir=asc`). The server seeks on `CAST(date_column AS DATE)` so
+hidden time and fractional seconds do not override later criteria within a day. Plain
+`sort=date,total` retains timestamp precision. The derived date is included in the cursor.

@@ -36,6 +36,7 @@ public class RegisterQueryService {
     private final Jdbi jdbi;
     private final RefResolver refResolver;
     private final RecordScopeCompiler scopes;
+    private final AccessService access;
 
     /**
      * Row caps for the unfiltered register tabs. Movements/balance default to "show everything",
@@ -56,6 +57,7 @@ public class RegisterQueryService {
         this.registry = registry;
         this.jdbi = jdbi;
         this.scopes = scopes;
+        this.access = access;
         this.refResolver = new RefResolver(registry, jdbi, scopes, access);
     }
 
@@ -185,18 +187,21 @@ public class RegisterQueryService {
     public su.onno.query.KeysetWindow.Page<Map<String, Object>> movementsPage(AccessSubject subject,
             AccumulationRegisterDescriptor desc, String from, String to, ListFilter.Result filters,
             String whereJson, String sortColumn, boolean descending, String cursor, int limit) {
-        String col = safeSort(storageColumn(desc, sortColumn), "_period", movementColumns(desc));
+        var terms = ListSort.parse(sortColumn, descending, f -> storageColumn(desc, f), movementColumns(desc), "_period", descending);
+        var attributes = java.util.stream.Stream.concat(desc.dimensions().stream(), desc.resources().stream()).toList();
+        var sorting = new ListSortProjection(registry, scopes, access, subject, attributes, terms);
         ListFilter.Result scoped = withWhere(scope(subject, desc, desc.tableName()).andInto(normalizedFilters(filters)),
                 Where.compile(whereJson, movementWhereSchema(desc)));
         StringBuilder where = new StringBuilder("_active = true");
         appendMovementWindow(where, from, to);
         appendFilters(where, scoped);
-        var page = KeysetWindow.collection(jdbi, desc.tableName(), "*", where.toString(), q -> {
+        var page = KeysetWindow.collection(jdbi, sorting.source(desc.tableName(), desc.tableName()), "*", where.toString(), q -> {
+            sorting.bind(q);
             bindMovementWindow(q, from, to);
             bindFilters(q, scoped);
-        }, List.of(new su.onno.query.KeysetWindow.Order(col, descending),
-                new su.onno.query.KeysetWindow.Order("_id", descending)), cursor, limit,
+        }, sorting.order(List.of("_id"), descending), cursor, limit,
                 su.onno.query.Cursor.context("movements", desc.tableName(), from, to, scoped.sql(), scoped.bindings(), EntityQuerySupport.cursorSubject(subject)));
+        sorting.clean(page.rows());
         resolveAll(subject, desc, page.rows());
         return page;
     }
@@ -289,15 +294,15 @@ public class RegisterQueryService {
             boolean descending, String cursor, int limit, String asOf) {
         BalanceSource source = balanceSource(subject, desc,
                 withWhere(normalizedFilters(filters), Where.compile(whereJson, balanceWhereSchema(desc))), asOf);
-        List<su.onno.query.KeysetWindow.Order> order = new ArrayList<>();
-        String sort = safeSort(storageColumn(desc, sortColumn), null, balanceColumns(desc));
-        if (sort != null) order.add(new su.onno.query.KeysetWindow.Order(sort, descending));
-        for (var dim : desc.dimensions()) {
-            if (!dim.columnName().equals(sort)) order.add(new su.onno.query.KeysetWindow.Order(dim.columnName(), descending));
-        }
-        if (order.isEmpty()) order.add(new su.onno.query.KeysetWindow.Order(desc.resources().getFirst().columnName(), descending));
-        var page = KeysetWindow.collection(jdbi, source.from(), "*", source.where(), source.binder(),
-                order, cursor, limit, source.context());
+        var terms = ListSort.parse(sortColumn, descending, f -> storageColumn(desc, f), balanceColumns(desc), null, descending);
+        var attributes = java.util.stream.Stream.concat(desc.dimensions().stream(), desc.resources().stream()).toList();
+        var sorting = new ListSortProjection(registry, scopes, access, subject, attributes, terms);
+        List<String> unique = desc.dimensions().stream().map(AttributeDescriptor::columnName).toList();
+        if (unique.isEmpty()) unique = List.of(desc.resources().getFirst().columnName());
+        var page = KeysetWindow.collection(jdbi, sorting.source(source.from(), desc.totalsTableName()),
+                "*", source.where(), q -> { source.binder().accept(q); sorting.bind(q); },
+                sorting.order(unique, descending), cursor, limit, source.context());
+        sorting.clean(page.rows());
         resolveAll(subject, desc, page.rows());
         return page;
     }
@@ -395,11 +400,6 @@ public class RegisterQueryService {
         return cols;
     }
 
-    /** Validate a client-supplied sort column against an allow-list, falling back to {@code fallback}. */
-    private static String safeSort(String sortColumn,
-                                   String fallback, Set<String> allowed) {
-        return sortColumn != null && allowed.contains(sortColumn.toLowerCase()) ? sortColumn : fallback;
-    }
 
     /** Current balances (the materialized totals) matching {@code where} over the balance rows. */
     public List<Map<String, Object>> balance(AccessSubject subject, AccumulationRegisterDescriptor desc,

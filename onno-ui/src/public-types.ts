@@ -175,14 +175,14 @@ interface EntityListOptions<E extends EntityName = EntityName> extends Omit<List
   defaultView?: ListView;
   defaultGroupBy?: TopField<E>;
   /** `-` prefix for descending. */
-  defaultSort?: TopField<E> | `-${TopField<E>}`;
+  defaultSort?: TopField<E> | `-${TopField<E>}` | `${TopField<E>},${string}` | `-${TopField<E>},${string}`;
 
   view?: ListView;
   onViewChange?: (view: ListView) => void;
   /** The grouping field (`""` = flat). */
   groupBy?: TopField<E> | "";
   onGroupByChange?: (field: string) => void;
-  sort?: TopField<E> | `-${TopField<E>}` | "";
+  sort?: TopField<E> | `-${TopField<E>}` | `${TopField<E>},${string}` | `-${TopField<E>},${string}` | "";
   onSortChange?: (sort: string) => void;
   search?: string;
   onSearchChange?: (search: string) => void;
@@ -323,8 +323,8 @@ export interface ListCustomization<E extends EntityName = EntityName> {
   /** Which records the list shows, always: `{ open: true }`. */
   where?: Where<E>;
   groupBy?: TopField<E>;
-  /** `-` prefix for descending. */
-  sort?: TopField<E> | `-${TopField<E>}`;
+  /** Ordered comma-separated fields; `-` reverses an individual criterion. */
+  sort?: TopField<E> | `-${TopField<E>}` | `${TopField<E>},${string}` | `-${TopField<E>},${string}`;
   title?: string;
   /** What the "Group by" picker offers: `["status", { date: "month" }]`. */
   groupable?: ListGrouping<E>[];

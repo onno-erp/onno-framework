@@ -524,3 +524,16 @@ public API; `testFrontend` runs Vitest and is part of `check`.
 ./gradlew :onno-web-starter:buildFrontend
 ./gradlew :onno-web-starter:test
 ```
+
+### List sorting
+
+Catalog/document and accumulation-register list endpoints support ordered criteria such as
+`sort=status,-total&dir=asc`; the existing single-column `sort`/`dir` form also works. The default
+catalog order is description ascending. Text/ref/enum columns order by case-folded readable labels;
+other values keep native ordering, with nulls last. The full sort is part of the cursor context.
+See [the read API](../docs/HEADLESS_READ_API.md#sorting-multiple-list-columns).
+
+Date-only local date/time columns request a `:day` sort modifier (e.g.
+`sort=date:day,total&dir=asc`). The server seeks on `CAST(date_column AS DATE)` so
+hidden time and fractional seconds do not override later criteria within a day. Plain
+`sort=date,total` retains timestamp precision. The derived date is included in the cursor.

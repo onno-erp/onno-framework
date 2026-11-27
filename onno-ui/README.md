@@ -382,3 +382,24 @@ backend port 8080 unless configured; this repository's example explicitly defaul
 
 For framework contributors, the [component organization](DESIGN.md#component-organization) describes
 the internal folders. Application imports continue to use the public `@onno/ui` entry point.
+
+### Sorting table columns
+
+Click a column header to order ascending, click again for descending, and a third time to remove
+that criterion. Clicking another column appends it at the next priority. Header arrows show
+direction; header numbers show priority. Changing a direction keeps its priority; removing
+and re-adding a column places it last. The first explicit header choice replaces the initial sort.
+The same headers work in flat and grouped lists, embedded lists and reference-picker tables.
+
+Catalogs without an explicit sort open alphabetically by description. Text comparison ignores
+case; reference columns use the viewer-visible target label and enumerations use their labels,
+rather than UUIDs. Numbers, dates and booleans keep their native ordering. Nulls come last.
+Sorting runs on the server before pagination, including backward and focused windows.
+
+List customizations, `EntityList`'s `sort`/`defaultSort`, and its `onSortChange` support ordered
+comma-separated fields, e.g. `sort: "status,-total"` (status ascending, total descending).
+The full criteria sequence survives URL sharing, refresh, grouping and controlled state.
+
+When a date column explicitly displays only a calendar day (`format: { date: "medium" }`),
+its sort also compares local calendar days: subsequent criteria order records within the day.
+Date-time columns retain timestamp precision.

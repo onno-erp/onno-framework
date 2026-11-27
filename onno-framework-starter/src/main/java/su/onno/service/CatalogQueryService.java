@@ -205,7 +205,9 @@ public class CatalogQueryService {
         EntitySurfaceDescriptor surface = surface(desc);
         String fingerprint = su.onno.query.Cursor.context(EntityQuerySupport.cursorSubject(subject),
                 scopes.policies().fingerprint(subject), search, eq, in, like, prefix, ge, le, whereJson);
-        String col = surface.safeSort(sortColumn);
+        var terms = ListSort.parse(sortColumn, descending, surface::storageColumn, surface.sortableColumns(),
+                "_description", false);
+        var sorting = new ListSortProjection(registry, scopes, access, subject, desc.attributes(), terms);
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le,
                 surface.filterableColumns(), surface.numericColumns());
@@ -215,15 +217,17 @@ public class CatalogQueryService {
         String where = "_deletion_mark = false" + searchClause.and()
                 + filterClause(filter) + filterClause(wf) + scope.and();
 
-        KeysetWindow.Raw window = KeysetWindow.fetch(jdbi, desc.tableName(), where, q -> {
+        KeysetWindow.Raw window = KeysetWindow.fetch(jdbi, sorting.source(desc.tableName(), desc.tableName()), where, q -> {
+                    sorting.bind(q);
                     EntityQuerySupport.bindSearch(q, search);
                     searchClause.bind(q);
                     filter.bindings().forEach(q::bind);
                     wf.bindings().forEach(q::bind);
                     scope.bind(q);
-                }, col, descending, !surface.isNonNullableSort(col),
+                }, sorting.order(List.of("_id"), terms.getFirst().descending()),
                 new KeysetWindow.Position(cursorToken, beforeToken, focus), limit, fingerprint);
 
+        sorting.clean(window.rows());
         // Cursors were minted from the raw rows; ref-resolution/redaction reshape the maps after.
         List<Map<String, Object>> rows = window.rows();
         if (desc.hierarchical()) EntityQuerySupport.maskParents(jdbi, desc.tableName(), rows, scope);

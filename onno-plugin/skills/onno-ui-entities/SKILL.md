@@ -232,3 +232,8 @@ decision (it records on every write path), never a UI one.
 
 Read [references/examples.md](references/examples.md) for complete customizations from the
 example app.
+
+List `sort` also accepts ordered comma-separated fields, e.g. `"status,-total"`. Header clicks
+append criteria in priority order, cycle ascending → descending → removed, and show numbered arrows.
+Flat and grouped lists share the behavior. The first explicit header choice replaces initial sort.
+Catalog defaults use description ascending; refs/enums order by readable labels on the server.

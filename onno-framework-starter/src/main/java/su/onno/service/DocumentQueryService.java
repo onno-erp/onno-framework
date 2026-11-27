@@ -192,9 +192,9 @@ public class DocumentQueryService {
         EntitySurfaceDescriptor surface = surface(desc);
         String fingerprint = su.onno.query.Cursor.context(EntityQuerySupport.cursorSubject(subject),
                 scopes.policies().fingerprint(subject), search, eq, in, like, prefix, ge, le, whereJson, from, to);
-        boolean defaultSort = surface.isDefaultSort(sortColumn);
-        String col = surface.safeSort(sortColumn);
-        boolean dirDesc = defaultSort ? surface.defaultDescending() : descending;
+        var terms = ListSort.parse(sortColumn, descending, surface::storageColumn, surface.sortableColumns(),
+                surface.defaultSortColumn(), surface.defaultDescending());
+        var sorting = new ListSortProjection(registry, scopes, access, subject, desc.attributes(), terms);
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le,
                 surface.filterableColumns(), surface.numericColumns());
@@ -208,7 +208,8 @@ public class DocumentQueryService {
         if (!wf.isEmpty()) where.append(" AND (").append(wf.sql()).append(")");
         where.append(scope.and());
 
-        KeysetWindow.Raw window = KeysetWindow.fetch(jdbi, desc.tableName(), where.toString(), q -> {
+        KeysetWindow.Raw window = KeysetWindow.fetch(jdbi, sorting.source(desc.tableName(), desc.tableName()), where.toString(), q -> {
+                    sorting.bind(q);
                     EntityQuerySupport.bindSearch(q, search);
                     searchClause.bind(q);
                     if (from != null) q.bind("from", from);
@@ -216,9 +217,10 @@ public class DocumentQueryService {
                     filter.bindings().forEach(q::bind);
                     wf.bindings().forEach(q::bind);
                     scope.bind(q);
-                }, col, dirDesc, !surface.isNonNullableSort(col),
+                }, sorting.order(List.of("_id"), terms.getFirst().descending()),
                 new KeysetWindow.Position(cursorToken, beforeToken, focus), limit, fingerprint);
 
+        sorting.clean(window.rows());
         EntityQuerySupport.decorateRows(refResolver, desc.attributes(), window.rows(), subject);
         return window.decorated();
     }

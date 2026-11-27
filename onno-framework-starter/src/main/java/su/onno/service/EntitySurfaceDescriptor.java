@@ -24,7 +24,7 @@ record EntitySurfaceDescriptor(
 ) {
 
     static EntitySurfaceDescriptor catalog(CatalogDescriptor desc) {
-        Set<String> sortable = new LinkedHashSet<>(Set.of("_code", "_description"));
+        Set<String> sortable = new LinkedHashSet<>(Set.of("_id", "_code", "_description"));
         desc.attributes().stream()
                 .filter(a -> !a.secret())
                 .forEach(a -> sortable.add(a.columnName()));
@@ -36,7 +36,7 @@ record EntitySurfaceDescriptor(
                 Set.copyOf(sortable),
                 AggregateBuckets.CATALOG_SYSTEM_COLUMNS,
                 List.of("_code", "_description"),
-                "_code",
+                "_description",
                 false,
                 Set.of("_code"),
                 desc.javaClass()
@@ -44,7 +44,7 @@ record EntitySurfaceDescriptor(
     }
 
     static EntitySurfaceDescriptor document(DocumentDescriptor desc) {
-        Set<String> sortable = new LinkedHashSet<>(Set.of("_number", "_date", "_posted"));
+        Set<String> sortable = new LinkedHashSet<>(Set.of("_id", "_number", "_date", "_posted"));
         desc.attributes().stream()
                 .filter(a -> !a.secret())
                 .forEach(a -> sortable.add(a.columnName()));

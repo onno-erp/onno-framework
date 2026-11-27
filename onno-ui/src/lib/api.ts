@@ -29,14 +29,14 @@ import type { CommandDescriptor, CommandState, RecordActionDescriptor } from "./
 /** How many records a records read returns (default 500, the server's cap) and in which order. */
 export type RecordsPage = { limit?: number; sort?: string };
 
-/** A records read's query: `where` as JSON, `limit`, and `sort` (a field name, `-` prefix descending). */
+/** A records read's query: `where` as JSON, `limit`, and `sort` (ordered comma-separated field names, `-` prefix descending). */
 function recordsParams(where: WhereClause | undefined, page: RecordsPage | undefined): URLSearchParams {
   const params = new URLSearchParams({ limit: String(page?.limit ?? 500) });
   const w = whereParam(where);
   if (w) params.set("where", w);
   if (page?.sort) {
-    params.set("sort", page.sort.replace(/^-/, ""));
-    params.set("dir", page.sort.startsWith("-") ? "desc" : "asc");
+    params.set("sort", page.sort.includes(",") ? page.sort : page.sort.replace(/^-/, ""));
+    params.set("dir", !page.sort.includes(",") && page.sort.startsWith("-") ? "desc" : "asc");
   }
   return params;
 }

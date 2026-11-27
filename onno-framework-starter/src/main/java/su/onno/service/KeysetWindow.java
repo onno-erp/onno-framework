@@ -2,6 +2,7 @@ package su.onno.service;
 
 import su.onno.query.Cursor;
 import su.onno.query.Keyset;
+import su.onno.query.KeysetWindow.Order;
 
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.core.statement.Query;
@@ -71,13 +72,21 @@ public final class KeysetWindow {
     public static Raw fetch(Jdbi jdbi, String table, String where, Consumer<Query> binder,
                      String column, boolean descending, boolean nullable,
                      Position position, int limit, String fingerprint) {
+        return fetch(jdbi, table, where, binder,
+                List.of(new Order(column, descending, !nullable), Order.notNull("_id", descending)),
+                position, limit, fingerprint);
+    }
+
+    /** Fetch using a validated, unique tuple, with the same forward/backward/focus contract. */
+    public static Raw fetch(Jdbi jdbi, String table, String where, Consumer<Query> binder,
+                            List<Order> order, Position position, int limit, String fingerprint) {
         int lim = Keyset.clampLimit(limit);
-        Seek seek = new Seek(jdbi, table, where, binder, column, descending, nullable, fingerprint);
+        Seek seek = new Seek(jdbi, table, where, binder, order, fingerprint);
         if (present(position.cursorToken())) {
             return seek.forward(seek.decode(position.cursorToken()), lim);
         }
         if (present(position.beforeToken())) {
-            Cursor before = seek.decode(position.beforeToken());
+            List<Object> before = seek.decode(position.beforeToken());
             // A malformed position restarts from the top; a different cursor context is rejected.
             return before == null ? seek.forward(null, lim) : seek.backward(before, lim);
         }
@@ -118,100 +127,101 @@ public final class KeysetWindow {
 
     /** One window request's query context. */
     private record Seek(Jdbi jdbi, String table, String where, Consumer<Query> binder,
-                        String column, boolean descending, boolean nullable, String fingerprint) {
+                        List<Order> order, String fingerprint) {
 
-        Cursor decode(String token) {
+        List<Object> decode(String token) {
             try {
-                var decoded = Cursor.decodeWindow(token, cursorContext(), 2);
+                var decoded = Cursor.decodeWindow(token, cursorContext(), order.size());
                 if (decoded == null) return null;
                 boolean valid = jdbi.withHandle(h -> su.onno.query.KeysetWindow.validPosition(h, table, "*", where,
-                        binder, order(), decoded.values()));
-                if (!valid) return null;
-                return new Cursor(column, descending, decoded.values().get(0), (UUID) decoded.values().get(1));
+                        binder, order, decoded.values()));
+                return valid ? decoded.values() : null;
             } catch (Cursor.ScopeMismatchException e) {
-                throw new ServiceException(
-                        ServiceException.Status.BAD_REQUEST, e.getMessage(), e);
+                throw new ServiceException(ServiceException.Status.BAD_REQUEST, e.getMessage(), e);
             }
         }
 
-        Raw forward(Cursor cursor, int lim) {
-            List<Map<String, Object>> rows = select(Keyset.plan(column, descending, nullable, cursor), cursor, lim + 1);
+        Raw forward(List<Object> cursor, int lim) {
+            List<Map<String, Object>> rows = select(cursor, false, lim + 1);
             boolean hasMore = rows.size() > lim;
-            if (hasMore) {
-                rows.removeLast();
-            }
+            if (hasMore) rows.removeLast();
             return new Raw(rows, hasMore ? seal(rows.getLast()) : null, hasMore, null, false, null);
         }
 
-        Raw backward(Cursor before, int lim) {
-            List<Map<String, Object>> rows = select(Keyset.planBefore(column, descending, nullable, before), before,
-                    lim + 1);
+        Raw backward(List<Object> before, int lim) {
+            List<Map<String, Object>> rows = select(before, true, lim + 1);
             boolean hasPrevious = rows.size() > lim;
             if (hasPrevious) rows.removeLast();
             Collections.reverse(rows);
-            if (rows.isEmpty()) {
-                return new Raw(rows, null, false, null, false, null);
-            }
-            // The rows after this window are the ones the client already shows; nextCursor still
-            // continues forward from its last row, so the envelope keeps its usual meaning.
+            if (rows.isEmpty()) return new Raw(rows, null, false, null, false, null);
             return new Raw(rows, seal(rows.getLast()), true,
                     hasPrevious ? seal(rows.getFirst()) : null, hasPrevious, null);
         }
 
-        /** The window containing {@code id}, or {@code null} when the query cannot see that record. */
         Raw around(UUID id, int lim) {
-            java.util.Optional<Map<String, Object>> focused = jdbi.withHandle(h -> {
-                Query q = h.createQuery("SELECT * FROM " + table + " WHERE " + where
-                        + " AND _id = :" + FOCUS_BIND);
+            var focused = jdbi.withHandle(h -> {
+                Query q = h.createQuery("SELECT * FROM " + table + " WHERE " + where + " AND _id = :" + FOCUS_BIND);
                 binder.accept(q);
                 return q.bind(FOCUS_BIND, id).mapToMap().findOne();
             });
-            if (focused.isEmpty()) {
-                return null;
-            }
+            if (focused.isEmpty()) return null;
             Map<String, Object> focus = focused.get();
-            Cursor at = Cursor.from(column, descending, focus);
-            // Fetch up to a full limit on each side so a short tail can be balanced with more rows
-            // above (and vice versa), then split the limit around the record.
-            List<Map<String, Object>> after = select(Keyset.plan(column, descending, nullable, at), at, lim);
-            List<Map<String, Object>> before = select(Keyset.planBefore(column, descending, nullable, at), at, lim);
+            List<Object> at = values(focus);
+            List<Map<String, Object>> after = select(at, false, lim);
+            List<Map<String, Object>> before = select(at, true, lim);
             int beforeTake = Math.clamp(Math.max((lim - 1) / 2, lim - 1 - after.size()), 0, before.size());
             int afterTake = Math.min(after.size(), lim - 1 - beforeTake);
-
             List<Map<String, Object>> rows = new ArrayList<>();
             for (int i = beforeTake - 1; i >= 0; i--) rows.add(before.get(i));
             rows.add(focus);
             for (int i = 0; i < afterTake; i++) rows.add(after.get(i));
             boolean hasPrevious = before.size() > beforeTake;
             boolean hasMore = after.size() > afterTake;
-            return new Raw(rows,
-                    hasMore ? seal(rows.getLast()) : null, hasMore,
-                    hasPrevious ? seal(rows.getFirst()) : null, hasPrevious,
-                    id);
+            return new Raw(rows, hasMore ? seal(rows.getLast()) : null, hasMore,
+                    hasPrevious ? seal(rows.getFirst()) : null, hasPrevious, id);
         }
 
-        private List<su.onno.query.KeysetWindow.Order> order() {
-            return List.of(new su.onno.query.KeysetWindow.Order(column, descending),
-                    new su.onno.query.KeysetWindow.Order("_id", descending));
-        }
+        private String cursorContext() { return Cursor.context("entity", table, fingerprint, order); }
+        private List<Object> values(Map<String, Object> row) { return order.stream().map(o -> row.get(o.column())).toList(); }
+        private String seal(Map<String, Object> row) { return Cursor.encodeWindow(cursorContext(), values(row)); }
 
-        private String cursorContext() { return Cursor.context("entity", table, fingerprint, order()); }
-
-        private String seal(Map<String, Object> row) {
-            return Cursor.encodeWindow(cursorContext(), java.util.Arrays.asList(row.get(column), row.get("_id")));
-        }
-
-        private List<Map<String, Object>> select(Keyset.Plan plan, Cursor cursor, int n) {
+        private List<Map<String, Object>> select(List<Object> position, boolean before, int limit) {
+            List<String> ordering = new ArrayList<>();
+            List<String> alternatives = new ArrayList<>();
+            List<String> prefix = new ArrayList<>();
+            for (int i = 0; i < order.size(); i++) {
+                Order key = order.get(i);
+                String col = key.column();
+                if (!key.notNull()) ordering.add("CASE WHEN " + col + " IS NULL THEN 1 ELSE 0 END " + (before ? "DESC" : "ASC"));
+                ordering.add(col + (key.descending() != before ? " DESC" : " ASC"));
+                if (position == null) continue;
+                Object value = position.get(i);
+                String comparison;
+                if (value == null) comparison = before ? col + " IS NOT NULL" : "1 = 0";
+                else {
+                    comparison = col + (key.descending() != before ? " < " : " > ") + ":ks" + i;
+                    if (!before && !key.notNull()) comparison = "(" + col + " IS NULL OR " + comparison + ")";
+                }
+                List<String> branch = new ArrayList<>(prefix);
+                branch.add(comparison);
+                alternatives.add("(" + String.join(" AND ", branch) + ")");
+                prefix.add(value == null ? col + " IS NULL" : col + " = :ks" + i);
+            }
+            String comparison = String.join(" OR ", alternatives);
+            if (position != null && order.stream().allMatch(o -> o.notNull() && o.descending() == order.getFirst().descending())
+                    && position.stream().noneMatch(java.util.Objects::isNull)) {
+                List<String> binds = new ArrayList<>();
+                for (int i = 0; i < order.size(); i++) binds.add(":ks" + i);
+                comparison = "(" + String.join(", ", order.stream().map(Order::column).toList()) + ")"
+                        + (order.getFirst().descending() != before ? " < " : " > ") + "(" + String.join(", ", binds) + ")";
+            }
+            String seek = position == null ? "" : " AND (" + comparison + ")";
             return jdbi.withHandle(h -> {
-                Query q = h.createQuery("SELECT * FROM " + table
-                                + " WHERE " + where + plan.predicate()
-                                + " ORDER BY " + plan.orderBy()
-                                + " LIMIT :limit")
-                        .bind("limit", n);
+                Query q = h.createQuery("SELECT * FROM " + table + " WHERE (" + where + ")" + seek
+                        + " ORDER BY " + String.join(", ", ordering) + " LIMIT :ksLimit").bind("ksLimit", limit);
                 binder.accept(q);
-                if (plan.hasCursor()) {
-                    q.bind(Keyset.ID_BIND, cursor.id());
-                    if (plan.bindsValue()) q.bind(Keyset.VALUE_BIND, cursor.value());
+                if (position != null) for (int i = 0; i < position.size(); i++) {
+                    if (position.get(i) != null) q.bind("ks" + i, position.get(i));
                 }
                 return new ArrayList<>(q.mapToMap().list());
             });

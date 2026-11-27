@@ -1,3 +1,4 @@
+import { parseSort, serializeSort, type ListSort } from "../../lib/list-sort";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { EntityListView, type ListDescriptor, type ListStateProps, type ListView } from "../lists/entity-list";
 import { findEntity, useModel } from "../../lib/model-store";
@@ -146,8 +147,7 @@ export type EntityListProps = Omit<ListCustomization, "selection"> & Pick<Entity
   onSelectionChange?: (ids: string[]) => void;
 };
 
-const sortString = (s: { column: string | null; descending: boolean }, list: ListDescriptor) =>
-  s.column ? (s.descending ? "-" : "") + fieldFor(list, s.column) : "";
+const sortString = (s: ListSort, list: ListDescriptor) => serializeSort(s, c => fieldFor(list, c));
 
 /**
  * The full interactive list of a catalog/document — search, filters, grouping, selection, actions,
@@ -192,7 +192,7 @@ export function EntityList(props: EntityListProps) {
     const d: ListDescriptor = { ...customized, embedded: props.list ? customized.embedded : true };
     if (fill) d.fill = true;
     if (defaultGroupBy) d.defaultGroupBy = columnFor(d, defaultGroupBy);
-    if (defaultSort) d.sort = { column: columnFor(d, defaultSort.replace(/^-/, "")), descending: defaultSort.startsWith("-") };
+    if (defaultSort) d.sort = parseSort(defaultSort, false, field => columnFor(d, field));
     if (defaultView === "custom" && d.custom) d.custom = { ...d.custom, defaultView: true };
     if (defaultView === "map" && d.map) d.map = { ...d.map, defaultView: true };
     if (defaultView === "table") {
@@ -212,7 +212,7 @@ export function EntityList(props: EntityListProps) {
       groupBy: !p.onGroupByChange || p.groupBy === undefined ? undefined : p.groupBy && columnFor(list, p.groupBy),
       onGroupByChange: p.onGroupByChange && ((column) => p.onGroupByChange!(column && fieldFor(list, column))),
       sort: !p.onSortChange || p.sort === undefined ? undefined : p.sort
-        ? { column: columnFor(list, p.sort.replace(/^-/, "")), descending: p.sort.startsWith("-") }
+        ? parseSort(p.sort, false, field => columnFor(list, field))
         : { column: null, descending: false },
       onSortChange: p.onSortChange && ((s) => p.onSortChange!(sortString(s, list))),
       search: p.search,

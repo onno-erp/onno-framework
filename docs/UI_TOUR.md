@@ -295,3 +295,17 @@ The public SDK exposes the same `useRecordForm` controller used by the default r
 select-all callbacks in addition to the existing feed/pagination props. See [UI_SDK.md](UI_SDK.md)
 for the supported replacement boundaries. New extension work should share controllers between
 standard and custom views rather than duplicate business or lifecycle behavior.
+
+### Table sort priority
+
+Use column headers directly: ascending → descending → removed. A newly clicked column appends
+a criterion; header numbers show priority. For example, `Status ↑ 1` and `Total ↓ 2` puts statuses
+in label order and sorts totals descending within an equal status. Removing and re-adding a
+criterion moves it last. No extra toolbar controls are required. Flat, grouped and picker tables
+share this behavior. An initial `sort: "status,-total"` uses the same ordered field format.
+Catalog defaults use alphabetical descriptions; references and enums sort by visible labels
+without exposing names of inaccessible targets. Numeric/date/boolean values keep their own types.
+
+When a date column explicitly displays only a calendar day (`format: { date: "medium" }`),
+its sort also compares local calendar days: subsequent criteria order records within the day.
+Date-time columns retain timestamp precision.

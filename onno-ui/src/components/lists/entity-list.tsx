@@ -1,3 +1,4 @@
+import { dateOnlySort, parseSort, serializeSort, sortColumns, toggleListSort, writeSortParams, type ListSort } from "../../lib/list-sort";
 import { openRoute } from "../../lib/navigation";
 import { ResponsiveActionPanel } from "../ui/responsive-action-panel";
 import { nearestScrollAncestor, trailingPaddingTo } from "../../lib/fill-height";
@@ -269,8 +270,8 @@ export type ListStateProps = {
   /** The grouping column ("" = flat). */
   groupBy?: string;
   onGroupByChange?: (column: string) => void;
-  sort?: { column: string | null; descending: boolean };
-  onSortChange?: (sort: { column: string | null; descending: boolean }) => void;
+  sort?: ListSort;
+  onSortChange?: (sort: ListSort) => void;
   search?: string;
   onSearchChange?: (search: string) => void;
   /** Selected record ids. */
@@ -284,7 +285,7 @@ export type ListDescriptor = {
   title: string;
   columns: ListColumn[];
   searchable: boolean;
-  sort: { column: string | null; descending: boolean };
+  sort: ListSort;
   newUrl: string | null;
   /**
    * The viewer's write access on the entity (server-stamped from RBAC). When false the list
@@ -1708,10 +1709,17 @@ export function EntityListView({
   const [viewportH, setViewportH] = useState(0);
   // Sort + search seed from the URL on a standalone list (see urlSynced), so a shared/bookmarked link
   // restores them; an embedded list starts from the descriptor default.
-  const [sort, setSort] = useControllable<{ column: string | null; descending: boolean }>(state?.sort, state?.onSortChange, () => {
+  const [sort, setSort] = useControllable<ListSort>(state?.sort, state?.onSortChange, () => {
     const col = urlSynced ? initialParams.get("sort") : null;
-    return col ? { column: col, descending: initialParams.get("dir") === "desc" } : list.sort;
+    return col !== null ? parseSort(col, initialParams.get("dir") === "desc") : list.sort;
   });
+  const sortColumnForQuery = (column: string) => {
+    const definition = list.columns.find(c => c.columnName === column);
+    return definition && !definition.render && dateOnlySort(definition.format) ? `${column}:day` : column;
+  };
+  const sortKey = serializeSort(sort, sortColumnForQuery);
+  const explicitSort = useRef(!!state?.sort || !!(urlSynced && initialParams.get("sort")));
+
   const [query, setQuery] = useControllable(state?.search, state?.onSearchChange, () => (urlSynced ? initialParams.get("q") ?? "" : ""));
   const [debouncedSearch, setDebounced] = useState(() => (urlSynced ? initialParams.get("q") ?? "" : ""));
   // The picker already debounces its search together with its folder constraint. Read both
@@ -1932,9 +1940,9 @@ export function EntityListView({
       k === "q" || k === "sort" || k === "dir" || k === "view" || k.startsWith("f.");
     for (const k of new Set([...params.keys()].filter(managed))) params.delete(k);
     if (debounced) params.set("q", debounced);
-    if (sort.column && (sort.column !== list.sort.column || sort.descending !== list.sort.descending)) {
-      params.set("sort", sort.column);
-      params.set("dir", sort.descending ? "desc" : "asc");
+    if (sortKey !== serializeSort(list.sort, sortColumnForQuery)) {
+      // Keep an explicit empty sort when the viewer removed a configured default.
+      writeSortParams(params, sort, sortColumnForQuery);
     }
     const defaultViewName = defaultViewOf(list);
     const currentViewName: ListView =
@@ -1962,7 +1970,7 @@ export function EntityListView({
       qs ? `${window.location.pathname}?${qs}` : window.location.pathname
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlSynced, filterSig, debounced, sort.column, sort.descending, mapMode, customMode, calendarMode, timelineMode]);
+  }, [urlSynced, filterSig, debounced, sortKey, mapMode, customMode, calendarMode, timelineMode]);
 
   // How many filters currently constrain the query — drives the "Clear all" affordance on the
   // filter bar. A filter counts as active only when it actually narrows rows (a picked option, some
@@ -2049,9 +2057,8 @@ export function EntityListView({
     // A default-view base filter (PageBuilder.list) is a server-side constraint applied on top of the
     // viewer's own filters/search — sent on every window fetch, grouped or flat.
     if (list.baseWhere && Object.keys(list.baseWhere).length) params.set("where", JSON.stringify(list.baseWhere));
-    if (sort.column) {
-      params.set("sort", sort.column);
-      params.set("dir", sort.descending ? "desc" : "asc");
+    if (sortKey) {
+      writeSortParams(params, sort, sortColumnForQuery);
     }
     if (debounced) params.set("q", debounced);
     // Declarative filters → eq/in/like/prefix/ge/le params (column,value); the server re-validates
@@ -2074,7 +2081,7 @@ export function EntityListView({
     }
     return params;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryParamSig, baseWhereSig, sort.column, sort.descending, debounced, filters, filterSig]);
+  }, [queryParamSig, baseWhereSig, sortKey, debounced, filters, filterSig]);
 
   // The shared query (sort + search + filters) the grouped view fetches groups/rows with, as a
   // string so its effects can depend on it.
@@ -2285,7 +2292,7 @@ export function EntityListView({
     setHasMore(true);
     loadInitial(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedBase, pageSize, sort.column, sort.descending, debounced, filterSig, queryParamSig, baseWhereSig]);
+  }, [feedBase, pageSize, sortKey, debounced, filterSig, queryParamSig, baseWhereSig]);
 
   useEffect(() => { if (refreshKey) loadInitial(true); }, [refreshKey, loadInitial]);
   useEffect(() => { if (queuedRefresh) loadInitial(true); }, [queuedRefresh]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2558,7 +2565,7 @@ export function EntityListView({
   // A changed query invalidates the selection's row set — indices shift, rows drop out.
   useEffect(() => {
     clearSelection();
-  }, [kind, name, feedBase, debounced, filterSig, queryParamSig, baseWhereSig, sort.column, sort.descending, groupBy, granularity, view, clearSelection]);
+  }, [kind, name, feedBase, debounced, filterSig, queryParamSig, baseWhereSig, sortKey, groupBy, granularity, view, clearSelection]);
 
   // A confirmation applies only to the exact selection that armed it.
   useEffect(() => { setArmedDelete(false); }, [selected]);
@@ -2822,14 +2829,53 @@ export function EntityListView({
     [openable, kind, name]
   );
 
-  // Cycle a column through three states on repeated clicks: ascending → descending → off
-  // (off clears the sort entirely, so the list falls back to the server's default order).
+  // The first explicit click replaces the initial order; subsequent columns append in priority order.
   const toggleSort = (col: string) => {
-    setSort((s) => {
-      if (s.column !== col) return { column: col, descending: false }; // new column → ascending
-      if (!s.descending) return { column: col, descending: true }; // ascending → descending
-      return { column: null, descending: false }; // descending → off
-    });
+    const initial = !explicitSort.current;
+    explicitSort.current = true;
+    setSort(s => initial && s.column !== col
+      ? { column: col, descending: false }
+      : toggleListSort(s, col));
+  };
+
+  const renderColumnHeader = (c: ListColumn) => {
+    const priority = sortColumns(sort).findIndex(s => s.column === c.columnName);
+    const active = priority >= 0;
+    const criterion = sortColumns(sort)[priority];
+    if (c.sortable === false) {
+      return (
+        <div key={c.columnName} className="flex min-w-0 items-center gap-1">
+          <span className="truncate text-xs font-medium text-muted-foreground">{c.label}</span>
+          <HintIcon text={c.hint} size={13} />
+        </div>
+      );
+    }
+    // The help "?" sits beside (not inside) the sort button — nesting buttons is
+    // invalid HTML and would make the hint trigger a sort.
+    return (
+      <div key={c.columnName} className="flex min-w-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={() => toggleSort(c.columnName)}
+          className={cn(
+            "flex min-w-0 items-center gap-1 truncate text-left text-xs font-medium",
+            active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+          )}
+          aria-label={c.label}
+          aria-description={active ? t("list.sortPriority", { priority: String(priority + 1) }) : undefined}
+          title={t("list.sortBy", { column: c.label })}
+        >
+          <span className="truncate">{c.label}</span>
+          {active ? (
+            criterion.descending ? <ArrowDown className="size-3 shrink-0 text-primary" /> : <ArrowUp className="size-3 shrink-0 text-primary" />
+          ) : (
+            <ChevronsUpDown className="size-3 shrink-0 opacity-30" />
+          )}
+          {active ? <span className="tabular-nums" aria-label={t("list.sortPriority", { priority: String(priority + 1) })}>{priority + 1}</span> : null}
+        </button>
+        <HintIcon text={c.hint} size={13} />
+      </div>
+    );
   };
 
   // ⌘C / ⌘V on rows. Copy writes two clipboard flavours from the native `copy` event: text/plain
@@ -3528,6 +3574,7 @@ export function EntityListView({
         // Grouped view: collapsible GROUP BY headers with subtotals; a group's rows lazily load
         // through the same feed. Shares the toolbar's search/filters/sort via groupParamsBase.
         <GroupedList
+          renderColumnHeader={renderColumnHeader}
           rowStyle={list.rowStyle}
           feedBase={feedBase}
           kind={kind}
@@ -3598,42 +3645,7 @@ export function EntityListView({
                 checked={allSelectionState}
                 onChange={toggleAllSelection}
               /> : null}
-              {columns.map((c) => {
-                const active = sort.column === c.columnName;
-                if (c.sortable === false) {
-                  return (
-                    <div key={c.columnName} className="flex min-w-0 items-center gap-1">
-                      <span className="truncate text-xs font-medium text-muted-foreground">{c.label}</span>
-                      <HintIcon text={c.hint} size={13} />
-                    </div>
-                  );
-                }
-                // The help "?" sits beside (not inside) the sort button — nesting buttons is
-                // invalid HTML and would make the hint trigger a sort.
-                return (
-                  <div key={c.columnName} className="flex min-w-0 items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => toggleSort(c.columnName)}
-                      className={cn(
-                        "flex min-w-0 items-center gap-1 truncate text-left text-xs font-medium",
-                        // The sorted column carries the brand (accent = state): which column orders
-                        // the list. Inactive headers stay muted and brighten on hover.
-                        active ? "text-primary" : "text-muted-foreground hover:text-foreground"
-                      )}
-                      title={t("list.sortBy", { column: c.label })}
-                    >
-                      <span className="truncate">{c.label}</span>
-                      {active ? (
-                        sort.descending ? <ArrowDown className="size-3 shrink-0" /> : <ArrowUp className="size-3 shrink-0" />
-                      ) : (
-                        <ChevronsUpDown className="size-3 shrink-0 opacity-30" />
-                      )}
-                    </button>
-                    <HintIcon text={c.hint} size={13} />
-                  </div>
-                );
-              })}
+              {columns.map(renderColumnHeader)}
               {rowButtonCommands.length ? <span aria-hidden="true" /> : null}
             </div>
 

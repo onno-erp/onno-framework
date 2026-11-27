@@ -1609,3 +1609,10 @@ Every tuple cursor needs a unique trailing tiebreaker (id), and
 its feed context must include only filter values, never transport params (`cursor`, `limit`).
 The cursor-only collection contract
 and bounded-selector exceptions are specified only in docs/HEADLESS_READ_API.md.
+
+Table header sorting uses click order as priority: ascending → descending → removed; new columns
+append, and numbered arrows expose priority. Initial configured orders are replaced by the first
+explicit criterion. List sort strings may contain comma-separated fields with individual `-`
+prefixes. Keep all criteria in route/controlled state and server cursors. Catalog default order
+is description ascending; reference/enum sorting uses readable labels before SQL LIMIT, with
+target authorization applied to label lookup. Never sort only the loaded browser window.

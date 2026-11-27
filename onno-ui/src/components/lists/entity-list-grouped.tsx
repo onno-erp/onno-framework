@@ -1,7 +1,7 @@
 import { useEntityChanges } from "../../lib/query";
 import { openRoute } from "../../lib/navigation";
 import { ListSelectionCheckbox, selectLoaded } from "./list-selection-checkbox";
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type Ref, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type Ref, type SetStateAction } from "react";
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { cn, enumPillStyle, rowStyleClass } from "../../lib/utils";
 import { formatValue } from "../../lib/cell-format";
@@ -70,7 +70,9 @@ export function GroupedList({
   openRowMenu,
   selectMode,
   rowStyle,
+  renderColumnHeader,
 }: {
+  renderColumnHeader?: (column: ListColumn) => ReactNode;
   /** The app's conditional row tint. */
   rowStyle?: (row: EntityRecord) => RowTone;
   feedBase: string;
@@ -315,7 +317,7 @@ export function GroupedList({
         style={surfaceMode ? undefined : { maxHeight: scrollCap }}
       >
         <div className="w-full" style={{ minWidth: minTableWidth }}>
-          {/* column labels (non-interactive in grouped view — sort still comes from the toolbar) */}
+          {/* Shared clickable headers keep sorting available while rows are grouped. */}
           <div
             className={cn("sticky top-0 z-10 grid items-center gap-3 rounded-t-card border-b border-border bg-card py-2.5", leftPad)}
             style={{ gridTemplateColumns: template }}
@@ -325,7 +327,7 @@ export function GroupedList({
               checked={allSelectionState}
               onChange={toggleAllSelection}
             /> : null}
-            {columns.map((c) => (
+            {columns.map((c) => renderColumnHeader ? renderColumnHeader(c) : (
               <span key={c.columnName} className="truncate text-xs font-medium text-muted-foreground">
                 {c.label}
               </span>

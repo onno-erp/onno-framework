@@ -533,6 +533,7 @@ public final class UiMessages {
         d.put("list.searchLabel", "Search");
         d.put("list.all", "All");
         d.put("list.sortBy", "Sort by {column}");
+        d.put("list.sortPriority", "Sort priority {priority}");
         d.put("list.tableView", "Table");
         d.put("list.mapView", "Map");
         // Fallback toggle label for a custom list view (`list.custom`) without a label.

@@ -1,3 +1,4 @@
+import { parseSort } from "./list-sort";
 import type { IconSource } from "./icons";
 import type { ComponentType, ReactNode } from "react";
 import type { ListDescriptor, ListRendererProps } from "../components/lists/entity-list";
@@ -266,7 +267,7 @@ export function applyListOptions(list: ListDescriptor, o: ListCustomization): Li
   raw.columns = columns;
   if (o.where && Object.keys(o.where).length) raw.baseWhere = list.baseWhere ? { and: [list.baseWhere, o.where] } : o.where;
   if (o.groupBy) raw.defaultGroupBy = columnFor(list, o.groupBy);
-  if (o.sort) raw.sort = { column: columnFor(list, o.sort.replace(/^-/, "")), descending: o.sort.startsWith("-") };
+  if (o.sort) raw.sort = parseSort(o.sort, false, field => columnFor(list, field));
   if (o.title) raw.title = o.title;
   if (o.groupable) {
     raw.groupable = o.groupable.map((g) => {
