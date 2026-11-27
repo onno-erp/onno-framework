@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useCustomizedForm, useCustomizedList, useEntityCustomizations } from "../lib/app-config";
 import { EntityListView, type ListDescriptor } from "../components/lists/entity-list";
 import { RecordForm, formTitle, type FormDescriptor } from "../components/entities/record-form";
+import { InformationRegisterSurface } from "../components/lists/information-register-surface";
 import { RegisterSurface } from "../components/lists/register-surface";
 import { CommentThread } from "../components/collaboration/comments";
 import type { ViewModel, ViewNode } from "../lib/view-types";
@@ -34,6 +35,8 @@ export function RouteView({ view }: RouteViewProps) {
     <div className={cn("flex w-full flex-col gap-2", record && "p-4")}>
       {"form" in view ? (
         <RecordView form={view.form as unknown as FormDescriptor} comments={model.features.comments} />
+      ) : "informationRegister" in view ? (
+        <Boundary label="Information register"><InformationRegisterSurface register={view.informationRegister as never} /></Boundary>
       ) : "list" in view ? (
         <ViewNodeView node={{ type: "list", list: view.list }} />
       ) : (

@@ -916,3 +916,18 @@ Catalog header and section replacements share one transaction, including the ver
 
 `POST /api/catalogs/{name}/{id}/duplicate` also copies tabular-section rows in their original order.
 The copy receives fresh record and row IDs; secret attributes are omitted, as for documents.
+
+### Standard information-register UI feed
+
+`GET /api/ui/view/information-registers/{name}` returns `{informationRegister: {periodic, list}}`.
+`GET /api/list/information-registers/{name}` supplies `{rows, nextCursor, hasMore, total?}` in the
+same logical vocabulary as the information-register REST API. It accepts `cursor`, `limit`,
+`sort` (a non-secret storage column), `dir`, `where`, the standard list `eq/in/like/prefix/ge/le`
+filters and `count=exact`. Optional `at` selects the latest record per dimension tuple on a periodic
+register; value filters apply after slicing. The slice is paged and does not use the legacy
+5000-row slice cap. Defaults are period then ID descending (periodic) or ID descending.
+Read roles and dimension record policies apply to both the surface and every feed window;
+cursors are bound to filters, date, sort and caller. No write or record-detail surface is provided.
+The canonical `/api/information-registers/{name}/records` and `/slice-last` contracts are unchanged.
+
+Information-register reference columns retain the standard storage-ID sort order.

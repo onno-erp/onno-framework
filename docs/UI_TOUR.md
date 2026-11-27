@@ -302,3 +302,12 @@ The public SDK exposes the same `useRecordForm` controller used by the default r
 select-all callbacks in addition to the existing feed/pagination props. See [UI_SDK.md](UI_SDK.md)
 for the supported replacement boundaries. New extension work should share controllers between
 standard and custom views rather than duplicate business or lifecycle behavior.
+
+### Information-register lists
+
+Open `/information-registers/{name}` to inspect an information register without writing a custom
+page. The model supplies its route in `informationRegisters`; default navigation includes readable
+registers, and authored navigation resolves them by logical name. Entity list customizations
+(columns, formats, filters and initial sort) apply to the read-only table. Periodic registers offer
+a History view and a Latest values view at the end of a selected local calendar date.
+The latter selects the last stored value per dimension tuple before applying value filters.

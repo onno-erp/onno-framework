@@ -67,6 +67,10 @@ class InformationRegisterControllerTest {
     private final AccessSubject subject = AccessSubject.user("customer", Set.of("CUSTOMER")).withRecordId(owner);
     private final ObjectMapper json = new ObjectMapper();
     private GenericInformationRegisterController controller;
+    private InformationRegisterListController listController;
+    private Jdbi database;
+    private String clientTable;
+    private String historyTable;
 
     @BeforeEach
     void setUp() {
@@ -81,6 +85,9 @@ class InformationRegisterControllerTest {
         registry.registerCatalog(clients);
         registry.registerInformationRegister(history);
         registry.registerInformationRegister(current);
+        database = jdbi;
+        clientTable = clients.tableName();
+        historyTable = history.tableName();
         new SchemaGenerator(registry).execute(jdbi);
         var policies = new RecordPolicies(registry, List.of(
                 RecordAccessPolicy.forCatalog(Client.class).appliesTo("CUSTOMER")
@@ -88,8 +95,10 @@ class InformationRegisterControllerTest {
                 RecordAccessPolicy.forRegister(Price.class).appliesTo("CUSTOMER").read(RecordScope.via("customer")),
                 RecordAccessPolicy.forRegister(CurrentPrice.class).appliesTo("CUSTOMER").read(RecordScope.via("customer"))));
         var access = new AccessService(registry);
-        controller = new GenericInformationRegisterController(
-                new InformationRegisterQueryService(registry, jdbi, new RecordScopeCompiler(policies), access), access);
+        var query = new InformationRegisterQueryService(registry, jdbi, new RecordScopeCompiler(policies), access);
+        controller = new GenericInformationRegisterController(query, access);
+        listController = new InformationRegisterListController(registry, query, access,
+                org.mockito.Mockito.mock(ResolvedMetadataService.class), new UiMessages(Map.of()));
         jdbi.useHandle(h -> {
             for (UUID id : List.of(owner, other)) {
                 h.createUpdate("INSERT INTO " + clients.tableName()
@@ -201,6 +210,147 @@ class InformationRegisterControllerTest {
         mvc(subject).perform(get(slice).param("customer", owner.toString())).andExpect(status().isBadRequest());
     }
 
+    @Test
+    void standardListSortsFiltersCountsAndPagesWithinTheRecordScope() throws Exception {
+        String url = "/api/list/information-registers/price_history";
+        var first = page(subject, get(url).param("sort", "amount").param("dir", "asc")
+                .param("limit", "1").param("ge", "amount,20").param("count", "exact"));
+        assertThat(first).containsEntry("total", 4).containsEntry("hasMore", true);
+        assertThat(rows(first)).singleElement().satisfies(row -> assertThat(row).containsEntry("amount", 20.0)
+                .containsEntry("token", "__SECRET_SET__").doesNotContainKey("_id"));
+        var second = page(subject, get(url).param("sort", "amount").param("dir", "asc")
+                .param("limit", "1").param("ge", "amount,20")
+                .param("cursor", (String) first.get("nextCursor")));
+        assertThat(rows(second).getFirst()).containsEntry("amount", 30.0);
+        mvc(AccessSubject.system()).perform(get(url).param("sort", "amount").param("dir", "asc")
+                .param("ge", "amount,20").param("cursor", (String) first.get("nextCursor")))
+                .andExpect(status().isBadRequest());
+        mvc(subject).perform(get(url).param("sort", "token")).andExpect(status().isBadRequest());
+        mvc(AccessSubject.user("outsider", Set.of())).perform(get(url)).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void datedListIncludesTheLastMicrosecondButExcludesTheNextMidnight() throws Exception {
+        database.useHandle(h -> {
+            String[] periods = {"2024-03-15T23:59:59.999999", "2024-03-16T00:00:00"};
+            for (int i = 0; i < periods.length; i++) {
+                h.createUpdate("INSERT INTO " + historyTable
+                                + " (_id, _period, customer, region, amount) VALUES (:id, :period, :customer, 'Boundary', :amount)")
+                        .bind("id", UUID.randomUUID()).bind("period", LocalDateTime.parse(periods[i]))
+                        .bind("customer", owner).bind("amount", 81 + i).execute();
+            }
+        });
+        String url = "/api/list/information-registers/price_history";
+        assertThat(rows(page(subject, get(url).param("eq", "region,Boundary")
+                .param("at", "2024-03-15T23:59:59.999999"))))
+                .singleElement().satisfies(row -> assertThat(row).containsEntry("amount", 81.0));
+        assertThat(rows(page(subject, get(url).param("eq", "region,Boundary")
+                .param("at", "2024-03-16T00:00:00"))))
+                .singleElement().satisfies(row -> assertThat(row).containsEntry("amount", 82.0));
+    }
+
+    @Test
+    void standardListPagesLatestValuesAndFiltersAfterSlicing() throws Exception {
+        String url = "/api/list/information-registers/price_history";
+        var first = page(subject, get(url).param("at", "2024-03-15T00:00:00")
+                .param("sort", "amount").param("dir", "asc").param("limit", "1").param("count", "exact"));
+        assertThat(first).containsEntry("total", 2).containsEntry("hasMore", true);
+        assertThat(rows(first).getFirst()).containsEntry("amount", 20.0);
+        var second = page(subject, get(url).param("at", "2024-03-15T00:00:00")
+                .param("sort", "amount").param("dir", "asc").param("limit", "1")
+                .param("cursor", (String) first.get("nextCursor")));
+        assertThat(rows(second).getFirst()).containsEntry("amount", 30.0);
+        assertThat(second).containsEntry("hasMore", false);
+        assertThat(rows(page(subject, get(url).param("at", "2024-03-15T00:00:00")
+                .param("le", "amount,25")))).singleElement()
+                .satisfies(row -> assertThat(row).containsEntry("region", "South"));
+        assertThat(rows(page(subject, get(url).param("at", "2024-01-01T00:00:00")))).isEmpty();
+        var current = page(subject, get("/api/list/information-registers/current_prices"));
+        assertThat(rows(current)).singleElement().satisfies(row -> assertThat(row).doesNotContainKey("period"));
+        mvc(subject).perform(get("/api/list/information-registers/current_prices").param("at", "2024-01-01T00:00:00"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void selectedReferenceFilterWorksInHistoryAndLatestValues() throws Exception {
+        String url = "/api/list/information-registers/price_history";
+        for (boolean sliced : List.of(false, true)) {
+            var request = get(url).param("in", "customer," + owner).param("count", "exact");
+            if (sliced) request.param("at", "2024-03-15T23:59:59");
+            var result = page(subject, request);
+            assertThat(result).containsEntry("total", sliced ? 2 : 5);
+            assertThat(rows(result)).allSatisfy(row -> assertThat(row).containsEntry("customer", owner.toString()));
+            var hidden = get(url).param("in", "customer," + other);
+            if (sliced) hidden.param("at", "2024-03-15T23:59:59");
+            assertThat(rows(page(subject, hidden))).isEmpty();
+        }
+    }
+
+    @Test
+    void referenceColumnsKeepIdOrderAcrossPagesInHistoryAndDatedSlices() throws Exception {
+        String[] names = {"Zulu", "alpha", "Alpha", "beta", ""};
+        database.useHandle(h -> {
+            for (int i = 0; i < names.length; i++) {
+                UUID client = new UUID(0, 100 + i);
+                h.createUpdate("INSERT INTO " + clientTable
+                                + " (_id, _code, _description, owner) VALUES (:id, :code, :label, :owner)")
+                        .bind("id", client).bind("code", i == 4 ? "Aardvark" : "C" + i)
+                        .bind("label", names[i]).bind("owner", owner).execute();
+                for (int day = 1; day <= 2; day++) {
+                    h.createUpdate("INSERT INTO " + historyTable
+                                    + " (_id, _period, customer, region, amount) VALUES (:id, :period, :client, 'Sort', :price)")
+                            .bind("id", new UUID(0, 1000 + i * 10 + day))
+                            .bind("period", LocalDateTime.of(2024, 3, day, 0, 0))
+                            .bind("client", client).bind("price", day).execute();
+                }
+            }
+        });
+        String url = "/api/list/information-registers/price_history";
+        for (boolean sliced : List.of(false, true)) {
+            for (String direction : List.of("asc", "desc")) {
+                var found = new java.util.ArrayList<Map<String, Object>>();
+                String cursor = null;
+                do {
+                    var request = get(url).param("sort", "customer").param("dir", direction)
+                            .param("eq", "region,Sort").param("limit", "1");
+                    if (sliced) request.param("at", "2024-03-01T23:59:59");
+                    if (cursor != null) request.param("cursor", cursor);
+                    var window = page(subject, request);
+                    found.addAll(rows(window));
+                    assertThat(found.size()).isLessThanOrEqualTo(10);
+                    cursor = (String) window.get("nextCursor");
+                } while (cursor != null);
+                assertThat(found).hasSize(sliced ? 5 : 10);
+                assertThat(found.stream().map(r -> r.get("id")).distinct().count()).isEqualTo(found.size());
+                var ids = found.stream().map(row -> row.get("customer").toString()).toList();
+                var expected = new java.util.ArrayList<>(ids);
+                expected.sort(direction.equals("asc") ? java.util.Comparator.naturalOrder() : java.util.Comparator.reverseOrder());
+                assertThat(ids).isEqualTo(expected);
+                assertThat(found.get(direction.equals("asc") ? 0 : found.size() - 1).get("customerDisplay"))
+                        .isEqualTo("Zulu");
+            }
+        }
+    }
+
+    @Test
+    void idSortDoesNotExposeRestrictedReferenceNames() throws Exception {
+        UUID hidden = new UUID(0, 500);
+        database.useHandle(h -> {
+            h.createUpdate("INSERT INTO " + clientTable
+                            + " (_id, _code, _description, owner) VALUES (:id, 'H', 'ZZZ-SECRET', :id)")
+                    .bind("id", hidden).execute();
+            h.createUpdate("UPDATE " + historyTable + " SET reviewed_by = :hidden WHERE amount = 10")
+                    .bind("hidden", hidden).execute();
+        });
+        String url = "/api/list/information-registers/price_history";
+        var first = page(subject, get(url).param("sort", "reviewed_by").param("dir", "asc").param("limit", "1"));
+        assertThat(rows(first).getFirst()).containsEntry("amount", 10.0).containsEntry("reviewedByRestricted", true);
+        var second = page(subject, get(url).param("sort", "reviewed_by").param("dir", "asc").param("limit", "1")
+                .param("cursor", (String) first.get("nextCursor")));
+        assertThat(rows(second).getFirst()).containsEntry("amount", 20.0);
+        assertThat(json.writeValueAsString(first)).doesNotContain("ZZZ-SECRET", "HIDDEN-CLIENT", "_info_ref_sort");
+    }
+
     private static String where(UUID customer) {
         return "{\"region\":\"North\",\"customer\":\"" + customer + "\"}";
     }
@@ -212,7 +362,7 @@ class InformationRegisterControllerTest {
     }
 
     private MockMvc mvc(AccessSubject caller) {
-        return MockMvcBuilders.standaloneSetup(controller)
+        return MockMvcBuilders.standaloneSetup(controller, listController)
                 .setControllerAdvice(new ServiceExceptionHandler())
                 .setCustomArgumentResolvers(AccessSubjectArgumentResolver.fixed(caller)).build();
     }

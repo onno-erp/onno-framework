@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { AppModel, ModelEntity } from "./app-model";
+import { modelEntities, type AppModel, type ModelEntity } from "./app-model";
 import { queryClient } from "./query";
 
 /**
@@ -55,7 +55,7 @@ export function clearModel(): void {
 export function findEntity(model: AppModel | null, ref: string, kind?: string): ModelEntity | undefined {
   if (!model) return undefined;
   const r = ref.replace(/^\//, "");
-  return model.entities.find((e) =>
+  return modelEntities(model).find((e) =>
     (!kind || e.kind === kind) &&
     (e.name === r || e.logicalName === ref || e.route === "/" + r || `${e.kind}/${e.name}` === r));
 }
