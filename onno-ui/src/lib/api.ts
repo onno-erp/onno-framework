@@ -311,6 +311,10 @@ export async function uploadMedia(file: File): Promise<StoredMedia> {
  * {@code filename*} preferred), falling back to {@code fallbackName}.
  */
 export async function downloadSelection(url: string, ids: string[], fallbackName: string): Promise<void> {
+  return downloadJson(url, { ids }, fallbackName);
+}
+
+export async function downloadJson(url: string, body: object, fallbackName: string): Promise<void> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const csrf = readCsrfToken();
   if (csrf) headers[CSRF_HEADER] = csrf;
@@ -318,7 +322,7 @@ export async function downloadSelection(url: string, ids: string[], fallbackName
     method: "POST",
     credentials: "same-origin",
     headers,
-    body: JSON.stringify({ ids }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`;

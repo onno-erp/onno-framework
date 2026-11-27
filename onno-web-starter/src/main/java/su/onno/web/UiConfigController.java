@@ -45,6 +45,7 @@ public class UiConfigController {
     public Map<String, Object> getConfig() {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("readOnly", webProperties.isReadOnly());
+        out.put("listExportRoles", webProperties.getList().getExportRoles());
         out.put("locale", properties.getLocale());
         // The display zone for Instant fields (onno.ui.time-zone). Omitted when unset: the client
         // then renders instants in the viewer's browser zone.

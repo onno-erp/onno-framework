@@ -533,6 +533,10 @@ public final class UiMessages {
         d.put("list.count", "Rows: {count}");
         d.put("list.focusMissing", "This record isn't in the list with the current filters");
         d.put("list.search", "Search…");
+        d.put("list.export", "Export");
+        d.put("list.export.failed", "Could not export the list");
+        d.put("list.export.tooManyRows", "Too many rows to export. Narrow the results and try again.");
+        d.put("list.export.textTooLong", "A value is too long for an XLSX cell. Export as CSV.");
         d.put("list.searchLabel", "Search");
         d.put("list.all", "All");
         d.put("list.sortBy", "Sort by {column}");

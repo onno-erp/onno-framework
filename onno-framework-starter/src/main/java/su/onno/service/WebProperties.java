@@ -106,6 +106,32 @@ public class WebProperties {
         /** Default rows returned per keyset window. Clamped to the server ceiling (500). */
         private int pageSize = 50;
 
+        /** Maximum matching data rows in a CSV or XLSX export (1 to 500,000). Larger exports are rejected. */
+        private int exportRowLimit = 10_000;
+
+        /** Roles permitted to download lists, in addition to ordinary entity and record read access. */
+        private java.util.List<String> exportRoles = java.util.List.of("ADMIN");
+
+        public int getExportRowLimit() {
+            return exportRowLimit;
+        }
+
+        public void setExportRowLimit(int exportRowLimit) {
+            if (exportRowLimit < 1 || exportRowLimit > 500_000) {
+                throw new IllegalArgumentException("List export row limit must be between 1 and 500000");
+            }
+            this.exportRowLimit = exportRowLimit;
+        }
+
+        public java.util.List<String> getExportRoles() {
+            return exportRoles;
+        }
+
+        public void setExportRoles(java.util.List<String> exportRoles) {
+            this.exportRoles = exportRoles.stream().map(su.onno.access.AccessSubject::normalizeRole)
+                    .filter(role -> !role.isEmpty()).distinct().toList();
+        }
+
         public int getPageSize() {
             return pageSize;
         }

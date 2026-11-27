@@ -132,6 +132,12 @@ export function DashboardPage() {
 
 The full reference app is [`example/src/main/ui`](../example/src/main/ui).
 
+Standard entity lists, including embedded lists and custom row/card renderers over a standard feed,
+offer **Export → XLSX / CSV** to configured export roles (default `ADMIN`). The file includes every
+matching authorized row with the current search, filters, sort, grouping and column order. Picking,
+map/schedule modes and custom feeds do not show the button. The server enforces roles and row limits;
+see [list export](../onno-web-starter/README.md#list-export--apilistexportkindname).
+
 ## The public API
 
 Everything an app can import is in [`src/index.ts`](src/index.ts); the types are in

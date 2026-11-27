@@ -91,6 +91,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
         "onno.scan-packages=su.onno.web.conformance.model",
         "onno.access.records.log-denials=true",
         "onno.ui.locale=en",
+        "onno.web.list.export-roles=CUSTOMER",
         "spring.main.banner-mode=off"
 })
 @RecordApplicationEvents
@@ -138,6 +139,7 @@ class RecordPolicyConformanceTest {
                 "GET /api/list/catalogs/{name}/groups", "GET /api/list/documents/{name}/groups",
                 "GET /api/list/catalogs/{name}/aggregate", "GET /api/list/documents/{name}/aggregate",
                 "GET /api/list/registers/{name}/movements", "GET /api/list/registers/{name}/balance",
+                "POST /api/list/export/{kind}/{name}",
                 "GET /api/list/registers/{name}/aggregate",
                 // Pickers, mentions, comments, tags, presence, commands, live checks
                 "POST /api/ref-options/search", "POST /api/ref-options/recent", "POST /api/ref-options/decorate", "GET /api/mentions", "GET /api/mentions/resolve",
@@ -404,6 +406,7 @@ class RecordPolicyConformanceTest {
     void noEndpointLeaksAnotherOwnersRecords() throws Exception {
         LeakTestApp.TOUCHES.set(0);
         readsAreScoped();
+        exportsAreScoped();
         restrictedRefsAndSearchAreNoOracle();
         treesPromoteOrphans();
         registersAreScopedByDimension();
@@ -425,6 +428,33 @@ class RecordPolicyConformanceTest {
             if (kind == Route.SCOPED && !hits.contains(route)) unexercised.add(route);
         });
         assertThat(unexercised).as("SCOPED routes the leak test never exercised").isEmpty();
+    }
+
+    private void exportsAreScoped() throws Exception {
+        String path = "/api/list/export/{kind}/{name}";
+        String catalog = ok(post(path, "catalogs", "LkInstances").contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"format":"csv","columns":[{"key":"_description","label":"Name"},
+                        {"key":"mirror","label":"Mirror"}]}
+                        """));
+        assertThat(catalog).contains("alpha-1", "alpha-mirror");
+        String documents = ok(post(path, "documents", "LkBuildJobs").contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"format":"csv","columns":[{"key":"note","label":"Note"}],"groupBy":"_date"}
+                        """));
+        assertThat(documents).contains("alpha job");
+        for (String view : List.of("movements", "balance")) {
+            String register = ok(post(path, "registers", "LkUsage").contentType(MediaType.APPLICATION_JSON)
+                    .content("""
+                            {"format":"csv","view":"%s","columns":[{"key":"tenant","label":"Tenant"}]}
+                            """.formatted(view)));
+            assertThat(register.lines()).hasSize(2);
+        }
+        String information = ok(post(path, "information-registers", "LkTenantFacts")
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                        {"format":"csv","columns":[{"key":"tenant","label":"Tenant"}]}
+                        """));
+        assertThat(information.lines()).hasSize(2);
     }
 
     private void readsAreScoped() throws Exception {

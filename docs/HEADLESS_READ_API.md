@@ -191,6 +191,38 @@ the inputs to fix; a client with the input form open shows it there and keeps th
 }
 ```
 
+### List export
+
+`POST /api/list/export/{kind}/{name}` downloads all matching rows as CSV or XLSX, rather than just
+the current window. Supported kinds are `catalogs`, `documents`, `registers` and
+`information-registers`. The request uses the list feed's storage-column vocabulary for columns
+and facet filters; structured `where` keeps its logical field names:
+
+```json
+{
+  "format": "xlsx",
+  "columns": [{ "key": "_code", "label": "Code" }, { "key": "_description", "label": "Name" }],
+  "query": { "q": ["book"], "sort": ["_code"], "dir": ["asc"], "where": ["{\"active\":true}"] }
+}
+```
+
+`query` maps each parameter to a list of values, preserving repeated facet filters. Cursor and
+window size do not restrict export. Catalog/document requests may specify `groupBy` (storage
+column) and `granularity` (`day`, `month`, `year`); a label row precedes each group. Registers
+require `view: "movements"` or `"balance"` and accept the corresponding feed filters and `asOf`.
+Information registers accept `where`, `from`, `to` and use their records feed order.
+
+The caller needs a session/bearer identity, CSRF token for session-authenticated POSTs, the entity
+read grant and a configured export role (`onno.web.list.export-roles`, default `ADMIN`). Record
+policies and administrator-inclusive CRM restrictions apply before pagination. Secret columns are
+rejected; refs/enums use display labels and restricted references remain masked. A successful
+response is an attachment with `Cache-Control: no-store`; invalid requests return 400, denied
+access 403, unknown entities 404, row-limit overflow 413, overlong XLSX text 422 (choose CSV).
+The default cap is 10000 data rows, configurable with `onno.web.list.export-row-limit`. Group label
+rows do not count against it. Export reads one repeatable-read snapshot and finishes the temporary
+file before sending headers, so a late error cannot produce a partial attachment. Successfully
+prepared files are audited in `onno_list_export_journal`, independently of client delivery.
+
 ### Collection pagination
 
 This section is the authoritative collection-read contract for REST and MCP.
