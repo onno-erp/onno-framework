@@ -15,7 +15,11 @@ import { useMeasureSeries } from "./stat";
 export function Sparkline(props: SparklineProps) {
   return (
     <Boundary label={props.title || "Sparkline"}>
-      <SparklineBody {...props} />
+      {props.measure ? <SparklineBody {...props} measure={props.measure} /> : (
+        <SparklineCard props={props} value={props.value ?? (props.points?.length ? props.points.reduce((a, b) => a + b, 0) : null)}
+          points={(props.points ?? []).map((v) => ({ value: Number.isFinite(v) ? v : 0 }))}
+          integer={(props.points ?? []).every(Number.isInteger)} />
+      )}
     </Boundary>
   );
 }
@@ -27,7 +31,14 @@ export interface SparklineProps {
   /** Help text behind a `?` next to the title. */
   hint?: string;
   /** What is measured, e.g. `sum("Orders", "total", { posted: true })`. */
-  measure: MeasureSpec;
+  measure?: MeasureSpec;
+  /**
+   * Points the page already has, instead of `measure`, oldest first: drawn as they are (no request).
+   * The figure is their sum unless `value` is given (e.g. the latest level).
+   */
+  points?: number[];
+  /** With `points`: the figure beside the title (default: the points' sum). */
+  value?: number | null;
   /** The sparkline's buckets, e.g. `{ date: "week" }` (default: the measure's date field by day). */
   by?: GroupSpec;
   /** Sparkline shape (default `area`). */
@@ -46,19 +57,24 @@ export interface SparklineProps {
   locale?: string;
 }
 
-function SparklineBody(props: SparklineProps) {
-  const { title, hint, measure, by } = props;
+function SparklineBody(props: SparklineProps & { measure: MeasureSpec }) {
+  const { measure, by } = props;
   const { source, series } = useMeasureSeries(measure, { by, dateBucket: by ? undefined : "day" });
+  return <SparklineCard props={props} value={source ? series.total : null} integer={measure.aggregation === "count"}
+    points={series.rows.map((r) => ({ value: Number(r.value) || 0 }))} />;
+}
+
+function SparklineCard({ props, value, points, integer }: { props: SparklineProps; value: number | null; points: Array<{ value: number }>; integer: boolean }) {
+  const { title, hint } = props;
   const color = resolveColor(props.colors?.join(","));
   const fmtNum = (n: number) =>
     formatCompact(n, {
       currency: props.currency,
       unit: props.unit,
       unitPosition: props.unitPosition,
-      format: props.format ?? (measure.aggregation === "count" ? "integer" : undefined),
+      format: props.format ?? (integer ? "integer" : undefined),
       locale: props.locale,
     });
-  const points = series.rows.map((r) => ({ value: Number(r.value) || 0 }));
 
   return (
     <Card className="overflow-hidden">
@@ -69,7 +85,7 @@ function SparklineBody(props: SparklineProps) {
             <HintIcon text={hint} size={13} />
           </div>
           <AnimatedNumber
-            value={source ? fmtNum(series.total) : "—"}
+            value={value != null ? fmtNum(value) : "—"}
             className="text-[15px] font-semibold tabular-nums"
           />
         </div>

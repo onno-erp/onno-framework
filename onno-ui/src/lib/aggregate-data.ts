@@ -80,7 +80,7 @@ export function bucketLabel(value: unknown, groupByDate?: GroupByDate): string {
 // its own label and keeps insertion order.
 // `iso` is the bucket's start date (yyyy-MM-dd) for a date bucket — used to map a drag-selected
 // region on a chart back to an absolute time range. Empty for non-date buckets (no zoom).
-function bucketKey(value: unknown, groupByDate?: GroupByDate): { key: string; label: string; iso: string } {
+export function bucketKey(value: unknown, groupByDate?: GroupByDate): { key: string; label: string; iso: string } {
   if (typeof value === "string" && groupByDate) {
     try {
       const d = parseISO(value);
@@ -221,11 +221,11 @@ export function applyScale(data: SeriesData, mode: ScaleMode): SeriesData {
 export const SINGLE_SERIES = "value";
 
 // One accumulating x bucket: its sort/display identity plus a per-series running sum.
-type BucketAcc = { sortKey: string; label: string; iso: string; series: Map<string, number> };
+export type BucketAcc = { sortKey: string; label: string; iso: string; series: Map<string, number> };
 
 // Rank series by total (largest first), fold the long tail beyond `maxSeries` into "Other", order
 // date buckets chronologically, and emit the wide recharts rows.
-function assembleSeries(
+export function assembleSeries(
   buckets: Map<string, BucketAcc>,
   seriesTotals: Map<string, number>,
   total: number,

@@ -118,7 +118,18 @@ export interface StatProps {
   /** Help text behind a `?` next to the title. */
   hint?: string;
   /** The headline number, e.g. `count("Orders", { posted: true })` or `sum("Orders", "total")`. */
-  measure: MeasureSpec;
+  measure?: MeasureSpec;
+  /**
+   * A figure the page already has, instead of `measure`: shown as is (no request, no shared time
+   * range). `previous` adds the change against it, `points` the sparkline.
+   *
+   *   <Stat title="Followers" value={47656} previous={47279} points={[47279, 47310, 47656]} />
+   */
+  value?: number | null;
+  /** With `value`: the figure to compare with (the change badge / arrow). */
+  previous?: number | null;
+  /** With `value`: the sparkline's points, oldest first. */
+  points?: number[];
   /**
    * A denominator: the headline becomes `measure` ÷ `ratioTo` × 100 over the selected window. A
    * ratio tile is headline-only (no trend/sparkline).
@@ -159,14 +170,32 @@ export interface StatProps {
 export function Stat(props: StatProps) {
   return (
     <Boundary label={props.title || "Stat"}>
-      <StatBody {...props} />
+      {props.measure ? <StatBody {...props} measure={props.measure} /> : <StatValue {...props} />}
     </Boundary>
   );
 }
 
-function StatBody(props: StatProps) {
-  const t = useMessages();
-  const { title, hint, measure, ratioTo, compareLabel } = props;
+/** A stat of a figure the page holds: the same tile, without requests. */
+function StatValue(props: StatProps) {
+  const value = props.value ?? null;
+  const previous = props.previous ?? null;
+  const delta = value != null && previous != null && previous !== 0 ? (value - previous) / Math.abs(previous) : null;
+  const showTrend = props.trend !== false && props.sparkline !== false && (props.points?.length ?? 0) > 1;
+  return (
+    <StatCard
+      props={props}
+      headline={value}
+      delta={delta}
+      points={(props.points ?? []).map((v) => ({ value: Number.isFinite(v) ? v : 0 }))}
+      showTrend={showTrend}
+      showComparison={props.compare === true || props.compare === "previous" || (!showTrend && previous != null)}
+      integer={value != null && Number.isInteger(value) && (props.points ?? []).every(Number.isInteger)}
+    />
+  );
+}
+
+function StatBody(props: StatProps & { measure: MeasureSpec }) {
+  const { measure, ratioTo } = props;
   // A ratio is calculated from two independently scoped aggregates. It deliberately renders as a
   // headline-only tile: combining two bucket series into a meaningful trend needs a shared
   // grouping contract, while the KPI itself only needs the selected window's two totals.
@@ -196,13 +225,38 @@ function StatBody(props: StatProps) {
   const points = current.series.rows.map((r) => ({ value: Number(r.value) || 0 }));
   const delta = previous && previousValue !== 0 ? (headlineValue - previousValue) / previousValue : null;
 
+  return (
+    <StatCard
+      props={props}
+      headline={current.source ? headlineValue : null}
+      delta={previous ? delta : null}
+      points={points}
+      showTrend={showTrend}
+      showComparison={showComparison}
+      integer={measure.aggregation === "count" && !ratioTo}
+    />
+  );
+}
+
+/** The stat tile itself, for both a measured and a given figure. */
+function StatCard({ props, headline, delta, points, showTrend, showComparison, integer }: {
+  props: StatProps;
+  headline: number | null;
+  delta: number | null;
+  points: Array<{ value: number }>;
+  showTrend: boolean;
+  showComparison: boolean;
+  integer: boolean;
+}) {
+  const t = useMessages();
+  const { title, hint, compareLabel } = props;
   const color = resolveColor(props.colors?.join(","));
   const fmtNum = (n: number) => {
     const options = {
       currency: props.currency,
       unit: props.unit,
       unitPosition: props.unitPosition,
-      format: props.format ?? (measure.aggregation === "count" && !ratioTo ? "integer" : undefined),
+      format: props.format ?? (integer ? "integer" : undefined),
       locale: props.locale,
     } as const;
     // A trend card needs a compact headline to leave room for its delta and sparkline; a
@@ -229,7 +283,7 @@ function StatBody(props: StatProps) {
         <div className={cn("mt-1 flex items-baseline gap-2", !showTrend && "mt-0 flex-col items-center justify-center gap-2 text-center")}>
           <div className="flex items-baseline gap-2">
             <AnimatedNumber
-              value={current.source ? fmtNum(headlineValue) : "—"}
+              value={headline != null ? fmtNum(headline) : "—"}
               className={cn("font-semibold leading-none tabular-nums", showTrend ? "text-[28px]" : "text-[46px] tracking-normal")}
             />
             {showTrend && delta != null && (

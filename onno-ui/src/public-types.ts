@@ -535,16 +535,16 @@ type Retyped<P, T> = Omit<P, keyof T> & T;
 
 /** Typed per entity: measures, groupings, `where` and render functions over the entity's records. */
 export type StatProps<E extends EntityName = EntityName> = Retyped<StatImpl, {
-  measure: Measure<E>;
+  measure?: Measure<E>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the ratio may measure any entity
   ratioTo?: Measure<any>;
   sparkline?: boolean | By<E>;
 }>;
-export type SparklineProps<E extends EntityName = EntityName> = Retyped<SparklineImpl, { measure: Measure<E>; by?: By<E> }>;
+export type SparklineProps<E extends EntityName = EntityName> = Retyped<SparklineImpl, { measure?: Measure<E>; by?: By<E> }>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the target may measure any entity
 export type GaugeProps<E extends EntityName = EntityName> = Retyped<GaugeImpl, { measure: Measure<E>; target?: number | Measure<any> }>;
 /** One series of a chart; each may measure a different entity. */
-export type ChartSeries<E extends EntityName = EntityName> = Retyped<ChartSeriesImpl, { measure: Measure<E> }>;
+export type ChartSeries<E extends EntityName = EntityName> = Retyped<ChartSeriesImpl, { measure?: Measure<E> }>;
 export type ChartProps<E extends EntityName = EntityName> = Retyped<ChartImpl, {
   measure?: Measure<E>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a series may measure any entity
@@ -600,6 +600,7 @@ export type EntityMapProps<E extends EntityName = EntityName> = Retyped<EntityMa
   label?: RecordRender<E, string | null | undefined>;
 }>;
 export type { ChartAxis, ChartThreshold, ChartType } from "./components/widgets/chart";
+export type { ChartRow } from "./lib/row-series";
 /** An editor for one `@Constant`, by its name. */
 export type SettingProps = Retyped<SettingImpl, { constant: ConstantName }>;
 export type { TimeRangeProps, TaskInboxProps, UserAccountsProps, ChangePasswordProps };

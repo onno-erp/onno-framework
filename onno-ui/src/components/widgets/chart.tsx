@@ -60,6 +60,7 @@ import { TimeRangeFacet } from "../lists/date-range-facet";
 import { Boundary } from "../pages/boundary";
 import { useMessages } from "../../providers/messages-provider";
 import { logicalEntityKey } from "../../lib/entity-keys";
+import { seriesFromRows, type ChartRow } from "../../lib/row-series";
 
 /**
  * The compact figure beside a chart title must be a valid summary of the rendered data. Count and
@@ -122,7 +123,9 @@ export interface ChartAxis {
  */
 export interface ChartSeries {
   /** What the series plots: `sum("Orders", "total", { posted: true })`. */
-  measure: MeasureSpec;
+  measure?: MeasureSpec;
+  /** With `data`: the key of the number this series plots in each row (instead of `measure`). */
+  value?: string;
   /** Mark type (default: the chart's `type`, else `"bar"`); a pie/donut type plots as bars here. */
   type?: ChartType;
   /** Legend/tooltip name (default: the chart title for the first series, else the measured field). */
@@ -147,8 +150,32 @@ export interface ChartSeries {
  *
  *   <Chart title="Revenue by day" type="area" measure={sum("Orders", "total", { posted: true })} by={{ date: "day" }} />
  *   <Chart title="Orders by status" type="pie" measure={count("Orders")} by="status" />
+ *
+ * Or of rows the page already holds (`data`), plotted as they are — no entity, no request, no
+ * shared time range; every other prop works the same:
+ *
+ *   <Chart title="Reach" data={days} x="day" value="reach" />
+ *   <Chart title="Leads by source" type="donut" data={sources} x="source" value="leads" />
+ *   <Chart title="Reach and chats" data={days} x="day" series={[{ value: "reach" }, { value: "chats", type: "line", axis: "right" }]} />
  */
 export interface ChartProps {
+  /**
+   * Rows to plot instead of measuring an entity. `x` names the x value (a category, or a date as an
+   * ISO string or `Date`, bucketed by `bucket`); `value` (or each series' `value`) the number; rows
+   * with the same x are added up. `splitBy` names a key to split by.
+   */
+  data?: ChartRow[];
+  /** With `data`: the key of the x value (default `"label"`). */
+  x?: string;
+  /** With `data`: the key of the single series' number (default `"value"`). */
+  value?: string;
+  /** With `data` and a date x: the bucket (default by span: day up to 120 days, week up to 500, else month). */
+  bucket?: GroupByDate;
+  /**
+   * With `data`: the figure in the header — the sum of the plotted values (default), the last
+   * bucket's (`"last"`, for levels such as a follower count), or none.
+   */
+  headline?: "total" | "last" | "none";
   /** Card title; also the single series' name unless `label` is set. */
   title?: string;
   /** Help text behind a `?` next to the title. */
@@ -225,7 +252,10 @@ export interface ChartProps {
 /** One series with every default applied. `key` is its data key in the chart rows. */
 export interface SeriesConfig {
   key: string;
-  measure: MeasureSpec;
+  /** What an entity series measures; absent for a `data` series. */
+  measure?: MeasureSpec;
+  /** The row key a `data` series plots. */
+  value?: string;
   type: ChartType;
   label: string;
   color?: string;
@@ -308,24 +338,38 @@ function chartType(value: string | undefined, title: string | undefined): ChartT
   return "bar";
 }
 
+/** True when every number under `key` in the rows is whole (ignoring missing ones). */
+function wholeNumbers(rows: ChartRow[], key: string): boolean {
+  return rows.every((r) => {
+    const v = r[key];
+    return v == null || v === "" || Number.isInteger(typeof v === "number" ? v : Number(v));
+  });
+}
+
 /** The resolved chart configuration for typed props, with every default applied. */
 export function chartConfig(props: ChartProps): ChartConfig {
-  const authored: ChartSeries[] = props.series?.length
+  const rows = Array.isArray(props.data);
+  const authored: ChartSeries[] = (props.series?.length
     ? props.series
-    : props.measure
-      ? [{ measure: props.measure, label: props.label, color: props.color }]
-      : [];
+    : rows
+      ? [{ value: props.value ?? "value", label: props.label, color: props.color }]
+      : props.measure
+        ? [{ measure: props.measure, label: props.label, color: props.color }]
+        : []
+  // A data chart plots row keys, an entity chart measures: a series without its kind's source is dropped.
+  ).filter((s) => (rows ? !!(s.value ?? (props.series?.length ? undefined : "value")) : !!s.measure));
   const multi = authored.length > 1;
   const series = authored.map((s, i): SeriesConfig => {
     let type = chartType(s.type ?? props.type, props.title);
     // A pie/donut plots one measure; beside others it has no axis to share, so it plots as bars.
     if (multi && (type === "pie" || type === "donut")) type = "bar";
-    const field = s.measure.field;
+    const field = s.measure?.field ?? s.value;
     return {
       key: multi ? `s${i}` : SINGLE_SERIES,
-      measure: s.measure,
+      measure: rows ? undefined : s.measure,
+      value: rows ? s.value ?? props.value ?? "value" : undefined,
       type,
-      label: s.label ?? (i === 0 ? props.title : undefined) ?? field ?? s.measure.entity,
+      label: s.label ?? (i === 0 ? props.title : undefined) ?? field ?? s.measure?.entity ?? "",
       color: s.color,
       axis: s.axis === "right" ? "right" : "left",
       lineStyle: lineStyle(s.lineStyle ?? props.lineStyle),
@@ -333,8 +377,8 @@ export function chartConfig(props: ChartProps): ChartConfig {
       opacity: clamp(s.opacity ?? props.opacity, 1, 0, 1),
       currency: s.currency ?? props.currency,
       unit: s.unit ?? props.unit,
-      // Counts read better as integers on the axis/tooltip unless the author overrides.
-      format: s.format ?? props.format ?? (s.measure.aggregation === "count" ? "integer" : undefined),
+      // Counts read better as integers; so do data series whose numbers are all whole.
+      format: s.format ?? props.format ?? (s.measure?.aggregation === "count" || (rows && wholeNumbers(props.data!, s.value ?? props.value ?? "value")) ? "integer" : undefined),
     };
   });
 
@@ -422,7 +466,7 @@ export function seriesGroupField(config: ChartConfig, entityType: ChartEntityTyp
  * field of a date grouping, else the entity's date (`"date"`, `"period"` for registers).
  */
 export function seriesWindowField(series: SeriesConfig, config: ChartConfig, entityType: ChartEntityType): string {
-  if (series.measure.dateField) return logicalEntityKey(series.measure.dateField);
+  if (series.measure?.dateField) return logicalEntityKey(series.measure.dateField);
   if (config.groupBy && config.groupByDate) return logicalEntityKey(config.groupBy);
   return entityDate(entityType);
 }
@@ -444,7 +488,8 @@ export function chartRequest(
   // instead of failing the query: an un-grouped catalog chart takes the endpoint's single
   // grand-total bucket, and the window/span ride only on an author-named date field.
   const dated = entityType !== "catalog";
-  const measure: MeasureSpec = { ...series.measure, field: series.measure.field ? logicalEntityKey(series.measure.field) : undefined };
+  const source = series.measure!;
+  const measure: MeasureSpec = { ...source, field: source.field ? logicalEntityKey(source.field) : undefined };
   const groupField = seriesGroupField(config, entityType);
   let by: GroupSpec | undefined;
   if (dated || groupField !== "date") {
@@ -483,8 +528,8 @@ export function seriesData(
     groupBy: seriesGroupField(config, entityType),
     groupByDate: granularity,
     seriesBy: opts.splitBy ? logicalEntityKey(opts.splitBy) : undefined,
-    metric: (series.measure.aggregation === "count" ? "count" : "sum") as Metric,
-    metricField: series.measure.field ? logicalEntityKey(series.measure.field) : undefined,
+    metric: (series.measure?.aggregation === "count" ? "count" : "sum") as Metric,
+    metricField: series.measure?.field ? logicalEntityKey(series.measure.field) : undefined,
     maxSeries: config.maxSeries,
   };
   const buckets = result ?? NO_BUCKETS;
@@ -589,13 +634,49 @@ export function chartSpanDays(min: number, max: number): number {
   return max > min ? (max - min) / 86_400_000 : 1;
 }
 
-/** A chart grouped by a field or a date bucket, following the page's shared time range. */
+/** A chart grouped by a field or a date bucket, following the page's shared time range — or of `data` rows as given. */
 export function Chart(props: ChartProps) {
   return (
     <Boundary label={props.title || "Chart"}>
-      <ChartSource {...props} />
+      {Array.isArray(props.data) ? <ChartRows {...props} /> : <ChartSource {...props} />}
     </Boundary>
   );
+}
+
+/** A chart of the page's own rows: the config, then the same body without requests. */
+function ChartRows(props: ChartProps) {
+  // The rows change identity on every parent render; the config only depends on the other props.
+  const { data: _rows, ...rest } = props;
+  const restKey = JSON.stringify(rest);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const config = useMemo(() => chartConfig(props), [restKey]);
+  return <ChartBody props={props} config={config} resolved={null} rows={props.data ?? []} />;
+}
+
+/**
+ * One series of a `data` chart: its key summed per x bucket (split by `splitBy` when given). Pies drop
+ * zero slices like the entity charts.
+ */
+export function rowSeriesData(series: SeriesConfig, props: ChartProps, config: ChartConfig, opts: { splitBy?: string; round: boolean }): SeriesData {
+  const data = seriesFromRows(props.data ?? [], {
+    x: props.x ?? "label",
+    value: series.value ?? "value",
+    splitBy: opts.splitBy,
+    bucket: props.bucket,
+    maxSeries: config.maxSeries,
+  });
+  if (!opts.round) return data;
+  return { ...data, rows: data.rows.filter((r) => data.seriesKeys.some((k) => Number(r[k]) !== 0)) };
+}
+
+/** The header figure of a `data` chart: the plotted total, the last bucket, or none. */
+export function rowHeadlineValue(mode: ChartProps["headline"], data: SeriesData): number | null {
+  if (mode === "none" || data.rows.length === 0) return null;
+  if (mode === "last") {
+    const last = data.rows[data.rows.length - 1];
+    return data.seriesKeys.reduce((sum, k) => sum + (Number(last[k]) || 0), 0);
+  }
+  return data.total;
 }
 
 type ResolvedSeries = { series: SeriesConfig; entityType: ChartEntityType; entityName: string };
@@ -611,6 +692,7 @@ function ChartSource(props: ChartProps) {
     if (!config.series.length) return null;
     const out: ResolvedSeries[] = [];
     for (const series of config.series) {
+      if (!series.measure) return null;
       const e = findEntity(model, series.measure.entity);
       if (!e) return null;
       const entityType = e.kind === "catalogs" ? "catalog" : e.kind === "documents" ? "document" : "register";
@@ -637,7 +719,7 @@ function ChartSource(props: ChartProps) {
   return <ChartBody key={key} props={props} config={config} resolved={resolved} />;
 }
 
-function ChartBody({ props, config, resolved }: { props: ChartProps; config: ChartConfig; resolved: ResolvedSeries[] }) {
+function ChartBody({ props, config, resolved, rows }: { props: ChartProps; config: ChartConfig; resolved: ResolvedSeries[] | null; rows?: ChartRow[] }) {
   const t = useMessages();
   const { title, hint } = props;
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -692,7 +774,7 @@ function ChartBody({ props, config, resolved }: { props: ChartProps; config: Cha
 
   // One request per series. A control or range change lands here, so it refetches.
   const requests = useMemo(
-    () => resolved.map((r) =>
+    () => (resolved ?? []).map((r) =>
       chartRequest(r.series, config, r.entityType, r.entityName, { granularity: effGranularity, splitBy: effSplitBy, window: windowRange })),
     [resolved, config, effGranularity, effSplitBy, windowRange],
   );
@@ -720,6 +802,11 @@ function ChartBody({ props, config, resolved }: { props: ChartProps; config: Cha
   const fmts = useChartFormatters(config);
 
   const data = useMemo(() => {
+    if (rows) {
+      if (multi) return mergeSeries(config.series.map((s) => rowSeriesData(s, props, config, { round: false })), config.series.map((s) => s.key));
+      return applyScale(rowSeriesData(config.series[0], props, config, { splitBy: effSplitBy, round }), effScale);
+    }
+    if (!resolved) return { rows: [], seriesKeys: [SINGLE_SERIES], total: 0 } as SeriesData;
     const opts = { granularity: effGranularity, round };
     if (multi) {
       const parts = resolved.map((r, i) => seriesData(r.series, config, r.entityType, results[i], opts));
@@ -727,7 +814,8 @@ function ChartBody({ props, config, resolved }: { props: ChartProps; config: Cha
     }
     const built = seriesData(resolved[0].series, config, resolved[0].entityType, results[0], { ...opts, splitBy: effSplitBy });
     return applyScale(built, effScale);
-  }, [multi, resolved, config, results, effGranularity, round, effSplitBy, effScale]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `props` matters only through `rows` and `config`
+  }, [rows, multi, resolved, config, results, effGranularity, round, effSplitBy, effScale]);
 
   const colors = useMemo(() => {
     if (multi) {
@@ -752,11 +840,16 @@ function ChartBody({ props, config, resolved }: { props: ChartProps; config: Cha
   // their buckets would produce a misleading headline (#353).
   const headlineValue =
     effScale === "absolute" && data.rows.length > 0 && !multi
-      ? chartHeadlineValue(config.series[0].measure.aggregation, data)
+      ? rows
+        ? rowHeadlineValue(props.headline, data)
+        : chartHeadlineValue(config.series[0].measure?.aggregation ?? "sum", data)
       : null;
 
-  // Drag-select a region to set the shared absolute range (Grafana-style zoom).
-  const { dragProps, refArea } = useDragZoom(data.rows, setAbsolute);
+  // Drag-select a region to set the shared absolute range (Grafana-style zoom). A data chart has no
+  // range to set: its rows are the page's, so it does not zoom.
+  const zoom = useDragZoom(data.rows, setAbsolute);
+  const dragProps = rows ? undefined : zoom.dragProps;
+  const refArea = rows ? null : zoom.refArea;
 
   // Granularity follows the shared range unless the author fixed it. Split / type / scale don't
   // apply to a multi-measure chart.
