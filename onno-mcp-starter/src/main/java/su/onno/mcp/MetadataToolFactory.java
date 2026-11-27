@@ -628,7 +628,8 @@ public class MetadataToolFactory implements McpToolProvider {
             props.append("\"id\":{\"type\":\"string\",\"description\":\"Record id (UUID).\"},");
         }
         props.append("\"values\":{\"type\":\"object\",\"description\":\"Field values keyed by field name "
-                + "(see describe_metadata). Reference/enum fields take an id string.\"}");
+                + "(see describe_metadata). Reference fields take an id string; enum fields take the "
+                + "constant name (or its id).\"}");
         required.append("]");
         return "{\"type\":\"object\",\"required\":" + required + ",\"properties\":{" + props + "}}";
     }

@@ -527,7 +527,7 @@ class WriteLifecycleCommandServiceTest {
                 () -> documentCommands.create(orderDesc,
                         Map.of("items", List.of(Map.of(
                                 "happensAt", "2026-06-04T10:00+03:00"))), admin),
-                "happensAt");
+                "items[0].happensAt");
     }
 
     @Test

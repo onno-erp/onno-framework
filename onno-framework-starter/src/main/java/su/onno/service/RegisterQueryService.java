@@ -606,10 +606,18 @@ public class RegisterQueryService {
         return "SUM" + signed(resourceColumn);
     }
 
-    /** Convert HTTP query values to the JDBC type declared by the register dimension. */
+    /**
+     * Convert HTTP query values to the JDBC type declared by the register dimension. An enum takes
+     * its stored UUID or its constant name, exactly as a {@code where} does.
+     */
     private static Object filterValue(AttributeDescriptor dimension, String raw) {
         Class<?> type = dimension.javaType();
-        if (dimension.isRef() || type.isEnum() || type == java.util.UUID.class) {
+        if (type.isEnum()) {
+            @SuppressWarnings("unchecked")
+            Class<? extends Enum<?>> enumType = (Class<? extends Enum<?>>) type;
+            return EnumValues.filterId(enumType, raw, "Invalid value for dimension " + dimension.fieldName());
+        }
+        if (dimension.isRef() || type == java.util.UUID.class) {
             return java.util.UUID.fromString(raw);
         }
         if (type == java.math.BigDecimal.class) return new java.math.BigDecimal(raw);

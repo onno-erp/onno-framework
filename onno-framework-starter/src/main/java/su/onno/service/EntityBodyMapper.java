@@ -3,11 +3,11 @@ package su.onno.service;
 import su.onno.lifecycle.BeforeWriteHandler;
 import su.onno.lifecycle.OnFillingHandler;
 import su.onno.metadata.AttributeDescriptor;
-import su.onno.metadata.EnumerationDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.ReferenceTargetDescriptor;
 import su.onno.model.TabularSectionRow;
 import su.onno.metadata.TabularSectionDescriptor;
+import su.onno.repository.EnumerationPersistence;
 import su.onno.rules.BusinessRuleValidator;
 import su.onno.security.SecretRedactor;
 import su.onno.types.PolyRef;
@@ -22,7 +22,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -31,7 +30,8 @@ import java.util.UUID;
  * The body uses the API's loose shapes — a {@link Ref} or enum as its id, a {@link PolyRef} as
  * {@code "type|id"} or {@code {type, id}}, temporals as ISO strings — and each present attribute is
  * coerced to its field type. A value that does not coerce becomes a field error rather than being
- * dropped; a secret sent as the read-side "set" sentinel keeps the stored value.
+ * dropped; a secret sent as the read-side "set" sentinel keeps the stored value. An enum may also be
+ * sent as its constant name ({@link EnumerationPersistence#fromNameOrId}).
  *
  * <p>It also runs the pre-save hooks for a dry-run validate, which never reaches the store.
  */
@@ -71,6 +71,8 @@ class EntityBodyMapper {
                 setField(entity, attr, raw);
             } catch (ServiceException refused) {
                 throw refused;
+            } catch (InvalidValue invalid) {
+                errors.field(attr.fieldName(), invalid.getMessage());
             } catch (RuntimeException badValue) {
                 String temporal = TemporalValues.writeMessage(attr.javaType());
                 errors.field(attr.fieldName(), temporal != null
@@ -82,7 +84,9 @@ class EntityBodyMapper {
 
     /**
      * Replace each tabular section present in {@code body} with rows built from it. Rows are new
-     * objects: the save replaces a section's lines, as the API always has.
+     * objects: the save replaces a section's lines, as the API always has. A row's coercion failure
+     * is keyed {@code section[index].field}, like the section's other row errors, so it never lands
+     * on a header field of the same name.
      */
     @SuppressWarnings("unchecked")
     void applySections(Object entity, List<TabularSectionDescriptor> sections, Map<String, Object> body,
@@ -92,8 +96,8 @@ class EntityBodyMapper {
                 continue;
             }
             List<TabularSectionRow> built = new ArrayList<>();
-            for (Object rawRow : rows) {
-                if (rawRow instanceof Map<?, ?> rowBody) {
+            for (int i = 0; i < rows.size(); i++) {
+                if (rows.get(i) instanceof Map<?, ?> rowBody) {
                     TabularSectionRow row;
                     try {
                         row = (TabularSectionRow) instantiate(ts.rowClass());
@@ -101,7 +105,12 @@ class EntityBodyMapper {
                         throw new IllegalStateException(
                                 "Cannot construct row for tabular section '" + ts.name() + "'", cannotBuild);
                     }
-                    applyBody(row, ts.attributes(), (Map<String, Object>) rowBody, errors);
+                    ValidationErrors rowErrors = new ValidationErrors();
+                    applyBody(row, ts.attributes(), (Map<String, Object>) rowBody, rowErrors);
+                    String path = ts.name() + "[" + i + "]";
+                    rowErrors.fieldErrors().forEach((field, messages) ->
+                            messages.forEach(message -> errors.field(path + "." + field, message)));
+                    rowErrors.formErrors().forEach(errors::form);
                     built.add(row);
                 }
             }
@@ -172,11 +181,7 @@ class EntityBodyMapper {
         } else if (type == UUID.class) {
             typed = toUuid(value);
         } else if (type.isEnum()) {
-            Optional<? extends Enum<?>> constant = enumConstant((Class<? extends Enum<?>>) type, toUuid(value));
-            if (constant.isEmpty()) {
-                throw new IllegalArgumentException("Unknown " + type.getSimpleName() + " value " + value);
-            }
-            typed = constant.get();
+            typed = enumConstant((Class<? extends Enum<?>>) type, attr, value);
         } else {
             typed = value;
         }
@@ -217,24 +222,25 @@ class EntityBodyMapper {
         return ref;
     }
 
-    private Optional<? extends Enum<?>> enumConstant(Class<? extends Enum<?>> type, UUID id) {
-        return registry.allEnumerations().stream()
-                .filter(e -> e.javaClass().equals(type))
-                .map(EnumerationDescriptor::values)
-                .flatMap(List::stream)
-                .filter(v -> v.id().equals(id))
-                .map(v -> enumByName(type, v.name()))
-                .filter(java.util.Objects::nonNull)
-                .findFirst();
+    /**
+     * The constant of a registered {@code @Enumeration} that {@code value} names, by constant name or
+     * stored id ({@link EnumerationPersistence#fromNameOrId}). A value naming none is an
+     * {@link InvalidValue} that lists the accepted names.
+     */
+    private Enum<?> enumConstant(Class<? extends Enum<?>> type, AttributeDescriptor attr, Object value) {
+        boolean registered = registry.allEnumerations().stream().anyMatch(e -> e.javaClass().equals(type));
+        if (!registered) {
+            throw new IllegalArgumentException(type.getName() + " is not a registered @Enumeration");
+        }
+        return EnumerationPersistence.fromNameOrId(type, value).orElseThrow(() -> new InvalidValue(
+                attr.displayName() + " must be one of " + EnumValues.names(type)));
     }
 
-    private static Enum<?> enumByName(Class<? extends Enum<?>> type, String name) {
-        for (Enum<?> constant : type.getEnumConstants()) {
-            if (constant.name().equals(name)) {
-                return constant;
-            }
+    /** A rejected value whose message is already the field error to show. */
+    private static final class InvalidValue extends IllegalArgumentException {
+        InvalidValue(String message) {
+            super(message);
         }
-        return null;
     }
 
     private static UUID toUuid(Object value) {

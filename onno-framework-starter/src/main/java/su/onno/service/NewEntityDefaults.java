@@ -4,6 +4,7 @@ import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.EnumerationDescriptor;
 import su.onno.metadata.EnumerationValueDescriptor;
 import su.onno.metadata.MetadataRegistry;
+import su.onno.repository.EnumerationPersistence;
 import su.onno.types.Ref;
 import su.onno.types.PolyRef;
 
@@ -67,8 +68,9 @@ final class NewEntityDefaults {
      * runs ref/enum resolution, so an injected {@link Ref}/enum id resolves to a label exactly like a
      * declared default. Keys are matched by attribute {@code fieldName} (what the write path and
      * widgets use) and written under {@code columnName} (what the seed row / read side uses), in the
-     * same loose shape {@link #columnValues} emits: {@link Ref}/enum → id {@link UUID},
-     * {@link LocalDateTime} as a canonical offset-free ISO string, everything else the raw string.
+     * same loose shape {@link #columnValues} emits: {@link Ref} → id {@link UUID}, enum (by constant
+     * name or id) → id {@link UUID}, {@link LocalDateTime} as a canonical offset-free ISO string,
+     * everything else the raw string.
      * Unknown keys, secrets, and values that can't be coerced are skipped, never errored — a
      * malformed deep link degrades to a blank field.
      */
@@ -94,7 +96,16 @@ final class NewEntityDefaults {
                 } catch (IllegalArgumentException invalidRef) {
                     continue;
                 }
-            } else if (attr.isRef() || attr.javaType().isEnum()) {
+            } else if (attr.javaType().isEnum()) {
+                // The constant name or the stored id; either seeds the id the read side uses.
+                @SuppressWarnings("unchecked")
+                Class<? extends Enum<?>> enumType = (Class<? extends Enum<?>>) attr.javaType();
+                var constant = EnumerationPersistence.fromNameOrId(enumType, value);
+                if (constant.isEmpty()) {
+                    continue;
+                }
+                coerced = EnumerationPersistence.resolveId(enumType, constant.get());
+            } else if (attr.isRef()) {
                 try {
                     coerced = UUID.fromString(value.trim());
                 } catch (IllegalArgumentException notAUuid) {

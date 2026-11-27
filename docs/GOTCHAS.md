@@ -94,9 +94,10 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
   sidecars such as `customerDisplay`. Add `?representation=storage` only for a legacy read client.
   Writes also accept storage aliases during migration, but conflicting logical/storage values are
   `400`; updates remain partial. Full tables are in [HEADLESS_READ_API.md](HEADLESS_READ_API.md).
-- **An enum value is its deterministic UUID, never the constant name.** The UUID is derived from
-  `FQCN.CONSTANT`, so it is stable across databases; the write path rejects `"NEW"` where it
-  expects the UUID. Display strings/colors come from `@EnumLabel` and ride the `FieldDisplay` /
+- **An enum is stored as its deterministic UUID; clients may send the constant name.** The UUID is
+  derived from `FQCN.CONSTANT`, so it is stable across databases. Writes, `where` filters, register
+  `{dimension}=` parameters and New-form prefill accept either `"NEW"` or that UUID; reads return the
+  UUID. The `@EnumLabel` label is never accepted as a value. Display strings/colors come from `@EnumLabel` and ride the `FieldDisplay` /
   `FieldColor` sidecars (`{col}_display` / `{col}_color` in storage compatibility mode).
 - **Temporal reads and writes are ISO-8601 wall-clock values.** `LocalDate` reads/writes as
   `yyyy-MM-dd`; `LocalDateTime` reads/writes as offset-free `yyyy-MM-ddTHH:mm[:ss[.fraction]]`.
@@ -152,7 +153,8 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
 
 - **The New form prefills from query params.** Append write-path field names to the New route —
   `/ui/documents/reservations/new?room=<uuid>&startsAt=2026-07-16T19:00`, or build it with
-  `links.newRecord("Reservations", { room, startsAt })`. `Ref`/enum values are UUID strings,
+  `links.newRecord("Reservations", { room, startsAt })`. `Ref` values are UUID strings, enum values
+  UUID strings or constant names,
   temporals ISO, everything else verbatim; unknown keys and bad values are skipped silently. Prefill applies after `OnFillingHandler` and
   field initializers. This is the way to seed a `Ref` default (a `Ref` can't be a literal field
   initializer).

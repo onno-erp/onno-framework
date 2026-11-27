@@ -17,6 +17,8 @@ dependencies {
     testImplementation(libs.assertj.core)
     testImplementation(libs.mockito.core)
     testImplementation(libs.h2)
+    // TestEntityStore: imports through the real generic write path.
+    testImplementation(testFixtures(project(":onno-framework-starter")))
     // Architecture guardrails (su.onno.archunit.OnnoRules) over this module's main classes.
     testImplementation(project(":onno-archunit"))
     testRuntimeOnly(libs.junit.platform.launcher)

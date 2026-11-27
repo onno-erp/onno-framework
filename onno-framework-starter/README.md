@@ -91,7 +91,9 @@ path binds the stable UUID into movement and totals tables, converts enum filter
 and restores the enum constant on typed reads.
 
 The converters also read enums (and `Ref<T>`) back from a **`varchar` column that holds the UUID as
-text**, not just a native `uuid` column. Enum constant names are not a persisted format.
+text**, not just a native `uuid` column. Enum constant names are not a persisted format, but the
+generic write and filter APIs accept them from clients and store the constant's UUID
+(`EnumerationPersistence.fromNameOrId`).
 
 ## Usage
 

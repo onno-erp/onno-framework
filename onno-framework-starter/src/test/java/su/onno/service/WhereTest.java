@@ -105,6 +105,15 @@ class WhereTest {
     }
 
     @Test
+    void unknownEnumNameIsABadRequestNamingTheConstants() {
+        assertThatThrownBy(() -> compile("{\"status\":{\"in\":[\"OPEN\",\"REOPENED\"]}}"))
+                .isInstanceOfSatisfying(ServiceException.class, e -> {
+                    assertThat(e.status()).isEqualTo(ServiceException.Status.BAD_REQUEST);
+                    assertThat(e.getMessage()).contains("status", "REOPENED", "OPEN, CLOSED");
+                });
+    }
+
+    @Test
     void inAndNotInHandleNullsAndEmptyLists() {
         UUID a = UUID.randomUUID();
         assertThat(compile("{\"status\":{\"in\":[\"" + a + "\",null]}}").sql())

@@ -86,7 +86,7 @@ Do not guess route/entity names from Java classes. Use metadata.
 | `list_catalog` | `name` | `query`, opaque `cursor`, `limit`; returns `{rows,nextCursor,hasMore}` |
 | `list_documents` | `name` | `query`, opaque `cursor`, `limit`, ISO `from`/`to`; same envelope |
 | `get_catalog`, `get_document` | `name`, UUID `id` | one read-shaped row |
-| create tools | `name`, `values` | write fields use model names; Ref/enum values are UUID strings |
+| create tools | `name`, `values` | write fields use model names; Ref values are UUID strings, enum values constant names (or UUID strings) |
 | update tools | `name`, UUID `id`, `values` | partial update |
 | delete/post/unpost/preview | `name`, UUID `id` | command result/preview |
 | `register_balance` | `name` | `where` over balance rows, `asOf`; errors above 5,000 matching rows |
