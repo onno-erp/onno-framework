@@ -124,3 +124,91 @@ describe("RecordForm save failure (#505)", () => {
     expect(toast.error.mock.calls).toEqual([["Couldn't save: Locked by an import"]]);
   });
 });
+
+describe("RecordForm post after save", () => {
+  const receipt: FormDescriptor = {
+    kind: "documents",
+    name: "receipts",
+    id: "receipt-1",
+    meta: { name: "Receipts", postable: true, attributes: form.meta.attributes },
+    initial: { id: "receipt-1", title: "Pilot" },
+  };
+
+  /** Stub fetch: the save goes through and the record re-reads; the post answers `post`. */
+  function stubPost(post: () => Response) {
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url === "/api/documents/receipts/receipt-1" && method === "PUT") return response(200, receipt.initial);
+      if (url === "/api/documents/receipts/receipt-1/post" && method === "POST") return post();
+      if (url === "/api/ui/record-refresh/documents/receipts/receipt-1") {
+        return response(200, { record: receipt.initial, actions: [], readOnly: false, canPost: true });
+      }
+      if (url.endsWith("/validate")) return response(200, { valid: true, fieldErrors: {}, formErrors: [] });
+      if (url.startsWith("/api/checks/")) return response(200, []);
+      throw new Error(`unexpected ${method} ${url}`);
+    }));
+  }
+
+  const postAfterSave = async () => {
+    render(<RecordForm form={receipt} />);
+    fireEvent.click(screen.getByRole("button", { name: "Post" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    await settle();
+  };
+
+  it("reports a network failure once, the save having gone through", async () => {
+    stubPost(() => {
+      throw new TypeError("Failed to fetch");
+    });
+    await postAfterSave();
+
+    expect(toast.error.mock.calls).toEqual([["Failed to fetch"]]);
+    expect(toast.success).toHaveBeenCalledWith("Saved");
+    // The failure comes after "Saved", so it is the toast in front of the stack.
+    expect(toast.success.mock.invocationCallOrder[0]).toBeLessThan(toast.error.mock.invocationCallOrder[0]);
+  });
+
+  it("reports a posting rule bound to a field, which the api layer leaves to the form, once", async () => {
+    stubPost(() => response(400, {
+      error: "validation",
+      message: "Quantity must be positive",
+      fieldErrors: { quantity: ["Quantity must be positive"] },
+    }));
+    await postAfterSave();
+
+    expect(toast.error.mock.calls).toEqual([["Quantity must be positive"]]);
+  });
+
+  it("on a new document, reports a network failure once and still opens the saved record", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url === "/api/documents/receipts" && method === "POST") return response(200, { id: "receipt-9", title: "Pilot" });
+      if (url === "/api/documents/receipts/receipt-9/post" && method === "POST") throw new TypeError("Failed to fetch");
+      if (url.endsWith("/validate")) return response(200, { valid: true, fieldErrors: {}, formErrors: [] });
+      if (url.startsWith("/api/checks/")) return response(200, []);
+      throw new Error(`unexpected ${method} ${url}`);
+    }));
+    const opened = vi.fn();
+    const onOpen = (event: Event) => opened((event as CustomEvent<string>).detail);
+    window.addEventListener("onno:open", onOpen);
+    try {
+      render(<RecordForm form={{ ...receipt, id: null, initial: { title: "Pilot" } }} />);
+      fireEvent.click(screen.getByRole("button", { name: "Post" }));
+      await waitFor(() => expect(toast.error).toHaveBeenCalled());
+      await settle();
+    } finally {
+      window.removeEventListener("onno:open", onOpen);
+    }
+
+    expect(toast.error.mock.calls).toEqual([["Failed to fetch"]]);
+    expect(opened).toHaveBeenCalledWith("onno://documents/receipts/receipt-9");
+  });
+
+  it("shows the api layer's toast for a rejected post only once", async () => {
+    stubPost(() => response(409, { message: "Not enough stock" }));
+    await postAfterSave();
+
+    expect(toast.error.mock.calls).toEqual([["Not enough stock"]]);
+    expect(toast.success.mock.invocationCallOrder[0]).toBeLessThan(toast.error.mock.invocationCallOrder[0]);
+  });
+});

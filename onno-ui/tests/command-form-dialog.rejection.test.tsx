@@ -3,8 +3,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 
 import { CommandFormDialog } from "@/components/actions/command-form-dialog";
 import { ApiError } from "@/lib/api";
+import { toast } from "@/components/ui/toast";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe("CommandFormDialog business rejection (#273)", () => {
   it("retains entered values and renders form and field errors", async () => {
@@ -53,5 +57,46 @@ describe("CommandFormDialog business rejection (#273)", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Run report" });
     expect(dialog).toHaveAccessibleDescription("Choose report options");
+  });
+});
+
+describe("CommandFormDialog failure without typed feedback", () => {
+  const submitWith = (onSubmit: () => Promise<void>, onClose = vi.fn()) => {
+    render(
+      <CommandFormDialog
+        title="Approve"
+        fields={[{ key: "reason", label: "Justification", type: "text" }]}
+        onSubmit={onSubmit}
+        onClose={onClose}
+      />
+    );
+    const input = screen.getByRole("textbox", { name: "Justification" });
+    fireEvent.change(input, { target: { value: "Schedule exception" } });
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    return input;
+  };
+
+  it("reports a network failure once and keeps the form open with the user's values", async () => {
+    const toastError = vi.spyOn(toast, "error");
+    const onClose = vi.fn();
+    const input = submitWith(vi.fn().mockRejectedValue(new TypeError("Failed to fetch")), onClose);
+
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(toastError.mock.calls).toEqual([["Failed to fetch"]]);
+    expect(input).toHaveValue("Schedule exception");
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("adds no toast to a failure the api layer has shown", async () => {
+    const toastError = vi.spyOn(toast, "error");
+    const shown = new ApiError("Database unavailable", 500);
+    shown.notified = true;
+    const onSubmit = vi.fn().mockRejectedValue(shown);
+    submitWith(onSubmit);
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(toastError).not.toHaveBeenCalled();
   });
 });

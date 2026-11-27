@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ImgHTMLAttributes, ReactNode } from "react";
 import type { ProcessWorkItem } from "@/lib/types";
+import type { CommentView } from "@/lib/api";
 
 // Widget-level guard for #505: with the real api layer in place (only fetch is stubbed), one
 // failed request shows one toast — the widget's own contextual one or the api layer's, not both.
@@ -24,6 +25,7 @@ vi.mock("@/components/ui/avatar", () => ({
 
 import { Setting } from "@/components/widgets/setting";
 import { TaskInbox } from "@/components/widgets/task-inbox";
+import { CommentThread } from "@/components/collaboration/comments";
 
 type Route = (url: string, method: string) => Response;
 
@@ -38,6 +40,12 @@ function stubFetch(route: Route) {
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) =>
     route(url, (init?.method ?? "GET").toUpperCase())));
 }
+
+/** Answer only `method path`; any other request is a bug in the test. */
+const only = (path: string, method: string, answer: () => Response): Route => (url, m) => {
+  if (url === path && m === method) return answer();
+  throw new Error(`unexpected ${m} ${url}`);
+};
 
 /** Let any late second toast land before asserting there is exactly one. */
 async function settle() {
@@ -126,11 +134,6 @@ describe("one failed request, one toast", () => {
       }
       return route(url, method);
     };
-    const only = (path: string, method: string, answer: () => Response): Route => (url, m) => {
-      if (url === path && m === method) return answer();
-      throw new Error(`unexpected ${m} ${url}`);
-    };
-
     it("claim: shows the api layer's toast once when the server rejects it", async () => {
       stubFetch(inbox(open, only("/api/tasks/task-1/claim", "POST", () => response(409, { message: "Task is already claimed" }))));
 
@@ -181,6 +184,168 @@ describe("one failed request, one toast", () => {
       fireEvent.click(screen.getByRole("button", { name: "Delegate" }));
 
       expect(await toastsAfterFailure()).toEqual([["Only the assignee can delegate"]]);
+    });
+
+    /** The inbox's first page offers a second one; `next` answers the request for it. */
+    const paged = (next: () => Response): Route => (url, method) => {
+      if (url === "/api/tasks" && method === "GET") {
+        return response(200, { rows: [open], nextCursor: "page-2", hasMore: true });
+      }
+      if (url === "/api/tasks?cursor=page-2" && method === "GET") return next();
+      if (url.startsWith("/api/task-assignees")) return response(200, []);
+      throw new Error(`unexpected ${method} ${url}`);
+    };
+
+    it("load more: shows the api layer's toast once", async () => {
+      stubFetch(paged(() => response(500, { message: "Tasks are unavailable" })));
+
+      render(<TaskInbox title="Process tasks" />);
+      fireEvent.click(await screen.findByRole("button", { name: "Load more tasks" }));
+
+      expect(await toastsAfterFailure()).toEqual([["Tasks are unavailable"]]);
+    });
+
+    it("load more: reports a network failure once", async () => {
+      stubFetch(paged(networkDown));
+
+      render(<TaskInbox title="Process tasks" />);
+      fireEvent.click(await screen.findByRole("button", { name: "Load more tasks" }));
+
+      expect(await toastsAfterFailure()).toEqual([["Failed to fetch"]]);
+    });
+
+    /** The claimed task's history offers a second page; `next` answers the request for it. */
+    const pagedHistory = (next: () => Response): Route => inbox(claimed, (url, method) => {
+      if (url === "/api/tasks/task-1/history" && method === "GET") {
+        return response(200, { rows: [], nextCursor: "page-2", hasMore: true });
+      }
+      if (url === "/api/tasks/task-1/history?cursor=page-2" && method === "GET") return next();
+      throw new Error(`unexpected ${method} ${url}`);
+    });
+
+    const loadMoreHistory = async () => {
+      render(<TaskInbox title="Process tasks" />);
+      await screen.findByText("Review order O-42");
+      fireEvent.click(screen.getByRole("button", { name: "History" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Load more history" }));
+    };
+
+    it("load more history: shows the api layer's toast once", async () => {
+      stubFetch(pagedHistory(() => response(500, { message: "History is unavailable" })));
+      await loadMoreHistory();
+
+      expect(await toastsAfterFailure()).toEqual([["History is unavailable"]]);
+    });
+
+    it("load more history: reports a network failure once", async () => {
+      stubFetch(pagedHistory(networkDown));
+      await loadMoreHistory();
+
+      expect(await toastsAfterFailure()).toEqual([["Failed to fetch"]]);
+    });
+  });
+
+  describe("CommentThread", () => {
+    const thread = "/api/comments/documents/orders/order-1";
+    const comment: CommentView = {
+      id: "comment-1",
+      authorName: "Mara",
+      authorAvatarUrl: null,
+      body: "Ship it on Monday",
+      parentId: null,
+      mentions: [],
+      reactions: [],
+      createdAt: "2026-11-17T09:00:00Z",
+      editedAt: null,
+      mine: true,
+      canDelete: true,
+    };
+
+    /** The thread lists `comment` with a second page behind it; `route` answers the action under test. */
+    const discussion = (route: Route): Route => (url, method) => {
+      if (url === thread && method === "GET") {
+        return response(200, { rows: [comment], nextCursor: "page-2", hasMore: true });
+      }
+      return route(url, method);
+    };
+
+    const renderThread = async (route: Route) => {
+      stubFetch(discussion(route));
+      render(<CommentThread target={{ kind: "documents", name: "orders", id: "order-1" }} />);
+      await screen.findByText("Ship it on Monday");
+    };
+
+    const send = async (answer: () => Response) => {
+      await renderThread(only(thread, "POST", answer));
+      fireEvent.change(screen.getByRole("textbox", { name: "Write a comment" }), { target: { value: "Agreed" } });
+      fireEvent.click(screen.getByRole("button", { name: "Send comment" }));
+    };
+
+    it("load more: shows the api layer's toast once", async () => {
+      await renderThread(only(`${thread}?cursor=page-2`, "GET", () => response(500, { message: "Comments are unavailable" })));
+      fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+      expect(await toastsAfterFailure()).toEqual([["Comments are unavailable"]]);
+    });
+
+    it("load more: reports a network failure once", async () => {
+      await renderThread(only(`${thread}?cursor=page-2`, "GET", networkDown));
+      fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+      expect(await toastsAfterFailure()).toEqual([["Failed to fetch"]]);
+    });
+
+    it("send: shows the api layer's toast once when the server rejects it", async () => {
+      await send(() => response(422, { message: "Comment is too long" }));
+
+      expect(await toastsAfterFailure()).toEqual([["Comment is too long"]]);
+    });
+
+    it("send: reports a lapsed session (401), which the api layer leaves to it, once with its context", async () => {
+      await send(() => response(401, { error: "unauthenticated" }));
+
+      expect(await toastsAfterFailure()).toEqual([["Couldn't post comment: unauthenticated"]]);
+    });
+
+    it("send: reports field errors, which the api layer leaves to it, once with its context", async () => {
+      await send(() => response(422, { message: "Body is required", fieldErrors: { body: ["Body is required"] } }));
+
+      expect(await toastsAfterFailure()).toEqual([["Couldn't post comment: Body is required"]]);
+    });
+
+    it("send: reports typed feedback, which the api layer leaves to it, once with its context", async () => {
+      await send(() => response(422, { severity: "error", title: "Comments are closed", message: "The thread is locked" }));
+
+      expect(await toastsAfterFailure()).toEqual([["Couldn't post comment: The thread is locked"]]);
+    });
+
+    it("send: reports a network failure once with its context", async () => {
+      await send(networkDown);
+
+      expect(await toastsAfterFailure()).toEqual([["Couldn't post comment: Failed to fetch"]]);
+    });
+
+    it("delete: reports a network failure once and puts the comment back", async () => {
+      await renderThread(only("/api/comments/comment-1", "DELETE", networkDown));
+      fireEvent.click(screen.getByRole("button", { name: "Delete comment" }));
+
+      expect(await toastsAfterFailure()).toEqual([["Failed to fetch"]]);
+      expect(screen.getByText("Ship it on Monday")).toBeInTheDocument();
+    });
+
+    it("delete: shows the api layer's toast once when the server refuses", async () => {
+      await renderThread(only("/api/comments/comment-1", "DELETE", () => response(403, { message: "Only the author can delete" })));
+      fireEvent.click(screen.getByRole("button", { name: "Delete comment" }));
+
+      expect(await toastsAfterFailure()).toEqual([["Only the author can delete"]]);
+    });
+
+    it("reaction: reports a network failure once", async () => {
+      await renderThread(only("/api/comments/comment-1/reactions", "POST", networkDown));
+      fireEvent.click(screen.getByRole("button", { name: "Choose reaction" }));
+      fireEvent.click(screen.getByRole("button", { name: "React with 👍" }));
+
+      expect(await toastsAfterFailure()).toEqual([["Failed to fetch"]]);
     });
   });
 });
