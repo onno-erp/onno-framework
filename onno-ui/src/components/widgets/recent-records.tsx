@@ -1,4 +1,5 @@
 import { openRoute } from "../../lib/navigation";
+import { notifyError } from "../../lib/notify-error";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { format } from "date-fns";
 import { toSnakeCase } from "../../lib/utils";
@@ -123,13 +124,14 @@ function RecentRecordsCard(props: RecentRecordsProps) {
     return "";
   };
 
+  // A new source starts empty; a live refresh keeps the rows on screen until the server answers.
   useEffect(() => {
     setItems([]);
     setHasMore(false);
-    if (!source || (source.entityType !== "document" && source.entityType !== "catalog")) {
-      setItems([]);
-      return;
-    }
+  }, [source, maxItems, dateField]);
+
+  useEffect(() => {
+    if (!source || (source.entityType !== "document" && source.entityType !== "catalog")) return;
     const name = toSnakeCase(source.entityName);
     const params = recentRecordsParams(source.entityType, { limit: maxItems, dateField, where: source.where });
     let alive = true;
@@ -140,7 +142,9 @@ function RecentRecordsCard(props: RecentRecordsProps) {
         setItems(data.rows ?? []);
         setHasMore(data.hasMore === true);
       })
-      .catch(() => alive && setItems([]));
+      .catch((error: unknown) => {
+        if (alive) notifyError(error);
+      });
     return () => {
       alive = false;
     };
