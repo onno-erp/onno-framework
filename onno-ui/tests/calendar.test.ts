@@ -72,7 +72,7 @@ describe("calendar items", () => {
   });
 
   it("falls back to the number, a reference display and the total", () => {
-    const event = calendarEvent(row, base)!;
+    const event = calendarEvent(row, { ...base, columns: [{ fieldName: "customer", type: "ref" }] })!;
     expect(event.title).toBe("EV-1");
     expect(event.extendedProps).toMatchObject({ primary: "EV-1", secondary: "Acme", amount: 120, color: undefined });
     expect(event.classNames).toEqual(["fc-onno-posted"]);

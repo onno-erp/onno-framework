@@ -94,6 +94,12 @@ Both in `onno-web-starter/src/main/java/su/onno/web/`.
 | `src/components/pages/page-blocks.tsx` | `Page`, `Row`, `DefaultView`, `EntityList` — what pages are composed from; the data components (`Stat`, `Chart`, …) live under `src/components/widgets/`. |
 | `src/lib/query.ts` | Data hooks on TanStack Query (`useRecords`, `useCreateRecord`, `useBalance`…) and SSE-driven invalidation. |
 | `src/lib/api.ts` | The REST client. |
+| `src/lib/record-presentation.ts` | Shared widget record labels and reference photos, selected from entity metadata; widget callbacks customize them. |
+
+Row-shaped widgets read bounded list windows and retain `hasMore`. A visible notice reports a
+partial result, including a board/list/map's own display limit. `api.listCatalogPage`,
+`listDocumentsPage` and `listCatalogWindowPage` keep the continuation envelope; array-only
+convenience reads such as `useRecords` are bounded and do not imply that every record was read.
 
 **How state flows.** The app's declaration goes *down the tree* in context, never into module
 state, so a component's behaviour depends only on its props and the providers above it:

@@ -1222,6 +1222,11 @@ orders nothing. Logical entity names are checked against the generated model.
   `count`/`sum`/`avg`/`min`/`max` (`sum("Orders", "total", { posted: true })`). Which records is
   always a typed `where` object (`{ status: { in: [OrderStatus.NEW] }, total: { gte: 100 } }`),
   sent to the server as JSON. Everything refreshes from the server's live events.
+- **Bounded record widgets** keep the list feed's `hasMore` and show `widget.records.truncated`
+  when the server or a display limit leaves records out. Default secondary labels/photos follow
+  entity metadata, never application-specific field-name fallback lists; use render callbacks for
+  app-specific text. Array-only `useRecords` reads are bounded; use the `api.list*Page` envelope
+  when a component needs continuation information.
 - **Calendar and timeline** list views for date-ranged records are the entity's `list`
   customization (or `EntityList` props for one list): `calendar={{ start: "startsAt", end: "endsAt", mode: "week" }}` and
   `timeline={{ start: "startsAt", end: "endsAt", lane: "organizer", laneEntity: "Employees",
