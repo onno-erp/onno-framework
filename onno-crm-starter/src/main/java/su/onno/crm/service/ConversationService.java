@@ -77,11 +77,18 @@ public class ConversationService {
     /**
      * @param html the reply as formatted HTML, for email only; {@code body} stays its plain-text version. It is
      *             sanitized ({@link ReplyHtml}) and kept as the message's {@code bodyHtml}; null sends plain text.
+     * @param cc   who an email reply copies ({@code "Name <address>"} or bare addresses, at most
+     *             {@link EmailAddresses#MAX_CC}); kept on the message as {@code copyTo}. Empty copies nobody.
      */
     public record Reply(String body, List<String> files, String authorName, String authorId, String subject, String recipient,
-                        String sender, String html) {
+                        String sender, String html, List<String> cc) {
         public Reply {
             files = files == null ? List.of() : List.copyOf(files);
+            cc = cc == null ? List.of() : List.copyOf(cc);
+        }
+        public Reply(String body, List<String> files, String authorName, String authorId, String subject, String recipient,
+                     String sender, String html) {
+            this(body, files, authorName, authorId, subject, recipient, sender, html, List.of());
         }
         public Reply(String body, List<String> files, String authorName, String authorId, String subject, String recipient,
                      String sender) {
@@ -153,6 +160,12 @@ public class ConversationService {
             recipient=connection.recipients().stream().filter(address->address.equalsIgnoreCase(chosen)).findFirst()
                 .orElseThrow(()->new IllegalArgumentException("Choose an email address linked to this contact"));
         }
+        List<String> cc = List.of();
+        if (!reply.cc().isEmpty()) {
+            if (!su.onno.crm.domain.Channel.EMAIL.equals(conversation.getChannel()))
+                throw new IllegalArgumentException("Only email replies have a Cc");
+            cc = EmailAddresses.cc(reply.cc(), recipient);
+        }
         if (normalized.length() > Math.min(8000, connection.maxTextLength())) {
             throw new IllegalArgumentException("Message is too long (maximum " + connection.maxTextLength() + " characters)");
         }
@@ -173,6 +186,12 @@ public class ConversationService {
         message.setBodyHtml(normalized.isEmpty() ? null : html);
         message.setSubject(subject);
         message.setRecipient(recipient);
+        if (su.onno.crm.domain.Channel.EMAIL.equals(conversation.getChannel()) && recipient != null)
+            message.setSentTo(recipient);
+        String copyTo = EmailAddresses.join(cc);
+        if (copyTo != null && copyTo.length() < cc.stream().mapToInt(String::length).sum() + 2 * (cc.size() - 1))
+            throw new IllegalArgumentException("The Cc list is too long");
+        message.setCopyTo(copyTo);
         message.setSenderAccount(sender);
         message.setAttachments(attachments.store(accepted));
         // A files-only message still needs something to read in a conversation list, so the preview

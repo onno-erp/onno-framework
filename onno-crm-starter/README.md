@@ -190,6 +190,18 @@ outgoing message as `senderAccount`, so delivery and retries use the same accoun
 conversation's own mailbox (the default), the shared mailboxes and the replying user's own personal
 mailbox, never another person's. Transports opt into recipient selection with `Connection.withRecipients(defaultAddress, allowedAddresses)`. Gmail offers the contact’s linked email identities and defaults to the current thread’s reply address. The optional `recipient` command field is validated against those choices and saved on the outgoing message, including the default, so retries retain the destination. Choosing a different address starts a new email thread within the same CRM conversation. A single address is shown without a dropdown. Email replies expose an editable Subject row separately from the sender account picker. The optional `subject` command field is saved on the outgoing message for delivery and retries; omit it to keep the existing reply subject. Gmail sends a changed subject as a new email thread and associates it with the same CRM conversation. Subjects must be a single line of at most 998 characters. Non-email channels reject subject overrides.
 
+Email replies also have a **Cc** row. Transports suggest who to copy with `Connection.withCc(List<String>)` (`cc` on the
+delivery response, `Name <address>` entries); Gmail suggests reply-all: everyone else on the conversation's latest
+received email (its To and Cc), without the deployment's own mailboxes and the reply's recipient, each address once.
+The composer prefills the row with it; the planner removes people (×) or adds addresses, and the edited list is kept in
+the conversation's draft. The optional `cc` command field (at most 20 entries, each exactly one valid address, no line
+breaks; `422` otherwise or on other channels) is saved on the outgoing message as `copyTo`, so delivery and retries copy
+the same people, on the existing thread or a new one. Omitting it copies nobody: the suggestion is never applied
+server-side. Messages keep an email's recipients (`ConversationMessage.sentTo`/`copyTo`, comma-joined RFC 5322 entries):
+Gmail fills both from received mail and from replies imported from the Sent label; a reply sent from the CRM stores
+its recipient and Cc. The chat shows them under the author ("to Sarah, me · cc Marco, Giulia", long lists ending in
+"+N", the full lists as the tooltip) only when the email had a Cc or several To.
+
 Files can be selected with the paperclip or dropped anywhere in the active conversation pane. The drop target respects reply permissions, channel attachment support, file count and upload size limits. Drops add files to the draft tray; they never send the reply automatically. Internal-note mode does not accept attachment drops.
 
 An outbound reply may carry files. They are stored as references, never as bytes on the message:
@@ -243,12 +255,12 @@ authorization precedes it. `canAccess` remains for single-conversation checks.
 | `GET /inbox-workspaces/{key}` | `{key,label,canWrite,config,list,channelAccounts,rows,total,hasMore,nextCursor}`: authorized rows (filters, `sort`/`dir`, cursor/limit) and the conversation list's default descriptor |
 | `GET /inbox-workspaces/{key}/conversation/{id}` | Authorized conversations for the same customer |
 | `GET/POST /inbox-workspaces/{key}/conversations/{id}/comments` | Internal notes. POST validates `body` against the shared `onno.comments.max-length` (4000 characters by default) and the CRM request cap of 8000 characters. Invalid text returns `422`. |
-| `GET/POST /conversations/{id}/messages` | History / enqueue `{body,attachments,subject?,recipient?,from?,html?}` (`html`: an email's formatted version of `body`, sanitized to formatting tags into the message's `bodyHtml` and sent as its HTML part; `400` on other channels); each message returns `attachments:[{url,filename,contentType,size,image}]` and the stored `subject`/`recipient`/`senderAccount` (null when not set), so history shows overrides. A `from` the delivery connection does not offer is `400` |
-| `GET /conversations/{id}/delivery` | `{connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients,senders,sender}`; `recipient` is the default address and `recipients` the choices (null/empty when the transport offers no selection); `senders` (`[{id,label}]`) are the accounts the reply may come from and `sender` the default id (empty/null when there is no choice), as offered to the caller. Addresses known only through another user's personal account are left out |
+| `GET/POST /conversations/{id}/messages` | History / enqueue `{body,attachments,subject?,recipient?,from?,html?,cc?}` (`cc`: who an email reply copies, see above) (`html`: an email's formatted version of `body`, sanitized to formatting tags into the message's `bodyHtml` and sent as its HTML part; `400` on other channels); each message returns `attachments:[{url,filename,contentType,size,image}]` and the stored `subject`/`recipient`/`senderAccount` and the email's `sentTo`/`copyTo` (null when not set), so history shows overrides. A `from` the delivery connection does not offer is `400` |
+| `GET /conversations/{id}/delivery` | `{connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients,senders,sender}`; `recipient` is the default address and `recipients` the choices (null/empty when the transport offers no selection); `senders` (`[{id,label}]`) are the accounts the reply may come from and `sender` the default id (empty/null when there is no choice), as offered to the caller; `cc` the suggested Cc (reply-all; empty when none). Addresses known only through another user's personal account are left out of `recipients`; `cc` comes from mail the conversation already shows |
 | `POST /conversations/{id}/status` | `{status}` (a configured status id) → the updated conversation state; a missing body or `status` is `400` |
 | `POST /conversations/{id}/messages/{messageId}/retry` | Retry a failed reply |
 | `POST /conversations/{id}/read` | Acknowledge unread messages |
-| `GET/POST /contacts/{id}/activity` | Scoped timeline / record an internal activity; message entries carry the same `attachments` shape and `senderAccount` |
+| `GET/POST /contacts/{id}/activity` | Scoped timeline / record an internal activity; message entries carry the same `attachments` shape, `senderAccount`, `sentTo` and `copyTo` |
 | `GET/POST /chat-groups?workspace=...` | Personal grouping, only when enabled |
 | `GET /channels`, `POST /channels/{key}` | Credential-free status / authorized connector command |
 
@@ -296,6 +308,16 @@ and the other fields stay the composer's. When `formatting` is true (email), the
 `onChange(text, html)`: the HTML is kept in the draft beside the text and sent as the email's HTML part, the text as
 its plain part; `onChange(text)` alone, or any other change of the text, makes the reply plain again. Mark the editable element `data-composer-reply` so the
 composer can put the caret back in it; Ctrl/Cmd+Enter is ignored while an IME is composing.
+Two more hooks reshape the composer without redrawing it. `renderAttach` replaces the paperclip wherever the
+composer draws it (the toolbar, the mobile actions panel, the larger window) with the app's own control, a menu of
+files and templates say; it gets `CrmAttachProps` (`composer`, `chooseFiles` to open the composer's file picker,
+`surface`, `labelled`). `renderFields` arranges the fields above the reply: it gets `CrmComposerFieldParts`, onno's
+own `header` (sender row with the larger-window button), `sender`, `recipient`, `recipientNotice`, `cc` (the Cc row,
+`CcField`) and `subject` (null where the channel has none), `expand` to open the larger window, a `summary` of what the
+rows hold (`summary.cc` lists the people copied, for a "+2 in Cc") and whether the planner `changed` the recipient, Cc
+or subject, so an app can fold them behind one line as Gmail does and still let them out.
+`insertDraft(text, files, html)` takes the text's formatting too (a letter template): an email reply keeps it, joined
+to the draft's own HTML, and sends it; other channels send the text.
 `CrmInbox`'s `components` swaps a part in place. Every replacement gets the same props the built-in
 part does: `ConversationRowProps`, `CrmComposerProps`, `InboxContactPanelProps`.
 
@@ -501,7 +523,7 @@ Mobile list-to-chat navigation uses the same 300ms horizontal slide as folders, 
 ### Composer drafts, large window and sending mailbox
 
 Drafts belong to the conversation (`src/main/ui/composerDrafts.ts`): the reply, an edited subject, the
-pinned recipient, the chosen sending mailbox and reply-or-note mode survive switching chats,
+pinned recipient, the edited Cc (`cc`, null while it follows the suggestion), the chosen sending mailbox and reply-or-note mode survive switching chats,
 contacts, inbox modes and tabs. The text parts are kept in `localStorage` under
 `onno.crm.draft.v1|<workspace>|<conversation>`, best effort (guarded access, 64 000 characters per
 entry, at most 100 entries, dropped after 30 days); files already uploaded for the next reply stay

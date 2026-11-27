@@ -65,8 +65,8 @@ public class OnnoAfterSaveCallback implements AfterSaveCallback<Object>, AfterCo
                     SecretFields.apply(aggregate, registry, secretCipher::decrypt));
         }
 
-        // A repository delete is implemented as a deletion-mark save. It has already run
-        // BeforeDeleteHandler in OnnoSimpleJdbcRepository and must publish delete semantics,
+        // A delete is implemented as a deletion-mark save. It has already run BeforeDeleteHandler
+        // in EntityDeleteService and must publish delete semantics,
         // not masquerade as an ordinary update/after-write.
         if (!deleted && aggregate instanceof AfterWriteHandler handler) {
             time(operationName("after-write", aggregate), aggregate, handler::afterWrite);

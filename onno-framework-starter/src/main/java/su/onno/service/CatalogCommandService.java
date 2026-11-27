@@ -4,7 +4,6 @@ import su.onno.access.AccessMode;
 import su.onno.access.AccessSubject;
 import su.onno.history.HistoryActor;
 import su.onno.history.HistoryActors;
-import su.onno.lifecycle.BeforeDeleteHandler;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.model.CatalogObject;
@@ -182,14 +181,10 @@ public class CatalogCommandService {
         EntityWriteSupport.requireWritable(properties);
         access.requireWrite(subject, desc);
         guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
-        // A soft delete, exactly as a repository delete: the domain's BeforeDeleteHandler may veto it
-        // (a ValidationException maps to the standard 4xx), then the deletion mark is saved.
-        CatalogObject stored = load(desc, id);
-        if (stored instanceof BeforeDeleteHandler handler) {
-            handler.beforeDelete();
-        }
-        stored.setDeletionMark(true);
-        store.inTransaction(() -> store.save(stored));
+        // The same soft delete as a repository delete (EntityDeleteService): the domain's
+        // BeforeDeleteHandler may veto it (a ValidationException maps to the standard 4xx), then the
+        // deletion mark is saved without beforeWrite or validation.
+        store.delete(load(desc, id));
     }
 
     /**

@@ -237,4 +237,17 @@ describe("DesktopNavigation", () => {
     expect(sales).toHaveAttribute("data-navigation-state", "section-active");
     expect(sales).toHaveStyle({ background: "#f0eeff", color: "#6757f5" });
   });
+
+  it("opens a menu item in a new workspace tab on middle-click or Ctrl/Cmd-click", () => {
+    const { onNavigate } = renderNavigation();
+    const customers = screen.getByRole("button", { name: "Customers" });
+    fireEvent.click(customers, { ctrlKey: true });
+    expect(onNavigate).toHaveBeenLastCalledWith("/catalogs/customers", { newWorkspaceTab: true });
+    fireEvent.click(customers, { metaKey: true });
+    expect(onNavigate).toHaveBeenLastCalledWith("/catalogs/customers", { newWorkspaceTab: true });
+    fireEvent(customers, new MouseEvent("auxclick", { bubbles: true, button: 1 }));
+    expect(onNavigate).toHaveBeenLastCalledWith("/catalogs/customers", { newWorkspaceTab: true });
+    fireEvent.click(customers);
+    expect(onNavigate).toHaveBeenLastCalledWith("/catalogs/customers");
+  });
 });

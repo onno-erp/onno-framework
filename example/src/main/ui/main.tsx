@@ -44,7 +44,16 @@ import { TeamPage } from "./pages/TeamPage";
 
 defineApp({
   login: LoginPage,
-  entities,
+  entities: { ...entities, "Book Prices": {
+    fields: { price: { format: { money: "USD" } } },
+    list: {
+      columns: ["book", "period", "price"], sort: "-period",
+      filters: [
+        { field: "book", label: "Book", optionsFrom: "Books" },
+        { field: "period", label: "Date", type: "dateRange" },
+      ],
+    },
+  } },
   // Contributions to the CRM chat's outlets (quote a message, open the contact's page).
   extensions: supportExtensions,
   pages: [
@@ -131,7 +140,7 @@ defineApp({
         },
       ],
     },
-    { title: "Catalog", icon: Book, items: ["Books", "Categories"] },
+    { title: "Catalog", icon: Book, items: ["Books", "Categories", "Book Prices"] },
     {
       title: "Inventory",
       icon: Package,

@@ -16,11 +16,16 @@ import { linkedWhere } from "../lib/links";
 function withLinkedWhere(view: ViewModel, path: string): ViewModel {
   const where = linkedWhere(path);
   if (!where) return view;
+  if ("informationRegister" in view) {
+    const register = view.informationRegister;
+    return { informationRegister: { ...register, list: { ...register.list as object, baseWhere: where } } };
+  }
   return "list" in view ? { list: { ...view.list, baseWhere: where } } : view;
 }
 
 /** An action a surface raises to the shell: an `onno://` URL or an app route (see AppShell). */
-export type ContentAction = { url?: string };
+/** A navigation or action URL; `newTab` asks for a new workspace tab instead of the active one. */
+export type ContentAction = { url?: string; newTab?: boolean };
 
 /** Fetch the server view for a route; rejects with a {@link PaneError}. */
 export function viewEndpoint(path: string): string {

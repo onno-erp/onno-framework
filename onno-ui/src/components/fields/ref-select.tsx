@@ -225,7 +225,8 @@ export function RefSelect({
     // field is available. Register the hand-off first: when that form saves, the new record's
     // id lands straight in this field instead of the user re-finding it in the picker.
     requestTokenRef.current = quickCreate.request(kind, name);
-    openRoute(`onno://${kind}/${name}/new`);
+    // A new tab: an ordinary open would replace this form, and the picker waiting for the id with it.
+    openRoute(`onno://${kind}/${name}/new`, { newWorkspaceTab: true });
   };
 
   const showAll = () => {
@@ -253,7 +254,8 @@ export function RefSelect({
   // layout, the record route elsewhere).
   const openSelected = () => {
     if (!value) return;
-    openRoute(`onno://${kind}/${name}/${value}`);
+    // Beside the form, never in its place: the form being edited stays open.
+    openRoute(`onno://${kind}/${name}/${value}`, { newWorkspaceTab: true });
   };
 
   const showOpen = openButton && !!value && !disabled;

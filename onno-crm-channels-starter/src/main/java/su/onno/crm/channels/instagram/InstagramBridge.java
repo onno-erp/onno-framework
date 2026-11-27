@@ -49,6 +49,12 @@ public class InstagramBridge implements CrmChannelConnection,CrmMessageTransport
      * in the same second leaves {@code updated_time} unchanged.
      */
     static final Duration SETTLE=Duration.ofMinutes(1);
+    /** How long a downloaded profile picture (or Instagram's "none") stands before it is checked again. */
+    static final Duration AVATAR_REFRESH=Duration.ofDays(7);
+    /** Profile pictures one poll may look up: two Graph calls each, so a first pass over many people is spread out. */
+    static final int AVATARS_PER_POLL=3;
+    /** Where {@link InstagramAvatars} serves a cached picture; the provider's own URL never leaves the server. */
+    static final String AVATAR_PATH="/api/crm/instagram/avatars/";
     private final InstagramClient client;private final JdbcTemplate jdbc;private final TransactionTemplate tx;
     private final InboxRepository inboxes;private final ConversationRepository conversations;
     private final ConversationMessageRepository messages;private final ContactIdentityRepository identities;
@@ -87,6 +93,10 @@ public class InstagramBridge implements CrmChannelConnection,CrmMessageTransport
         jdbc.execute("CREATE TABLE IF NOT EXISTS onno_crm_ig_outbox (message_id UUID PRIMARY KEY,account_id VARCHAR(100),peer_id VARCHAR(100),state VARCHAR(20))");
         // Times are ISO-8601 UTC text (Instant#toString), so neither the JVM nor the database time zone can shift them.
         jdbc.execute("CREATE TABLE IF NOT EXISTS onno_crm_ig_sync (account_id VARCHAR(100) PRIMARY KEY,activation_cutoff VARCHAR(40) NOT NULL,checkpoint VARCHAR(40),pass_head VARCHAR(40),pass_cursor VARCHAR(4000))");
+        // One row per person the account talks to: their cached profile picture (base64, empty when Instagram gave
+        // none) and when it was last checked (ISO-8601 UTC, whole seconds, so the text compares in time order).
+        jdbc.execute("CREATE TABLE IF NOT EXISTS onno_crm_ig_avatar (account_id VARCHAR(100),peer_id VARCHAR(100),identity_id UUID NOT NULL,content_type VARCHAR(100),content TEXT,checked_at VARCHAR(40) NOT NULL,PRIMARY KEY(account_id,peer_id))");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS onno_crm_ig_avatar_identity ON onno_crm_ig_avatar (identity_id)");
         jdbc.execute("CREATE TABLE IF NOT EXISTS onno_crm_ig_thread (account_id VARCHAR(100),thread_id VARCHAR(512),updated_time VARCHAR(40) NOT NULL,fetched_at VARCHAR(40) NOT NULL,PRIMARY KEY(account_id,thread_id))");
         tx.executeWithoutResult(s->{for(UUID id:jdbc.query("SELECT message_id FROM onno_crm_ig_outbox WHERE state='SENDING'",(r,n)->r.getObject(1,UUID.class)))finish(id,false,null);});
         var a=account();
@@ -171,7 +181,7 @@ public class InstagramBridge implements CrmChannelConnection,CrmMessageTransport
 
     synchronized void tick(){if(!ready||!client.configured()||clock.instant().isBefore(retryAt))return;
         try{if(account()==null)connect();var a=account();if(!a.active)return;failure="";
-            ensureCutoff(a.id,"first poll");deliver(a);poll(a);failures=0;
+            ensureCutoff(a.id,"first poll");deliver(a);poll(a);avatars(a);failures=0;
         }catch(InstagramClient.ApiFailure e){
             failures++;boolean limited=e.rateLimited();
             long delay=Math.max(e.retrySeconds,backoff(limited?300:60,limited?3600:900));
@@ -280,6 +290,40 @@ public class InstagramBridge implements CrmChannelConnection,CrmMessageTransport
             jdbc.update("INSERT INTO onno_crm_ig_seen VALUES (?,?)",a.id,external);
         });
     }
+    // ---- profile pictures ----
+
+    /**
+     * Downloads the profile pictures of up to {@link #AVATARS_PER_POLL} people: first those never
+     * checked, then the longest unchecked, the most recent writers first, each at most once per
+     * {@link #AVATAR_REFRESH}. A picture is kept until Instagram answers again; only a clear answer
+     * (a new picture, or none) replaces it. Rate limits and a rejected token stop the poll as usual.
+     */
+    void avatars(Account a){
+        String due=seconds(clock.instant().minus(AVATAR_REFRESH));
+        var peers=jdbc.query("SELECT p.peer_id FROM onno_crm_ig_peer p LEFT JOIN onno_crm_ig_avatar v ON v.account_id=p.account_id AND v.peer_id=p.peer_id"
+                +" WHERE p.account_id=? AND (v.checked_at IS NULL OR v.checked_at<?) ORDER BY v.checked_at NULLS FIRST,p.last_inbound DESC NULLS LAST,p.peer_id"
+                +" FETCH FIRST "+AVATARS_PER_POLL+" ROWS ONLY",(r,n)->r.getString(1),a.id,due);
+        for(String peer:peers){
+            UUID identity=identityId(a,peer);boolean known=identities.findActiveById(identity).isPresent();
+            boolean answered=false;InstagramClient.Image image=null;
+            if(known)try{String url=client.profilePicture(peer);image=url==null?null:client.picture(url);answered=url==null||image!=null;}
+            catch(InstagramClient.ApiFailure e){if(e.rateLimited()||e.code==190)throw e;}
+            catch(RuntimeException e){log.debug("Instagram profile picture deferred ({})",e.getClass().getSimpleName());}
+            var found=image;boolean replace=answered;String checked=seconds(clock.instant());
+            tx.executeWithoutResult(s->{workspace.lock();
+                String content=found==null?"":Base64.getEncoder().encodeToString(found.content()),type=found==null?null:found.contentType();
+                boolean exists=jdbc.queryForObject("SELECT COUNT(*) FROM onno_crm_ig_avatar WHERE account_id=? AND peer_id=?",Integer.class,a.id,peer)>0;
+                if(!exists)jdbc.update("INSERT INTO onno_crm_ig_avatar (account_id,peer_id,identity_id,content_type,content,checked_at) VALUES (?,?,?,?,?,?)",a.id,peer,identity,type,content,checked);
+                else if(replace)jdbc.update("UPDATE onno_crm_ig_avatar SET identity_id=?,content_type=?,content=?,checked_at=? WHERE account_id=? AND peer_id=?",identity,type,content,checked,a.id,peer);
+                else jdbc.update("UPDATE onno_crm_ig_avatar SET checked_at=? WHERE account_id=? AND peer_id=?",checked,a.id,peer);
+                if(known&&replace)contacts.setIdentityAvatar(identity,found==null?null:AVATAR_PATH+identity);
+            });
+        }
+    }
+    /** The contact identity {@link CrmContactService#link} gives this person in the account's inbox. */
+    private static UUID identityId(Account a,String peer){return UUID.nameUUIDFromBytes(("INSTAGRAM\n"+a.inbox+"\n"+peer.trim()).getBytes(StandardCharsets.UTF_8));}
+    private static String seconds(Instant at){return at.truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString();}
+
     private void deliver(Account a){for(UUID id:jdbc.query("SELECT message_id FROM onno_crm_ig_outbox WHERE account_id=? AND state='QUEUED'",(r,n)->r.getObject(1,UUID.class),a.id)){
         if(jdbc.update("UPDATE onno_crm_ig_outbox SET state='SENDING' WHERE message_id=? AND state='QUEUED'",id)!=1)continue;
         try{var m=messages.findActiveById(id).orElseThrow();var c=conversations.findActiveById(m.getConversation().id()).orElseThrow();if(!connection(c).canSend())throw new IllegalStateException();

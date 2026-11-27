@@ -378,6 +378,8 @@ contract.
 Extend the framework without forking it. Community projects can ship connectors, SPI
 implementations, UI component packages, MCP tools, or agent skills as separate artifacts. The
 [extension guide](docs/EXTENDING.md) documents the contracts, naming rules, and definition of done.
+Starters can add public endpoint patterns and CSRF exemptions through `AuthPathsContributor` beans;
+see the [auth starter's CSRF model](onno-auth-starter/README.md#csrf-model).
 
 Built one? Add it to [`community/registry.json`](community/registry.json), run
 `./gradlew generateIntegrationsDoc`, and open a pull request to list it in

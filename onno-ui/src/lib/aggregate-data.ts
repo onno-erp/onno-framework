@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { queryClient, useEntityChanges } from "./query";
 import type { EntitySource } from "./entity-source";
 import { format, parseISO, startOfHour, startOfISOWeek, startOfMonth } from "date-fns";
-import { api } from "./api";
+import { api, type CollectionPage } from "./api";
 import { toSnakeCase } from "./utils";
 import type { EntityRecord } from "./types";
 
@@ -30,13 +30,14 @@ export function useEntityVersion(source: EntitySource | null): number {
 }
 
 const NO_ROWS: EntityRecord[] = [];
+const EMPTY_PAGE: CollectionPage<EntityRecord> = { rows: NO_ROWS, hasMore: false, nextCursor: null };
 
 /**
  * The records backing a row-shaped component (calendar, kanban, map, recent records): a document or
  * catalog list, narrowed by the source's `where`. A TanStack query on the shell's client, so the
  * server's live events refresh it like any entity query. A register has no records — no rows.
  */
-export function useEntityRows(source: EntitySource | null): EntityRecord[] {
+export function useEntityRows(source: EntitySource | null): CollectionPage<EntityRecord> {
   const query = useQuery({
     queryKey: ["onno", source?.entityName ?? "", "source-rows", source?.where ?? null],
     enabled: !!source && source.entityType !== "register",
@@ -44,14 +45,14 @@ export function useEntityRows(source: EntitySource | null): EntityRecord[] {
       const s = source!;
       const name = toSnakeCase(s.entityName);
       try {
-        if (s.entityType === "document") return await api.listDocuments(name, undefined, undefined, s.where);
-        return await api.listCatalog(name, s.where);
+        if (s.entityType === "document") return await api.listDocumentsPage(name, undefined, undefined, s.where, { limit: 500 });
+        return await api.listCatalogPage(name, s.where, { limit: 500 });
       } catch {
-        return NO_ROWS;
+        return EMPTY_PAGE;
       }
     },
   }, queryClient);
-  return query.data ?? NO_ROWS;
+  return query.data ?? EMPTY_PAGE;
 }
 
 /** A label for one bucket value — formatted dates for time buckets, else the raw value. */

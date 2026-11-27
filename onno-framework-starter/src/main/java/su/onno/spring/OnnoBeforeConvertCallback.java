@@ -18,6 +18,7 @@ import su.onno.validation.AttributeValidator;
 import su.onno.validation.BeanValidation;
 import su.onno.validation.ValidationErrors;
 
+import org.jdbi.v3.core.Jdbi;
 import org.springframework.data.relational.core.mapping.event.BeforeConvertCallback;
 
 import java.lang.reflect.Field;
@@ -31,6 +32,7 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
     private final SecretCipher secretCipher;
     private final OnnoMetrics metrics;
     private PeriodCloseService periodClose;
+    private Jdbi jdbi;
     private final BusinessRuleValidator businessRuleValidator = new BusinessRuleValidator();
     private final AttributeValidator attributeValidator = new AttributeValidator();
 
@@ -50,6 +52,14 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
     /** Enables period-close enforcement on document saves (including the soft delete). */
     public void setPeriodCloseService(PeriodCloseService periodClose) {
         this.periodClose = periodClose;
+    }
+
+    /**
+     * Enables the posted re-check of a soft delete: the stored row is locked and read on the save's
+     * transaction, so a document posted after it was loaded is not marked deleted with stale state.
+     */
+    public void setJdbi(Jdbi jdbi) {
+        this.jdbi = jdbi;
     }
 
     @Override
@@ -105,24 +115,32 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
             }
         }
 
-        // Call BeforeWriteHandler
-        if (aggregate instanceof BeforeWriteHandler handler) {
+        // A soft delete (EntityDeleteService) is its own lifecycle: BeforeDeleteHandler already ran,
+        // and neither recalculation hooks nor current-state validation apply to a record on its way out.
+        boolean deleting = DeleteWriteContext.isDeleting(aggregate);
+        if (deleting && aggregate instanceof DocumentObject document) {
+            requireUnpostedForDelete(document);
+        }
+
+        if (!deleting && aggregate instanceof BeforeWriteHandler handler) {
             time(operationName("before-write", aggregate), aggregate, handler::beforeWrite);
         }
 
         // Validate: attribute constraints (column length plus rules a Bean Validation provider does
         // not own), Jakarta Bean Validation on the entity and its rows, and the business rules,
-        // collected together so the user sees every problem at once.
-        time(operationName("validate", aggregate), aggregate, () -> {
-            ValidationErrors errors = new ValidationErrors();
-            List<AttributeDescriptor> attributes = attributesOf(aggregate);
-            if (attributes != null) {
-                attributeValidator.validate(aggregate, attributes, errors);
-                BeanValidation.validate(aggregate, errors);
-            }
-            businessRuleValidator.collect(aggregate, errors);
-            errors.throwIfAny();
-        });
+        // collected together so the user sees every problem at once. A soft delete skips it.
+        if (!deleting) {
+            time(operationName("validate", aggregate), aggregate, () -> {
+                ValidationErrors errors = new ValidationErrors();
+                List<AttributeDescriptor> attributes = attributesOf(aggregate);
+                if (attributes != null) {
+                    attributeValidator.validate(aggregate, attributes, errors);
+                    BeanValidation.validate(aggregate, errors);
+                }
+                businessRuleValidator.collect(aggregate, errors);
+                errors.throwIfAny();
+            });
+        }
 
         // Encrypt secret attributes so the row written holds ciphertext. The plaintext is
         // restored on the in-memory instance by OnnoAfterSaveCallback once the write lands.
@@ -130,6 +148,24 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
                 SecretFields.apply(aggregate, registry, secretCipher::encrypt));
 
         return aggregate;
+    }
+
+    /**
+     * Posting flips {@code _posted} without bumping the version, so the optimistic lock alone would
+     * not notice a post that landed after the document was loaded. Lock the row on the save's
+     * transaction (JDBI joins it) and re-read the flag; a concurrent post then waits for this delete
+     * and finds the document deletion-marked.
+     */
+    private void requireUnpostedForDelete(DocumentObject document) {
+        if (jdbi == null) return;
+        DocumentDescriptor desc = registry.getDocumentDescriptor(document.getClass());
+        boolean posted = jdbi.withHandle(h -> h.createQuery(
+                        "SELECT _posted FROM " + desc.tableName() + " WHERE _id = :id FOR UPDATE")
+                .bind("id", document.getId())
+                .mapTo(Boolean.class)
+                .findOne()
+                .orElse(false));
+        if (posted) throw EntityDeleteService.postedDocument(document);
     }
 
     @SuppressWarnings("unchecked")

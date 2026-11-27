@@ -63,6 +63,21 @@ public class ConversationMessage extends CatalogObject implements HasBusinessRul
     @Attribute(displayName = "Sent from", length = 320)
     private String senderAccount;
 
+    /**
+     * An email's To list as RFC 5322 addresses ({@code "Name <address>"}, or a bare address), joined
+     * by {@code ", "}: from the headers of received mail and mail imported from Gmail's Sent label,
+     * and the recipient a reply was sent to. Null for other channels and older messages.
+     */
+    @Attribute(displayName = "To", length = 4000)
+    private String sentTo;
+
+    /**
+     * An email's Cc list in the {@link #sentTo} format. On an outbound reply it is the Cc chosen
+     * when it was queued, so delivery and retries copy the same people. Null when nobody was copied.
+     */
+    @Attribute(displayName = "Cc", length = 4000)
+    private String copyTo;
+
     @Attribute(displayName = "Body", length = 8000)
     private String body;
 

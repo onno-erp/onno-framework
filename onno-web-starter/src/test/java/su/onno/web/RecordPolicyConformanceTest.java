@@ -132,6 +132,7 @@ class RecordPolicyConformanceTest {
                 "GET /api/registers/{name}/movements", "GET /api/registers/{name}/balance",
                 "GET /api/registers/{name}/turnover", "GET /api/information-registers/{name}/records",
                 "GET /api/information-registers/{name}/slice-last",
+                "GET /api/list/information-registers/{name}",
                 // List feeds, groups, widget aggregates
                 "GET /api/list/catalogs/{name}", "GET /api/list/documents/{name}",
                 "GET /api/list/catalogs/{name}/groups", "GET /api/list/documents/{name}/groups",
@@ -157,7 +158,7 @@ class RecordPolicyConformanceTest {
                 "GET /api/ui/view/catalogs/{name}/new", "GET /api/ui/view/catalogs/{name}/{id}/duplicate",
                 "GET /api/ui/view/documents/{name}", "GET /api/ui/view/documents/{name}/{id}",
                 "GET /api/ui/view/documents/{name}/new", "GET /api/ui/view/documents/{name}/{id}/duplicate",
-                "GET /api/ui/view/registers/{name}", "GET /api/ui/pickers/{kind}/{name}",
+                "GET /api/ui/view/information-registers/{name}", "GET /api/ui/view/registers/{name}", "GET /api/ui/pickers/{kind}/{name}",
                 "GET /api/ui/record-refresh/{kind}/{name}/{id}",
                 // Task inbox: assignment decides visibility; subject labels are masked by scope
                 "GET /api/tasks")) {
@@ -528,6 +529,9 @@ class RecordPolicyConformanceTest {
     private void registersAreScopedByDimension() throws Exception {
         assertThat((List<?>) jsonMap(ok(get("/api/information-registers/LkTenantFacts/records"))).get("rows")).hasSize(1);
         assertThat(jsonList(ok(get("/api/information-registers/LkTenantFacts/slice-last")))).hasSize(1);
+        Map<String, Object> facts = jsonMap(ok(get("/api/list/information-registers/LkTenantFacts").param("count", "exact")));
+        assertThat((List<?>) facts.get("rows")).hasSize(1);
+        assertThat(facts.get("total")).isEqualTo(1);
         List<Map<String, Object>> movements = pageRows(ok(get("/api/registers/LkUsage/movements")));
         assertThat(movements).hasSize(1);
         List<Map<String, Object>> balance = pageRows(ok(get("/api/registers/LkUsage/balance")));
@@ -627,6 +631,7 @@ class RecordPolicyConformanceTest {
         ok(get("/api/ui/view/documents/LkBuildJobs/" + jobA + "/duplicate"));
         status(get("/api/ui/view/documents/LkBuildJobs/" + jobB + "/duplicate"), 404);
         ok(get("/api/ui/view/registers/LkUsage"));
+        ok(get("/api/ui/view/information-registers/LkTenantFacts"));
     }
 
     private void writesAreScoped() throws Exception {

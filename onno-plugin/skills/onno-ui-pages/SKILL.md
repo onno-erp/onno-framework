@@ -273,8 +273,11 @@ Links name what to open; web and mobile clients share them.
 | `links.list("Orders", { where: { posted: false } })` | `onno://documents/orders?where=<json>` | a list showing only those records |
 | `links.page("/ops")` | `onno://ops` | an app page (`onno://` is home) |
 
-Open with `openRoute(link)` (also takes a page path; `openRoute(link, { newTab: true })` opens a
-browser tab under the app's base path) or the shortcut `openRecord("Orders", id)` /
+Open with `openRoute(link)` (also takes a page path). Like a link in a browser window, it replaces
+what the active workspace tab shows and that tab's Back returns; `openRoute(link, { newWorkspaceTab:
+true })` opens a new workspace tab and `openRoute(link, { newTab: true })` a browser tab under the
+app's base path. Use `newWorkspaceTab` when several records open at once (each would otherwise
+replace the previous one) or the shortcut `openRecord("Orders", id)` /
 `openRecord("Orders", "new", prefill)`. `<RouteLink to={link}>` is a real anchor (middle-click and
 copy work) that opens in the workspace on a plain click. A Java command can send the user on with
 `CommandResult.open(ref)` / `.navigate(route)`; the client applies the result's `navigateTo` after
