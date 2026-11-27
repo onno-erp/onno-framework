@@ -69,7 +69,6 @@ export interface KanbanProps {
   locale?: string;
 }
 
-const text = (v: unknown) => (v == null ? "" : String(v));
 
 /** The default card caption: the record's number, else its code. */
 export const defaultKanbanCaption = (row: EntityRecord): ReactNode => shortRecordNumber(row.number ?? row.code);
