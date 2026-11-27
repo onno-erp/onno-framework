@@ -457,10 +457,11 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(JobScheduler.class)
     public ScheduledJobRegistrar scheduledJobRegistrar(ApplicationContext applicationContext,
-                                                        JobScheduler jobScheduler) {
-        return new ScheduledJobRegistrar(applicationContext, jobScheduler);
+                                                        ObjectProvider<JobScheduler> jobScheduler,
+                                                        OnnoProperties properties) {
+        return new ScheduledJobRegistrar(applicationContext, jobScheduler.getIfAvailable(),
+                resolvePackages(properties, applicationContext));
     }
 
     /** Durable wake-up for due process timers and completed subprocess waits. */

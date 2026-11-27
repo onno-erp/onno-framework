@@ -559,6 +559,7 @@ Examples:
 - Aging reports
 
 ```java
+@Component
 @ScheduledJob(name = "DailySalesReport", cron = "0 0 2 * * *")
 public class DailySalesReportJob implements BackgroundTask {
     @Override
@@ -566,6 +567,10 @@ public class DailySalesReportJob implements BackgroundTask {
     }
 }
 ```
+
+`@ScheduledJob` classes must implement `BackgroundTask` and be Spring beans (`@Component` or
+`@Bean`). The starter fails at startup for active declarations in its scan packages without a
+bean, or for task beans without a JobRunr `JobScheduler`. Apps with no tasks need no scheduler.
 
 ### Business Processes And Human Tasks
 
