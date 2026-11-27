@@ -2,6 +2,11 @@ package su.onno.posting;
 
 import su.onno.model.DocumentObject;
 
+/**
+ * Posting operations on documents saved and committed through the ordinary write pipeline.
+ * These operations change register movements and posting state, not document attributes or
+ * tabular sections, and do not invoke {@code BeforeWriteHandler.beforeWrite()}.
+ */
 public class PostingService {
 
     private final PostingEngine engine;

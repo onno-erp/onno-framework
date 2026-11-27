@@ -189,7 +189,7 @@ Enums: `AccumulationType{BALANCE,TURNOVER}`, `Periodicity{NONE,SECOND,MINUTE,HOU
 
 | Interface | Method | When |
 | --- | --- | --- |
-| `BeforeWriteHandler` | `beforeWrite()` | Before save and before post — compute derived fields. |
+| `BeforeWriteHandler` | `beforeWrite()` | Ordinary save/write-validation pipeline only — compute derived fields before saving. Never run by posting or posting previews. |
 | `AfterWriteHandler` | `afterWrite()` | After a successful repository or generic REST/import/MCP save; validation previews skip it. |
 | `OnFillingHandler` | `onFilling()` | Seed/normalize defaults on **create/save**. It does not populate the initially rendered blank New form; use Java field initializers for values that must appear there. It runs on every save of a new entity (`isNew==true`), so guard on null and keep it idempotent. |
 | `BeforePostHandler` | `beforePost()` | Before posting (validation) — **no Spring DI** (see below). |
@@ -217,10 +217,13 @@ validation exception/payload.
 - `PostingContext` — `movements(Class<T extends AccumulationRecord>)` returns a `RegisterRepository<T>`;
   call `addReceipt(Consumer<T>)` / `addExpense(Consumer<T>)` to stage movements.
 - Events: `DocumentPostedEvent(document)`, `DocumentUnpostedEvent(document)` (Spring events, after commit).
-- `PostingEngine` runs `beforeWrite → beforePost → rules → handlePosting`. Normal posting stages
+- `PostingEngine` runs `beforePost → rules → handlePosting`. Normal posting stages
   movements before opening its JDBI persistence transaction, then atomically claims an existing
   unposted document, inserts movements, updates totals, rejects negative BALANCE results unless the
-  register declares `allowNegative=true`, writes back computed fields, and sets `_posted=true`.
+  register declares `allowNegative=true`, and sets `_posted=true`. Post, repost, preview and
+  chronological restoration never invoke `beforeWrite` or save document attributes/tabular
+  sections. Save and commit derived fields first; temporary values computed by posting hooks
+  belong to movement calculation and are not written back to the document.
   Core `post` rejects an already-posted document; `repost` reverses old movements and writes the
   recalculated set in one transaction, preserving the old posting if recalculation fails. Unpost
   rejects drafts and deleted documents.

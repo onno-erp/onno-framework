@@ -433,7 +433,11 @@ class PostingTest {
                 .bind("id", issue.getId())
                 .mapTo(BigDecimal.class)
                 .one());
-        assertThat(storedCost).isEqualByComparingTo("100.00");
+        // Recalculation changes the register, never the document's saved attributes.
+        assertThat(storedCost).isNull();
+        assertThat(costPersistence.getRecordsByDocument(issue.getId()).stream()
+                .filter(TestCostRegister::isActive).toList()).singleElement()
+                .satisfies(row -> assertThat(row.getAmount()).isEqualByComparingTo("100.00"));
     }
 
     /**
@@ -472,7 +476,10 @@ class PostingTest {
                 .bind("id", backdated.getId())
                 .mapTo(BigDecimal.class)
                 .one());
-        assertThat(storedCost).isEqualByComparingTo("50.00");
+        assertThat(storedCost).isNull();
+        assertThat(costPersistence.getRecordsByDocument(backdated.getId()).stream()
+                .filter(TestCostRegister::isActive).toList()).singleElement()
+                .satisfies(row -> assertThat(row.getAmount()).isEqualByComparingTo("50.00"));
     }
 
     @Test

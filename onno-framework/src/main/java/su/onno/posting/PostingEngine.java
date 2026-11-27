@@ -4,7 +4,6 @@ import su.onno.events.EntityChangedEvent;
 import su.onno.lifecycle.AfterPostHandler;
 import su.onno.lifecycle.BeforePostHandler;
 import su.onno.lifecycle.BeforeUnpostHandler;
-import su.onno.lifecycle.BeforeWriteHandler;
 import su.onno.lifecycle.Postable;
 import su.onno.annotations.DomainEvent;
 import su.onno.annotations.EventTiming;
@@ -12,13 +11,11 @@ import su.onno.metadata.AccumulationRegisterDescriptor;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.MetadataRegistry;
-import su.onno.metadata.TabularSectionDescriptor;
 import su.onno.messaging.OutboxWriter;
 import su.onno.model.AccumulationRecord;
 import su.onno.model.AccumulationType;
 import su.onno.model.DocumentObject;
 import su.onno.model.PostingOrder;
-import su.onno.model.TabularSectionRow;
 import su.onno.performance.OnnoPerformance;
 import su.onno.period.PeriodCloseService;
 import su.onno.period.PeriodOperation;
@@ -45,11 +42,14 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * Posts documents: runs their {@link Postable} logic, writes the resulting register movements and
  * totals, enforces non-negative balances, then flips {@code _posted}.
+ * Posting, re-posting, preview and chronological restoration do not call
+ * {@code BeforeWriteHandler.beforeWrite()} or save document attributes or tabular-section rows.
+ * Save derived document fields through the ordinary write pipeline before posting; values
+ * computed by {@code beforePost()} or {@code handlePosting()} are for movement calculation only.
  *
  * <h2>Transaction boundary — important</h2>
  * Posting runs inside its <em>own</em> JDBI transaction ({@link Jdbi#useTransaction}) on a connection
@@ -167,10 +167,6 @@ public class PostingEngine {
                     document.getClass().getName() + " does not implement Postable");
         }
 
-        if (document instanceof BeforeWriteHandler writer) {
-            OnnoPerformance.record("onno.document.before-write", 1, writer::beforeWrite);
-        }
-
         if (document instanceof BeforePostHandler handler) {
             OnnoPerformance.record("onno.document.before-post", 1, handler::beforePost);
         }
@@ -189,7 +185,7 @@ public class PostingEngine {
         OnnoPerformance.record("onno.document.post.transaction", 1, () -> jdbi.useTransaction(handle -> {
             claimUnpostedDocument(handle, docDescriptor, document.getId());
             requirePeriodOpen(handle, document, context, PeriodOperation.POST);
-            persistPosting(handle, docDescriptor, document, context);
+            persistPosting(handle, document, context);
             publishDomainEvents(handle, document, EventTiming.AFTER_POST);
         }));
 
@@ -212,7 +208,7 @@ public class PostingEngine {
             claimPostedDocument(handle, descriptor, document.getId(), false);
             requirePeriodOpen(handle, document, context, PeriodOperation.REPOST);
             unpostMovements(handle, document.getId());
-            persistPosting(handle, descriptor, document, context);
+            persistPosting(handle, document, context);
             publishDomainEvents(handle, document, EventTiming.AFTER_POST);
         }));
         afterSuccessfulPost(document);
@@ -226,9 +222,6 @@ public class PostingEngine {
         if (!(document instanceof Postable)) {
             throw new IllegalArgumentException(
                     document.getClass().getName() + " does not implement Postable");
-        }
-        if (document instanceof BeforeWriteHandler writer) {
-            OnnoPerformance.record("onno.document.before-write", 1, writer::beforeWrite);
         }
         if (document instanceof BeforePostHandler handler) {
             OnnoPerformance.record("onno.document.before-post", 1, handler::beforePost);
@@ -398,14 +391,12 @@ public class PostingEngine {
                                 // date-ordered post would have seen.
                                 clearPending(requestedContext);
                                 PostingContext asOfDate = buildPostingContext(requested);
-                                persistPosting(handle, requestedDescriptor, requested, asOfDate);
+                                persistPosting(handle, requested, asOfDate);
                             }
 
                             for (DocumentObject later : laterDocuments) {
                                 PostingContext context = preparePosting(later);
-                                DocumentDescriptor descriptor =
-                                        registry.getDocumentDescriptor(later.getClass());
-                                persistPosting(handle, descriptor, later, context);
+                                persistPosting(handle, later, context);
                                 later.setPosted(true);
                             }
                             if (mutation != PostingMutation.UNPOST) {
@@ -420,9 +411,6 @@ public class PostingEngine {
             throw new IllegalArgumentException(
                     document.getClass().getName() + " does not implement Postable");
         }
-        if (document instanceof BeforeWriteHandler writer) {
-            OnnoPerformance.record("onno.document.before-write", 1, writer::beforeWrite);
-        }
         if (document instanceof BeforePostHandler handler) {
             OnnoPerformance.record("onno.document.before-post", 1, handler::beforePost);
         }
@@ -433,7 +421,6 @@ public class PostingEngine {
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     private void persistPosting(Handle handle,
-                                DocumentDescriptor descriptor,
                                 DocumentObject document,
                                 PostingContext context) {
         for (RegisterRepositoryImpl<?> repo : context.touchedRepositories()) {
@@ -444,7 +431,6 @@ public class PostingEngine {
             checkNonNegativeBalances(handle, persistence.getDescriptor(), document.getId());
             repo.clearPending();
         }
-        writeBackDocument(handle, descriptor, document);
     }
 
     private void claimUnpostedDocument(Handle handle,
@@ -735,61 +721,6 @@ public class PostingEngine {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private void writeBackDocument(Handle handle, DocumentDescriptor desc, DocumentObject document) {
-        // Update document-level attributes
-        // Secret attributes are encrypted by the repository save path. The domain object holds
-        // plaintext after loading, so binding them here would overwrite the ciphertext.
-        List<AttributeDescriptor> attrs = desc.attributes().stream()
-                .filter(attr -> !attr.secret())
-                .toList();
-        if (!attrs.isEmpty()) {
-            String setClauses = attrs.stream()
-                    .map(a -> a.columnName() + " = :" + a.columnName())
-                    .collect(Collectors.joining(", "));
-
-            var update = handle.createUpdate(
-                    "UPDATE " + desc.tableName() + " SET " + setClauses + " WHERE _id = :_id")
-                    .bind("_id", document.getId());
-
-            for (AttributeDescriptor attr : attrs) {
-                Object val = getFieldValue(document, attr.fieldName());
-                update.bind(attr.columnName(), convertForDb(val));
-            }
-            update.execute();
-        }
-
-        // Update tabular section rows
-        for (TabularSectionDescriptor ts : desc.tabularSections()) {
-            List<?> rows = getListField(document, ts.fieldName());
-            if (rows == null) continue;
-
-            for (Object rowObj : rows) {
-                if (!(rowObj instanceof TabularSectionRow row)) continue;
-                if (row.getId() == null) continue;
-
-                List<AttributeDescriptor> rowAttrs = ts.attributes().stream()
-                        .filter(attr -> !attr.secret())
-                        .toList();
-                if (rowAttrs.isEmpty()) continue;
-
-                String rowSetClauses = rowAttrs.stream()
-                        .map(a -> a.columnName() + " = :" + a.columnName())
-                        .collect(Collectors.joining(", "));
-
-                var rowUpdate = handle.createUpdate(
-                        "UPDATE " + ts.tableName() + " SET " + rowSetClauses + " WHERE _id = :_id")
-                        .bind("_id", row.getId());
-
-                for (AttributeDescriptor attr : rowAttrs) {
-                    Object val = getFieldValue(rowObj, attr.fieldName());
-                    rowUpdate.bind(attr.columnName(), convertForDb(val));
-                }
-                rowUpdate.execute();
-            }
-        }
-    }
-
     private Object convertForDb(Object val) {
         if (val == null) return null;
         if (val instanceof Ref<?> ref) return ref.id();
@@ -818,12 +749,6 @@ public class PostingEngine {
         } catch (Exception e) {
             return null;
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<?> getListField(Object target, String fieldName) {
-        Object val = getFieldValue(target, fieldName);
-        return val instanceof List<?> list ? list : null;
     }
 
     private Field findField(Class<?> clazz, String name) {
