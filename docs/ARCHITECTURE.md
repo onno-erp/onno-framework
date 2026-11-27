@@ -240,7 +240,8 @@ MCP). It runs `BeforeDeleteHandler.beforeDelete()` (throw to veto), sets the mar
 Spring Data JDBC, so the optimistic version, period close, record history, the `AFTER_DELETE` outbox
 row and the change event all happen in the delete's transaction. `beforeWrite`, attribute
 validation, business rules and `afterWrite` do not run: a record that no longer passes today's rules
-can still be deleted. A posted document is rejected (`PostedDocumentDeletionException`; the generic
+can still be deleted. Only the structural hierarchy rule remains: a folder with active children
+cannot be deleted. A posted document is rejected (`PostedDocumentDeletionException`; the generic
 path answers `409`) — unpost it explicitly first; the stored `_posted` flag is re-checked under a
 row lock during the save. Repositories for ordinary, non-onno aggregates keep Spring Data JDBC's
 physical-delete behavior.
@@ -509,6 +510,11 @@ encryption, period close, record history, `afterWrite()`, domain events and the 
 add only the caller-facing checks around the save (read-only mode, entity and record access, the
 post-write scope check, all in one transaction). Validation previews run only the pre-write phase
 and never call `afterWrite()`; posting still runs its own lifecycle in `PostingEngine`.
+For hierarchical catalogs the save callback also validates the persisted parent chain after the
+hooks: parents are live folders in the same catalog, cycles are rejected, and a folder with active
+children cannot be demoted or soft-deleted. The written row and ancestors are locked through the
+transaction-bound JDBI connection so concurrent moves cannot commit a cycle. Generic live
+validation repeats these rules without locks or writes. Failures are field-scoped on `parent`.
 Tabular-section `lineNumber` in read payloads is the 1-based position in stored order.
 
 The same pipeline backs **live form validation**: `POST /api/{catalogs,documents}/{name}[/{id}]/validate`

@@ -47,6 +47,12 @@ Opt-in, not part of `all()`:
 The rules name onno types by their class names, so this module adds only ArchUnit to your test
 classpath. A rule whose subject does not occur (an app with no controllers) passes.
 
+The framework's `RecordScopeArchitectureTest` also audits direct entity-table readers. Its
+`CatalogHierarchyValidator` entry is a trusted save-time integrity check over the complete parent
+chain, including repository saves; it returns no record data. Caller-facing catalog commands and
+validation previews check a supplied parent's read scope first, with identical preview errors for
+unknown and inaccessible parents (`RecordPolicyConformanceTest`).
+
 ## Accepting existing violations
 
 To adopt a rule in an app that already breaks it, freeze the current violations and fail only on

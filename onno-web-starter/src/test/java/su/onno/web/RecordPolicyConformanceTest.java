@@ -339,7 +339,7 @@ class RecordPolicyConformanceTest {
         instanceA = id(catalogCommands.create(instances, body("code", "IA", "description", "alpha-1",
                 "tenant", tenantA.toString(), "plan", planBasic.toString()), system));
         instanceB = id(catalogCommands.create(instances, body("code", "LEAK-B-I", "description", "LEAK-B-instance",
-                "tenant", tenantB.toString(), "plan", planBasic.toString()), system));
+                "tenant", tenantB.toString(), "plan", planBasic.toString(), "folder", true), system));
         // an A instance filed under B's instance: A must see it as a root with the parent withheld
         instanceUnderB = id(catalogCommands.create(instances, body("code", "IA2", "description", "alpha-orphan",
                 "tenant", tenantA.toString(), "parent", instanceB.toString()), system));
@@ -664,6 +664,14 @@ class RecordPolicyConformanceTest {
                 .content("{\"description\":\"x\",\"tenant\":\"" + tenantB + "\"}"), 422);
         status(post("/api/catalogs/LkInstances").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"description\":\"x\",\"tenant\":\"" + tenantA + "\",\"parent\":\"" + instanceB + "\"}"), 422);
+        Map<String, Object> hiddenParent = jsonMap(ok(post("/api/catalogs/LkInstances/validate")
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(
+                        body("tenant", tenantA.toString(), "parent", instanceB.toString())))));
+        Map<String, Object> missingParent = jsonMap(ok(post("/api/catalogs/LkInstances/validate")
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(
+                        body("tenant", tenantA.toString(), "parent", UUID.randomUUID().toString())))));
+        assertThat(hiddenParent).containsEntry("valid", false).isEqualTo(missingParent);
+        assertThat(((Map<?, ?>) hiddenParent.get("fieldErrors")).containsKey("parent")).isTrue();
         Map<String, Object> scratch = jsonMap(ok(post("/api/catalogs/LkInstances").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"description\":\"scratch\",\"tenant\":\"" + tenantA + "\"}")));
         status(delete("/api/catalogs/LkInstances/" + scratch.get("id")), 200);

@@ -411,6 +411,14 @@ writes use the same field name:
 }
 ```
 
+Hierarchical catalog writes validate `parent` after the entity's filling/before-write hooks. The
+parent must be an existing folder in the same catalog, not marked for deletion, and its ancestor
+chain must not contain a cycle. `parent: null` moves a record to the root. A folder with active
+children cannot be turned into an item or soft-deleted. Invalid hierarchy writes return HTTP 400
+with `error: "validation"`, `field: "parent"` and `fieldErrors.parent`; an inaccessible parent still
+uses the existing record-access response. Catalog `/validate` reports these rules in its normal
+HTTP 200 validation payload without saving. Typed repository saves enforce the same invariants.
+
 ### Document row
 
 ```jsonc

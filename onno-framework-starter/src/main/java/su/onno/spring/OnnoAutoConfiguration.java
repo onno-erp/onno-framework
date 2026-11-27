@@ -194,6 +194,7 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
                 new OnnoBeforeConvertCallback(registry, numberGenerator, secretCipher, metrics);
         callback.setPeriodCloseService(periodClose.getIfAvailable());
         callback.setJdbi(jdbi);
+        callback.setCatalogHierarchyValidator(new su.onno.service.CatalogHierarchyValidator(jdbi));
         return callback;
     }
 

@@ -29,6 +29,10 @@ class RecordScopeArchitectureTest {
             "CatalogQueryService.java", "DocumentQueryService.java", "RegisterQueryService.java",
             "InformationRegisterQueryService.java", "EntityQuerySupport.java",
             "CatalogCommandService.java", "DocumentCommandService.java", "RecordWriteGuard.java",
+            // Trusted save-time integrity check, including repository saves: reads the full parent
+            // chain, returns no records/ids. Command and preview paths guard supplied parents by
+            // READ scope before this validator; hidden and unknown parents have the same preview.
+            "CatalogHierarchyValidator.java",
             // scope-aware helpers
             "RefResolver.java", "RecordAccess.java", "EventPublisher.java", "MentionResolver.java",
             // DDL only

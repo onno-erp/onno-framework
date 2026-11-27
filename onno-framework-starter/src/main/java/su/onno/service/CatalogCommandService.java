@@ -39,6 +39,7 @@ public class CatalogCommandService {
     private final AttributeValidator attributeValidator = new AttributeValidator();
     private final EntityBodyMapper mapper;
     private final RecordWriteGuard guard;
+    private final CatalogHierarchyValidator hierarchy;
 
     public CatalogCommandService(MetadataRegistry registry, Jdbi jdbi, WebProperties properties,
                                  CatalogQueryService query, AccessService access, EntityStore store) {
@@ -49,6 +50,7 @@ public class CatalogCommandService {
         this.store = store;
         this.mapper = new EntityBodyMapper(registry);
         this.guard = new RecordWriteGuard(registry, query.scopes(), access, jdbi);
+        this.hierarchy = new CatalogHierarchyValidator(jdbi);
     }
 
     // Each command binds the caller as the history actor for its duration, so the write and anything
@@ -154,16 +156,23 @@ public class CatalogCommandService {
             entity.setCode(asString(body.getOrDefault("code", "")));
             entity.setDescription(asString(body.getOrDefault("description", "")));
             entity.setFolder(Boolean.TRUE.equals(body.get("folder")));
-            entity.setParent(parseUuid(body.get("parent")));
+            entity.setParent(previewParent(body.get("parent"), errors));
         } else {
             if (body.containsKey("code")) entity.setCode(asString(body.get("code")));
             if (body.containsKey("description")) entity.setDescription(asString(body.get("description")));
             if (body.containsKey("folder")) entity.setFolder(Boolean.TRUE.equals(body.get("folder")));
-            if (body.containsKey("parent")) entity.setParent(parseUuid(body.get("parent")));
+            if (body.containsKey("parent")) entity.setParent(previewParent(body.get("parent"), errors));
         }
         mapper.applyBody(entity, desc.attributes(), body, errors);
         mapper.applySections(entity, desc.tabularSections(), body, errors);
         mapper.dryRun(entity, isNew, errors);
+        if (desc.hierarchical() && body.containsKey("parent") && entity.getParent() != null
+                && query.scopes().isScoped(desc.javaClass(), subject, AccessMode.READ)
+                && !query.inScope(subject, desc, entity.getParent(), AccessMode.READ)) {
+            errors.field("parent", "Unknown or inaccessible reference for parent");
+        } else {
+            hierarchy.collect(desc, entity, errors);
+        }
         TabularSectionWriteSupport.validate(desc.tabularSections(), body, errors);
         return EntityWriteSupport.validationReport(errors);
     }
@@ -249,7 +258,20 @@ public class CatalogCommandService {
 
     private static UUID parseUuid(Object value) {
         if (value == null || "".equals(value)) return null;
-        return value instanceof UUID uuid ? uuid : UUID.fromString(value.toString());
+        try {
+            return value instanceof UUID uuid ? uuid : UUID.fromString(value.toString());
+        } catch (IllegalArgumentException malformed) {
+            throw new su.onno.validation.ValidationException("Parent must be a valid UUID", "parent");
+        }
+    }
+
+    private static UUID previewParent(Object value, ValidationErrors errors) {
+        try {
+            return parseUuid(value);
+        } catch (su.onno.validation.ValidationException malformed) {
+            errors.field("parent", malformed.getMessage());
+            return null;
+        }
     }
 
     private static int parseInt(Object value) {

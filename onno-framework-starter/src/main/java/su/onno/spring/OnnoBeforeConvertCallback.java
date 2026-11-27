@@ -14,6 +14,7 @@ import su.onno.period.PeriodOperation;
 import su.onno.rules.BusinessRuleValidator;
 import su.onno.security.SecretCipher;
 import su.onno.security.SecretFields;
+import su.onno.service.CatalogHierarchyValidator;
 import su.onno.validation.AttributeValidator;
 import su.onno.validation.ValidationErrors;
 
@@ -31,6 +32,7 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
     private final SecretCipher secretCipher;
     private final OnnoMetrics metrics;
     private PeriodCloseService periodClose;
+    private CatalogHierarchyValidator catalogHierarchy;
     private Jdbi jdbi;
     private final BusinessRuleValidator businessRuleValidator = new BusinessRuleValidator();
     private final AttributeValidator attributeValidator = new AttributeValidator();
@@ -51,6 +53,11 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
     /** Enables period-close enforcement on document saves (including the soft delete). */
     public void setPeriodCloseService(PeriodCloseService periodClose) {
         this.periodClose = periodClose;
+    }
+
+    /** Enables persisted hierarchy checks for catalog saves, including typed repositories. */
+    public void setCatalogHierarchyValidator(CatalogHierarchyValidator catalogHierarchy) {
+        this.catalogHierarchy = catalogHierarchy;
     }
 
     /**
@@ -120,6 +127,11 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
         if (deleting && aggregate instanceof DocumentObject document) {
             requireUnpostedForDelete(document);
         }
+        if (deleting && aggregate instanceof CatalogObject catalog && catalogHierarchy != null) {
+            ValidationErrors errors = new ValidationErrors();
+            catalogHierarchy.collectForDelete(registry.getCatalogDescriptor(catalog.getClass()), catalog, errors);
+            errors.throwIfAny();
+        }
 
         if (!deleting && aggregate instanceof BeforeWriteHandler handler) {
             time(operationName("before-write", aggregate), aggregate, handler::beforeWrite);
@@ -135,6 +147,9 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
                     attributeValidator.validate(aggregate, attributes, errors);
                 }
                 businessRuleValidator.collect(aggregate, errors);
+                if (aggregate instanceof CatalogObject catalog && catalogHierarchy != null) {
+                    catalogHierarchy.collectForWrite(registry.getCatalogDescriptor(catalog.getClass()), catalog, errors);
+                }
                 errors.throwIfAny();
             });
         }

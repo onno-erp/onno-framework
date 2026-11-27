@@ -197,10 +197,11 @@ public final class TestEntityStore {
         }
 
         @Bean
-        OnnoBeforeConvertCallback onnoBeforeConvertCallback() {
+        OnnoBeforeConvertCallback onnoBeforeConvertCallback(Jdbi jdbi) {
             OnnoBeforeConvertCallback callback =
                     new OnnoBeforeConvertCallback(options.registry(), options.numbers(), options.cipher());
             callback.setPeriodCloseService(options.periodClose());
+            callback.setCatalogHierarchyValidator(new CatalogHierarchyValidator(jdbi));
             return callback;
         }
 
