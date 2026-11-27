@@ -188,10 +188,12 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
                                                                 su.onno.numbering.NumberGenerator numberGenerator,
                                                                 su.onno.security.SecretCipher secretCipher,
                                                                 OnnoMetrics metrics,
-                                                                org.springframework.beans.factory.ObjectProvider<su.onno.period.PeriodCloseService> periodClose) {
+                                                                org.springframework.beans.factory.ObjectProvider<su.onno.period.PeriodCloseService> periodClose,
+                                                                Jdbi jdbi) {
         OnnoBeforeConvertCallback callback =
                 new OnnoBeforeConvertCallback(registry, numberGenerator, secretCipher, metrics);
         callback.setPeriodCloseService(periodClose.getIfAvailable());
+        callback.setJdbi(jdbi);
         return callback;
     }
 

@@ -609,9 +609,11 @@ is `422`. Policy defaults (e.g. `owner`) are filled on create and cannot be over
 
 `list` returns only live rows (`deletionMark = false`; `_deletion_mark` in storage representation).
 Deletes are soft (the mark is set), so a
-deleted row disappears from `list` but is still reachable by `get` until purged. Spring Data
-`CatalogRepository`/`DocumentRepository` delete methods use the same tombstone contract; posted
-documents must be unposted before repository deletion.
+deleted row disappears from `list` but is still reachable by `get` until purged. The generic
+`DELETE` and Spring Data `CatalogRepository`/`DocumentRepository` delete methods run the same
+command: `BeforeDeleteHandler`, then the mark (version bumped, delete events), without `beforeWrite`
+or validation. Deleting a posted document answers `409`; unpost it first (`batch-delete` reports it
+as a failed id).
 
 ## Reacting to changes
 

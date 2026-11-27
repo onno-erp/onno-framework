@@ -1,5 +1,8 @@
 package su.onno.service;
 
+import su.onno.spring.EntityDeleteService;
+import su.onno.spring.PostedDocumentDeletionException;
+
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.jdbc.core.JdbcAggregateOperations;
 import org.springframework.data.relational.core.conversion.DbActionExecutionException;
@@ -26,10 +29,12 @@ public class EntityStore {
 
     private final JdbcAggregateOperations aggregates;
     private final TransactionTemplate transactions;
+    private final EntityDeleteService deletes;
 
     public EntityStore(JdbcAggregateOperations aggregates, PlatformTransactionManager transactionManager) {
         this.aggregates = aggregates;
         this.transactions = new TransactionTemplate(transactionManager);
+        this.deletes = new EntityDeleteService(aggregates);
     }
 
     /** The stored aggregate with secrets decrypted, or {@code null} when no row has that id. */
@@ -50,6 +55,28 @@ public class EntityStore {
             }
             throw failed;
         }
+    }
+
+    /**
+     * Soft-delete the stored aggregate through {@link EntityDeleteService}, the same command a typed
+     * repository delete runs, in one transaction. A posted document is rejected with
+     * {@link PostedDocumentDeletionException}; a stale {@code version} surfaces as
+     * {@link OptimisticLockingFailureException}.
+     */
+    public void delete(Object aggregate) {
+        inTransaction(() -> {
+            try {
+                deletes.delete(aggregate);
+            } catch (DbActionExecutionException failed) {
+                if (failed.getCause() instanceof OptimisticLockingFailureException stale) {
+                    throw stale;
+                }
+                if (failed.getCause() instanceof PostedDocumentDeletionException posted) {
+                    throw posted;
+                }
+                throw failed;
+            }
+        });
     }
 
     /** Run {@code work} in one transaction; JDBI calls made inside it join that transaction. */

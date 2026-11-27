@@ -396,17 +396,20 @@ JDBI handle as the posting mutation, so both commit or roll back together. Repos
 outbox rows likewise join the active Spring JDBC transaction. Unposting a draft or deleted
 document is rejected.
 
-Catalog/document repository deletes are soft: `delete(...)`, `deleteById(...)`, and bulk delete
-methods run `BeforeDeleteHandler`, save `deletionMark = true`, and then publish delete events. A
-posted document must be explicitly unposted before repository deletion. Ordinary non-onno Spring
+Catalog/document deletes are soft and run one command, `EntityDeleteService`, for typed repository
+deletes (`delete(...)`, `deleteById(...)`, bulk) and the generic REST/UI/import/MCP delete alike: it
+runs `BeforeDeleteHandler`, saves `deletionMark = true` (bumping the version) and publishes delete
+events in one transaction, without `beforeWrite`, validation or `afterWrite`. A posted document is
+rejected on every path (`PostedDocumentDeletionException`, HTTP 409): unpost it explicitly first.
+Ordinary non-onno Spring
 Data aggregates retain physical deletes. Generic REST/import/MCP creates and updates run
 `onFilling` (create), `beforeWrite`, rules, persistence, then `afterWrite`; validation previews never
 run `afterWrite`.
 
 **Who may post is a separate right from who may edit.** `@AccessControl(postRoles = …,
 unpostRoles = …)` on a document narrows posting (and re-posting) or unposting to those roles *on
-top of* write access; left empty, every writer keeps the right. Deleting a posted document unposts
-it, so it needs the unpost right too. `ADMIN` always passes. The gates are enforced on the shared
+top of* write access; left empty, every writer keeps the right. Deleting never unposts: a posted
+document must be unposted explicitly first. `ADMIN` always passes. The gates are enforced on the shared
 command path (generic REST, MCP tools, built-in UI actions — the Post/Unpost buttons are hidden
 from callers who lack them); trusted code calling `PostingService` directly is not gated, like typed
 repositories. For a state-based veto ("a reconciled payment cannot be unposted") implement
