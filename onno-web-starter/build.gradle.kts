@@ -147,6 +147,9 @@ dependencies {
     // related-list rows) — same lightweight pattern the framework module uses.
     testImplementation(libs.spring.jdbc) // Verify SSE observes only committed JDBC changes.
     testImplementation(libs.h2)
+    // Jakarta constraints on entities flow through /validate and the generic write path.
+    testImplementation(libs.hibernate.validator)
+    testImplementation(libs.expressly)
     // Postgres-portability checks: the date-bound register/document queries can only be
     // verified against a real PostgreSQL (H2 silently casts varchar↔timestamp, so it never
     // reproduces the strict-typing failure). The IT skips when Docker is unavailable.

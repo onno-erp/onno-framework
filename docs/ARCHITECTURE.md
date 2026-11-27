@@ -503,7 +503,7 @@ The catalog/document `POST`/`PUT` writes (`CatalogCommandService`/`DocumentComma
 the REST API, the generated UI, CSV import, and the MCP tools) map the request body onto the typed
 entity (`EntityBodyMapper`) and save it through `EntityStore` — Spring Data JDBC's aggregate
 template, the same persistence path and entity callbacks as `repository.save(...)`. Numbering,
-`onFilling()` (create), `beforeWrite()`, attribute and `Validated` rule validation, secret
+`onFilling()` (create), `beforeWrite()`, field-constraint and `HasBusinessRules` rule validation, secret
 encryption, period close, record history, `afterWrite()`, domain events and the commit-deferred
 `EntityChangedEvent` are therefore one implementation for every write path. The command services
 add only the caller-facing checks around the save (read-only mode, entity and record access, the
@@ -512,11 +512,26 @@ and never call `afterWrite()`; posting still runs its own lifecycle in `PostingE
 Tabular-section `lineNumber` in read payloads is the 1-based position in stored order.
 
 The same pipeline backs **live form validation**: `POST /api/{catalogs,documents}/{name}[/{id}]/validate`
-dry-runs it — constraints, hooks, `Validated` rules (a Java conflict check included) — against the
+dry-runs it — constraints, hooks, `HasBusinessRules` rules (a Java conflict check included) — against the
 submitted values without persisting or consuming a number, and returns
 `{valid, fieldErrors, formErrors}` with 200 either way. The generated form calls it debounced while
 the user edits, painting a field-scoped rule (`BusinessRule.onField`) inline on its input and
 cross-field messages as a form-level notice, before Save is ever pressed.
+
+**Field constraints are Jakarta Bean Validation.** Single-field rules are the standard annotations
+(`@NotNull`, `@NotBlank`, `@Size`, `@Min`/`@Max`, `@Pattern`, `@Email`, `@Past`, custom
+`@Constraint`s); cross-field and business rules are `HasBusinessRules`. With a provider on the
+classpath (`spring-boot-starter-validation`), `su.onno.validation.BeanValidation` validates the entity
+and each tabular-section row in `OnnoBeforeConvertCallback` (every save) and in the dry-run, keying
+violations by field (`items[0].quantity`; class-level ones are form errors), using the Spring
+context's `Validator` (`OnnoBeanValidationAutoConfiguration`). `MetadataScanner` merges the
+representable constraints into `AttributeDescriptor.required`/`Constraints` (`minLength`,
+`maxLength`, inclusive `min`/`max`, `pattern`, `email`) for the UI model and MCP; rules taken from
+Jakarta are marked `beanValidated`, and `AttributeValidator` leaves them to the provider so each
+failure is reported once, keeping only the column-length check and the deprecated `@Attribute`
+flags. A flag that contradicts a Jakarta annotation, or `@Size(max)` above the column `length`,
+fails startup. `jakarta.validation` is `compileOnly`; only `su.onno.validation.JakartaBridge`
+references it (guarded by `CoreArchitectureTest`), so applications without it are unaffected.
 
 ## UI layer
 

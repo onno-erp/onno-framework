@@ -7,7 +7,7 @@ import su.onno.lifecycle.BeforeDeleteHandler;
 import su.onno.lifecycle.BeforeWriteHandler;
 import su.onno.model.CatalogObject;
 import su.onno.rules.BusinessRule;
-import su.onno.rules.Validated;
+import su.onno.rules.HasBusinessRules;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -22,7 +22,7 @@ import java.util.List;
 @Getter
 @Setter
 public class TestDeleteGuardedCatalog extends CatalogObject
-        implements BeforeDeleteHandler, BeforeWriteHandler, AfterWriteHandler, Validated {
+        implements BeforeDeleteHandler, BeforeWriteHandler, AfterWriteHandler, HasBusinessRules {
 
     public static int deleteHookCalls;
 

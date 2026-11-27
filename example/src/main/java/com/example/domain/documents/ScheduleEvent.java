@@ -1,5 +1,7 @@
 package com.example.domain.documents;
 
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
 import com.example.domain.catalogs.Employee;
 import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
@@ -9,7 +11,7 @@ import su.onno.lifecycle.OnFillingHandler;
 import su.onno.model.DocumentObject;
 import su.onno.period.PeriodCloseExempt;
 import su.onno.rules.BusinessRule;
-import su.onno.rules.Validated;
+import su.onno.rules.HasBusinessRules;
 import su.onno.types.Ref;
 
 import lombok.Getter;
@@ -33,15 +35,18 @@ import java.util.List;
 @AccessControl(readRoles = {"MANAGER", "ADMIN"}, writeRoles = {"MANAGER", "ADMIN"})
 @Getter
 @Setter
-public class ScheduleEvent extends DocumentObject implements OnFillingHandler, Validated {
+public class ScheduleEvent extends DocumentObject implements OnFillingHandler, HasBusinessRules {
 
-    @Attribute(displayName = "Subject", required = true, length = 200)
+    @Attribute(displayName = "Subject", length = 200)
+    @NotBlank
     private String subject = "Team meeting";
 
-    @Attribute(displayName = "Starts at", required = true)
+    @Attribute(displayName = "Starts at")
+    @NotNull
     private LocalDateTime startsAt = LocalDate.now().plusDays(1).atTime(10, 0);
 
-    @Attribute(displayName = "Ends at", required = true)
+    @Attribute(displayName = "Ends at")
+    @NotNull
     private LocalDateTime endsAt = LocalDate.now().plusDays(1).atTime(12, 0);
 
     /** Who runs the event: the lane of the list's timeline view (one column per employee). */

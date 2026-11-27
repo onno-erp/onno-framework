@@ -39,6 +39,18 @@ class CoreArchitectureTest {
     }
 
     @Test
+    void beanValidationStaysOptional() {
+        noClasses()
+                .that().doNotHaveFullyQualifiedName("su.onno.validation.JakartaBridge")
+                .should().dependOnClassesThat(resideInAPackage("jakarta.validation.."))
+                .because("jakarta.validation is an optional (compileOnly) dependency: an application "
+                        + "without it must never load a jakarta.* type. Route Bean Validation through "
+                        + "su.onno.validation.BeanValidation, which calls JakartaBridge only after "
+                        + "checking the API is on the classpath")
+                .check(CORE);
+    }
+
+    @Test
     void sharedOnnoRulesHold() {
         OnnoRules.POSTING_RUNS_OUTSIDE_SPRING_TRANSACTIONS.check(CORE);
         OnnoRules.FULL_LISTS_DRAIN_KEYSET_WINDOWS.check(CORE);

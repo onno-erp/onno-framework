@@ -257,7 +257,7 @@ Use:
 ```java
 @Catalog(name = "Products", codeLength = 9, codePrefix = "P-")
 public class Product extends CatalogObject {
-    @Attribute(required = true)
+    @Attribute @NotNull
     private String name;
 }
 ```
@@ -294,7 +294,7 @@ Use:
 ```java
 @Document(name = "Sales Orders", numberPrefix = "SO-")
 public class SalesOrder extends DocumentObject implements BeforeWriteHandler, Postable {
-    @Attribute(required = true)
+    @Attribute @NotNull
     private Ref<Customer> customer;
 
     @TabularSection(name = "items")
@@ -329,7 +329,7 @@ Use:
 
 ```java
 public class SalesOrderLine extends TabularSectionRow {
-    @Attribute(required = true)
+    @Attribute @NotNull
     private Ref<Product> product;
 
     @Attribute(precision = 15, scale = 3)
@@ -455,7 +455,7 @@ Use `Ref<T>` when a field has one target type. If the business meaning genuinely
 catalog/document types in the same field, use `PolyRef` with an explicit target allowlist:
 
 ```java
-@Attribute(required = true)
+@Attribute @NotNull
 @RefTargets({BankAccount.class, CashAccount.class, Payment.class})
 private PolyRef settlementTarget;
 ```
@@ -900,6 +900,8 @@ Ask:
 - What are common exceptions?
 
 Likely outputs:
+- Jakarta constraints on single fields (`@NotNull`, `@Size`, `@Min`, `@Pattern`, ...)
+- `HasBusinessRules` for cross-field invariants
 - `BeforeWriteHandler`
 - `BeforePostHandler` / `BeforeUnpostHandler`
 - validation in Java services
@@ -1001,7 +1003,7 @@ intentionally remain strings. On the React side, field names are typed from `mod
 @Getter
 @Setter
 public class Customer extends CatalogObject {
-    @Attribute(required = true, length = 200)
+    @Attribute(length = 200) @NotBlank
     private String name;
 
     @Attribute(length = 50)
@@ -1016,7 +1018,7 @@ public class Customer extends CatalogObject {
 @Getter
 @Setter
 public class SalesOrder extends DocumentObject implements BeforeWriteHandler, Postable {
-    @Attribute(required = true)
+    @Attribute @NotNull
     private Ref<Customer> customer;
 
     @Attribute(precision = 15, scale = 2)
@@ -1123,19 +1125,62 @@ class OrderInvoice extends PrintForm<Order> {
 }
 ```
 
-### Business Rules
+### Field Constraints And Business Rules
 
-Validation is typed Java, not string expressions. Implement `Validated` and return named `BusinessRule`s whose condition is a `BooleanSupplier` over the entity's fields. Rules run before write and before posting; the first failure throws with the rule's message (or `Business rule failed: {name}` if none).
+Spring and Jakarta own infrastructure; onno adds only business concepts and does not redefine what
+they already provide. One rule decides where validation goes:
+
+- **One field** (required, length, range, format) — a standard Jakarta Bean Validation annotation on
+  the field: `@NotNull`, `@NotBlank`, `@Size`, `@Min`/`@Max`, `@DecimalMin`/`@DecimalMax`,
+  `@Positive`, `@Pattern`, `@Email`, `@Past`/`@Future`, `@Digits`, or your own `@Constraint` with a
+  `ConstraintValidator`.
+- **Several fields or business logic** — `HasBusinessRules` returning typed `BusinessRule`s.
 
 ```java
-public class Invoice extends DocumentObject implements Validated {
+@Catalog(name = "Customers")
+public class Customer extends CatalogObject {
+    @Attribute(length = 200) @NotBlank
+    private String name;
+
+    @Attribute(length = 200) @Email
+    private String email;
+
+    @Attribute @Min(0) @Max(100)
+    private Integer discountPercent;
+}
+```
+
+Add `spring-boot-starter-validation` (any Jakarta Bean Validation provider). onno then runs the
+constraints on the entity and every tabular-section row (no `@Valid` needed) on each write path —
+REST create/update, the form's dry-run `POST /api/{catalogs|documents}/{name}/validate`, CSV
+import, MCP and typed `repository.save(...)` — and reports each violation inline under its field
+(`email`, `items[0].quantity`); a class-level constraint is a form-level error. The Spring context's
+`Validator` is used, so Spring's message source and injected `ConstraintValidator`s apply. The
+representable constraints also fill the model metadata (`required`, `minLength`, `maxLength`,
+`min`/`max`, `pattern`, `email`), so the form mirrors them instantly; exclusive bounds such as
+`@Positive` are left to the server. `jakarta.validation` is optional: without it nothing changes.
+Constraints run on writes, not on posting.
+
+`@Attribute` describes storage and display only: `length`, `precision`, `scale`, `secret`,
+`searchIndex`, `displayName`, `previousNames`. Its validation flags (`required`, `min`, `max`,
+`minLength`, `pattern`, `email`) are deprecated; startup fails when one contradicts a Jakarta
+annotation on the same field, and when `@Size(max)` exceeds the column `length` (raise `length`).
+
+Business rules are typed Java, not string expressions. Implement `HasBusinessRules` and return
+named `BusinessRule`s whose condition is a `BooleanSupplier` over the entity's fields. Rules run
+before write and before posting; every failure is collected (a `BusinessRule.onField(...)` rule
+inline on its field, otherwise form-level), with the rule's message or `Business rule failed: {name}`.
+(`Validated` is the deprecated former name — Spring's `@Validated` is unrelated.)
+
+```java
+public class Invoice extends DocumentObject implements HasBusinessRules {
     @Override
     public List<BusinessRule> rules() {
         return List.of(
             new BusinessRule("items-required", "Add at least one line",
                     () -> items != null && !items.isEmpty()),
-            new BusinessRule("total-positive", "Total must be positive",
-                    () -> total != null && total.signum() > 0));
+            new BusinessRule("dates-ordered", "The due date must follow the invoice date",
+                    () -> dueDate == null || !dueDate.isBefore(getDate().toLocalDate())));
     }
 }
 ```
@@ -1267,7 +1312,7 @@ Behaviour stays in Java, as Spring beans in `onno-framework` packages:
   `onno.web.read-only`, record scope and availability on every surface.
 - **Live checks** are `Checks<E>` beans (`su.onno.validation`):
   `v.check(key, ctx -> List<Feedback>).dependsOn(Event::getStartsAt).debounce(...)`, run as the user
-  types by `POST /api/checks/{kind}/{name}/{key}`. Advisory; save-time `Validated` rules stay
+  types by `POST /api/checks/{kind}/{name}/{key}`. Advisory; save-time `HasBusinessRules` rules stay
   authoritative.
 - **Picker options** are `PickerOptions<E>` beans (`su.onno.picker`) bound to one reference field
   (`entity()` + `field()`, e.g. `"participants.employee"`) that badge, disable or hide candidates

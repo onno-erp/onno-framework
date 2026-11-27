@@ -10,6 +10,8 @@ import su.onno.model.Periodicity;
 import su.onno.model.TabularSectionRow;
 import su.onno.types.Ref;
 import su.onno.types.PolyRef;
+import su.onno.metadata.AttributeDescriptor.Constraints.Rule;
+import su.onno.validation.BeanValidation;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -18,6 +20,8 @@ import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.List;
 import java.util.UUID;
 
@@ -315,22 +319,22 @@ public class MetadataScanner {
                 boolean isRef = Ref.class.isAssignableFrom(javaType)
                         || PolyRef.class.isAssignableFrom(javaType);
                 List<ReferenceTargetDescriptor> refTargets = scanRefTargets(field, javaType);
+                int length = PolyRef.class.isAssignableFrom(javaType) ? Math.max(attr.length(), 512) : attr.length();
+                FieldConstraints constraints = constraintsOf(clazz, field, attr, length);
 
                 result.add(new AttributeDescriptor(
                         fieldName,
                         displayName,
                         columnName,
                         javaType,
-                        PolyRef.class.isAssignableFrom(javaType)
-                                ? Math.max(attr.length(), 512) : attr.length(),
-                        attr.required(),
+                        length,
+                        constraints.required(),
                         isRef,
                         isRef ? extractRefTargetName(field) : null,
                         refTargets,
                         attr.precision(),
                         attr.scale(),
-                        new AttributeDescriptor.Constraints(
-                                attr.min(), attr.max(), attr.minLength(), attr.pattern(), attr.email()),
+                        constraints.constraints(),
                         attr.secret(),
                         List.of(attr.previousNames()),
                         attr.searchIndex()
@@ -340,6 +344,70 @@ public class MetadataScanner {
         }
 
         return result;
+    }
+
+    /** Above this a String column is TEXT (unbounded), so its length is no limit to compare against. */
+    private static final int MAX_VARCHAR = 65_535;
+
+    private record FieldConstraints(boolean required, AttributeDescriptor.Constraints constraints) {
+    }
+
+    /**
+     * The field's single-field rules: the Jakarta Bean Validation annotations merged with the
+     * deprecated {@code @Attribute} validation flags. Declaring a rule in both places is allowed only
+     * when they agree (the Jakarta one is then enforced); disagreeing declarations fail startup.
+     */
+    @SuppressWarnings("deprecation") // reads the deprecated @Attribute validation flags on purpose
+    private static FieldConstraints constraintsOf(Class<?> owner, Field field, Attribute attr, int length) {
+        AttributeDescriptor.Constraints onno = new AttributeDescriptor.Constraints(
+                attr.min(), attr.max(), attr.minLength(), attr.pattern(), attr.email());
+        BeanValidation.FieldRules jakarta = BeanValidation.rulesOf(field).orElse(null);
+        if (jakarta == null) {
+            return new FieldConstraints(attr.required(), onno);
+        }
+        String where = owner.getName() + "." + field.getName();
+        if (attr.required() && jakarta.mustBeNull()) {
+            throw conflict(where, "@Attribute(required = true) contradicts @Null");
+        }
+        if (onno.hasMin() && jakarta.min() != null && onno.min() != jakarta.min()) {
+            throw conflict(where, "@Attribute(min = " + onno.min() + ") contradicts the Jakarta minimum "
+                    + jakarta.min() + "; keep only the Jakarta annotation");
+        }
+        if (onno.hasMax() && jakarta.max() != null && onno.max() != jakarta.max()) {
+            throw conflict(where, "@Attribute(max = " + onno.max() + ") contradicts the Jakarta maximum "
+                    + jakarta.max() + "; keep only the Jakarta annotation");
+        }
+        if (onno.minLength() > 0 && jakarta.minLength() != null && onno.minLength() != jakarta.minLength()) {
+            throw conflict(where, "@Attribute(minLength = " + onno.minLength() + ") contradicts @Size(min = "
+                    + jakarta.minLength() + "); keep only @Size");
+        }
+        if (!onno.pattern().isBlank() && jakarta.pattern() != null && !onno.pattern().equals(jakarta.pattern())) {
+            throw conflict(where, "@Attribute(pattern) contradicts @Pattern(regexp); keep only @Pattern");
+        }
+        if (jakarta.maxLength() != null && length > 0 && length <= MAX_VARCHAR && jakarta.maxLength() > length) {
+            throw conflict(where, "@Size(max = " + jakarta.maxLength() + ") exceeds the column length " + length
+                    + "; set @Attribute(length = " + jakarta.maxLength() + ") so the value fits");
+        }
+
+        Set<Rule> beanValidated = EnumSet.noneOf(Rule.class);
+        if (jakarta.required()) beanValidated.add(Rule.REQUIRED);
+        double min = onno.min();
+        if (jakarta.min() != null) { min = jakarta.min(); beanValidated.add(Rule.MIN); }
+        double max = onno.max();
+        if (jakarta.max() != null) { max = jakarta.max(); beanValidated.add(Rule.MAX); }
+        int minLength = onno.minLength();
+        if (jakarta.minLength() != null) { minLength = jakarta.minLength(); beanValidated.add(Rule.MIN_LENGTH); }
+        int maxLength = 0;
+        if (jakarta.maxLength() != null) { maxLength = jakarta.maxLength(); beanValidated.add(Rule.MAX_LENGTH); }
+        String pattern = onno.pattern();
+        if (jakarta.pattern() != null) { pattern = jakarta.pattern(); beanValidated.add(Rule.PATTERN); }
+        if (jakarta.email()) beanValidated.add(Rule.EMAIL);
+        return new FieldConstraints(attr.required() || jakarta.required(), new AttributeDescriptor.Constraints(
+                min, max, minLength, maxLength, pattern, onno.email() || jakarta.email(), beanValidated));
+    }
+
+    private static IllegalStateException conflict(String where, String detail) {
+        return new IllegalStateException("Conflicting validation on " + where + ": " + detail);
     }
 
     private List<TabularSectionDescriptor> scanTabularSections(Class<?> clazz, String documentName) {

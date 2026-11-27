@@ -3,7 +3,7 @@ name: onno-posting
 description: >-
   Implement onno-framework posting, validation, business rules, register movements, lifecycle
   hooks, and post/unpost side effects. Use when writing Postable.handlePosting, BeforeWriteHandler,
-  BeforePostHandler, Validated BusinessRule rules, accumulation register balance/turnover logic,
+  BeforePostHandler, HasBusinessRules BusinessRule rules, accumulation register balance/turnover logic,
   negative-balance checks, DocumentPostedEvent listeners, soft-delete-aware business logic, or
   debugging save/post transactional behavior.
 ---
@@ -38,7 +38,7 @@ Posting is typed Java. There is no string-mapped posting rule or validation expr
 
 ```java
 @Document(name = "Sales Orders", numberPrefix = "SO-", context = "Sales")
-public class SalesOrder extends DocumentObject implements BeforeWriteHandler, Validated, Postable {
+public class SalesOrder extends DocumentObject implements BeforeWriteHandler, HasBusinessRules, Postable {
     @TabularSection(name = "items")
     private List<SalesOrderLine> items = new ArrayList<>();
 
@@ -135,7 +135,7 @@ do not re-emit `DocumentPostedEvent`.
 
 ## Rules And Defaults
 
-`Validated.rules()` runs before write and before posting. Use named `BusinessRule`s with clear user
+`HasBusinessRules.rules()` runs before write and before posting. Use named `BusinessRule`s with clear user
 messages. For field-specific errors use `BusinessRule.onField(field, message, condition)`.
 
 Use Java field initializers for defaults that must appear on the initially rendered New form.

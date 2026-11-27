@@ -1,5 +1,6 @@
 package com.example.domain.catalogs;
 
+import jakarta.validation.constraints.Pattern;
 import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
@@ -22,6 +23,7 @@ import lombok.Setter;
 @Setter
 public class BookCategory extends CatalogObject {
 
-    @Attribute(displayName = "Color", length = 7, pattern = "#[0-9A-Fa-f]{6}")
+    @Attribute(displayName = "Color", length = 7)
+    @Pattern(regexp = "#[0-9A-Fa-f]{6}")
     private String color;
 }

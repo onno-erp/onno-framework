@@ -363,7 +363,7 @@ form.
 | POST | `/api/commands/{kind}/{name}/{key}/batch` | Body `{ids: […], inputs}` → `{ok, failed, total[, feedback]}`; each id in its own transaction. |
 
 **Live checks** (`su.onno.validation`) — a `Checks<E>` bean declares advisory checks that run as the
-user types; the save-time `Validated` rules stay authoritative:
+user types; the save-time `HasBusinessRules` rules stay authoritative:
 
 ```java
 v.check("schedule-conflicts", this::conflicts)

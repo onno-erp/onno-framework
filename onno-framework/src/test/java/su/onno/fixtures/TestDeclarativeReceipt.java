@@ -7,7 +7,7 @@ import su.onno.lifecycle.Postable;
 import su.onno.model.DocumentObject;
 import su.onno.posting.PostingContext;
 import su.onno.rules.BusinessRule;
-import su.onno.rules.Validated;
+import su.onno.rules.HasBusinessRules;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -19,7 +19,7 @@ import java.util.UUID;
 @Document(name = "TestDeclarativeReceipts")
 @Getter
 @Setter
-public class TestDeclarativeReceipt extends DocumentObject implements Postable, Validated {
+public class TestDeclarativeReceipt extends DocumentObject implements Postable, HasBusinessRules {
 
     @Attribute
     private UUID warehouse;

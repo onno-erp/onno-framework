@@ -1,5 +1,6 @@
 package com.example.domain.catalogs;
 
+import jakarta.validation.constraints.NotNull;
 import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
@@ -23,10 +24,12 @@ import lombok.Setter;
 @Setter
 public class SupplierOffer extends CatalogObject {
 
-    @Attribute(displayName = "Supplier", required = true)
+    @Attribute(displayName = "Supplier")
+    @NotNull
     private Ref<Supplier> supplier;
 
-    @Attribute(displayName = "Book", required = true)
+    @Attribute(displayName = "Book")
+    @NotNull
     private Ref<Book> book;
 
     @Attribute(displayName = "Purchase price", precision = 12, scale = 2)

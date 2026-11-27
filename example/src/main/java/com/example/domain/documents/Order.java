@@ -1,5 +1,6 @@
 package com.example.domain.documents;
 
+import jakarta.validation.constraints.NotNull;
 import com.example.domain.catalogs.Customer;
 import com.example.domain.catalogs.Employee;
 import com.example.domain.enumerations.OrderStatus;
@@ -15,7 +16,7 @@ import su.onno.lifecycle.OnFillingHandler;
 import su.onno.model.DocumentObject;
 import su.onno.posting.PostingContext;
 import su.onno.rules.BusinessRule;
-import su.onno.rules.Validated;
+import su.onno.rules.HasBusinessRules;
 import su.onno.types.Ref;
 
 import lombok.Getter;
@@ -36,7 +37,7 @@ import java.util.List;
  *       populated rather than blank (the {@code status} default is the {@code NEW} field initializer).</li>
  *   <li>{@link BeforeWriteHandler} — on every save, compute each line's {@code amount} and the order
  *       {@code total}, and the derived {@code open} flag — never keyed by hand.</li>
- *   <li>{@link Validated} — invariants checked before write and before posting.</li>
+ *   <li>{@link HasBusinessRules} — invariants checked before write and before posting.</li>
  *   <li>{@code Postable} (via {@link #handlePosting}) — on posting, take the books out of
  *       {@link BookStock} (an expense the BALANCE register refuses if stock is short) and record the
  *       sale in {@link BookSales}. A {@code CANCELLED} order posts nothing.</li>
@@ -50,9 +51,10 @@ import java.util.List;
 @Getter
 @Setter
 public class Order extends DocumentObject
-        implements OnFillingHandler, BeforeWriteHandler, Validated, su.onno.lifecycle.Postable {
+        implements OnFillingHandler, BeforeWriteHandler, HasBusinessRules, su.onno.lifecycle.Postable {
 
-    @Attribute(displayName = "Customer", required = true)
+    @Attribute(displayName = "Customer")
+    @NotNull
     private Ref<Customer> customer;
 
     @Attribute(displayName = "Status")

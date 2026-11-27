@@ -36,15 +36,29 @@ reuse across documents/sections. Share implementation through a base row class.
 | `name` | String | `""` | Column name; derived from field. |
 | `displayName` | String | `""` | UI label. |
 | `previousNames` | String[] | `{}` | Former field/column names for rename. |
-| `length` | int | `255` | Max string length. |
-| `required` | boolean | `false` | NOT NULL. |
+| `length` | int | `255` | Column (storage) length; validate a shorter limit with `@Size(max)`. |
 | `precision` / `scale` | int | `15` / `2` | Decimal precision/scale. |
-| `min` / `max` | double | `NaN` | Numeric bounds. |
-| `minLength` | int | `0` | String min length. |
-| `pattern` | String | `""` | Regex validation. |
-| `email` | boolean | `false` | Email-format validator. |
+| `required`, `min`, `max`, `minLength`, `pattern`, `email` | — | — | **Deprecated** validation flags: use the Jakarta annotations below. A flag contradicting a Jakarta annotation on the same field fails startup. |
 | `secret` | boolean | `false` | Encrypted at rest (needs `onno.security.secret-key`), masked as `__SECRET_SET__` on read. |
 | `searchIndex` | boolean | `false` | PostgreSQL trigram index for substring search on this String attribute. Opt in only for fields users search by on large tables. |
+
+### Field constraints: Jakarta Bean Validation (on attribute and row fields)
+
+One field → a Jakarta annotation; several fields or business logic → `HasBusinessRules`. Needs a
+provider (`spring-boot-starter-validation`); without `jakarta.validation` nothing is enforced or read.
+
+| Annotation | Metadata (form mirror) | Notes |
+| --- | --- | --- |
+| `@NotNull`, `@NotBlank`, `@NotEmpty` | `required` | `@NotBlank` for Strings (rejects blank). |
+| `@Size(min, max)` | `minLength` / `maxLength` | `max` must not exceed `@Attribute(length)` (startup check). |
+| `@Min`, `@Max`, `@DecimalMin`/`@DecimalMax` (inclusive), `@PositiveOrZero`, `@NegativeOrZero` | `min` / `max` | Exclusive bounds (`@Positive`, `inclusive = false`) are server-only. |
+| `@Pattern(regexp)` | `pattern` | With `flags`, server-only. |
+| `@Email` | `email` | |
+| `@Past`, `@Future`, `@Digits`, custom `@Constraint` + `ConstraintValidator` | — | Server-only; Spring injects beans into validators. |
+
+Violations land in `fieldErrors` under the field (`email`, `items[0].quantity`), class-level ones in
+`formErrors`, on REST create/update, `/validate`, CSV import, MCP and `repository.save(...)`. Not on
+posting. Rows are validated without `@Valid`. Only the default group runs.
 
 **Supported attribute field types:** `String`, `int`/`Integer`, `long`/`Long`, `boolean`/`Boolean`,
 `double`/`Double`, `float`/`Float`, `BigDecimal`, `UUID`, `LocalDate`, `LocalDateTime`, `LocalTime`,
@@ -197,7 +211,7 @@ Enums: `AccumulationType{BALANCE,TURNOVER}`, `Periodicity{NONE,SECOND,MINUTE,HOU
 | `BeforeUnpostHandler` | `beforeUnpost()` | Before an explicit unpost (a delete never unposts) — throw to veto; **no Spring DI**. Not run on re-post. |
 | `AfterPostHandler` | `afterPost()` | After post — **no Spring DI**; prefer `@EventListener` on `DocumentPostedEvent`. |
 | `BeforeDeleteHandler` | `beforeDelete()` | Before delete — runs on BOTH the repository path and the UI/REST DELETE; throw (e.g. `ValidationException`) to veto, which is how a catalog protects seeded system rows. |
-| `Validated` | `List<BusinessRule> rules()` | Rules checked before write and before post — **no Spring DI** (see below). |
+| `HasBusinessRules` | `List<BusinessRule> rules()` | Cross-field/business rules checked before write and before post — **no Spring DI** (see below). Former name `Validated` is deprecated (Spring's `@Validated` is unrelated). |
 
 ⚠️ **No Spring DI in any of these hooks.** They run on the domain object, which the framework creates
 by reflection (`new`), not as a Spring bean — so `@Autowired` fields are null in `beforeWrite`,
@@ -327,7 +341,7 @@ because they are not Java field references.
   .dependsOn(E::getA, E::getB).andDependsOn(E::getLines, Line::getX).debounce(Duration)`.
   `CheckContext`: `kind`, `name`, `entityType`, `id` (null on create), `values` (by field name).
   `Feedback.error|warning|info(field, msg)`, `Feedback.formError(msg)`. Advisory dry run
-  (`POST /api/checks/{kind}/{name}/{key}`); `Validated` stays authoritative.
+  (`POST /api/checks/{kind}/{name}/{key}`); `HasBusinessRules` stays authoritative.
 - `PickerOptions<E>` bean — `entity()`, `field()` (`"customer"` or `"section.field"`; one bean per
   field), `decorate(PickerContext, List<PickerCandidate>) → Map<UUID, PickerOption>`.
   `PickerContext`: `targetKind`, `targetName`, `fieldPath`, `formValues`, `section`, `rowIndex`,

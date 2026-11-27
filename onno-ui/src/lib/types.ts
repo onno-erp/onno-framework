@@ -91,6 +91,8 @@ export interface AttributeMeta {
   min?: number;
   max?: number;
   minLength?: number;
+  /** Validation limit from `@Size(max)`; never above `length`, the column's storage length. */
+  maxLength?: number;
   pattern?: string;
   email?: boolean;
 }

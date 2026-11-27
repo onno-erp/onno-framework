@@ -126,7 +126,7 @@ Use `andRefresh()` (or `reload()`) whenever the handler changed data the user is
 
 Advisory feedback while a record is edited, computed on the server from the unsaved values
 (`POST /api/checks/{kind}/{name}/{key}`, a dry run). Rules that must hold on save stay in
-`Validated`/`BeforeWriteHandler` (`onno-rules-lifecycle`).
+`HasBusinessRules`/`BeforeWriteHandler` (`onno-rules-lifecycle`).
 
 ```java
 @Component

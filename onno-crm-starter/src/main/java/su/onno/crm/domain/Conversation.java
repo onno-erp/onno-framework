@@ -9,14 +9,14 @@ import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.model.CatalogObject;
 import su.onno.rules.BusinessRule;
-import su.onno.rules.Validated;
+import su.onno.rules.HasBusinessRules;
 import su.onno.types.Ref;
 
 @Catalog(name = "CrmConversations", title = "Conversation", codePrefix = "CV-", context = "CRM")
 @AccessControl(readRoles = {"ADMIN"}, writeRoles = {"ADMIN"})
 @Getter
 @Setter
-public class Conversation extends CatalogObject implements Validated {
+public class Conversation extends CatalogObject implements HasBusinessRules {
 
     @Attribute(displayName = "Customer", required = true)
     // UUID is scoped to CrmCustomerBinding.catalog(); CRM never introduces a shadow customer.

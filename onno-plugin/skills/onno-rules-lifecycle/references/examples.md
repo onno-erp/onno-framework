@@ -65,7 +65,7 @@ Use `BeforeWriteHandler` for data that should be correct before posting and visi
 ## Business Rules
 
 ```java
-public class Invoice extends DocumentObject implements Validated {
+public class Invoice extends DocumentObject implements HasBusinessRules {
     @Attribute
     private Ref<Customer> customer;
 
@@ -107,7 +107,7 @@ final class InvoiceRules {
 }
 ```
 
-`Validated.rules()` returns `InvoiceRules.rulesFor(this)`. Validation collects all failures.
+`HasBusinessRules.rules()` returns `InvoiceRules.rulesFor(this)`. Validation collects all failures.
 
 ## Path Matrix
 

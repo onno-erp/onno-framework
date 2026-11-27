@@ -5,6 +5,20 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+/**
+ * A stored field of a catalog, document or tabular-section row: its column ({@link #name},
+ * {@link #length}, {@link #precision}, {@link #scale}, {@link #previousNames}), its presentation
+ * ({@link #displayName}) and storage behaviour ({@link #secret}, {@link #searchIndex}).
+ *
+ * <p>Single-field validation is declared with the standard Jakarta Bean Validation annotations
+ * ({@code @NotNull}, {@code @NotBlank}, {@code @Size}, {@code @Min}/{@code @Max}, {@code @Pattern},
+ * {@code @Email}, {@code @Past}, custom constraints, ...): onno reads them into the model metadata
+ * and enforces them on every write when a provider is present. The validation flags on this
+ * annotation ({@link #required}, {@link #min}, {@link #max}, {@link #minLength}, {@link #pattern},
+ * {@link #email}) are deprecated duplicates of those; declaring a rule both ways with different
+ * values fails startup. Rules that span several fields belong in
+ * {@link su.onno.rules.HasBusinessRules}.</p>
+ */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.FIELD)
 public @interface Attribute {
@@ -22,29 +36,61 @@ public @interface Attribute {
      */
     String[] previousNames() default {};
 
+    /** Column length of a String attribute (the storage limit; validate a shorter one with {@code @Size(max)}). */
     int length() default 255;
 
+    /**
+     * The attribute must have a value (a String must not be blank).
+     *
+     * @deprecated use {@code @jakarta.validation.constraints.NotNull} or {@code @NotBlank} (Strings).
+     */
+    @Deprecated(since = "5.0")
     boolean required() default false;
 
     int precision() default 15;
 
     int scale() default 2;
 
-    // ----- validation constraints (enforced before write, mirrored to the form for inline errors) -----
+    // ----- deprecated validation flags: use the Jakarta Bean Validation annotations instead -----
 
-    /** Minimum allowed value for a numeric attribute. {@code NaN} (default) means no bound. */
+    /**
+     * Minimum allowed value for a numeric attribute. {@code NaN} (default) means no bound.
+     *
+     * @deprecated use {@code @jakarta.validation.constraints.Min} or {@code @DecimalMin}.
+     */
+    @Deprecated(since = "5.0")
     double min() default Double.NaN;
 
-    /** Maximum allowed value for a numeric attribute. {@code NaN} (default) means no bound. */
+    /**
+     * Maximum allowed value for a numeric attribute. {@code NaN} (default) means no bound.
+     *
+     * @deprecated use {@code @jakarta.validation.constraints.Max} or {@code @DecimalMax}.
+     */
+    @Deprecated(since = "5.0")
     double max() default Double.NaN;
 
-    /** Minimum length for a String attribute. {@code 0} (default) means no minimum. ({@link #length} is the max.) */
+    /**
+     * Minimum length for a String attribute. {@code 0} (default) means no minimum.
+     *
+     * @deprecated use {@code @jakarta.validation.constraints.Size(min = ...)}.
+     */
+    @Deprecated(since = "5.0")
     int minLength() default 0;
 
-    /** A regex the String value must fully match. Empty (default) means no pattern. */
+    /**
+     * A regex the String value must fully match. Empty (default) means no pattern.
+     *
+     * @deprecated use {@code @jakarta.validation.constraints.Pattern(regexp = ...)}.
+     */
+    @Deprecated(since = "5.0")
     String pattern() default "";
 
-    /** Shortcut: the String value must be a valid email address. */
+    /**
+     * The String value must be a valid email address.
+     *
+     * @deprecated use {@code @jakarta.validation.constraints.Email}.
+     */
+    @Deprecated(since = "5.0")
     boolean email() default false;
 
     /**

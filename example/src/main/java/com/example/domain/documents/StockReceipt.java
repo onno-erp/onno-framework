@@ -1,5 +1,6 @@
 package com.example.domain.documents;
 
+import jakarta.validation.constraints.NotNull;
 import com.example.domain.catalogs.Supplier;
 import com.example.domain.registers.BookStock;
 import su.onno.annotations.AccessControl;
@@ -30,7 +31,8 @@ import java.util.List;
 @Setter
 public class StockReceipt extends DocumentObject implements OnFillingHandler, Postable {
 
-    @Attribute(displayName = "Supplier", required = true)
+    @Attribute(displayName = "Supplier")
+    @NotNull
     private Ref<Supplier> supplier;
 
     @Attribute(displayName = "Note", length = 500)

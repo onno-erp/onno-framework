@@ -18,6 +18,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc")
     implementation("com.h2database:h2")
+    // Jakarta Bean Validation: @NotNull/@NotBlank/@Email/@Pattern on the domain fields are
+    // enforced on every onno write (and mirrored to the forms) once a provider is present.
+    implementation("org.springframework.boot:spring-boot-starter-validation")
 
     // Dev live-reload: on a recompile devtools restarts the context (metamodel rescan, schema
     // re-diff, layout/page rebuild — all boot-time work), and the UI starter detects devtools on

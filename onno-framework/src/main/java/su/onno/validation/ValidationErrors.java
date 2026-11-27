@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Accumulates validation failures across all sources (declarative attribute constraints, custom
+ * Accumulates validation failures across all sources (Jakarta Bean Validation and attribute constraints, custom
  * {@link su.onno.rules.BusinessRule}s) so the user sees every problem at once rather than one at a
  * time. {@link #throwIfAny()} raises a {@link ValidationException} when anything was collected.
  */
@@ -21,12 +21,17 @@ public final class ValidationErrors {
             form(message);
             return;
         }
-        fieldErrors.computeIfAbsent(field, k -> new ArrayList<>()).add(message);
+        List<String> messages = fieldErrors.computeIfAbsent(field, k -> new ArrayList<>());
+        if (!messages.contains(message)) { // two sources stating the same failure read as one
+            messages.add(message);
+        }
     }
 
     /** Record a cross-field / form-level message. */
     public void form(String message) {
-        formErrors.add(message);
+        if (!formErrors.contains(message)) {
+            formErrors.add(message);
+        }
     }
 
     public boolean isEmpty() {
