@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { setModel } from "@/lib/model-store";
-import { queryClient } from "@/lib/query";
+import { invalidateEntity, queryClient } from "@/lib/query";
+import { notifyError } from "@/lib/notify-error";
 import { Kanban } from "@/components/widgets/kanban";
 import { Calendar } from "@/components/widgets/calendar";
 import { RecentRecords } from "@/components/widgets/recent-records";
@@ -26,6 +27,7 @@ vi.mock("@fullcalendar/react", async () => {
     return null;
   }) };
 });
+vi.mock("@/lib/notify-error", () => ({ notifyError: vi.fn() }));
 vi.mock("@/components/maps/map-view", () => ({ MapView: () => <div data-testid="map" /> }));
 
 const response = (body: unknown) => new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json" } });
@@ -116,5 +118,43 @@ describe("bounded record widgets", () => {
     await act(async () => { release(response({ rows, hasMore: true, nextCursor: "next" })); await old; });
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByText("Visit")).toBeNull();
+  });
+
+  it.each(["calendar", "recent"])("keeps %s rows on screen through a live refresh until the server answers", async widget => {
+    serve(false);
+    render(widget === "calendar" ? <Calendar entity="visits" /> : <RecentRecords entity="visits" />);
+    if (widget === "calendar") await waitFor(() => expect(calendar.events).toHaveLength(1));
+    else expect(await screen.findByText("Rex")).toBeTruthy();
+
+    let release!: (value: Response) => void;
+    const pending = new Promise<Response>(resolve => { release = resolve; });
+    const refetch = vi.fn(async (url: string) => url.startsWith("/api/ui/view/") ? response(view) : pending);
+    vi.stubGlobal("fetch", refetch);
+    await act(async () => { invalidateEntity("visits"); });
+    await waitFor(() => expect(refetch).toHaveBeenCalledWith(expect.stringContaining("/api/list/documents/visits"), expect.anything()));
+
+    if (widget === "calendar") expect(calendar.events).toHaveLength(1);
+    else expect(screen.getByText("Rex")).toBeTruthy();
+    await act(async () => { release(response({ rows, hasMore: false, nextCursor: null })); await pending; });
+    if (widget === "calendar") expect(calendar.events).toHaveLength(1);
+    else expect(screen.getByText("Rex")).toBeTruthy();
+  });
+
+  it("shows no truncation notice for a grouped kanban whose view has not loaded", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url.startsWith("/api/ui/view/")
+      ? new Response("down", { status: 500 })
+      : response({ rows, hasMore: false, nextCursor: null })));
+    render(<Kanban entity="visits" by="patient" />);
+    await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalledWith(expect.stringContaining("/api/list/documents/visits"), expect.anything()));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+    expect(screen.queryByText(/first 0 records/)).toBeNull();
+  });
+
+  it("reports a failed recent-records load instead of showing an empty list", async () => {
+    vi.mocked(notifyError).mockClear();
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url.startsWith("/api/ui/view/")
+      ? response(view) : new Response("boom", { status: 500 })));
+    render(<RecentRecords entity="visits" />);
+    await waitFor(() => expect(notifyError).toHaveBeenCalled());
   });
 });

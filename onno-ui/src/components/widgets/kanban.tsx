@@ -358,7 +358,9 @@ function KanbanBoard(props: KanbanProps) {
         </div>
       </CardHeader>
       <CardContent className="overflow-x-auto">
-        <RecordsTruncated count={visibleCount} truncated={hasMore || visibleCount < items.length} />
+        {/* Until the view's columns load (or if that request fails) nothing is placed, so the
+            loaded count would read "first 0 records". */}
+        <RecordsTruncated count={visibleCount} truncated={columns.length > 0 && (hasMore || visibleCount < items.length)} />
         <DragDropContext onDragEnd={onDragEnd}>
           <div className="flex gap-3 min-w-fit pb-1">
             {columns.map((col) => {

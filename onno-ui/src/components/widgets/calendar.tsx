@@ -369,9 +369,14 @@ function useEntityCalendar(props: CalendarProps, range: Range): CalendarData {
     setHasMore(page?.hasMore === true);
   }, [kind, name, where, start, range]);
 
+  // A new source or range starts empty; a live refresh keeps the rows on screen until the server
+  // answers, so editing (or dragging in) the calendar does not flash it blank.
   useEffect(() => {
     setItems([]);
     setHasMore(false);
+  }, [kind, name, where, start, range]);
+
+  useEffect(() => {
     void load().catch(notifyError);
     return cancelLoad;
   }, [load, live, cancelLoad]);
