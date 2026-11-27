@@ -1,4 +1,4 @@
-import { Button, formatMoney, openRecord, openRoute, useRecords, type RouteProps, type UiExtension } from "@onno/ui";
+import { Button, formatMoney, formatRecordNumber, openRecord, openRoute, useRecords, type RouteProps, type UiExtension } from "@onno/ui";
 import { ContactRound, ShoppingBag } from "@onno/ui/icons";
 import {
   CrmConnections, CrmContactPage, CrmConversationPage, CrmInbox,
@@ -22,7 +22,7 @@ const orderCards: CrmTimelineSource[] = [{
       render: () => (
         <div className="mx-auto flex max-w-md items-center gap-3 rounded-panel border border-border bg-muted/40 px-3 py-2 text-sm">
           <ShoppingBag className="size-4 shrink-0 text-primary" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate">Order {String(order.number)} · {formatMoney(Number(order.total ?? 0), "USD")}</span>
+          <span className="min-w-0 flex-1 truncate">Order {formatRecordNumber(order.number)} · {formatMoney(Number(order.total ?? 0), "USD")}</span>
           <Button size="sm" variant="ghost" onClick={() => openRecord("Orders", String(order.id))}>Open</Button>
         </div>
       ),

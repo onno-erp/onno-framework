@@ -1,3 +1,4 @@
+import { shortRecordNumber } from "../../lib/record-number";
 import { openRoute } from "../../lib/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronsUpDown, ExternalLink, List, Plus, Search, X } from "lucide-react";
@@ -88,8 +89,8 @@ function displayOf(item: EntityRecord): string {
   if (desc && desc.trim()) return desc;
   // Catalogs label by code; documents have no code/description, so fall back to number.
   return (
-    (item.code as string) ??
-    (item.number as string) ??
+    (item.code == null ? undefined : shortRecordNumber(item.code)) ??
+    (item.number == null ? undefined : shortRecordNumber(item.number)) ??
     (item.id as string) ?? ""
   );
 }
@@ -576,7 +577,7 @@ function RefRow({
   // A target catalog's `color` attribute (same convention the list uses for FieldColor pills):
   // render a small dot so colored options — statuses, tags — read the same here as on the board.
   const color = ((item.color as string | undefined) ?? "").trim();
-  const code = item.code as string | undefined;
+  const code = shortRecordNumber(item.code);
   // The disambiguating secondary line (e.g. a phone), shown under the name in the options list.
   const sub = secondary ? item[logicalEntityKey(secondary)] : undefined;
   const subText = sub == null ? "" : String(sub);

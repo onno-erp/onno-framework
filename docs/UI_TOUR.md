@@ -303,6 +303,17 @@ select-all callbacks in addition to the existing feed/pagination props. See [UI_
 for the supported replacement boundaries. New extension work should share controllers between
 standard and custom views rather than duplicate business or lifecycle behavior.
 
+### Record numbers
+
+Default UI lists and record labels omit leading zeros in codes and document numbers
+(`CON-00000001` → `CON-1`). This is presentation only: persisted values, API payloads,
+server sorting, filters and pagination cursors retain the original identifiers. Authored cell
+renderers and explicit value formats keep control of their own presentation.
+
+Custom React labels can use the same formatter: `import { formatRecordNumber } from "@onno/ui";`
+and `formatRecordNumber(order.number)` (also accepts catalog codes). Format only the identifier,
+not the whole label or a business description.
+
 ### Information-register lists
 
 Open `/information-registers/{name}` to inspect an information register without writing a custom

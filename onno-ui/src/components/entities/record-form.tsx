@@ -1,3 +1,4 @@
+import { shortRecordNumber } from "../../lib/record-number";
 import { CommentThread } from "../collaboration/comments";
 import { RecordHistory } from "../collaboration/record-history";
 import { findEntity, useModel } from "../../lib/model-store";
@@ -840,7 +841,7 @@ export function useRecordForm(form: FormDescriptor): RecordFormState {
   // always knows *which* supplier/order they're deep inside of. A posted document shows its
   // status pill — re-posting an already-posted document is a different mental act than posting.
   const subtitleParts = isEdit
-    ? [record?.code, record?.number, record?.description].filter(
+    ? [shortRecordNumber(record?.code), shortRecordNumber(record?.number), record?.description].filter(
         (v): v is string =>
           typeof v === "string" &&
           v.trim() !== "" &&
@@ -1786,6 +1787,6 @@ export function formTitle(form: FormDescriptor, t: Translate, values: EntityReco
   if (form.duplicate) return t("form.duplicateTitle", { name: entity });
   if (!form.id) return t("form.newTitle", { name: entity });
   const text = (v: unknown) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v));
-  if (form.kind === "catalogs") return text(values?.description) || text(values?.code) || entity;
-  return [entity, text(values?.number)].filter(Boolean).join(" ");
+  if (form.kind === "catalogs") return text(values?.description) || shortRecordNumber(text(values?.code)) || entity;
+  return [entity, shortRecordNumber(text(values?.number))].filter(Boolean).join(" ");
 }
