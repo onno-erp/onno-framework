@@ -21,7 +21,7 @@ const BrandingContext = createContext<Branding>({});
  */
 export function BrandingProvider({ children }: { children: React.ReactNode }) {
   const [branding, setBranding] = useState<Branding>({});
-  const { theme } = useTheme();
+  const { resolvedTheme } = useTheme();
 
   useEffect(() => {
     api
@@ -41,23 +41,13 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Re-tint the shadcn variables for the active mode whenever the palette or theme changes.
-  // The palette differs per mode (a darker/brighter primary), so this re-runs on theme flips;
-  // it also tracks the OS preference while the theme is "system".
+  // The palette differs per mode (a darker/brighter primary), so this re-runs on theme flips —
+  // including an OS preference change while the theme is "system", which the resolved theme follows.
   useEffect(() => {
-    const apply = () => applyBrandVariables(branding.palette, resolveMode(theme));
-    apply();
-    if (theme !== "system") return;
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, [branding.palette, theme]);
+    applyBrandVariables(branding.palette, resolvedTheme);
+  }, [branding.palette, resolvedTheme]);
 
   return <BrandingContext.Provider value={branding}>{children}</BrandingContext.Provider>;
-}
-
-function resolveMode(theme: string): "light" | "dark" {
-  if (theme === "light" || theme === "dark") return theme;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
 // shadcn variables are HSL triplets consumed as `hsl(var(--x))`, so brand hexes are converted

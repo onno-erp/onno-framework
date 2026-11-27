@@ -47,6 +47,18 @@ The exports in `src/index.ts` remain the stable entry point for applications.
 - **Colors** — semantic vars (light + dark) plus `--chart-1..8`. Overridable at runtime through
   `onno.ui.theme.*` → `/api/theme` → CSS vars (`providers/theme-provider.tsx`). Never hardcode a
   hex; widgets use `hsl(var(--primary))` etc.
+- **Light/dark mode** — read it from `useTheme().resolvedTheme` (`providers/theme-provider.tsx`),
+  which follows an OS change while the theme is `system`. Never query `prefers-color-scheme`
+  yourself: a private read misses the change.
+- **Breakpoints** — one device class for the whole UI: `useViewport()` (`lib/viewport.ts`) is
+  `mobile` below 768px, `tablet` from 768px, `desktop` from 1024px — Tailwind's `md` and `lg`.
+  The shell layout, page `Row`s, the calendar, facet overlays and windows all switch on it; never
+  classify the screen with your own width media query or a fixed screen-width comparison
+  (`innerWidth < 600`; measuring geometry against the screen edge is fine). CSS that changes with
+  the device class uses `md:`/`lg:` (or `max-md:`/`max-lg:`; a hand-written `@media` uses the same
+  `not all and (min-width: 768px)` form), which switch at the same widths. `sm:` (640px) is not a
+  device-class boundary: keep it to fitting content to the available width (padding, columns,
+  dialog widths), never to switching between phone and tablet behaviour.
 
 ## Islands
 
@@ -131,7 +143,8 @@ of the row keeps the full context menu. Flat table view only.
 | `NotificationBadgeMotion` | `components/ui/notification-badge-motion.tsx` | Unread dots/count pills that slide and pop when the unread count increases. |
 | `Toaster` / `toast` | `components/ui/toast.tsx` | The single shadcn-style Base UI toast host and global manager: large themed surfaces, typed title/message/detail hierarchy, semantic icon wells, actions, swipe dismissal, and an animated stack. |
 | `Drawer` | `components/ui/drawer.tsx` | The canonical shadcn-style Base UI drawer composition (portal, backdrop, viewport, popup, content); use it for notification and edge panels instead of hand-rolled fixed overlays. |
-| `FacetSheet` / `useFacetOverlay` | `components/ui/facet-sheet.tsx` | Responsive overlay: bottom sheet (phone) / modal (tablet) / popover (desktop). |
+| `useViewport` | `lib/viewport.ts` | The shared device class (`mobile` / `tablet` / `desktop`): the shell layout, page `Row`s, the calendar, facet overlays and windows switch on it. |
+| `FacetSheet` / `useFacetOverlay` | `components/ui/facet-sheet.tsx` | Responsive overlay: bottom sheet (phone) / modal (tablet) / popover (desktop), from `useViewport`. |
 | `Popover`, `Tooltip`, `HintIcon` | `components/ui/*` | Anchored overlays; `HintIcon` is the authored "?" help glyph. |
 | `Button`, `Input`, `Textarea`, `Checkbox`, `Switch`, `Label`, `Badge` | `components/ui/*` | Form controls & pills. |
 | `ColorPicker` | `components/fields/color-picker.tsx` | Hex color fields: canonical text input plus `react-colorful` popover, or a compact swatch (`compact`) with `onCommit` for dense rows; exported to applications. |

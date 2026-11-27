@@ -1,9 +1,10 @@
 import {cleanup, fireEvent, render, screen} from "@testing-library/react";
 import {afterEach, expect, it, vi} from "vitest";
 import {ResponsiveActionPanel} from "@/components/ui/responsive-action-panel";
+import {stubScreenWidth} from "./viewport-fixtures";
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 it("keeps mobile action sheets dismissible without a Done footer", async()=>{
-  vi.stubGlobal("matchMedia",(q:string)=>({matches:q.includes("max-width: 767px"),addEventListener(){},removeEventListener(){}}));
+  stubScreenWidth(390);
   render(<ResponsiveActionPanel label="Tools" presentation="actions" trigger={<button>Open tools</button>}><button>Schedule call</button></ResponsiveActionPanel>);
   fireEvent.click(screen.getByRole("button",{name:"Open tools"}));
   expect(await screen.findByRole("button",{name:"Schedule call"})).toBeVisible();
@@ -13,7 +14,7 @@ it("keeps mobile action sheets dismissible without a Done footer", async()=>{
 });
 
 it("keeps a child form inside the sheet while editing and submitting", async()=>{
-  vi.stubGlobal("matchMedia",(q:string)=>({matches:q.includes("max-width: 767px"),addEventListener(){},removeEventListener(){}}));
+  stubScreenWidth(390);
   const {Popover,PopoverTrigger,PopoverContent} = await import("@/components/ui/popover");
   const saved = vi.fn();
   render(<ResponsiveActionPanel label="Tools" presentation="actions" trigger={<button>Open tools</button>}>

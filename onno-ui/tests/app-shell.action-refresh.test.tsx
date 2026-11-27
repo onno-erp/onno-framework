@@ -9,7 +9,7 @@ vi.mock("@/lib/presence-store", () => ({
   useViewersById: () => new Map()
 }));
 vi.mock("@/providers/auth-provider", () => ({ useAuth: () => ({ logout: vi.fn() }) }));
-vi.mock("@/providers/theme-provider", () => ({ useTheme: () => ({ theme: "light", setTheme: vi.fn() }) }));
+vi.mock("@/providers/theme-provider", () => ({ useTheme: () => ({ theme: "light", resolvedTheme: "light", setTheme: vi.fn() }) }));
 vi.mock("@/providers/branding-provider", () => ({ useBranding: () => ({}) }));
 vi.mock("@/hooks/use-ui-events", () => ({ useUiEvents: vi.fn() }));
 vi.mock("@/lib/icons", () => ({

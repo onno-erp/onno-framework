@@ -686,7 +686,8 @@
     }
   }
 
-  @media (max-width: 600px) {
+  /* Phones: the `mobile` viewport (MOBILE_QUERY in lib/viewport.ts). */
+  @media not all and (min-width: 768px) {
     .onno-toaster {
       right: 12px;
       bottom: 12px;

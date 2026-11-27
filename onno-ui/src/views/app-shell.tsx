@@ -15,6 +15,7 @@ import { api } from "../lib/api";
 import { cn, copyToClipboard } from "../lib/utils";
 import { stripBasePath, withBasePath } from "../lib/base-path";
 import { useDirtyForms } from "../lib/dirty-forms";
+import { useViewport } from "../lib/viewport";
 import { MobileNavigationFrame } from "../components/shell/mobile-navigation-frame";
 import { ContentPane, type ContentAction } from "./content-pane";
 import {
@@ -82,21 +83,6 @@ import { DesktopAccountDock } from "../components/shell/desktop-account-dock";
  * between islands resize them. `onno://` action URLs become navigation, theme toggle and sign-out.
  * A live SSE channel (/api/events) refetches whichever islands show the changed surface.
  */
-// Phone-portrait gets the full-width bottom bar; large/landscape phones and tablets
-// share the "tablet" class (a compact bottom bar pinned bottom-right); desktop gets
-// the sidebar + islands.
-const MOBILE_MAX = 600;
-const TABLET_MAX = 1024;
-
-type Viewport = "mobile" | "tablet" | "desktop";
-
-// The device class, which picks the shell layout (sidebar on desktop, bottom bar otherwise).
-function viewportFor(width: number): Viewport {
-  if (width < MOBILE_MAX) return "mobile";
-  if (width < TABLET_MAX) return "tablet";
-  return "desktop";
-}
-
 export type { Pane, Workspace, WorkspaceTab } from "./workspace-navigation";
 
 export type WorkspaceTabState = "command-target" | "pane-active" | "open";
@@ -266,12 +252,14 @@ function Shell() {
   const navigationType = useNavigationType();
   const navigate = useNavigate();
   const { logout } = useAuth();
-  const { theme, setTheme } = useTheme();
+  const { theme, resolvedTheme, setTheme } = useTheme();
   const branding = useBranding();
   const t = useMessages();
   const { openPanel: openNotificationPanel } = useNotifications();
   const dirtyForms = useDirtyForms();
-  const [viewport, setViewport] = useState<Viewport>(() => viewportFor(window.innerWidth));
+  // The device class picks the shell layout: phones get the stretched bottom bar (centred, at most
+  // max-w-md), tablets a compact bottom bar pinned bottom-right, desktop the sidebar + islands.
+  const viewport = useViewport();
   const [workspace, setWorkspace] = useState<Workspace>(initialWorkspace);
   const wsRef = useRef(workspace);
   wsRef.current = workspace;
@@ -304,17 +292,6 @@ function Shell() {
   const confirmOpenRef = useRef(false);
   confirmOpenRef.current = confirm !== null;
 
-
-  const resolvedTheme = useMemo<"light" | "dark">(() => {
-    if (theme === "dark" || theme === "light") return theme;
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  }, [theme]);
-
-  useEffect(() => {
-    const onResize = () => setViewport(viewportFor(window.innerWidth));
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
 
   // The nav highlight follows the focused island's active tab (not the raw URL), so
   // it clears when that island is emptied and tracks focus between islands — all
