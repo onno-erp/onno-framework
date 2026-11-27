@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { EntityListView, type ListDescriptor } from "@/components/lists/entity-list";
-import { dateOnlySort, parseSort, serializeSort, toggleListSort } from "@/lib/list-sort";
+import { dateOnlySort, daySortColumn, parseSort, serializeSort, toggleListSort } from "@/lib/list-sort";
+import { publishDisplayTimeZone } from "@/lib/time-zone";
 
 vi.mock("@/lib/presence-store", () => ({ useViewersById: () => new Map() }));
 vi.mock("@/components/maps/list-map-view", () => ({ ListMapView: () => null }));
@@ -19,7 +20,7 @@ describe("list sorting by header click order", () => {
     vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => window.setTimeout(() => cb(0), 0));
     vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
   });
-  afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, "", "/"); });
+  afterEach(() => { publishDisplayTimeZone(undefined); cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, "", "/"); });
 
   it("appends keys, keeps their priority on direction changes, removes and re-adds at the end", async () => {
     const urls: URL[] = [];
@@ -63,6 +64,7 @@ describe("list sorting by header click order", () => {
   });
 
   it("requests day precision for date-only columns before adding an amount criterion", async () => {
+    publishDisplayTimeZone("Europe/Moscow");
     const urls: URL[] = [];
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       urls.push(new URL(url, "http://localhost"));
@@ -75,10 +77,11 @@ describe("list sorting by header click order", () => {
     render(<EntityListView list={dated} />);
     await waitFor(() => expect(urls).toHaveLength(1));
     fireEvent.click(screen.getByRole("button", { name: "Date" }));
-    await waitFor(() => expect(urls.at(-1)?.searchParams.get("sort")).toBe("_date:day"));
+    await waitFor(() => expect(urls.at(-1)?.searchParams.get("sort")).toBe("_date:day@Europe/Moscow"));
     fireEvent.click(screen.getByRole("button", { name: "price" }));
-    await waitFor(() => expect(urls.at(-1)?.searchParams.get("sort")).toBe("_date:day,price"));
-    expect(serializeSort(parseSort("_date:day,price"))).toBe("_date,price");
+    await waitFor(() => expect(urls.at(-1)?.searchParams.get("sort")).toBe("_date:day@Europe/Moscow,price"));
+    expect(serializeSort(parseSort("_date:day@Europe/Moscow,price"))).toBe("_date,price");
+    expect(daySortColumn("starts_at", { date: { dateStyle: "medium", timeZone: "America/New_York" } })).toBe("starts_at:day@America/New_York");
     expect(dateOnlySort({ date: { dateStyle: "medium", timeStyle: "short" } })).toBe(false);
   });
 

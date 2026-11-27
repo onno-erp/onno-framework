@@ -1616,3 +1616,7 @@ explicit criterion. List sort strings may contain comma-separated fields with in
 prefixes. Keep all criteria in route/controlled state and server cursors. Catalog default order
 is description ascending; reference/enum sorting uses readable labels before SQL LIMIT, with
 target authorization applied to label lookup. Never sort only the loaded browser window.
+
+Date-only Instant sorting passes the column's display time zone with the day criterion
+(`field:day@Zone/Name`). Local calendar dates are never shifted. PolyRef sorting resolves all
+declared target types under their own read permissions rather than ordering encoded ids.

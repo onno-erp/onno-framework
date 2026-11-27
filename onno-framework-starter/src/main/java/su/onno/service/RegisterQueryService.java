@@ -200,7 +200,7 @@ public class RegisterQueryService {
             bindMovementWindow(q, from, to);
             bindFilters(q, scoped);
         }, sorting.order(List.of("_id"), descending), cursor, limit,
-                su.onno.query.Cursor.context("movements", desc.tableName(), from, to, scoped.sql(), scoped.bindings(), EntityQuerySupport.cursorSubject(subject)));
+                sorting.context(su.onno.query.Cursor.context("movements", desc.tableName(), from, to, scoped.sql(), scoped.bindings(), EntityQuerySupport.cursorSubject(subject))));
         sorting.clean(page.rows());
         resolveAll(subject, desc, page.rows());
         return page;
@@ -301,7 +301,7 @@ public class RegisterQueryService {
         if (unique.isEmpty()) unique = List.of(desc.resources().getFirst().columnName());
         var page = KeysetWindow.collection(jdbi, sorting.source(source.from(), desc.totalsTableName()),
                 "*", source.where(), q -> { source.binder().accept(q); sorting.bind(q); },
-                sorting.order(unique, descending), cursor, limit, source.context());
+                sorting.order(unique, descending), cursor, limit, sorting.context(source.context()));
         sorting.clean(page.rows());
         resolveAll(subject, desc, page.rows());
         return page;

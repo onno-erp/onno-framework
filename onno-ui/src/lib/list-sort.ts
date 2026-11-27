@@ -1,4 +1,5 @@
 import type { ValueFormat } from "./cell-format";
+import { displayTimeZone } from "./time-zone";
 
 /** Ordered list sort state; the primary pair remains compatible with existing descriptors. */
 export type SortColumn = { column: string; descending: boolean };
@@ -19,7 +20,7 @@ export function parseSort(value: string, descending = false, resolve = (column: 
   for (const token of value.split(",")) {
     const text = token.trim();
     if (!text) continue;
-    const column = resolve(text.replace(/^[-+]/, "").replace(/:day$/, ""));
+    const column = resolve(text.replace(/^[-+]/, "").replace(/:day(?:@[^,]+)?$/, ""));
     if (!column || seen.has(column)) continue;
     seen.add(column);
     columns.push({ column, descending: /^[+-]/.test(text) ? text.startsWith("-") : descending });
@@ -55,4 +56,12 @@ export function dateOnlySort(format: ValueFormat | undefined): boolean {
   const options = format.date;
   if (options.timeStyle || options.hour || options.minute || options.second || ("fractionalSecondDigits" in options && options.fractionalSecondDigits)) return false;
   return !!(options.dateStyle || options.day) || !Object.keys(options).length;
+}
+
+/** Match Instant day boundaries to the zone used by the column's date formatter. */
+export function daySortColumn(column: string, format: ValueFormat | undefined): string {
+  if (!dateOnlySort(format)) return column;
+  const zone = format && "date" in format && typeof format.date !== "string"
+    ? format.date.timeZone ?? displayTimeZone() : displayTimeZone();
+  return `${column}:day@${zone}`;
 }

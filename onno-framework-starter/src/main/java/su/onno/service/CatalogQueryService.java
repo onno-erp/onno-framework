@@ -225,7 +225,7 @@ public class CatalogQueryService {
                     wf.bindings().forEach(q::bind);
                     scope.bind(q);
                 }, sorting.order(List.of("_id"), terms.getFirst().descending()),
-                new KeysetWindow.Position(cursorToken, beforeToken, focus), limit, fingerprint);
+                new KeysetWindow.Position(cursorToken, beforeToken, focus), limit, sorting.context(fingerprint));
 
         sorting.clean(window.rows());
         // Cursors were minted from the raw rows; ref-resolution/redaction reshape the maps after.

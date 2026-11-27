@@ -1,4 +1,4 @@
-import { dateOnlySort, parseSort, serializeSort, sortColumns, toggleListSort, writeSortParams, type ListSort } from "../../lib/list-sort";
+import { daySortColumn, parseSort, serializeSort, sortColumns, toggleListSort, writeSortParams, type ListSort } from "../../lib/list-sort";
 import { openRoute } from "../../lib/navigation";
 import { ResponsiveActionPanel } from "../ui/responsive-action-panel";
 import { nearestScrollAncestor, trailingPaddingTo } from "../../lib/fill-height";
@@ -1715,7 +1715,7 @@ export function EntityListView({
   });
   const sortColumnForQuery = (column: string) => {
     const definition = list.columns.find(c => c.columnName === column);
-    return definition && !definition.render && dateOnlySort(definition.format) ? `${column}:day` : column;
+    return definition && !definition.render ? daySortColumn(column, definition.format) : column;
   };
   const sortKey = serializeSort(sort, sortColumnForQuery);
   const explicitSort = useRef(!!state?.sort || !!(urlSynced && initialParams.get("sort")));

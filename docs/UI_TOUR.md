@@ -309,3 +309,7 @@ without exposing names of inaccessible targets. Numeric/date/boolean values keep
 When a date column explicitly displays only a calendar day (`format: { date: "medium" }`),
 its sort also compares local calendar days: subsequent criteria order records within the day.
 Date-time columns retain timestamp precision.
+
+Date-only Instant sorting passes the column's display time zone with the day criterion
+(`field:day@Zone/Name`). Local calendar dates are never shifted. PolyRef sorting resolves all
+declared target types under their own read permissions rather than ordering encoded ids.

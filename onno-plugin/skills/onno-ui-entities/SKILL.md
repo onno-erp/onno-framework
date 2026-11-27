@@ -237,3 +237,7 @@ List `sort` also accepts ordered comma-separated fields, e.g. `"status,-total"`.
 append criteria in priority order, cycle ascending → descending → removed, and show numbered arrows.
 Flat and grouped lists share the behavior. The first explicit header choice replaces initial sort.
 Catalog defaults use description ascending; refs/enums order by readable labels on the server.
+
+Date-only Instant sorting passes the column's display time zone with the day criterion
+(`field:day@Zone/Name`). Local calendar dates are never shifted. PolyRef sorting resolves all
+declared target types under their own read permissions rather than ordering encoded ids.

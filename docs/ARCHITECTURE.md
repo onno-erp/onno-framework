@@ -1279,3 +1279,9 @@ Date-only local date/time columns request a `:day` sort modifier (e.g.
 `sort=date:day,total&dir=asc`). The server seeks on `CAST(date_column AS DATE)` so
 hidden time and fractional seconds do not override later criteria within a day. Plain
 `sort=date,total` retains timestamp precision. The derived date is included in the cursor.
+
+Instant date-only sorts use `field:day@Europe/Moscow` (an IANA zone id, or a zone offset).
+The SQL day key follows the requested display zone; `:day` without a zone uses UTC.
+LocalDate/LocalDateTime remain zone-less. The zone is validated, bound as a query value, and
+included in the cursor context. PolyRef columns sort by the readable label of each declared
+catalog/document target, applying target RBAC and record policies before looking up its label.

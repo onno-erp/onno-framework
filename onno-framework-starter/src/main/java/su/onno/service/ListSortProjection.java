@@ -32,7 +32,24 @@ final class ListSortProjection {
             String column = term.column();
             AttributeDescriptor attribute = attributes.stream().filter(a -> a.columnName().equals(column)).findFirst().orElse(null);
             String expression = "sort_row." + column;
-            if (term.day() && (column.equals("_date") || column.equals("_period")
+            if (term.day() && attribute != null && attribute.javaType() == java.time.Instant.class) {
+                String bind = "ls_zone_" + order.size();
+                var zone = java.time.ZoneId.of(term.timeZone());
+                String local;
+                if (zone.getRules().isFixedOffset()) {
+                    // PostgreSQL interprets text offsets with the opposite (POSIX) sign.
+                    bindings.put(bind, zone.getRules().getOffset(java.time.Instant.EPOCH).getTotalSeconds());
+                    local = "((CAST(" + expression + " AS TIMESTAMP WITH TIME ZONE) + CAST(:"
+                            + bind + " AS INTEGER) * INTERVAL '1' SECOND) AT TIME ZONE 'UTC')";
+                } else {
+                    bindings.put(bind, term.timeZone());
+                    local = "(" + expression + " AT TIME ZONE :" + bind + ")";
+                }
+                // EXTRACT keeps the requested local day on both PostgreSQL and H2;
+                // casting H2's zoned timestamp to DATE would use the session zone instead.
+                expression = "(EXTRACT(YEAR FROM " + local + ") * 10000 + EXTRACT(MONTH FROM "
+                        + local + ") * 100 + EXTRACT(DAY FROM " + local + "))";
+            } else if (term.day() && (column.equals("_date") || column.equals("_period")
                     || attribute != null && (attribute.javaType() == java.time.LocalDateTime.class
                     || attribute.javaType() == java.time.LocalDate.class))) {
                 expression = "CAST(" + expression + " AS DATE)";
@@ -47,8 +64,11 @@ final class ListSortProjection {
                     }
                     expression = "LOWER(" + sql.append(" ELSE CAST(").append(expression).append(" AS VARCHAR) END") + ")";
                 }
+            } else if (attribute != null && attribute.isPolymorphicRef()) {
+                expression = polymorphicReference(attribute, expression);
             } else if (attribute != null && attribute.isRef() && attribute.refTarget() != null) {
-                expression = reference(attribute, expression);
+                expression = "LOWER(" + reference(attribute.refTarget(), null, expression,
+                        "sort_ref_" + order.size(), null) + ")";
             } else if ((attribute != null && attribute.javaType() == String.class) || column.equals("_description")) {
                 expression = "LOWER(" + expression + ")";
             }
@@ -65,24 +85,50 @@ final class ListSortProjection {
         }
     }
 
-    private String reference(AttributeDescriptor attr, String value) {
-        String alias = "sort_ref_" + order.size();
-        var catalog = registry.allCatalogs().stream().filter(c -> c.logicalName().equals(attr.refTarget())).findFirst();
-        var document = registry.allDocuments().stream().filter(d -> d.logicalName().equals(attr.refTarget())).findFirst();
+    private String polymorphicReference(AttributeDescriptor attribute, String value) {
+        StringBuilder expression = new StringBuilder("CASE");
+        int targetIndex = 0;
+        for (var target : attribute.refTargets()) {
+            String prefix = target.javaTypeName() + "|";
+            String alias = "sort_ref_" + order.size() + "_" + targetIndex++;
+            expression.append(" WHEN SUBSTRING(").append(value).append(", 1, ").append(prefix.length())
+                    .append(") = ").append(literal(prefix)).append(" THEN ")
+                    .append(reference(target.logicalName(), target.kind(), value, alias, prefix));
+        }
+        // Unknown target prefixes keep their raw text, matching RefResolver's fallback.
+        return "LOWER(" + expression.append(" ELSE ").append(value).append(" END") + ")";
+    }
+
+    private String reference(String name, String kind, String value, String alias, String prefix) {
+        var catalog = registry.allCatalogs().stream()
+                .filter(c -> (kind == null || kind.equals("catalog")) && c.logicalName().equals(name))
+                .findFirst();
+        var document = registry.allDocuments().stream()
+                .filter(d -> (kind == null || kind.equals("document")) && d.logicalName().equals(name))
+                .findFirst();
         if (catalog.isEmpty() && document.isEmpty()) return value;
-        String kind = catalog.isPresent() ? "catalog" : "document";
+        String targetKind = catalog.isPresent() ? "catalog" : "document";
         String table = catalog.isPresent() ? catalog.get().tableName() : document.orElseThrow().tableName();
         Class<?> type = catalog.isPresent() ? catalog.get().javaClass() : document.orElseThrow().javaClass();
-        if (!access.canRead(subject, kind, attr.refTarget())) return "CAST(NULL AS VARCHAR)";
+        if (!access.canRead(subject, targetKind, name)) return "CAST(NULL AS VARCHAR)";
         ScopeClause visible = scopes.clause(type, subject, AccessMode.READ, alias);
         bindings.putAll(visible.bindings());
         String label = catalog.isPresent()
                 ? "COALESCE(NULLIF(TRIM(" + alias + "._description), ''), " + alias + "._code)"
                 : alias + "._number";
-        String query = "(SELECT " + label + " FROM " + table + " " + alias + " WHERE " + alias
-                + "._id = " + value + visible.and() + ")";
+        // Compare the encoded reference as text, so malformed legacy ids never require a UUID cast.
+        String id = prefix == null ? alias + "._id"
+                : literal(prefix) + " || CAST(" + alias + "._id AS VARCHAR)";
+        String query = "(SELECT " + label + " FROM " + table + " " + alias + " WHERE " + id
+                + " = " + value + visible.and() + ")";
+        String fallback = prefix == null ? "CAST(" + value + " AS VARCHAR)"
+                : "SUBSTRING(" + value + ", " + (prefix.length() + 1) + ")";
         // A missing/unreadable scoped target has a constant key, just as its masked UI label does.
-        return "LOWER(" + (visible.isAll() ? "COALESCE(" + query + ", CAST(" + value + " AS VARCHAR))" : query) + ")";
+        return visible.isAll() ? "COALESCE(" + query + ", " + fallback + ")" : query;
+    }
+
+    String context(String context) {
+        return su.onno.query.Cursor.context(context, bindings);
     }
 
     String source(String source, String alias) {

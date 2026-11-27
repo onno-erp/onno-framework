@@ -9,6 +9,8 @@ import su.onno.access.RecordAccessPolicy;
 import su.onno.access.RecordScope;
 import su.onno.access.RecordPolicies;
 import su.onno.annotations.Attribute;
+import su.onno.annotations.RefTargets;
+import su.onno.types.PolyRef;
 import su.onno.annotations.AccumulationRegister;
 import su.onno.annotations.Dimension;
 import su.onno.annotations.Resource;
@@ -25,6 +27,7 @@ import su.onno.model.DocumentObject;
 import su.onno.schema.SchemaGenerator;
 import su.onno.types.Ref;
 
+import java.time.Instant;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.*;
@@ -43,6 +46,8 @@ class ListSortQueryTest {
         @Attribute private Ref<Client> customer;
         @Attribute private Status status;
         @Attribute private Integer price;
+        @Attribute private Instant instantDate;
+        @Attribute @RefTargets({Client.class, TargetDocument.class}) private PolyRef target;
     }
     @AccumulationRegister(name = "SortStock", type = AccumulationType.BALANCE)
     static class Stock extends AccumulationRecord {
@@ -50,6 +55,11 @@ class ListSortQueryTest {
         @Dimension private String location;
         @Resource private Integer quantity;
     }
+    @Document(name = "SortTargetDocuments")
+    @AccessControl(readRoles = "VIEWER")
+    static class TargetDocument extends DocumentObject {
+    }
+
     private Jdbi jdbi;
     private MetadataRegistry registry;
     private CatalogDescriptor clients;
@@ -59,18 +69,23 @@ class ListSortQueryTest {
     private static final List<String> NONE = List.of();
 
     @BeforeEach void setup() {
-        var ds = new JdbcDataSource();
-        ds.setURL("jdbc:h2:mem:multisort" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
-        jdbi = Jdbi.create(ds);
+        jdbi = createJdbi();
         registry = new MetadataRegistry();
         var scanner = new MetadataScanner(new DefaultNamingStrategy());
         clients = scanner.scan(Client.class); orders = scanner.scanDocument(Order.class);
         registry.registerCatalog(clients); registry.registerDocument(orders);
+        registry.registerDocument(scanner.scanDocument(TargetDocument.class));
         registry.registerEnumeration(scanner.scanEnumeration(Status.class));
         registry.registerAccumulation(scanner.scanRegister(Stock.class));
         new SchemaGenerator(registry).execute(jdbi);
         catalogs = new CatalogQueryService(registry, jdbi);
         documents = new DocumentQueryService(registry, jdbi);
+    }
+
+    Jdbi createJdbi() {
+        var ds = new JdbcDataSource();
+        ds.setURL("jdbc:h2:mem:multisort" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
+        return Jdbi.create(ds);
     }
 
     UUID client(String code, String name, String tier) {
@@ -103,6 +118,129 @@ class ListSortQueryTest {
     }
     List<String> codes(KeysetPage page) { return page.rows().stream().map(row -> row.get("_code").toString()).toList(); }
     List<String> numbers(List<Map<String, Object>> rows) { return rows.stream().map(row -> row.get("_number").toString()).toList(); }
+
+    @Test void instantDateOnlySortHonorsSecondaryPrice() {
+        UUID customer = client("C1", "Alice", null);
+        order("O1", customer, Status.FIRST, 129);
+        order("O2", customer, Status.FIRST, 58);
+        order("O3", customer, Status.FIRST, 40);
+        for (int i = 1; i <= 3; i++) {
+            String number = "O" + i;
+            var value = java.time.OffsetDateTime.parse("2026-08-04T1" + i + ":00:00Z");
+            jdbi.useHandle(h -> h.createUpdate("UPDATE " + orders.tableName() + " SET instant_date = :v WHERE _number = :n")
+                    .bind("v", value).bind("n", number).execute());
+        }
+        assertThat(numbers(orderRows(documents, AccessSubject.system(), "instant_date:day,price")))
+                .containsExactly("O3", "O2", "O1");
+    }
+
+    @Test void polymorphicReferencesSortByVisibleLabel() {
+        UUID first = client("C1", "Zulu", null), second = client("C2", "Alpha", null);
+        UUID low = new UUID(0, 1), high = new UUID(0, 2);
+        jdbi.useHandle(h -> {
+            h.createUpdate("UPDATE " + clients.tableName() + " SET _id = :v WHERE _id = :old")
+                    .bind("v", low).bind("old", first).execute();
+            h.createUpdate("UPDATE " + clients.tableName() + " SET _id = :v WHERE _id = :old")
+                    .bind("v", high).bind("old", second).execute();
+        });
+        order("O1", low, Status.FIRST, 1);
+        order("O2", high, Status.FIRST, 2);
+        jdbi.useHandle(h -> {
+            h.createUpdate("UPDATE " + orders.tableName() + " SET target = :v WHERE _number = 'O1'")
+                    .bind("v", PolyRef.of(Client.class, low).externalForm()).execute();
+            h.createUpdate("UPDATE " + orders.tableName() + " SET target = :v WHERE _number = 'O2'")
+                    .bind("v", PolyRef.of(Client.class, high).externalForm()).execute();
+        });
+        assertThat(numbers(orderRows(documents, AccessSubject.system(), "target,price")))
+                .containsExactly("O2", "O1");
+    }
+
+    @Test void instantDayUsesTheDisplayZoneAndBindsItsCursorToThatZone() {
+        UUID customer = client("C1", "Alice", null);
+        order("O1", customer, Status.FIRST, 129);
+        order("O2", customer, Status.FIRST, 58);
+        order("O3", customer, Status.FIRST, 40);
+        String[] timestamps = {"2026-08-04T22:30:00Z", "2026-08-05T01:00:00Z", "2026-08-05T21:30:00Z"};
+        for (int i = 0; i < timestamps.length; i++) {
+            String number = "O" + (i + 1);
+            var instant = java.time.OffsetDateTime.parse(timestamps[i]);
+            jdbi.useHandle(h -> h.createUpdate("UPDATE " + orders.tableName() + " SET instant_date = :v WHERE _number = :n")
+                    .bind("v", instant).bind("n", number).execute());
+        }
+        assertThat(numbers(orderRows(documents, AccessSubject.system(), "instant_date:day@UTC,price")))
+                .containsExactly("O1", "O3", "O2");
+        assertThat(numbers(orderRows(documents, AccessSubject.system(), "instant_date:day@Europe/Moscow,price")))
+                .containsExactly("O2", "O1", "O3");
+        assertThat(numbers(orderRows(documents, AccessSubject.system(), "instant_date:day@+03:00,price")))
+                .containsExactly("O2", "O1", "O3");
+        assertThat(numbers(orderRows(documents, AccessSubject.system(), "instant_date:day@-03:30,price")))
+                .containsExactly("O2", "O1", "O3");
+        assertThat(numbers(orderRows(documents, AccessSubject.system(), "-instant_date:day@Europe/Moscow,price")))
+                .containsExactly("O3", "O2", "O1");
+        var first = documents.keysetPage(AccessSubject.system(), orders, null, null, null, 1,
+                "instant_date:day@UTC,price", false, null, null, null, NONE, NONE, NONE, NONE, NONE, NONE, null);
+        assertThatThrownBy(() -> documents.keysetPage(AccessSubject.system(), orders, first.nextCursor(),
+                null, null, 1, "instant_date:day@Europe/Moscow,price", false, null, null, null,
+                NONE, NONE, NONE, NONE, NONE, NONE, null)).isInstanceOf(ServiceException.class);
+        assertThatThrownBy(() -> orderRows(documents, AccessSubject.system(), "instant_date:day@No/SuchZone,price"))
+                .isInstanceOf(ServiceException.class);
+    }
+
+    @Test void polymorphicReferencesMixCatalogAndDocumentLabelsAcrossPages() {
+        UUID z = client("C1", "Zulu", null), a = client("C2", "Alpha", null);
+        UUID document = UUID.randomUUID();
+        var target = registry.allDocuments().stream().filter(d -> d.javaClass() == TargetDocument.class).findFirst().orElseThrow();
+        jdbi.useHandle(h -> h.createUpdate("INSERT INTO " + target.tableName()
+                + " (_id, _number, _date) VALUES (:id, 'Beta', CURRENT_TIMESTAMP)").bind("id", document).execute());
+        order("O1", z, Status.FIRST, 10);
+        order("O2", a, Status.FIRST, 20);
+        order("O3", a, Status.FIRST, 30);
+        Object[][] values = {{"O1", PolyRef.of(Client.class, z)}, {"O2", PolyRef.of(Client.class, a)},
+                {"O3", PolyRef.of(TargetDocument.class, document)}};
+        for (Object[] value : values) {
+            jdbi.useHandle(h -> h.createUpdate("UPDATE " + orders.tableName() + " SET target = :v WHERE _number = :n")
+                    .bind("v", value[1].toString()).bind("n", value[0]).execute());
+        }
+        assertThat(numbers(orderRows(documents, AccessSubject.system(), "target,price")))
+                .containsExactly("O2", "O3", "O1");
+        assertThat(numbers(orderRows(documents, AccessSubject.system(), "-target,price")))
+                .containsExactly("O1", "O3", "O2");
+    }
+
+    @Test void polymorphicHiddenCatalogAndDeniedDocumentShareAMaskedSortKey() {
+        UUID a = client("C1", "Alpha", "hidden"), z = client("C2", "Zulu", "hidden");
+        UUID document = UUID.randomUUID();
+        var target = registry.allDocuments().stream().filter(d -> d.javaClass() == TargetDocument.class).findFirst().orElseThrow();
+        jdbi.useHandle(h -> h.createUpdate("INSERT INTO " + target.tableName()
+                + " (_id, _number, _date) VALUES (:id, 'Beta', CURRENT_TIMESTAMP)").bind("id", document).execute());
+        order("O1", a, Status.FIRST, 10);
+        order("O2", a, Status.FIRST, 20);
+        order("O3", z, Status.FIRST, 30);
+        Object[][] values = {{"O1", PolyRef.of(Client.class, a)}, {"O2", PolyRef.of(TargetDocument.class, document)},
+                {"O3", PolyRef.of(Client.class, z)}};
+        for (Object[] value : values) {
+            jdbi.useHandle(h -> h.createUpdate("UPDATE " + orders.tableName() + " SET target = :v WHERE _number = :n")
+                    .bind("v", value[1].toString()).bind("n", value[0]).execute());
+        }
+        var scope = new RecordScopeCompiler(new RecordPolicies(registry, List.of(
+                RecordAccessPolicy.forCatalog(Client.class).appliesTo("VIEWER").read(RecordScope.eq("tier", "visible")))));
+        var policy = new EntityAccessPolicy() {
+            @Override public boolean allows(Set<String> roles, String type, String name, boolean write) {
+                return !type.equals("document") || !name.equals(target.logicalName().toLowerCase(Locale.ROOT));
+            }
+        };
+        var access = new AccessService(registry, () -> List.of(policy));
+        var service = new DocumentQueryService(registry, jdbi, scope, access);
+        var viewer = AccessSubject.user("viewer", Set.of("VIEWER"));
+        assertThat(scope.isScoped(Client.class, viewer, su.onno.access.AccessMode.READ)).isTrue();
+        assertThat(access.canRead(viewer, "document", target.logicalName())).isFalse();
+        var rows = orderRows(service, viewer, "target,-price");
+        assertThat(numbers(rows)).containsExactly("O3", "O2", "O1");
+        assertThat(rows).allSatisfy(row -> {
+            assertThat(row.get("target_restricted")).isEqualTo(true);
+            assertThat(row.get("target")).isNull();
+        });
+    }
 
     @Test void defaultCatalogOrderUsesNamesIgnoringCase() {
         client("C1", "zebra", null); client("C2", "Alpha", null); client("C3", "beta", null);

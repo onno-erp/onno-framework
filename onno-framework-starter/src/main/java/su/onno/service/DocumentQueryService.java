@@ -218,7 +218,7 @@ public class DocumentQueryService {
                     wf.bindings().forEach(q::bind);
                     scope.bind(q);
                 }, sorting.order(List.of("_id"), terms.getFirst().descending()),
-                new KeysetWindow.Position(cursorToken, beforeToken, focus), limit, fingerprint);
+                new KeysetWindow.Position(cursorToken, beforeToken, focus), limit, sorting.context(fingerprint));
 
         sorting.clean(window.rows());
         EntityQuerySupport.decorateRows(refResolver, desc.attributes(), window.rows(), subject);
