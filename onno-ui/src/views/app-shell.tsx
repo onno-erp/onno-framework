@@ -85,16 +85,27 @@ import { DesktopAccountDock } from "../components/shell/desktop-account-dock";
 // Phone-portrait gets the full-width bottom bar; large/landscape phones and tablets
 // share the "tablet" class (a compact bottom bar pinned bottom-right); desktop gets
 // the sidebar + islands.
+//
+// Width alone cannot tell a tablet from a laptop: display scaling (Windows at 150%) or browser zoom
+// leaves a 1366px laptop some 910 CSS px, and a narrowed desktop window is no tablet either. With a
+// mouse or trackpad as the primary pointer the desktop shell therefore stays down to DESKTOP_MIN;
+// only touch devices get the tablet shell below TABLET_MAX.
 const MOBILE_MAX = 600;
 const TABLET_MAX = 1024;
+const DESKTOP_MIN = 720;
 
 type Viewport = "mobile" | "tablet" | "desktop";
 
 // The device class, which picks the shell layout (sidebar on desktop, bottom bar otherwise).
-function viewportFor(width: number): Viewport {
+export function viewportFor(width: number, touch: boolean): Viewport {
   if (width < MOBILE_MAX) return "mobile";
-  if (width < TABLET_MAX) return "tablet";
+  if (width < (touch ? TABLET_MAX : DESKTOP_MIN)) return "tablet";
   return "desktop";
+}
+
+// Whether the primary pointer is a finger. Where the browser cannot say, assume touch: width decides alone, as before.
+function touchPointer(): boolean {
+  return typeof window.matchMedia !== "function" || window.matchMedia("(pointer: coarse)").matches;
 }
 
 export type { Pane, Workspace, WorkspaceTab } from "./workspace-navigation";
@@ -271,7 +282,7 @@ function Shell() {
   const t = useMessages();
   const { openPanel: openNotificationPanel } = useNotifications();
   const dirtyForms = useDirtyForms();
-  const [viewport, setViewport] = useState<Viewport>(() => viewportFor(window.innerWidth));
+  const [viewport, setViewport] = useState<Viewport>(() => viewportFor(window.innerWidth, touchPointer()));
   const [workspace, setWorkspace] = useState<Workspace>(initialWorkspace);
   const wsRef = useRef(workspace);
   wsRef.current = workspace;
@@ -311,7 +322,7 @@ function Shell() {
   }, [theme]);
 
   useEffect(() => {
-    const onResize = () => setViewport(viewportFor(window.innerWidth));
+    const onResize = () => setViewport(viewportFor(window.innerWidth, touchPointer()));
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
