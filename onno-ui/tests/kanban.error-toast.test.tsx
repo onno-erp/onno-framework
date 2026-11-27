@@ -99,19 +99,20 @@ describe("Kanban move failure (#505)", () => {
     expect(toast.error.mock.calls).toEqual([["Failed to fetch"]]);
   });
 
-  it("reports typed feedback, which the api layer leaves to its caller, once", async () => {
+  it("reports typed feedback, which the api layer leaves to its caller, once under its own title", async () => {
     await dragToPosted(() => response(409, {
       severity: "error",
       title: "Posting blocked",
       message: "The period is closed",
     }));
 
-    expect(toast.error.mock.calls).toEqual([["The period is closed"]]);
+    expect(toast.error).toHaveBeenCalledOnce();
+    expect(toast.error.mock.calls[0][0]).toBe("Posting blocked");
   });
 
-  it("reports a lapsed session (401), which the api layer leaves to its caller, once", async () => {
+  it("does not toast a lapsed session (401): the auth recovery takes over", async () => {
     await dragToPosted(() => response(401, { error: "unauthenticated" }));
 
-    expect(toast.error.mock.calls).toEqual([["unauthenticated"]]);
+    expect(toast.error).not.toHaveBeenCalled();
   });
 });

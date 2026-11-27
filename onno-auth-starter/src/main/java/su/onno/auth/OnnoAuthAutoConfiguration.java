@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import su.onno.auth.spi.AuthMethodsProvider;
+import su.onno.auth.spi.AuthPathsContributor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -150,8 +151,13 @@ public class OnnoAuthAutoConfiguration {
         };
     }
 
-    private static void applyApiAuthorization(HttpSecurity http, OnnoAuthProperties properties) throws Exception {
-        String[] publicPaths = properties.effectivePublicPaths().toArray(String[]::new);
+    @Bean
+    OnnoAuthPaths onnoAuthPaths(OnnoAuthProperties properties, ObjectProvider<AuthPathsContributor> contributors) {
+        return OnnoAuthPaths.resolve(properties, contributors.orderedStream().toList());
+    }
+
+    private static void applyApiAuthorization(HttpSecurity http, OnnoAuthPaths paths) throws Exception {
+        String[] publicPaths = paths.publicPaths().toArray(String[]::new);
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers(publicPaths).permitAll()
                 .requestMatchers("/api/**").authenticated()
@@ -340,6 +346,7 @@ public class OnnoAuthAutoConfiguration {
         @Bean
         @ConditionalOnMissingBean(SecurityFilterChain.class)
         SecurityFilterChain onnoSecurityFilterChain(HttpSecurity http, OnnoAuthProperties properties,
+                                                    OnnoAuthPaths paths,
                                                     ObjectProvider<TokenBasedRememberMeServices> rememberMe,
                                                     UserDetailsService userDetailsService,
                                                     ObjectProvider<UserStore> userStore)
@@ -347,7 +354,7 @@ public class OnnoAuthAutoConfiguration {
             CsrfTokenRequestAttributeHandler csrfHandler = new CsrfTokenRequestAttributeHandler();
             csrfHandler.setCsrfRequestAttributeName(null);
 
-            applyApiAuthorization(http, properties);
+            applyApiAuthorization(http, paths);
             // Honour the remember-me cookie: its filter/provider re-authenticate a request whose
             // session has lapsed. The provider's key must match the one the cookie was signed with.
             TokenBasedRememberMeServices rms = rememberMe.getIfAvailable();
@@ -377,7 +384,7 @@ public class OnnoAuthAutoConfiguration {
             UserStore store = userStore.getIfAvailable();
             if (store != null) {
                 http.addFilterBefore(new AccountSessionGuardFilter(store, rms,
-                        properties.effectivePublicPaths()), AuthorizationFilter.class);
+                        paths.publicPaths()), AuthorizationFilter.class);
             }
 
             return http
@@ -387,7 +394,7 @@ public class OnnoAuthAutoConfiguration {
                     .csrf(csrf -> csrf
                             .csrfTokenRepository(csrfTokenRepository(properties))
                             .csrfTokenRequestHandler(csrfHandler)
-                            .ignoringRequestMatchers(properties.getCsrfIgnoredPaths().toArray(String[]::new)))
+                            .ignoringRequestMatchers(paths.csrfIgnoredPaths().toArray(String[]::new)))
                     .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                     .exceptionHandling(ex -> ex.authenticationEntryPoint(new JsonAuthenticationEntryPoint()))
                     .formLogin(AbstractHttpConfigurer::disable)
@@ -451,13 +458,14 @@ public class OnnoAuthAutoConfiguration {
         @ConditionalOnMissingBean(SecurityFilterChain.class)
         SecurityFilterChain onnoOidcSecurityFilterChain(HttpSecurity http,
                                                         OnnoAuthProperties properties,
+                                                        OnnoAuthPaths paths,
                                                         ClientRegistrationRepository clientRegistrations)
                 throws Exception {
             CsrfTokenRequestAttributeHandler csrfHandler = new CsrfTokenRequestAttributeHandler();
             csrfHandler.setCsrfRequestAttributeName(null);
 
             OnnoAuthProperties.ResolvedOidc oidc = properties.getOidc().resolved();
-            applyApiAuthorization(http, properties);
+            applyApiAuthorization(http, paths);
             applyEmbeddingPolicy(http, properties);
             return http
                     .sessionManagement(session -> session
@@ -465,7 +473,7 @@ public class OnnoAuthAutoConfiguration {
                     .csrf(csrf -> csrf
                             .csrfTokenRepository(csrfTokenRepository(properties))
                             .csrfTokenRequestHandler(csrfHandler)
-                            .ignoringRequestMatchers(properties.getCsrfIgnoredPaths().toArray(String[]::new)))
+                            .ignoringRequestMatchers(paths.csrfIgnoredPaths().toArray(String[]::new)))
                     .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                     .oauth2Login(oauth -> oauth
                             // Point at the SPA's own /login route. This suppresses Spring's
@@ -553,8 +561,9 @@ public class OnnoAuthAutoConfiguration {
         @Bean
         @ConditionalOnMissingBean(SecurityFilterChain.class)
         SecurityFilterChain onnoResourceServerSecurityFilterChain(HttpSecurity http,
-                                                                  OnnoAuthProperties properties) throws Exception {
-            applyApiAuthorization(http, properties);
+                                                                  OnnoAuthProperties properties,
+                                                                  OnnoAuthPaths paths) throws Exception {
+            applyApiAuthorization(http, paths);
             applyEmbeddingPolicy(http, properties);
             return http
                     // Bearer-token clients carry no cookies, so the session and CSRF machinery

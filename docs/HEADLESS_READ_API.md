@@ -609,9 +609,11 @@ is `422`. Policy defaults (e.g. `owner`) are filled on create and cannot be over
 
 `list` returns only live rows (`deletionMark = false`; `_deletion_mark` in storage representation).
 Deletes are soft (the mark is set), so a
-deleted row disappears from `list` but is still reachable by `get` until purged. Spring Data
-`CatalogRepository`/`DocumentRepository` delete methods use the same tombstone contract; posted
-documents must be unposted before repository deletion.
+deleted row disappears from `list` but is still reachable by `get` until purged. The generic
+`DELETE` and Spring Data `CatalogRepository`/`DocumentRepository` delete methods run the same
+command: `BeforeDeleteHandler`, then the mark (version bumped, delete events), without `beforeWrite`
+or validation. Deleting a posted document answers `409`; unpost it first (`batch-delete` reports it
+as a failed id).
 
 ## Reacting to changes
 
@@ -663,7 +665,10 @@ There are no CRM contact edit, duplicate-search, merge-preview, merge, history o
 (explicit `crm.administer` holders by default). Unknown connectors return 404; invalid commands return 422.
 `POST /api/crm/contacts/{id}/identities` accepts manual `{channel,address}` email/phone identities,
 requiring writable workspace membership and host customer write permission. Telegram's cached JPEG
-endpoint `/api/crm/telegram/avatars/{identityId}` requires customer/workspace access as well.
+endpoint `/api/crm/telegram/avatars/{identityId}` requires customer/workspace access as well, and so does
+Instagram's `/api/crm/instagram/avatars/{identityId}`: the adapter downloads the profile picture of each person who
+messages the account (a few per poll, each re-checked weekly) and serves its own copy, since Instagram's signed CDN
+URLs expire within days and never leave the server.
 
 The starter activates only with a `CrmCustomerBinding`; it creates no customer, employee or sales
 catalog. Customer/assignee keys in CRM persistence are UUIDs scoped to explicit host bindings.
@@ -693,6 +698,10 @@ connections ask for `gmail.readonly`, `gmail.send` and `gmail.modify`; only the 
 The delivery connection (`GET /api/crm/conversations/{id}/delivery`) adds `senders:[{id,label}]` and
 the default `sender` (the conversation's own mailbox address); the reply command accepts an optional
 `from` among those ids (else 400). Gmail offers shared mailboxes and the caller's own personal one.
+It also adds `cc`, the suggested Cc of a reply (reply-all: the latest received email's To and Cc without the
+deployment's mailboxes and the recipient). The reply command accepts an optional `cc` list (at most 20 single
+addresses; else 422), stored on the message as `copyTo`; messages and activity entries carry an email's `sentTo`
+and `copyTo` (comma-joined `Name <address>` entries, null when unknown).
 
 Mail search and restore, all requiring inbox workspace access (restore: write access) and limited to
 shared mailboxes and the caller's own personal ones (any other `account` is 404):
@@ -759,7 +768,7 @@ With `onno.crm.channels.whatsapp.enabled=true`, `GET /api/crm/whatsapp/webhook` 
 
 The CRM Inbox presents one row per contact and a chronological timeline across its channel conversations, internal comments and system events. Underlying conversations retain provider routing and email thread identifiers. The reply selector changes only the destination, and defaults to the latest incoming message's conversation; an unsent draft keeps its selected destination.
 
-`GET /api/crm/contacts/{customer}/activity?cursor=&limit=100` returns `{rows,nextCursor,hasMore}` (newest first, default 100, maximum 500). Only the `rows` key and cursor continuation are supported. No total is calculated. Messages and internal notes are combined by SQL UNION ALL, restricted to authorized conversation keys before seeking on `(time DESC, source DESC, UUID DESC)`. Files, HTML, author photos and account labels are resolved only for the selected page. Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`; message entries also retain `senderAccount`, the account used to send the reply, or null. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
+`GET /api/crm/contacts/{customer}/activity?cursor=&limit=100` returns `{rows,nextCursor,hasMore}` (newest first, default 100, maximum 500). Only the `rows` key and cursor continuation are supported. No total is calculated. Messages and internal notes are combined by SQL UNION ALL, restricted to authorized conversation keys before seeking on `(time DESC, source DESC, UUID DESC)`. Files, HTML, author photos and account labels are resolved only for the selected page. Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`; message entries also retain `senderAccount`, the account used to send the reply, or null, and an email's `sentTo`/`copyTo` recipient lists. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
 
 `POST /api/crm/contacts/{customer}/activity` accepts `conversationId`, `type` (`QUOTED`, `CALL_PLANNED`, `CALL_COMPLETED`, `MEETING_PLANNED`, `OTHER`), nonblank `details` up to 7000 characters, and optional local `scheduledFor`. It requires write access to the matching contact's conversation. It stores an internal `SYSTEM_EVENT` without sending a channel message or changing the sales stage. Planned dates are descriptive event text, not reminders or calendar invitations. Domain workflows can also append system events through the existing conversation-message repository.
 
@@ -906,3 +915,18 @@ Catalog header and section replacements share one transaction, including the ver
 
 `POST /api/catalogs/{name}/{id}/duplicate` also copies tabular-section rows in their original order.
 The copy receives fresh record and row IDs; secret attributes are omitted, as for documents.
+
+### Standard information-register UI feed
+
+`GET /api/ui/view/information-registers/{name}` returns `{informationRegister: {periodic, list}}`.
+`GET /api/list/information-registers/{name}` supplies `{rows, nextCursor, hasMore, total?}` in the
+same logical vocabulary as the information-register REST API. It accepts `cursor`, `limit`,
+`sort` (a non-secret storage column), `dir`, `where`, the standard list `eq/in/like/prefix/ge/le`
+filters and `count=exact`. Optional `at` selects the latest record per dimension tuple on a periodic
+register; value filters apply after slicing. The slice is paged and does not use the legacy
+5000-row slice cap. Defaults are period then ID descending (periodic) or ID descending.
+Read roles and dimension record policies apply to both the surface and every feed window;
+cursors are bound to filters, date, sort and caller. No write or record-detail surface is provided.
+The canonical `/api/information-registers/{name}/records` and `/slice-last` contracts are unchanged.
+
+Information-register reference columns retain the standard storage-ID sort order.

@@ -95,6 +95,12 @@ Both in `onno-web-starter/src/main/java/su/onno/web/`.
 | `src/components/pages/page-blocks.tsx` | `Page`, `Row`, `DefaultView`, `EntityList` — what pages are composed from; the data components (`Stat`, `Chart`, …) live under `src/components/widgets/`. |
 | `src/lib/query.ts` | Data hooks on TanStack Query (`useRecords`, `useCreateRecord`, `useBalance`…) and SSE-driven invalidation. |
 | `src/lib/api.ts` | The REST client. |
+| `src/lib/record-presentation.ts` | Shared widget record labels and reference photos, selected from entity metadata; widget callbacks customize them. |
+
+Row-shaped widgets read bounded list windows and retain `hasMore`. A visible notice reports a
+partial result, including a board/list/map's own display limit. `api.listCatalogPage`,
+`listDocumentsPage` and `listCatalogWindowPage` keep the continuation envelope; array-only
+convenience reads such as `useRecords` are bounded and do not imply that every record was read.
 
 **How state flows.** The app's declaration goes *down the tree* in context, never into module
 state, so a component's behaviour depends only on its props and the providers above it:
@@ -110,7 +116,10 @@ state, so a component's behaviour depends only on its props and the providers ab
   read with `useUiEvents(listener, filter)` over the same shared stream.
 - Per-session state (notifications, presence, dirty forms, the quick-create hand-off): providers
   mounted in `App.tsx`. Opening and closing screens goes through `openRoute`/`closeRoute`
-  (`lib/navigation.ts`), which the shell alone listens to.
+  (`lib/navigation.ts`), which the shell alone listens to. The workspace rules (an open replaces the
+  active tab's screen and records it for that tab's Back / Forward, explicit new tabs and islands,
+  the soft tab limit) are pure functions in `views/workspace-navigation.ts`; the tab strip's "+"
+  palette is `components/shell/new-tab-palette.tsx` over `lib/new-tab-destinations.ts`.
 - Shared page state (theme, messages, the page's time range): their providers.
 - A component's own UI state: inside it, and *controllable* where a page may care.
   `EntityList` works like an `<input>`: `defaultGroupBy`/`defaultSort`/`defaultView` set where it
@@ -217,6 +226,7 @@ Opening `/ui/ops` instead stops at step 3: the app's pages (in context) have `Sa
 | add a command, a live check or picker options | a `Commands` / `Checks` / `PickerOptions` bean in the app |
 | place or icon a command (or a built-in like `delete`, or `print-invoice`) | the entity's `commands` customization: `{ advance: { placement: "row", icon: ArrowRight } }` |
 | change how command feedback shows (toast vs dialog) | `feedbackNeedsDialog` in `lib/command-feedback.tsx` |
+| change how typed feedback looks as a toast, or the show-once rule | `lib/feedback-toast.tsx` |
 | change the calendar/timeline list views | `components/lists/list-schedule-view.tsx`, `lib/schedule.ts` |
 | change the record history panel | `components/collaboration/record-history.tsx` |
 | change the period-close admin screen | `components/widgets/period-close.tsx` |
@@ -293,3 +303,12 @@ The public SDK exposes the same `useRecordForm` controller used by the default r
 select-all callbacks in addition to the existing feed/pagination props. See [UI_SDK.md](UI_SDK.md)
 for the supported replacement boundaries. New extension work should share controllers between
 standard and custom views rather than duplicate business or lifecycle behavior.
+
+### Information-register lists
+
+Open `/information-registers/{name}` to inspect an information register without writing a custom
+page. The model supplies its route in `informationRegisters`; default navigation includes readable
+registers, and authored navigation resolves them by logical name. Entity list customizations
+(columns, formats, filters and initial sort) apply to the read-only table. Periodic registers offer
+a History view and a Latest values view at the end of a selected local calendar date.
+The latter selects the last stored value per dimension tuple before applying value filters.

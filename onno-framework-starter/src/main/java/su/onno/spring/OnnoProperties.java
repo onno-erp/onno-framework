@@ -10,7 +10,8 @@ public class OnnoProperties {
 
     /**
      * Packages scanned for {@code @Catalog}, {@code @Document}, {@code @AccumulationRegister},
-     * {@code @InformationRegister}, {@code @Enumeration}, and {@code @Constant} types. Leave unset
+     * {@code @InformationRegister}, {@code @Enumeration}, {@code @Constant}, and
+     * {@code @ScheduledJob} types. Scheduled jobs must also be registered as Spring beans. Leave unset
      * to scan from your {@code @SpringBootApplication} package. This is the core scan property;
      * there is no {@code onno.base-packages} alias.
      */

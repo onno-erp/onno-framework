@@ -146,15 +146,21 @@ class DocumentPostingAccessTest {
     }
 
     @Test
-    void deletingPostedDocumentNeedsUnpostRight() {
+    void postedDocumentMustBeUnpostedExplicitlyBeforeDelete() {
         UUID id = create(gated, CLERK);
         commands.post(gated, id, POSTER);
 
-        assertForbidden(() -> commands.delete(gated, id, CLERK), "unpost");
+        // Not even the unpost right deletes a posted document: a delete never unposts implicitly.
+        for (AccessSubject subject : new AccessSubject[] {CLERK, MANAGER}) {
+            assertThatThrownBy(() -> commands.delete(gated, id, subject))
+                    .isInstanceOfSatisfying(ServiceException.class,
+                            e -> assertThat(e.status()).isEqualTo(ServiceException.Status.CONFLICT));
+        }
         assertThat(posted(gated, id)).isTrue();
         assertThat(deleted(gated, id)).isFalse();
 
-        commands.delete(gated, id, MANAGER);
+        commands.unpost(gated, id, MANAGER);
+        commands.delete(gated, id, CLERK);
         assertThat(deleted(gated, id)).isTrue();
     }
 

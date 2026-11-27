@@ -6,10 +6,12 @@ import {
   useId,
   useMemo,
   useState,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 import { ChevronRight } from "lucide-react";
 import { Icon } from "../../lib/icons";
+import { placementForClick, type OpenPlacement } from "../../lib/open-placement";
 import type { IconSource } from "../../lib/icons";
 import type {
   ShellNavItem,
@@ -30,10 +32,42 @@ export type NavigationProps = {
   header?: ReactNode;
   footer?: ReactNode;
 };
+/**
+ * Opens a navigation item. `newWorkspaceTab` asks for a new workspace tab (middle- or Ctrl/⌘-click),
+ * `newIsland` for a new island beside the focused one (Shift-click).
+ */
+export type NavigateHandler = (path: string, options?: { newWorkspaceTab?: boolean; newIsland?: boolean }) => void;
+
+function navigateWith(onNavigate: NavigateHandler, path: string, placement: OpenPlacement) {
+  if (placement === "new-island") onNavigate(path, { newIsland: true });
+  else if (placement === "new-tab") onNavigate(path, { newWorkspaceTab: true });
+  else onNavigate(path);
+}
+
+/**
+ * Click handlers for a navigation button, with a browser's modifiers: a plain click navigates the
+ * active tab, a middle-click or a Ctrl/⌘-click opens a new workspace tab, a Shift-click opens a new
+ * island beside the focused one.
+ */
+export function navigationClickHandlers(path: string, onNavigate: NavigateHandler) {
+  return {
+    onClick: (event: MouseEvent) => navigateWith(onNavigate, path, placementForClick(event)),
+    onAuxClick: (event: MouseEvent) => {
+      if (event.button !== 1) return;
+      event.preventDefault();
+      navigateWith(onNavigate, path, "new-tab");
+    },
+    // A middle press would otherwise start the browser's autoscroll, a Shift press a text selection.
+    onMouseDown: (event: MouseEvent) => {
+      if (event.button === 1 || event.shiftKey) event.preventDefault();
+    },
+  };
+}
+
 type NavigationContext = {
   activePath: string;
   mobile: boolean;
-  onNavigate: (path: string) => void;
+  onNavigate: NavigateHandler;
 };
 const NavigationContext = createContext<NavigationContext>({
   activePath: "",
@@ -70,7 +104,7 @@ export function NavigationHost({
   header,
   footer,
 }: NavigationProps & {
-  onNavigate: (path: string) => void;
+  onNavigate: NavigateHandler;
   children: ReactNode;
 }) {
   const Custom = useAppConfig().app.navigationComponent;
@@ -231,7 +265,7 @@ function Destination({
       type="button"
       aria-label={item.label}
       aria-current={active ? "page" : undefined}
-      onClick={() => onNavigate(item.path)}
+      {...navigationClickHandlers(item.path, onNavigate)}
       className={cn(
         "flex w-full items-center gap-2 rounded-field px-2 text-left text-sm transition-colors hover:bg-muted",
         mobile ? "py-3" : "py-1.5",

@@ -1,6 +1,6 @@
 import type { IconSource } from "./icons";
 import { createContext, useContext, useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
-import { defaultNavigation, ENTITY_KIND_ICONS, holdsPermission, holdsRole, isEntitySurface, type AppModel, type ModelEntity } from "./app-model";
+import { defaultNavigation, modelEntities, ENTITY_KIND_ICONS, holdsPermission, holdsRole, isEntitySurface, type AppModel, type ModelEntity } from "./app-model";
 import { applyForm, applyList, customizationsFor, type EntityCustomization } from "./entity-customizations";
 import { mergePresentations, type CommandPresentation } from "./commands";
 import { findEntity, modelOutsideReact, useModel } from "./model-store";
@@ -273,7 +273,7 @@ export function buildNavigation(
     const page = pages.find((p) => pagePath(p, model) === item.path);
     if (!page && isEntitySurface(item.path)) {
       const base = "/" + item.path.split("?")[0].split("/").filter(Boolean).slice(0, 2).join("/");
-      if (!model.entities.some((entity) => entity.route === base)) return null;
+      if (!modelEntities(model).some((entity) => entity.route === base)) return null;
     }
     if (!page && !isEntitySurface(item.path) && import.meta.env.DEV) {
       console.warn(`[onno] navigation links "${item.path}", which is neither a page nor an entity route`);

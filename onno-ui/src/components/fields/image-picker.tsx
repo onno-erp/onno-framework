@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { toast } from "../ui/toast";
 import { ImagePlus, Loader2, Trash2, Upload, X } from "lucide-react";
-import { uploadMedia } from "../../lib/api";
+import { isSessionLapse, uploadMedia } from "../../lib/api";
 import { looksLikeImageUrl } from "../../lib/cell-format";
 import { cn } from "../../lib/utils";
 
@@ -29,8 +29,9 @@ async function uploadImage(file: File): Promise<string | null> {
   try {
     const stored = await uploadMedia(file);
     return stored.url;
-  } catch {
-    toast.error(`Couldn't upload "${file.name}".`);
+  } catch (error) {
+    // A lapsed session is left to the auth recovery.
+    if (!isSessionLapse(error)) toast.error(`Couldn't upload "${file.name}".`);
     return null;
   }
 }

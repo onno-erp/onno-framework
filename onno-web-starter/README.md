@@ -234,8 +234,8 @@ specified in [docs/HEADLESS_READ_API.md](../docs/HEADLESS_READ_API.md).
 | POST | `/{name}/{id}/unpost` | Reverse a posted document. Needs the `unpost` grant; `BeforeUnpostHandler` may veto. |
 | GET | `/{name}/{id}/posting-preview` | The movements a post would write, without writing them. |
 | POST | `/{name}/{id}/duplicate` | Server-side copy: attributes and lines, fresh id and number, dated now, unposted. |
-| POST | `/{name}/batch-delete` | Soft-delete `{ids: […]}` (≤500), unposting posted ones. |
-| DELETE | `/{name}/{id}` | Soft delete; a posted document is unposted first (which needs the unpost right). |
+| POST | `/{name}/batch-delete` | Soft-delete `{ids: […]}` (≤500); posted ones fail (unpost first). |
+| DELETE | `/{name}/{id}` | Soft delete (`BeforeDeleteHandler`, no `beforeWrite`/validation); a posted document answers `409` — unpost it first. |
 | POST | `/{name}/validate`, `/{name}/{id}/validate` | Dry run of the write path; nothing persists. |
 
 ### Accumulation registers — `/api/registers`
@@ -527,3 +527,11 @@ public API; `testFrontend` runs Vitest and is part of `check`.
 ./gradlew :onno-web-starter:buildFrontend
 ./gradlew :onno-web-starter:test
 ```
+
+### Standard information-register screens
+
+Readable information registers have a read-only `/information-registers/{name}` surface.
+`GET /api/ui/view/information-registers/{name}` supplies the descriptor and
+`GET /api/list/information-registers/{name}` supplies sortable, filtered keyset windows with optional
+exact count. Periodic registers support `at` for a paged latest-values slice. Role and dimension
+record policies apply on every request. See [the read contract](../docs/HEADLESS_READ_API.md).

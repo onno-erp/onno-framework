@@ -11,7 +11,7 @@ public enum EntityRight {
     WRITE,
     /** Documents: post and re-post. Implies {@link #WRITE}. */
     POST,
-    /** Documents: unpost, including deleting a posted document. Implies {@link #WRITE}. */
+    /** Documents: unpost. Implies {@link #WRITE}. */
     UNPOST;
 
     /** Whether holding this right also grants {@code other}. */

@@ -142,7 +142,7 @@ Everything an app can import is in [`src/index.ts`](src/index.ts); the types are
 | The app | `defineApp(app)` — `entities` (one `EntityCustomization<E>` per entity name), `pages` (`path` or `list` or `record`, `component`, `label`, `icon`, `roles`, `when`, `view`), `navigation` (sections of entity names and page paths, or a function of the model), `extensions` (components for named `ExtensionSlot` outlets), `login` (the app's own login page). |
 | Login | `useSignIn()` (`password`, `method(id, credentials)`, `challenge(id, input)`, `redirect(provider)`), `useLoginMethods()`, `LoginLayout`, `SignInMethods`, `PasswordLogin`, `SsoButtons`, `LoginButton`, `DefaultLogin`, `SignInError`; types `LoginPageProps`, `LoginMethods`, `SsoOption`. |
 | Navigation UI | `Navigation`, `NavigationSection`, `NavigationGroup`, `NavigationLink`, `DefaultNavigation`; section `actions`, nested `items`, optional `navigationComponent`. |
-| Navigation | `openRecord(entity, id?, prefill?)`, `openRoute(link \| path, { newTab? })`, `RouteLink` (an anchor that opens in the workspace), `links.record` / `newRecord` / `list` / `page` (typed `onno://` links). A command result's `navigateTo` is applied after its feedback and refresh. |
+| Navigation | `openRecord(entity, id?, prefill?)`, `openRoute(link \| path, { newWorkspaceTab?, newTab? })` (an open replaces the active tab's screen and its Back returns; `newWorkspaceTab` opens a new workspace tab, `newTab` a browser tab), `RouteLink` (an anchor that opens in the workspace), `links.record` / `newRecord` / `list` / `page` (typed `onno://` links). A command result's `navigateTo` is applied after its feedback and refresh. |
 | Model | `useModel()`, `useHasRole(...roles)`, `useHasPermission(permission)`. |
 | Page blocks | `Page`, `Row`, `RecordPage`, `RecordFields`, `RecordLines`, `PageHeader`, `DefaultView`, `DefaultHome`, `EntityList` (an entity's full list; controllable: `where`, `defaultGroupBy`/`groupBy`, `sort`, `view`, `search`, `selection` with `on…Change`; `calendar`/`timeline` views). `RecordPage` takes `history` (default: when the entity records history). |
 | Widgets | `Stat`, `Sparkline`, `Gauge`, `Chart`, `TimeRange`, `RecentRecords`, `Kanban`, `Calendar`, `EntityMap`, `Setting`, `TaskInbox`, `UserAccounts`, `ChangePassword`, `PeriodClose` (period-close administration), `RecordHistory` (one record's change history). Typed per entity; they read data themselves and follow the page's time range. |
@@ -152,6 +152,17 @@ Everything an app can import is in [`src/index.ts`](src/index.ts); the types are
 | Live events | `useUiEvents(listener, filter)`, `subscribeUiEvents` — for comments, presence, tasks; entity data refreshes by itself. |
 | Text | `useTranslate`, `useLocale`, `text`, `locale`, `formatMoney`, `formatDate`, `displayOf`. |
 | Mobile, outlets | `useMobileDetail`, `usePageSlide`, `ExtensionSlot`. |
+
+**Record widgets.** `Calendar`, `Kanban` and `RecentRecords` use the framework's record identity
+(`description`, `number`, `code`) for their default headline. Secondary text and reference photos
+follow the entity list descriptor's declared columns, without guessing application field names.
+Use `itemTitle`/`subtitle` (calendar) or `primary`/`secondary` (board/recent records) for an app-specific
+presentation. Bounded widgets retain `hasMore` and show a notice when more records match; boards,
+recent lists and maps also report rows hidden by their display limit. The notice is localized with
+`onno.ui.messages.widget.records.truncated` (`{count}` is the number of loaded/displayed records,
+not a total). `api.listCatalogPage`, `listDocumentsPage` and `listCatalogWindowPage` preserve the
+`{ rows, nextCursor, hasMore }` envelope; array-only reads (`listCatalog`, `listDocuments`,
+`useRecords`) remain bounded convenience reads and do not represent a complete collection.
 
 **Typed vocabulary.** Everything an app hands the package is a typed value, never a string it
 parses: entities by logical name (`"Orders"`); which records as a `where` object
@@ -389,3 +400,12 @@ backend port 8080 unless configured; this repository's example explicitly defaul
 
 For framework contributors, the [component organization](DESIGN.md#component-organization) describes
 the internal folders. Application imports continue to use the public `@onno/ui` entry point.
+
+### Information registers
+
+Readable information registers appear in default navigation, grouped by context, at
+`/information-registers/{name}`. Authored navigation can name their logical name (for example
+`"Book Prices"`), and ordinary entity list customizations apply by that name. The standard surface
+is read-only: no record form, New, Edit, Delete, balance or turnover actions. Periodic registers
+offer History (with a period range) and Latest values as of the end of a selected local date.
+Both modes use a scoped keyset feed, including sorting and authored filters.

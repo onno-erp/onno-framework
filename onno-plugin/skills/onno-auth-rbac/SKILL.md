@@ -50,7 +50,7 @@ decide what they can see or change.
   declared, a role list naming no declared role or `fromIdp` name (a typo such as `"MANGER"`) fails
   startup.
 - Posting is its own right: `post(Invoice.class)` lets reception create and post invoices,
-  `unpost(Invoice.class)` lets a manager unpost (or delete a posted) one; `write(...)` alone allows
+  `unpost(Invoice.class)` lets a manager unpost one (a posted document must be unposted before delete — `409`); `write(...)` alone allows
   neither. REST/MCP answer `403`; the UI hides the Post/Unpost actions.
 - Database mode lockout protection: the first seeded account gets a role holding `users.manage` if
   no seed has one, and the last enabled holder cannot be disabled or demoted. When existing accounts

@@ -273,7 +273,7 @@ public class AccessService {
         return can(subject, "document", descriptor.logicalName(), descriptor.javaClass(), EntityRight.POST);
     }
 
-    /** Whether {@code subject} may unpost documents of this type (also gates deleting a posted one). */
+    /** Whether {@code subject} may unpost documents of this type. */
     public boolean canUnpost(AccessSubject subject, DocumentDescriptor descriptor) {
         return can(subject, "document", descriptor.logicalName(), descriptor.javaClass(), EntityRight.UNPOST);
     }

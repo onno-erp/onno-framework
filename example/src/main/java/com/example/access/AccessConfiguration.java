@@ -9,6 +9,7 @@ import com.example.domain.catalogs.SupplierOffer;
 import com.example.domain.documents.Order;
 import com.example.domain.documents.ScheduleEvent;
 import com.example.domain.documents.StockReceipt;
+import com.example.domain.registers.BookPrice;
 import com.example.domain.registers.BookSales;
 import com.example.domain.registers.BookStock;
 import su.onno.access.CorePermissions;
@@ -35,7 +36,7 @@ public class AccessConfiguration {
                                 SupplierOffer.class, ScheduleEvent.class)
                         .post(Order.class, StockReceipt.class)
                         .unpost(Order.class, StockReceipt.class)
-                        .read(Employee.class, BookSales.class, BookStock.class))
+                        .read(Employee.class, BookSales.class, BookStock.class, BookPrice.class))
                 .role(AppRole.ADMIN, r -> r
                         .writeAll()
                         .postAll()

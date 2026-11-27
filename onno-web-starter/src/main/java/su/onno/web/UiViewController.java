@@ -251,6 +251,8 @@ public class UiViewController {
                 .map(d -> {
                     Map<String, Object> e = new LinkedHashMap<>();
                     e.put("logicalName", d.logicalName());
+                    e.put("name", toSnakeCase(d.logicalName()));
+                    e.put("route", "/information-registers/" + toSnakeCase(d.logicalName()));
                     e.put("title", d.displayTitle());
                     e.put("context", d.context() == null ? "" : d.context());
                     e.put("periodic", d.periodicity() != su.onno.model.Periodicity.NONE);
@@ -459,8 +461,8 @@ public class UiViewController {
         if (canWrite) {
             actions.add(ViewDescriptors.RecordAction.builtIn("duplicate",
                     "onno://documents/" + name + "/" + id + "/duplicate"));
-            // Deleting a posted document unposts it, so it is offered only with the unpost right.
-            if (!posted || canUnpost) {
+            // A posted document must be unposted explicitly before it can be deleted.
+            if (!posted) {
                 actions.add(new ViewDescriptors.RecordAction("delete", null,
                         "onno://delete/documents/" + name + "/" + id, true));
             }

@@ -9,6 +9,8 @@ import type { EntityRecord } from "../../lib/types";
 import { Boundary } from "../pages/boundary";
 import { MapView } from "./map-view";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { recordTitle } from "../../lib/record-presentation";
+import { RecordsTruncated } from "../widgets/records-truncated";
 import { HintIcon } from "../ui/hint-icon";
 
 /**
@@ -44,12 +46,7 @@ export interface EntityMapProps {
 const MAP_HEIGHT = 360;
 
 /** The default marker/shape label: a system identifier. */
-export function defaultMapLabel(row: EntityRecord): string {
-  for (const c of [row.description, row.number, row.code, row.name]) {
-    if (c != null && String(c).trim() !== "") return String(c);
-  }
-  return "";
-}
+export const defaultMapLabel = recordTitle;
 
 export function EntityMap(props: EntityMapProps) {
   return (
@@ -61,7 +58,8 @@ export function EntityMap(props: EntityMapProps) {
 
 function EntityMapCard({ title, hint, entity, where, limit, lat, lng, geoJson, label }: EntityMapProps) {
   const entitySource = useEntitySource(entity, { where });
-  const rows = useEntityRows(entitySource);
+  const { rows, hasMore } = useEntityRows(entitySource);
+  const visibleRows = useMemo(() => limit ? rows.slice(0, limit) : rows, [rows, limit]);
   const source = useMemo<GeoSource>(
     () => ({ latField: lat || undefined, lngField: lng || undefined, geoJsonField: geoJson || undefined }),
     [lat, lng, geoJson]
@@ -77,13 +75,13 @@ function EntityMapCard({ title, hint, entity, where, limit, lat, lng, geoJson, l
     const route = toSnakeCase(entitySource.entityName);
     const labelOf = labelRef.current ?? defaultMapLabel;
     const out: Feature[] = [];
-    for (const row of limit ? rows.slice(0, limit) : rows) {
+    for (const row of visibleRows) {
       const href = row.id ? `onno://${entitySource.entityType}s/${route}/${row.id}` : undefined;
       const props = { label: labelOf(row) ?? "", href };
       out.push(...featuresFromRow(row, source, props));
     }
     return out;
-  }, [rows, source, entitySource, limit]);
+  }, [visibleRows, source, entitySource]);
 
   const misconfigured = !hasGeoSource(source);
 
@@ -99,6 +97,7 @@ function EntityMapCard({ title, hint, entity, where, limit, lat, lng, geoJson, l
         ) : null}
       </CardHeader>
       <CardContent className="p-4 pt-0">
+        <RecordsTruncated count={visibleRows.length} truncated={hasMore || visibleRows.length < rows.length} />
         {misconfigured ? (
           <div className="flex h-[210px] items-center justify-center px-4 text-center text-xs text-muted-foreground">
             Set a geo source: a <code className="mx-1 font-mono">lat</code>/

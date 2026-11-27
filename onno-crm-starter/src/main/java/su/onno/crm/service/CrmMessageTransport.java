@@ -58,12 +58,17 @@ public interface CrmMessageTransport {
      *
      * <p>{@code senders} are the accounts a reply may be sent from (empty means the provider offers
      * no choice) and {@code sender} the default one's id; set both with {@link #withSenders}.
+     *
+     * <p>{@code cc} is who a reply copies by default, as RFC 5322 entries ({@code "Name <address>"}): for an email,
+     * everyone else on the latest received email (reply-all), never the studio's own mailboxes or the recipient.
+     * Empty when there is nobody, or the channel has no Cc; set it with {@link #withCc}. The composer offers it as a
+     * suggestion; a reply copies only the Cc it sends.
      */
     record Connection(boolean connected, String label, int maxTextLength,
                       ReplyCapability replyCapability, String replyReason,
                       int maxAttachments, String attachmentReason,
                       String recipient, List<String> recipients,
-                      List<Sender> senders, String sender) {
+                      List<Sender> senders, String sender, List<String> cc) {
         public Connection {
             Objects.requireNonNull(replyCapability);
             replyReason=replyReason==null?"":replyReason;
@@ -72,6 +77,14 @@ public interface CrmMessageTransport {
             recipients=recipients==null?List.of():List.copyOf(recipients);
             senders=senders==null?List.of():List.copyOf(senders);
             if(sender==null && !senders.isEmpty())sender=senders.getFirst().id();
+            cc=cc==null?List.of():List.copyOf(cc);
+        }
+        public Connection(boolean connected, String label, int maxTextLength,
+                          ReplyCapability replyCapability, String replyReason,
+                          int maxAttachments, String attachmentReason,
+                          String recipient, List<String> recipients,
+                          List<Sender> senders, String sender) {
+            this(connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients,senders,sender,List.of());
         }
         public Connection(boolean connected, String label, int maxTextLength,
                           ReplyCapability replyCapability, String replyReason,
@@ -93,18 +106,22 @@ public interface CrmMessageTransport {
         }
         /** The same connection, declaring how many files it carries. */
         public Connection withAttachments(int limit, String reason) {
-            return new Connection(connected,label,maxTextLength,replyCapability,replyReason,limit,reason,recipient,recipients,senders,sender);
+            return new Connection(connected,label,maxTextLength,replyCapability,replyReason,limit,reason,recipient,recipients,senders,sender,cc);
         }
         /** The same connection, declaring the default reply address and the addresses to choose from. */
         public Connection withRecipients(String recipient, List<String> recipients) {
-            return new Connection(connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients,senders,sender);
+            return new Connection(connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients,senders,sender,cc);
         }
         /**
          * The same connection, declaring the accounts a reply may be sent from and the default one
          * ({@code current}, an id among {@code options}; the first option when null).
          */
         public Connection withSenders(String current, List<Sender> options) {
-            return new Connection(connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients,options,current);
+            return new Connection(connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients,options,current,cc);
+        }
+        /** The same connection, suggesting who a reply copies (see {@link Connection}). */
+        public Connection withCc(List<String> cc) {
+            return new Connection(connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients,senders,sender,cc);
         }
         /** The offered sender with this id, matched without regard to case; null when none is. */
         public Sender offeredSender(String id) {

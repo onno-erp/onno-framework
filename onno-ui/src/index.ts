@@ -67,8 +67,15 @@ export const openRecord = openRecordImpl as <E extends EntityName>(
   entity: E, id?: string, prefill?: Partial<Record<FieldOf<E>, string>>,
 ) => void;
 
-/** Open an `onno://` link (build one with {@link links}) or an app page path (`"/ops"`) in the workspace. */
-export const openRoute = openRouteImpl as (route: OnnoLink | PagePath) => void;
+/**
+ * Open an `onno://` link (build one with {@link links}) or an app page path (`"/ops"`) in the
+ * workspace. It replaces what the active tab shows, like a link in a browser window, and the tab's
+ * Back returns to the previous screen; `{ newWorkspaceTab: true }` opens it in a new workspace tab
+ * instead, `{ newTab: true }` in a new browser tab.
+ */
+export const openRoute = openRouteImpl as (
+  route: OnnoLink | PagePath, options?: { newWorkspaceTab?: boolean; newTab?: boolean },
+) => void;
 
 /**
  * Typed `onno://` links — the deep-link protocol web and mobile clients share:

@@ -29,6 +29,9 @@ export type CrmMessage = {
   attachments?: CrmAttachment[];
   /** Sanitized email HTML; rendered in a sandboxed frame instead of the plain-text body. */
   bodyHtml?: string | null;
+  /** An email's To and Cc lists: `Name <address>` entries joined by ", " (see `emailAddresses.ts`); null when not known. */
+  sentTo?: string | null;
+  copyTo?: string | null;
 };
 
 /** An internal note on a conversation: visible to the team only. */
@@ -51,6 +54,8 @@ export type CrmDelivery = {
   maxAttachments?: number; attachmentReason?: string;
   recipient?: string; recipients?: string[];
   senders?: { id: string; label?: string | null }[]; sender?: string | null;
+  /** Who a reply copies by default (reply-all): everyone else on the latest received email, as `Name <address>` entries. */
+  cc?: string[];
 };
 
 /**

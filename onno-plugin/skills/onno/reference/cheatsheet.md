@@ -99,7 +99,10 @@ compatibility reads retain `{col}_display` and `{col}_color`.
 `name` (required).
 
 ### `@ScheduledJob` / `@Scheduled`
-`@ScheduledJob`: `name` (required), `cron` (required). Plain Spring `@Scheduled` jobs also work
+`@ScheduledJob`: `name` (required), `cron` (required). Implement `BackgroundTask` and register
+as a Spring bean (`@Component` or `@Bean`); a JobRunr `JobScheduler` bean is required.
+The starter fails at startup for active declarations in its scan packages without a bean,
+or task beans without a scheduler. Plain Spring `@Scheduled` jobs also work
 (the example uses `@Scheduled(initialDelay=…, fixedDelay=…)`).
 
 ## Durable typed business processes (package `su.onno.process`)
@@ -155,8 +158,8 @@ on an IdP name mapping to two roles, two `RoleKey` constants normalizing alike
 string (command/print-form/workspace/`@McpTool`/record-policy roles) that names no declared role or
 `fromIdp` name. With grants: deny-by-default, a role named `ADMIN` is ordinary. **No bean = open mode** (every signed-in user may do everything; warning logged) except
 the explicit-only `periodClose.override`, `processes.administer`, `crm.administer`
-(`EffectiveAccess.granted(...)`). Anonymous callers get nothing. Deleting a posted document needs
-the unpost right. Enforced on REST/MCP/UI/events; `AccessSubject.system()` and direct
+(`EffectiveAccess.granted(...)`). Anonymous callers get nothing. A delete never unposts: a posted
+document must be unposted explicitly first. Enforced on REST/MCP/UI/events; `AccessSubject.system()` and direct
 `PostingService` calls are trusted code. Role names compare via `AccessSubject.normalizeRole`
 (`ROLE_manager` → `MANAGER`).
 
@@ -207,7 +210,7 @@ Enums: `AccumulationType{BALANCE,TURNOVER}`, `Periodicity{NONE,SECOND,MINUTE,HOU
 | `OnFillingHandler` | `onFilling()` | Seed/normalize defaults on **create/save**. It does not populate the initially rendered blank New form; use Java field initializers for values that must appear there. It runs on every save of a new entity (`isNew==true`), so guard on null and keep it idempotent. |
 | `BeforePostHandler` | `beforePost()` | Before posting (validation) — **no Spring DI** (see below). |
 | `Postable` | `handlePosting(PostingContext)` | Write register movements. |
-| `BeforeUnpostHandler` | `beforeUnpost()` | Before unposting (incl. the unpost a delete of a posted document performs) — throw to veto; **no Spring DI**. Not run on re-post. |
+| `BeforeUnpostHandler` | `beforeUnpost()` | Before an explicit unpost (a delete never unposts) — throw to veto; **no Spring DI**. Not run on re-post. |
 | `AfterPostHandler` | `afterPost()` | After post — **no Spring DI**; prefer `@EventListener` on `DocumentPostedEvent`. |
 | `BeforeDeleteHandler` | `beforeDelete()` | Before delete — runs on BOTH the repository path and the UI/REST DELETE; throw (e.g. `ValidationException`) to veto, which is how a catalog protects seeded system rows. |
 | `Validated` | `List<BusinessRule> rules()` | Rules checked before write and before post — **no Spring DI** (see below). |
@@ -291,8 +294,9 @@ because they are not Java field references.
   isn't deletion-scoped (no `…AndDeletionMarkFalse`, no `deletion_mark` in `@Query`, not `findActive*`).
   Opt a finder out with `@su.onno.repository.IncludesDeleted` when it must see tombstones (Ref
   resolution, restore/admin).
-- Repository `delete(...)`, `deleteById(...)`, and bulk delete methods for catalog/document entities
-  run `BeforeDeleteHandler` and persist `deletionMark=true`; a posted document must be unposted first.
+- Repository `delete(...)`, `deleteById(...)`, bulk deletes and the generic REST/UI DELETE share
+  `EntityDeleteService`: `BeforeDeleteHandler`, then `deletionMark=true` (version bumped, delete events)
+  without `beforeWrite`/validation/`afterWrite`; a posted document is rejected — unpost it first.
   Repositories for ordinary non-onno aggregates still physically delete.
 - `RegisterRepository<T>` — read-only for accumulation registers: `getBalance(...)`,
   `getTurnover(from,to,...)`, `getRecordsByDocument(uuid)`, plus `addReceipt/addExpense` used during
@@ -538,3 +542,10 @@ a silently capped preview. A plain-`List` Java method drains the cursor
 `getMovements`/`getBalance`/`getTurnover` return pages and `allRegisterRows` follows the cursor.
 See docs/HEADLESS_READ_API.md, Collection pagination, for the cursor-only contract, bounded
 selectors and CRM callback limits.
+
+### Auth endpoint contributions
+
+`AuthPathsContributor` (`su.onno.auth.spi`, Spring bean) additively declares `publicPaths()` and
+`csrfIgnoredPaths()` separately. Public access does not imply a CSRF exemption or vice versa.
+Use `onno.auth.additional-csrf-ignored-paths` for app configuration; the legacy CSRF list is merged
+and cannot remove the mandatory `/api/auth/login` exemption. Custom login methods remain protected.

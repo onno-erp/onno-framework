@@ -20,7 +20,7 @@ const rows = [
 const connected = { connected: true, label: "Email", replyCapability: "AVAILABLE", maxAttachments: 2, maxTextLength: 8000 };
 const mailboxes = { senders: [{ id: "office", label: "office@studio.test" }, { id: "wedding", label: "wedding@studio.test" }], sender: "office" };
 
-function mount(delivery: Record<string, object> = {}, props: Partial<CrmInboxProps> = {}) {
+function mount(delivery: Record<string, object> = {}, props: Partial<CrmInboxProps> = {}, activityExtra: Record<string, object> = {}) {
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input), "http://localhost").pathname;
     if (path === "/api/crm/inbox-workspaces") return response([{ key: "support" }]);
@@ -29,7 +29,7 @@ function mount(delivery: Record<string, object> = {}, props: Partial<CrmInboxPro
     if (path === "/api/crm/workspace") return response({ workspace: { version: 0, config, fields: [] } });
     const activity = path.match(/^\/api\/crm\/contacts\/(\w+)\/activity$/);
     if (activity) return response({ hasMore: false, rows: [{ id: `message:${activity[1]}`, conversationId: `chat-${activity[1]}`, kind: "CUSTOMER_MESSAGE", direction: "INBOUND",
-      channel: "EMAIL", authorName: activity[1], body: `Hello from ${activity[1]}`, at: "2026-11-09T08:00:00Z", attachments: [] }] });
+      channel: "EMAIL", authorName: activity[1], body: `Hello from ${activity[1]}`, at: "2026-11-09T08:00:00Z", attachments: [], ...activityExtra[activity[1]] }] });
     if (path.startsWith("/api/crm/contacts/")) return response({ fields: {}, identities: [] });
     const conversation = path.match(/^\/api\/crm\/conversations\/([\w-]+)\/delivery$/);
     if (conversation) return response({ ...connected, recipient: `${conversation[1]}@example.com`, ...delivery[conversation[1]] });
@@ -102,6 +102,7 @@ it("clears a draft only after it is sent", async () => {
   await waitFor(() => expect(sent()).toHaveLength(1));
   expect(sent()[0].body).toMatchObject({ body: "Confirmed", recipient: "chat-anna@example.com" });
   expect(sent()[0].body).not.toHaveProperty("from");
+  expect(sent()[0].body).not.toHaveProperty("cc");
   // The field is redrawn once sending finishes.
   await waitFor(() => expect(screen.getByRole("textbox", { name: "Write a reply" })).toHaveValue(""));
   composerDrafts.flush();
@@ -295,4 +296,134 @@ it("sends an email reply's formatting with its text, and drops it when the text 
   await waitFor(() => expect(sent()).toHaveLength(2));
   expect(sent()[1].body).toMatchObject({ body: "Dates confirmed" });
   expect(sent()[1].body).not.toHaveProperty("html");
+});
+
+it("keeps a formatted insert's HTML in an email reply, joined to what the draft already holds, and sends it", async () => {
+  extensions = [{ id: "test.insert-letter", slot: "crm.chat.composer",
+    component: ({ context }) => <button type="button" onClick={() => context.insertDraft?.("Dear Anna,\n\nThe villa is free.", [], "<p>Dear <b>Anna</b>,</p><p>The villa is free.</p>")}>Letter</button> }];
+  try {
+    const { sent } = mount({}, { components: formattingComposer });
+    const body = await openChat("Anna");
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Letter" })); });
+    expect(body).toHaveValue("Dear Anna,\n\nThe villa is free.");
+    expect(screen.getByTestId("html")).toHaveTextContent("<p>Dear <b>Anna</b>,</p><p>The villa is free.</p>");
+
+    // Into a plain draft: its text, escaped, comes first.
+    fireEvent.change(body, { target: { value: "Hi <Anna>" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Letter" })); });
+    expect(body).toHaveValue("Hi <Anna>\n\nDear Anna,\n\nThe villa is free.");
+    expect(screen.getByTestId("html")).toHaveTextContent("Hi &lt;Anna&gt;<br><br><p>Dear <b>Anna</b>,</p><p>The villa is free.</p>");
+    fireEvent.keyDown(body, { key: "Enter", ctrlKey: true });
+    await waitFor(() => expect(sent()).toHaveLength(1));
+    expect(sent()[0].body.html).toBe("Hi &lt;Anna&gt;<br><br><p>Dear <b>Anna</b>,</p><p>The villa is free.</p>");
+  } finally { extensions = []; }
+});
+
+it("lets an app draw its own paperclip, which still opens the composer's file picker", async () => {
+  const picked = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
+  const surfaces: string[] = [];
+  mount({}, { components: { Composer: (props: CrmComposerProps) => <CrmComposer {...props} renderAttach={({ chooseFiles, surface, labelled }) => {
+    surfaces.push(`${surface}${labelled ? ":labelled" : ""}`);
+    return <button type="button" onClick={chooseFiles}>Files and letters</button>;
+  }} /> } });
+  await openChat("Anna");
+  expect(screen.queryByRole("button", { name: "Attach files" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getAllByRole("button", { name: "Files and letters" })[0]);
+  expect(picked).toHaveBeenCalledTimes(1);
+  expect(surfaces).toContain("inline");
+});
+
+it("lets an app fold the fields above the reply and open the larger window from its own line", async () => {
+  mount({}, { components: { Composer: (props: CrmComposerProps) => <CrmComposer {...props} renderFields={parts => parts.surface === "inline"
+    ? <p>{parts.summary.recipient} · {parts.summary.subject}{parts.expand && <button type="button" onClick={parts.expand}>Bigger</button>}</p>
+    : <>{parts.header}{parts.recipient}{parts.subject}</>} /> } });
+  await openChat("Anna");
+  expect(screen.getByText("chat-anna@example.com · Villa")).toBeInTheDocument();
+  expect(screen.queryByRole("textbox", { name: "Subject" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Bigger" }));
+  // The larger window draws every field.
+  expect(await screen.findByRole("textbox", { name: "Subject" })).toHaveValue("Villa");
+});
+
+const replyAll = { "chat-anna": { cc: ["Marco Rossi <marco@villa.test>", "giulia@villa.test"] } };
+
+it("prefills the Cc from the reply-all suggestion, lets the writer edit it and sends it", async () => {
+  const { sent } = mount(replyAll);
+  const body = await openChat("Anna");
+  const cc = await screen.findByRole("textbox", { name: "Cc" });
+  expect(screen.getByText("Marco Rossi")).toBeInTheDocument();
+  expect(screen.getByText("giulia@villa.test")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Remove giulia@villa.test from Cc" }));
+  expect(screen.queryByText("giulia@villa.test")).not.toBeInTheDocument();
+  fireEvent.change(cc, { target: { value: "nope" } });
+  fireEvent.keyDown(cc, { key: "Enter" });
+  expect(await screen.findByRole("alert")).toHaveTextContent("nope is not an email address.");
+  fireEvent.change(cc, { target: { value: "Zoë <zoe@villa.test>, ben@villa.test" } });
+  fireEvent.keyDown(cc, { key: "Enter" });
+  expect(screen.getByText("Zoë")).toBeInTheDocument();
+  expect(screen.getByText("ben@villa.test")).toBeInTheDocument();
+  expect(cc).toHaveValue("");
+
+  fireEvent.change(body, { target: { value: "Copying the venue" } });
+  fireEvent.keyDown(body, { key: "Enter", ctrlKey: true });
+  await waitFor(() => expect(sent()).toHaveLength(1));
+  expect(sent()[0].body).toMatchObject({ body: "Copying the venue", cc: ["Marco Rossi <marco@villa.test>", "Zoë <zoe@villa.test>", "ben@villa.test"] });
+  // Sent: the draft goes back to the suggestion.
+  await waitFor(() => expect(screen.getByText("giulia@villa.test")).toBeInTheDocument());
+});
+
+it("keeps an edited Cc in the conversation's draft and opens the Cc row on request", async () => {
+  const { sent } = mount(replyAll);
+  await openChat("Anna");
+  fireEvent.click(await screen.findByRole("button", { name: "Remove Marco Rossi from Cc" }));
+
+  // Ben's last email copied nobody: no Cc row until asked for.
+  let body = await openChat("Ben");
+  await waitFor(() => expect(screen.queryByText("giulia@villa.test")).not.toBeInTheDocument());
+  expect(screen.queryByRole("textbox", { name: "Cc" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Add Cc" }));
+  const cc = await screen.findByRole("textbox", { name: "Cc" });
+  fireEvent.change(cc, { target: { value: "planner@partner.test" } });
+  fireEvent.blur(cc);
+  expect(screen.getByText("planner@partner.test")).toBeInTheDocument();
+
+  body = await openChat("Anna");
+  await waitFor(() => expect(screen.getByText("giulia@villa.test")).toBeInTheDocument());
+  expect(screen.queryByText("Marco Rossi")).not.toBeInTheDocument();
+
+  body = await openChat("Ben");
+  await waitFor(() => expect(screen.getByText("planner@partner.test")).toBeInTheDocument());
+  fireEvent.change(body, { target: { value: "Looping in our partner" } });
+  fireEvent.keyDown(body, { key: "Enter", ctrlKey: true });
+  await waitFor(() => expect(sent()).toHaveLength(1));
+  expect(sent()[0].body).toMatchObject({ cc: ["planner@partner.test"] });
+});
+
+it("gives renderFields the Cc row and the people copied", async () => {
+  mount(replyAll, { components: { Composer: (props: CrmComposerProps) => <CrmComposer {...props} renderFields={parts => parts.surface === "inline"
+    ? <p>{parts.summary.recipient} +{parts.summary.cc.length} in Cc{parts.expand && <button type="button" onClick={parts.expand}>Bigger</button>}</p>
+    : <>{parts.header}{parts.recipient}{parts.cc}<span>{parts.changed ? "changed" : "as suggested"}</span>{parts.subject}</>} /> } });
+  await openChat("Anna");
+  expect(screen.getByText("chat-anna@example.com +2 in Cc")).toBeInTheDocument();
+  expect(screen.queryByRole("textbox", { name: "Cc" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Bigger" }));
+  const dialog = await screen.findByRole("dialog", { name: "Reply to Anna" });
+  expect(within(dialog).getByText("as suggested")).toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Remove Marco Rossi from Cc" }));
+  expect(within(dialog).getByText("changed")).toBeInTheDocument();
+});
+
+it("shows who else was on an email in the timeline, only when someone was copied", async () => {
+  mount({}, {}, {
+    anna: { accountLabel: "Gmail · office@studio.test", sentTo: "Studio <office@studio.test>, Marco <marco@villa.test>",
+      copyTo: "Giulia <giulia@villa.test>, a@villa.test, b@villa.test, c@villa.test" },
+    ben: { sentTo: "office@studio.test", copyTo: null },
+  });
+  await openChat("Anna");
+  const line = document.querySelector("[data-message-recipients]");
+  expect(line).toHaveTextContent("to me, Marco · cc Giulia, a@villa.test +2");
+  expect(line?.getAttribute("title")).toContain("Cc: Giulia <giulia@villa.test>, a@villa.test, b@villa.test, c@villa.test");
+  await openChat("Ben");
+  await waitFor(() => expect(document.querySelector("[data-message-recipients]")).toBeNull());
 });

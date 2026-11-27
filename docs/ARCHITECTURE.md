@@ -113,6 +113,9 @@ In brief:
   (`cron`) / `@Scheduled` background jobs, **`@DomainEvent`** (outbox), **`RoleGrants`** + **`RoleKey`** + **`Permission`**
   (`su.onno.access`: one bean declaring each role's entity rights and capabilities), **`@Attribute`** (`required`, `length`, `precision`/`scale`, `secret`,
   validation `min`/`max`/`pattern`/`email`, `previousNames`).
+- **Scheduled task validation:** a `@ScheduledJob` class must implement `BackgroundTask` and be a
+  Spring bean (`@Component` or `@Bean`). The starter rejects active declarations in its scan
+  packages without a bean, and task beans without a JobRunr `JobScheduler`, at startup.
 - **`Ref<T>`** (`su.onno.types.Ref`) — a typed `(Class<T>, UUID)` reference, stored as a UUID
   column; resolved with `RefResolver`.
 - **`PolyRef` + `@RefTargets`** — an explicitly allowlisted reference to one of several catalog or
@@ -230,11 +233,17 @@ on `CatalogRepository`/`DocumentRepository` — `findAllActive()`, `findActiveBy
 `findActiveByCode(String)` / `findActiveByNumber(String)`, `findActiveByDateBetween(from, to)`
 (backed by derived `findByDeletionMarkFalse()`-style queries) — or filter `!isDeletionMark()`.
 
-The framework's Spring Data repository base class also turns `delete(...)`, `deleteById(...)`, and
-bulk deletes of catalog/document aggregates into deletion-mark saves. It runs
-`BeforeDeleteHandler.beforeDelete()` first, publishes delete events only after the mark is stored,
-and refuses to delete a posted document; explicitly unpost it first. Repositories for ordinary,
-non-onno aggregates keep Spring Data JDBC's physical-delete behavior.
+Deletes of catalog/document aggregates are deletion-mark saves through one command,
+`EntityDeleteService`, used both by the framework's Spring Data repository base class
+(`delete(...)`, `deleteById(...)`, bulk deletes) and by the generic command path (REST, UI, import,
+MCP). It runs `BeforeDeleteHandler.beforeDelete()` (throw to veto), sets the mark and saves through
+Spring Data JDBC, so the optimistic version, period close, record history, the `AFTER_DELETE` outbox
+row and the change event all happen in the delete's transaction. `beforeWrite`, attribute
+validation, business rules and `afterWrite` do not run: a record that no longer passes today's rules
+can still be deleted. A posted document is rejected (`PostedDocumentDeletionException`; the generic
+path answers `409`) — unpost it explicitly first; the stored `_posted` flag is re-checked under a
+row lock during the save. Repositories for ordinary, non-onno aggregates keep Spring Data JDBC's
+physical-delete behavior.
 
 Because Spring Data JDBC has no global soft-delete filter (no JPA `@Where` equivalent), a
 **boot-time guardrail** catches the cases people forget: at startup every
@@ -598,6 +607,13 @@ header/footer. Custom links share model/page gates and the shell dispatcher. See
 In every mode, framework bootstrap paths (including `/api/config` and `/api/auth/login`) remain
 public. `onno.auth.additional-public-paths` adds public Ant patterns; legacy `onno.auth.public-paths`
 entries are combined with them and can no longer remove mandatory framework paths.
+The password-login CSRF exemption (`/api/auth/login`) is also mandatory. Cookie-based chains
+combine it with legacy `onno.auth.csrf-ignored-paths` and
+`onno.auth.additional-csrf-ignored-paths`. Public access and CSRF exemption are independent;
+custom login-method endpoints remain CSRF-protected by default. Starters can add public paths and
+CSRF exclusions separately through `su.onno.auth.spi.AuthPathsContributor` beans without depending
+on the auth implementation. These additive contributions apply to all default chains (public paths
+also to the database account-session guard); resource-server mode still disables CSRF.
 
 - **`database`** (recommended) — accounts in the framework-managed table `onno_auth_user`, managed at
   runtime through `UserAccounts`, `/api/auth/users` (`users.manage`) and `@onno/ui`'s `UserAccounts` /
@@ -1017,7 +1033,8 @@ and a single-instance polling worker. It publishes CRM changes via the standard 
 connector in `onno-crm-channels-starter`; see that module’s README.
 Replies may be sent from another mailbox (`Connection.senders`/`sender`, request `from`, stored as
 `ConversationMessage.senderAccount`); such a reply starts a thread in that mailbox, routed to the same
-conversation. `CrmMessageTransport.connection(conversation, principal)` gives the per-user view and
+conversation. Email recipients are kept on messages (`sentTo`/`copyTo`); the delivery's `cc` suggests reply-all and a
+reply's optional `cc` is stored as `copyTo` and sent as the MIME Cc on every attempt. `CrmMessageTransport.connection(conversation, principal)` gives the per-user view and
 `markedRead(conversation)` lets Gmail clear its `UNREAD` label after commit (grants with
 `gmail.modify` only). `GET /api/crm/gmail/accounts`, `GET /api/crm/gmail/search` and
 `POST /api/crm/gmail/restore` find mail in a mailbox, archived included, and import its thread through
@@ -1121,7 +1138,7 @@ provider-approved WhatsApp message templates. Inactive or deleted templates are 
 
 The CRM Inbox presents one row per contact and a chronological timeline across its channel conversations, internal comments and system events. Underlying conversations retain provider routing and email thread identifiers. The reply selector changes only the destination, and defaults to the latest incoming message's conversation; an unsent draft keeps its selected destination.
 
-`GET /api/crm/contacts/{customer}/activity?cursor=&limit=100` returns `{rows,nextCursor,hasMore}` (newest first, default 100, maximum 500). Only the `rows` key and cursor continuation are supported. No total is calculated. Messages and internal notes are combined by SQL UNION ALL, restricted to authorized conversation keys before seeking on `(time DESC, source DESC, UUID DESC)`. Files, HTML, author photos and account labels are resolved only for the selected page. Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`; message entries also retain `senderAccount`, the account used to send the reply, or null. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
+`GET /api/crm/contacts/{customer}/activity?cursor=&limit=100` returns `{rows,nextCursor,hasMore}` (newest first, default 100, maximum 500). Only the `rows` key and cursor continuation are supported. No total is calculated. Messages and internal notes are combined by SQL UNION ALL, restricted to authorized conversation keys before seeking on `(time DESC, source DESC, UUID DESC)`. Files, HTML, author photos and account labels are resolved only for the selected page. Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`; message entries also retain `senderAccount`, the account used to send the reply, or null, and an email's `sentTo`/`copyTo` recipient lists. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
 
 `POST /api/crm/contacts/{customer}/activity` accepts `conversationId`, `type` (`QUOTED`, `CALL_PLANNED`, `CALL_COMPLETED`, `MEETING_PLANNED`, `OTHER`), nonblank `details` up to 7000 characters, and optional local `scheduledFor`. It requires write access to the matching contact's conversation. It stores an internal `SYSTEM_EVENT` without sending a channel message or changing the sales stage. Planned dates are descriptive event text, not reminders or calendar invitations. Domain workflows can also append system events through the existing conversation-message repository.
 
@@ -1282,3 +1299,10 @@ bounded to 20 MB. ConversationMessage Body is optional; its business rule requir
 Filesystem media keeps private filename/content-type sidecars across restarts.
 
 CRM audio playback lives in the inbox component; common audio formats are served inline by `MediaController`. Audio files use the existing media upload and message attachment flow. Channel delivery remains attachment-based.
+
+Information registers have a standard read-only React list at `/information-registers/{name}`.
+Their model entries carry `name` and `route`; default and authored client navigation resolve them.
+The descriptor comes from `/api/ui/view/information-registers/{name}`, while
+`/api/list/information-registers/{name}` pages scoped records or a dated latest-values slice.
+It reuses the standard list renderer, customizations, sorting and filters, without accumulation
+register tabs or record-write actions. The canonical information-register REST reads stay unchanged.

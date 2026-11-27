@@ -238,7 +238,7 @@ Map answers:
 | "Cannot post with empty lines" | `Validated` |
 | "Cannot ship more than stock" | BALANCE register negative guard |
 | "New orders default to today and Draft" | `OnFillingHandler` + field initializer |
-| "Only finance can delete posted invoices" | `RoleGrants` `unpost(Invoice.class)` for finance only (deleting a posted document needs unpost) |
+| "Only finance can delete posted invoices" | `RoleGrants` `unpost(Invoice.class)` for finance only (a posted document must be unposted before it can be deleted) |
 
 Follow-up questions:
 

@@ -48,12 +48,16 @@ class ChannelsAutoConfigurationTest {
                 .withBean(CrmConnectionAccounts.class, () -> mock(CrmConnectionAccounts.class))
                 .withBean(CrmInboxWorkspaceService.class, () -> mock(CrmInboxWorkspaceService.class))
                 .withBean(ConversationRepository.class, () -> mock(ConversationRepository.class))
+                // Instagram's cached profile pictures are read through JDBC and the contact identities.
+                .withBean(org.springframework.jdbc.core.JdbcTemplate.class, () -> mock(org.springframework.jdbc.core.JdbcTemplate.class))
+                .withBean(su.onno.crm.repository.ContactIdentityRepository.class, () -> mock(su.onno.crm.repository.ContactIdentityRepository.class))
                 .withPropertyValues("onno.crm.channels.gmail.enabled=true", "onno.crm.channels.instagram.enabled=true",
                         "onno.crm.channels.whatsapp.enabled=true")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(GmailClient.class);
                     assertThat(context).hasSingleBean(InstagramClient.class);
+                    assertThat(context).hasSingleBean(su.onno.crm.channels.instagram.InstagramAvatarController.class);
                     assertThat(context).hasSingleBean(WhatsAppClient.class);
                 });
     }
