@@ -37,7 +37,9 @@ export function EmailHtmlBody({ html }: { html: string }) {
     const element = frame.current;
     if (!element) return;
     let observer: ResizeObserver | null = null;
+    let content: ResizeObserver | null = null;
     let frameWidth = -1;
+    let lastHeight = -1;
     const measure = () => {
       const doc = element.contentDocument;
       const root = doc?.documentElement;
@@ -50,24 +52,36 @@ export function EmailHtmlBody({ html }: { html: string }) {
       // Sub-2% overflow is rounding or a scrollbar gutter, not a wide layout: leave it unscaled.
       const scale = ratio < 0.98 ? Math.max(0.3, ratio) : 1;
       doc.body.style.zoom = String(scale);
-      setHeight(Math.max(40, Math.ceil(root.scrollHeight)));
+      const next = Math.max(40, Math.ceil(root.scrollHeight));
+      if (next !== lastHeight) { lastHeight = next; setHeight(next); }
     };
     const loaded = () => {
       measure();
       const doc = element.contentDocument;
       if (!doc?.body) return;
       observer?.disconnect();
-      // Re-fit when the bubble changes width (window resize, panel toggle); height changes are ours.
+      content?.disconnect();
+      // Re-fit when the bubble changes width (window resize, panel toggle, a hidden tab shown again: it measured 0 wide).
       observer = new ResizeObserver(() => {
         if (element.clientWidth === frameWidth) return;
         frameWidth = element.clientWidth;
         measure();
       });
       observer.observe(element);
+      // The email's own content can grow after load (web fonts, late layout, images without sizes): follow it, or the
+      // frame keeps its first, too short height and crops the email. measure() only sets the height when it changes.
+      const View = doc.defaultView as (Window & typeof globalThis) | null;
+      if (View?.ResizeObserver) {
+        content = new View.ResizeObserver(() => measure());
+        content.observe(doc.body);
+      }
       doc.querySelectorAll("img").forEach(img => img.addEventListener("load", measure));
+      void doc.fonts?.ready.then(measure);
     };
     element.addEventListener("load", loaded);
-    return () => { element.removeEventListener("load", loaded); observer?.disconnect(); };
+    // A frame that is already loaded (React re-ran the effect) is measured now, not on a load event that has passed.
+    if (element.contentDocument?.readyState === "complete" && element.contentDocument.body) loaded();
+    return () => { element.removeEventListener("load", loaded); observer?.disconnect(); content?.disconnect(); };
   }, [html]);
 
   const collapsible = height > COLLAPSED_HEIGHT;

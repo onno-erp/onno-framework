@@ -4,7 +4,6 @@ import su.onno.access.AccessMode;
 import su.onno.access.AccessSubject;
 import su.onno.history.HistoryActor;
 import su.onno.history.HistoryActors;
-import su.onno.lifecycle.BeforeDeleteHandler;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.model.DocumentObject;
@@ -12,6 +11,7 @@ import su.onno.period.PeriodCloseService;
 import su.onno.period.PeriodOperation;
 import su.onno.posting.PostingPreview;
 import su.onno.posting.PostingService;
+import su.onno.spring.PostedDocumentDeletionException;
 import su.onno.validation.AttributeValidator;
 import su.onno.validation.ValidationErrors;
 
@@ -67,8 +67,8 @@ public class DocumentCommandService {
     }
 
     /**
-     * Checks a delete against period close before a posted document is unposted. Create and update
-     * are checked by the save itself (the store's before-convert callback).
+     * Checks a delete against period close before the delete hook runs. Create and update are
+     * checked by the save itself (the store's before-convert callback).
      */
     public void setPeriodCloseService(PeriodCloseService periodClose) {
         this.periodClose = periodClose;
@@ -239,29 +239,24 @@ public class DocumentCommandService {
         guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
 
         DocumentObject stored = loadLive(desc, id);
-        // Deleting a posted document unposts it, so it needs the unpost right too (#546) — checked
-        // before any hook runs so a caller without it changes nothing.
+        // A posted document must be unposted explicitly (its own right and BeforeUnpostHandler);
+        // deleting never unposts it implicitly.
         if (stored.isPosted()) {
-            access.requireUnpost(subject, desc);
+            throw new ServiceException(ServiceException.Status.CONFLICT, "Unpost the document before deleting it");
         }
-        // The domain's BeforeDeleteHandler may veto the soft delete (a ValidationException maps to
-        // the standard 4xx), as on a repository delete.
-        if (stored instanceof BeforeDeleteHandler handler) {
-            handler.beforeDelete();
-        }
-        // Checked before unposting so a closed period changes nothing; the save re-checks it.
+        // Checked before the delete hook runs so a closed period changes nothing; the save re-checks it.
         if (periodClose != null) {
             periodClose.requireDocumentOpen(desc, id, stored.getDate(), periodClose.organizationOf(stored),
                     PeriodOperation.DELETE);
         }
-        DocumentObject toDelete = stored;
-        if (stored.isPosted()) {
-            postingService.unpost(stored);
-            toDelete = loadLive(desc, id); // unposting bumped the stored row; delete the current one
+        // The same soft delete as a repository delete (EntityDeleteService): the domain's
+        // BeforeDeleteHandler may veto it, then the deletion mark is saved without beforeWrite or
+        // validation. A post that lands meanwhile is caught under a row lock.
+        try {
+            store.delete(stored);
+        } catch (PostedDocumentDeletionException posted) {
+            throw new ServiceException(ServiceException.Status.CONFLICT, "Unpost the document before deleting it");
         }
-        toDelete.setDeletionMark(true);
-        DocumentObject marked = toDelete;
-        store.inTransaction(() -> store.save(marked));
     }
 
     /**

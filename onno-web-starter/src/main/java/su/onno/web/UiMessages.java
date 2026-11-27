@@ -146,6 +146,14 @@ public final class UiMessages {
         d.put("crm.chat.subject", "Subject");
         d.put("crm.chat.from", "From");
         d.put("crm.chat.to", "To");
+        d.put("crm.chat.cc", "Cc");
+        d.put("crm.chat.addCc", "Add Cc");
+        d.put("crm.chat.removeCc", "Remove {name} from Cc");
+        d.put("crm.chat.ccInvalid", "{address} is not an email address.");
+        d.put("crm.chat.ccLimit", "At most {count} people can be copied.");
+        d.put("crm.chat.recipientsTo", "to");
+        d.put("crm.chat.recipientsCc", "cc");
+        d.put("crm.chat.me", "me");
         d.put("crm.chat.newRecipientThread", "Changing the recipient starts a new email thread.");
         d.put("crm.chat.newSubjectThread", "Changing the subject starts a new email thread.");
         d.put("crm.chat.uploadTooLarge", "{name} is too large. Maximum file size: {limit}.");
@@ -511,6 +519,9 @@ public final class UiMessages {
         d.put("shell.expandNavigation", "Expand navigation");
 
         // Register surface (the virtualized movements/balance lists).
+        d.put("register.records", "History");
+        d.put("register.latest", "Latest values");
+        d.put("register.date", "Date");
         d.put("register.period", "Period");
         d.put("register.type", "Type");
         d.put("register.balanceTab", "Balance");
@@ -682,6 +693,7 @@ public final class UiMessages {
         // period-over-period caption; a widget can override it per tile with
         // .config("comparisonLabel", ...).
         d.put("widget.stat.comparison", "vs previous period");
+        d.put("widget.records.truncated", "Showing the first {count} records. More records match this query.");
 
         d.put("validation.required", "{field} is required");
         d.put("validation.maxLength", "{field} must be at most {n} characters");

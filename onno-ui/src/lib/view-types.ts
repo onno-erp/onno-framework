@@ -8,7 +8,8 @@ import type { IconSource } from "./icons";
 export type ViewModel =
   | { list: Record<string, unknown> }
   | { form: Record<string, unknown> }
-  | { register: Record<string, unknown> };
+  | { register: Record<string, unknown> }
+  | { informationRegister: Record<string, unknown> };
 
 /** One block a default surface renders; `type` selects the renderer (see `route-view.tsx`). */
 export type ViewNode =

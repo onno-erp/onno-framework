@@ -30,7 +30,7 @@ security filter chain scoped to that endpoint that reuses your existing
 | `list_documents`, `get_document` | read | Keyset-page/search documents with optional date range; get one document with tabular sections. |
 | `register_balance`, `register_movements` | read | Accumulation register balances and movements. Results are capped at 5,000 and 1,000 rows respectively; a wider match returns an MCP error instead of a silent partial list, so narrow dimension filters or the movement period. |
 | `create_catalog`, `update_catalog`, `delete_catalog` | write | Create/update/soft-delete catalog records. *(gated by `onno.mcp.writes-enabled`)* |
-| `create_document`, `update_document`, `delete_document` | write | Create/update/soft-delete documents. A posted document is unposted before delete. *(gated by `onno.mcp.writes-enabled`)* |
+| `create_document`, `update_document`, `delete_document` | write | Create/update/soft-delete documents. A posted document must be unposted first. *(gated by `onno.mcp.writes-enabled`)* |
 | `posting_preview` | read | Show the register movements a document would make if posted. *(gated by `onno.mcp.posting-enabled`)* |
 | `period_close_status` | read | Closed accounting periods (scope, inclusive `closedThrough`, `soft`/`hard`), so an agent knows a backdated write will be rejected. Registered when period close is enabled. |
 | `post_document`, `unpost_document` | write | Post/unpost a document to registers. **Has ledger side-effects.** Honours the document's `@AccessControl(postRoles/unpostRoles)` like the REST API. *(gated by `onno.mcp.posting-enabled`)* |

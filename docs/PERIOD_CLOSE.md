@@ -73,8 +73,8 @@ and application services:
   closed by another context or register. The whole restoration rolls back.
 - **Saves** — `OnnoBeforeConvertCallback`, including the soft delete, on repository saves and on the
   generic command path (`DocumentCommandService` create/update/delete serving the UI, REST, CSV
-  import and MCP saves through the same callbacks). A delete of a posted document is checked before
-  it is unposted.
+  import and MCP saves through the same callbacks). A generic delete is checked before its
+  `BeforeDeleteHandler` runs.
 
 A rejection throws `PeriodClosedException`, naming the closed period and the remediation:
 

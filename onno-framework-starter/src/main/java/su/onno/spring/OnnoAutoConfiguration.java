@@ -188,11 +188,12 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
                                                                 su.onno.numbering.NumberGenerator numberGenerator,
                                                                 su.onno.security.SecretCipher secretCipher,
                                                                 OnnoMetrics metrics,
-                                                                Jdbi jdbi,
-                                                                org.springframework.beans.factory.ObjectProvider<su.onno.period.PeriodCloseService> periodClose) {
+                                                                org.springframework.beans.factory.ObjectProvider<su.onno.period.PeriodCloseService> periodClose,
+                                                                Jdbi jdbi) {
         OnnoBeforeConvertCallback callback =
                 new OnnoBeforeConvertCallback(registry, numberGenerator, secretCipher, metrics);
         callback.setPeriodCloseService(periodClose.getIfAvailable());
+        callback.setJdbi(jdbi);
         callback.setCatalogHierarchyValidator(new su.onno.service.CatalogHierarchyValidator(jdbi));
         return callback;
     }
@@ -457,10 +458,11 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(JobScheduler.class)
     public ScheduledJobRegistrar scheduledJobRegistrar(ApplicationContext applicationContext,
-                                                        JobScheduler jobScheduler) {
-        return new ScheduledJobRegistrar(applicationContext, jobScheduler);
+                                                        ObjectProvider<JobScheduler> jobScheduler,
+                                                        OnnoProperties properties) {
+        return new ScheduledJobRegistrar(applicationContext, jobScheduler.getIfAvailable(),
+                resolvePackages(properties, applicationContext));
     }
 
     /** Durable wake-up for due process timers and completed subprocess waits. */

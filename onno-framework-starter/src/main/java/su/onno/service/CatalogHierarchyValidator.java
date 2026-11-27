@@ -21,7 +21,7 @@ public final class CatalogHierarchyValidator {
 
     /** Read-only form preview; the real save repeats the check while locking the chain. */
     public void collect(CatalogDescriptor descriptor, CatalogObject entity, ValidationErrors errors) {
-        collect(descriptor, entity, errors, false);
+        collect(descriptor, entity, errors, false, false);
     }
 
     /**
@@ -29,11 +29,20 @@ public final class CatalogHierarchyValidator {
      * concurrent moves cannot both validate against the old tree and then create a cycle.
      */
     public void collectForWrite(CatalogDescriptor descriptor, CatalogObject entity, ValidationErrors errors) {
-        collect(descriptor, entity, errors, true);
+        collect(descriptor, entity, errors, true, false);
+    }
+
+    /**
+     * The structural part of a soft delete, which otherwise skips validation: a folder with active
+     * children cannot be deleted. The parent chain is not re-validated, so an item under an already
+     * deleted folder can still be deleted. Runs inside the delete's transaction and locks the row.
+     */
+    public void collectForDelete(CatalogDescriptor descriptor, CatalogObject entity, ValidationErrors errors) {
+        collect(descriptor, entity, errors, true, true);
     }
 
     private void collect(CatalogDescriptor descriptor, CatalogObject entity, ValidationErrors errors,
-                         boolean lock) {
+                         boolean lock, boolean deleting) {
         if (!descriptor.hierarchical()) return;
         jdbi.useHandle(handle -> {
             String table = descriptor.tableName();
@@ -48,6 +57,7 @@ public final class CatalogHierarchyValidator {
                             .bind("id", entity.getId()).mapTo(UUID.class).findFirst().isPresent()) {
                 errors.field("parent", "A folder with active children cannot be deleted or changed to an item");
             }
+            if (deleting) return;
             var visited = new HashSet<UUID>();
             if (entity.getId() != null) visited.add(entity.getId());
             UUID parent = entity.getParent();

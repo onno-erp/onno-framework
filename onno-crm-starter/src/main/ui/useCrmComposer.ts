@@ -5,6 +5,7 @@ import { composerDrafts, installDraftUnloadGuard, EMPTY_DRAFT, type ComposerDraf
 import { action, type Config } from "./CrmWorkspace";
 import { checkedJson, conversationChannel, fileSize, workspaceCommand, type CrmAttachment, type CrmMessage } from "./crmModel";
 import type { CrmConversationState } from "./useCrmConversation";
+import { sameAddresses } from "./emailAddresses";
 
 /**
  * A conversation's composer, without its look: the draft (kept per conversation, across chats, tabs
@@ -40,6 +41,14 @@ export function useCrmComposer(conversation: CrmConversationState, config: Confi
   const setFormattedDraft = (body: string, html: string | null) => updateDraft(current => ({ ...current, body, html: html || null }));
   const setSubjectDraft = (subject: string | null) => updateDraft(current => ({ ...current, subject }));
   const setRecipientDraft = (recipient: string | null) => updateDraft(current => ({ ...current, recipient }));
+  // Who the reply copies: the connection's reply-all suggestion until the writer edits it, then the edited list.
+  const suggestedCc = (delivery?.cc ?? []).filter(entry => typeof entry === "string" && entry.trim());
+  const ccDraft = composed.cc;
+  const cc = ccDraft ?? suggestedCc;
+  /** Sets the Cc; `null` goes back to the suggestion. */
+  const setCcDraft = (next: string[] | null) => updateDraft(current => ({ ...current, cc: next }));
+  const ccChanged = ccDraft !== null && !sameAddresses(ccDraft, suggestedCc);
+  const suggestedCcKey = suggestedCc.join("\n");
   const setNote = (text: string, body: string) => updateDraft(current => ({ ...current, note: text, noteBody: body }));
   const setPending = (update: CrmAttachment[] | ((files: CrmAttachment[]) => CrmAttachment[]), key: string | null = draftKey) => {
     if (key) composerDrafts.setFiles(key, update);
@@ -64,12 +73,13 @@ export function useCrmComposer(conversation: CrmConversationState, config: Confi
     if (pending.length >= limit) return { disabled: true, reason: t("crm.chat.attachLimit", { count: limit }) };
     return { disabled: false, reason: t("crm.chat.attach") };
   })();
-  // Pin the recipient once writing starts, but only with this conversation's own connection loaded.
+  // Pin the recipient and the suggested Cc once writing starts, but only with this conversation's own connection
+  // loaded: an email arriving meanwhile must not change who the reply goes to under the writer's hands.
   useEffect(() => {
-    if (!conversation.deliveryLoaded || recipientDraft !== null) return;
-    if (mode === "reply" && (draft.trim() || pending.length || subjectDraft !== null) && delivery?.recipient)
-      setRecipientDraft(delivery.recipient);
-  }, [mode, draft, pending.length, subjectDraft, delivery?.recipient, recipientDraft, conversation.deliveryLoaded]);
+    if (!conversation.deliveryLoaded || mode !== "reply" || !(draft.trim() || pending.length || subjectDraft !== null)) return;
+    if (recipientDraft === null && delivery?.recipient) setRecipientDraft(delivery.recipient);
+    if (ccDraft === null && suggestedCc.length && conversationChannel(row) === "EMAIL") setCcDraft(suggestedCc);
+  }, [mode, draft, pending.length, subjectDraft, delivery?.recipient, recipientDraft, ccDraft, suggestedCcKey, conversation.deliveryLoaded]);
   // A mode the workspace does not allow falls back to one it does.
   useEffect(() => {
     if (config && !action(config, mode)) { const next = config.actions.find(a => a.visible && ["reply", "note"].includes(a.key)); if (next) setMode(next.key as ComposerMode); }
@@ -165,6 +175,8 @@ export function useCrmComposer(conversation: CrmConversationState, config: Confi
           ...(email && draftHtml ? { html: draftHtml } : {}),
           recipient: email ? recipientDraft ?? delivery?.recipient : undefined,
           subject: email ? subjectDraft : undefined,
+          // Only with someone to copy, so older backends never see the field.
+          ...(email && cc.length ? { cc } : {}),
           attachments: pending.map(file => file.url),
           // Only offered with a real choice, so older backends never see the field.
           ...(chooseSender && senderId ? { from: senderId } : {}),
@@ -254,9 +266,11 @@ export function useCrmComposer(conversation: CrmConversationState, config: Confi
     /** Whether the reply may be formatted: email carries HTML, the other channels plain text only. */
     formatting: conversationChannel(row) === "EMAIL",
     subjectDraft, setSubjectDraft, recipientDraft, setRecipientDraft,
+    /** Who an email reply copies (`cc`: the edited list, else the suggestion), the edited list alone, and whether it differs from the suggestion. */
+    cc, ccDraft, setCcDraft, suggestedCc, ccChanged,
     noteDraft, noteBody, setNote, updateDraft,
     /** Anything typed or chosen that a switch of conversation would lose sight of. */
-    hasDraft: !!(draft || noteDraft) || subjectDraft !== null || (recipientDraft !== null && recipientDraft !== delivery?.recipient),
+    hasDraft: !!(draft || noteDraft) || subjectDraft !== null || (recipientDraft !== null && recipientDraft !== delivery?.recipient) || ccChanged,
     pending, removeFile, uploading, attach, attachState,
     showAttachments: mode === "reply" && !!action(config, "sendReply"),
     senders, chooseSender, senderId, defaultSender, setSender,

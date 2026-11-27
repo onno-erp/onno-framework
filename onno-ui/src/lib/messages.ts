@@ -161,6 +161,14 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "crm.chat.subject": "Subject",
   "crm.chat.from": "From",
   "crm.chat.to": "To",
+  "crm.chat.cc": "Cc",
+  "crm.chat.addCc": "Add Cc",
+  "crm.chat.removeCc": "Remove {name} from Cc",
+  "crm.chat.ccInvalid": "{address} is not an email address.",
+  "crm.chat.ccLimit": "At most {count} people can be copied.",
+  "crm.chat.recipientsTo": "to",
+  "crm.chat.recipientsCc": "cc",
+  "crm.chat.me": "me",
   "crm.chat.newRecipientThread": "Changing the recipient starts a new email thread.",
   "crm.chat.newSubjectThread": "Changing the subject starts a new email thread.",
   "crm.chat.teamMember": "Team member",
@@ -485,6 +493,9 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "shell.expandNavigation": "Expand navigation",
 
   // Register surface (the virtualized movements/balance lists).
+  "register.records": "History",
+  "register.latest": "Latest values",
+  "register.date": "Date",
   "register.period": "Period",
   "register.type": "Type",
   "register.balanceTab": "Balance",
@@ -651,6 +662,7 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   // Dashboard widgets. The stat tile's period-over-period caption; a widget can still override it
   // per tile with .config("comparisonLabel", ...).
   "widget.stat.comparison": "vs previous period",
+  "widget.records.truncated": "Showing the first {count} records. More records match this query.",
 
   // Client-side validation messages (mirror the server's AttributeValidator).
   "validation.required": "{field} is required",

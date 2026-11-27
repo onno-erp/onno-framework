@@ -404,17 +404,21 @@ JDBI handle as the posting mutation, so both commit or roll back together. Repos
 outbox rows likewise join the active Spring JDBC transaction. Unposting a draft or deleted
 document is rejected.
 
-Catalog/document repository deletes are soft: `delete(...)`, `deleteById(...)`, and bulk delete
-methods run `BeforeDeleteHandler`, save `deletionMark = true`, and then publish delete events. A
-posted document must be explicitly unposted before repository deletion. Ordinary non-onno Spring
+Catalog/document deletes are soft and run one command, `EntityDeleteService`, for typed repository
+deletes (`delete(...)`, `deleteById(...)`, bulk) and the generic REST/UI/import/MCP delete alike: it
+runs `BeforeDeleteHandler`, saves `deletionMark = true` (bumping the version) and publishes delete
+events in one transaction, without `beforeWrite`, validation or `afterWrite` (the hierarchy rule
+that a folder with active children cannot be deleted still applies). A posted document is
+rejected on every path (`PostedDocumentDeletionException`, HTTP 409): unpost it explicitly first.
+Ordinary non-onno Spring
 Data aggregates retain physical deletes. Generic REST/import/MCP creates and updates run
 `onFilling` (create), `beforeWrite`, rules, persistence, then `afterWrite`; validation previews never
 run `afterWrite`.
 
 **Who may post is a separate right from who may edit.** `@AccessControl(postRoles = …,
 unpostRoles = …)` on a document narrows posting (and re-posting) or unposting to those roles *on
-top of* write access; left empty, every writer keeps the right. Deleting a posted document unposts
-it, so it needs the unpost right too. `ADMIN` always passes. The gates are enforced on the shared
+top of* write access; left empty, every writer keeps the right. Deleting never unposts: a posted
+document must be unposted explicitly first. `ADMIN` always passes. The gates are enforced on the shared
 command path (generic REST, MCP tools, built-in UI actions — the Post/Unpost buttons are hidden
 from callers who lack them); trusted code calling `PostingService` directly is not gated, like typed
 repositories. For a state-based veto ("a reconciled payment cannot be unposted") implement
@@ -564,6 +568,7 @@ Examples:
 - Aging reports
 
 ```java
+@Component
 @ScheduledJob(name = "DailySalesReport", cron = "0 0 2 * * *")
 public class DailySalesReportJob implements BackgroundTask {
     @Override
@@ -571,6 +576,10 @@ public class DailySalesReportJob implements BackgroundTask {
     }
 }
 ```
+
+`@ScheduledJob` classes must implement `BackgroundTask` and be Spring beans (`@Component` or
+`@Bean`). The starter fails at startup for active declarations in its scan packages without a
+bean, or for task beans without a JobRunr `JobScheduler`. Apps with no tasks need no scheduler.
 
 ### Business Processes And Human Tasks
 
@@ -1222,6 +1231,11 @@ orders nothing. Logical entity names are checked against the generated model.
   `count`/`sum`/`avg`/`min`/`max` (`sum("Orders", "total", { posted: true })`). Which records is
   always a typed `where` object (`{ status: { in: [OrderStatus.NEW] }, total: { gte: 100 } }`),
   sent to the server as JSON. Everything refreshes from the server's live events.
+- **Bounded record widgets** keep the list feed's `hasMore` and show `widget.records.truncated`
+  when the server or a display limit leaves records out. Default secondary labels/photos follow
+  entity metadata, never application-specific field-name fallback lists; use render callbacks for
+  app-specific text. Array-only `useRecords` reads are bounded; use the `api.list*Page` envelope
+  when a component needs continuation information.
 - **Calendar and timeline** list views for date-ranged records are the entity's `list`
   customization (or `EntityList` props for one list): `calendar={{ start: "startsAt", end: "endsAt", mode: "week" }}` and
   `timeline={{ start: "startsAt", end: "endsAt", lane: "organizer", laneEntity: "Employees",
@@ -1391,6 +1405,12 @@ For UI frontend-only changes, at minimum run:
 ./gradlew :onno-web-starter:buildFrontend
 ./gradlew :onno-web-starter:processResources
 ```
+
+Auth endpoint contributions use `su.onno.auth.spi.AuthPathsContributor` beans: public access and
+CSRF exemption are separate lists. Default cookie-based auth chains always exempt `/api/auth/login`
+and merge legacy `csrf-ignored-paths`, `additional-csrf-ignored-paths`, and contributor exemptions.
+Never replace the mandatory login exemption when adding paths. Custom login methods remain
+CSRF-protected unless explicitly exempted.
 
 ### Inspecting a running app (read this before you curl)
 
@@ -1617,3 +1637,9 @@ Every tuple cursor needs a unique trailing tiebreaker (id), and
 its feed context must include only filter values, never transport params (`cursor`, `limit`).
 The cursor-only collection contract
 and bounded-selector exceptions are specified only in docs/HEADLESS_READ_API.md.
+
+Standard information-register UI: readable `informationRegisters` model entries expose `name` and
+`route`. The React shell resolves default and authored navigation at `/information-registers/{name}`.
+The read-only surface reuses EntityListView with its explicit `/api/list/information-registers/{name}`
+feed; periodic registers offer history and a dated, keyset-paged latest-values slice. Apply read
+roles and dimension scopes to every window and count; select the last row before value filtering.

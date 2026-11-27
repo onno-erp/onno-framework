@@ -89,14 +89,23 @@ public class OnnoAuthProperties {
             "/api/ui/login");
 
     /**
-     * Request paths exempted from CSRF protection in the cookie-based modes
-     * ({@link Mode#IN_MEMORY}, {@link Mode#DATABASE} and {@link Mode#OIDC}). Defaults to just the login endpoint. Add a
-     * path here to expose an anonymous, CSRF-free {@code POST} (e.g. a public lead/intake form)
-     * without having to override the whole {@code SecurityFilterChain} (issue #30). Ant patterns
-     * are supported (e.g. {@code /api/public/**}). Ignored in {@link Mode#RESOURCE_SERVER}, where
-     * CSRF is already disabled.
+     * Legacy CSRF-exempt Ant path patterns in the cookie-based modes (in-memory, database,
+     * OIDC). Combined with the mandatory {@code /api/auth/login} exemption and
+     * {@code additional-csrf-ignored-paths}; custom or empty values cannot remove the login
+     * exemption. Prefer {@code onno.auth.additional-csrf-ignored-paths} for new configurations.
+     * Does not grant anonymous access; configure public paths separately. Ignored in
+     * resource-server mode, where CSRF is already disabled.
      */
-    private List<String> csrfIgnoredPaths = new ArrayList<>(List.of("/api/auth/login"));
+    private List<String> csrfIgnoredPaths = new ArrayList<>(FRAMEWORK_CSRF_IGNORED_PATHS);
+
+    /**
+     * Additional CSRF-exempt Ant path patterns, combined with mandatory framework exemptions,
+     * legacy csrf-ignored-paths and AuthPathsContributor beans. Does not grant anonymous
+     * access; configure public paths separately. Ignored in resource-server mode.
+     */
+    private List<String> additionalCsrfIgnoredPaths = new ArrayList<>();
+
+    private static final List<String> FRAMEWORK_CSRF_IGNORED_PATHS = List.of("/api/auth/login");
 
     /**
      * Configured user accounts. Empty by default — the starter ships no built-in users. In
@@ -189,6 +198,22 @@ public class OnnoAuthProperties {
 
     public void setCsrfIgnoredPaths(List<String> csrfIgnoredPaths) {
         this.csrfIgnoredPaths = csrfIgnoredPaths;
+    }
+
+    public List<String> getAdditionalCsrfIgnoredPaths() {
+        return additionalCsrfIgnoredPaths;
+    }
+
+    public void setAdditionalCsrfIgnoredPaths(List<String> additionalCsrfIgnoredPaths) {
+        this.additionalCsrfIgnoredPaths = additionalCsrfIgnoredPaths;
+    }
+
+    /** CSRF exemptions used by cookie-based modes; password login cannot be removed. */
+    public List<String> effectiveCsrfIgnoredPaths() {
+        var paths = new LinkedHashSet<>(FRAMEWORK_CSRF_IGNORED_PATHS);
+        paths.addAll(csrfIgnoredPaths);
+        paths.addAll(additionalCsrfIgnoredPaths);
+        return List.copyOf(paths);
     }
 
     public List<User> getUsers() {

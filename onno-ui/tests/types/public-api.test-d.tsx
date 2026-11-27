@@ -235,3 +235,13 @@ function OwnRecord({ descriptor }: { descriptor: FormDescriptor }) {
   return <RecordField form={form} field="note">{(field) => <textarea value={field.value ?? ""} disabled={field.disabled} onChange={(event) => field.onChange(event.target.value)} />}</RecordField>;
 }
 void OwnRecord;
+
+// Information-register list/navigation customization is typed without granting write APIs.
+defineAppTyped({
+  navigation: [{ title: "Finance", items: ["Rates", { entity: "Rates" }] }],
+  entities: { Rates: { fields: { rate: { format: { money: "USD" } } }, list: { columns: ["currency", "period", "rate"], sort: "-period" } } },
+});
+defineAppTyped({ entities: { Rates: { list: {
+  // @ts-expect-error information-register columns must exist
+  columns: ["missing"],
+} } } });

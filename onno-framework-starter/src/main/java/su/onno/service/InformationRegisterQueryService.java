@@ -118,6 +118,71 @@ public class InformationRegisterQueryService {
         return rows;
     }
 
+    /** A scoped, sortable UI window. A dated slice pages without the legacy slice endpoint's cap. */
+    public su.onno.query.KeysetWindow.Page<Map<String, Object>> listPage(AccessSubject subject,
+            InformationRegisterDescriptor desc, ListFilter.Result filters, String whereJson,
+            String sort, boolean descending, LocalDateTime at, String cursor, int limit) {
+        SqlPredicate predicate = listPredicate(subject, desc, filters, whereJson);
+        String column = sort == null || sort.isBlank()
+                ? (desc.periodicity() != Periodicity.NONE ? "_period" : "_id") : sort;
+        if (!whereSchema(desc).columns().containsKey(column)) {
+            throw new ServiceException(ServiceException.Status.BAD_REQUEST, "Unknown sort column: " + column);
+        }
+        String where = listWhere(desc, predicate, at);
+        var order = new ArrayList<su.onno.query.KeysetWindow.Order>();
+        order.add(column.equals("_period") || column.equals("_id")
+                ? su.onno.query.KeysetWindow.Order.notNull(column, descending)
+                : new su.onno.query.KeysetWindow.Order(column, descending));
+        if (!"_id".equals(column)) order.add(su.onno.query.KeysetWindow.Order.notNull("_id", descending));
+        var page = KeysetWindow.collection(jdbi, desc.tableName(), "*", where, q -> {
+            predicate.bindings().forEach(q::bind);
+            if (at != null) q.bind("infoAt", at);
+        }, order, cursor, limit, su.onno.query.Cursor.context("information-list", desc.tableName(),
+                at, predicate.sql(), predicate.bindings(), EntityQuerySupport.cursorSubject(subject)));
+        EntityQuerySupport.decorateRows(refResolver, allFields(desc), page.rows(), subject);
+        return page;
+    }
+
+    /** Total for the standard list's virtual scroller, with the same scope, filters and slice. */
+    public long listCount(AccessSubject subject, InformationRegisterDescriptor desc,
+            ListFilter.Result filters, String whereJson, LocalDateTime at) {
+        SqlPredicate predicate = listPredicate(subject, desc, filters, whereJson);
+        return jdbi.withHandle(h -> {
+            var q = h.createQuery("SELECT COUNT(*) FROM " + desc.tableName() + " WHERE " + listWhere(desc, predicate, at));
+            predicate.bindings().forEach(q::bind);
+            if (at != null) q.bind("infoAt", at);
+            return q.mapTo(Long.class).one();
+        });
+    }
+
+    private SqlPredicate listPredicate(AccessSubject subject, InformationRegisterDescriptor desc,
+            ListFilter.Result filters, String whereJson) {
+        SqlPredicate predicate = scopes.clause(desc.javaClass(), subject, AccessMode.READ, desc.tableName())
+                .andInto(Where.compile(whereJson, whereSchema(desc)));
+        if (filters == null || filters.isEmpty()) return predicate;
+        Map<String, Object> bindings = new java.util.LinkedHashMap<>(predicate.bindings());
+        bindings.putAll(filters.bindings());
+        return new SqlPredicate(predicate.isEmpty() ? filters.sql()
+                : "(" + predicate.sql() + ") AND (" + filters.sql() + ")", bindings);
+    }
+
+    private String listWhere(InformationRegisterDescriptor desc, SqlPredicate predicate, LocalDateTime at) {
+        String where = predicate.isEmpty() ? "1=1" : "(" + predicate.sql() + ")";
+        if (at == null) return where;
+        if (desc.periodicity() == Periodicity.NONE) {
+            throw new ServiceException(ServiceException.Status.BAD_REQUEST, "This register is not periodic; omit 'at'");
+        }
+        String table = desc.tableName();
+        StringBuilder latest = new StringBuilder(" AND ").append(table)
+                .append("._period = (SELECT MAX(infoSlice._period) FROM ").append(table)
+                .append(" infoSlice WHERE infoSlice._period <= :infoAt");
+        for (AttributeDescriptor d : desc.dimensions()) {
+            latest.append(" AND infoSlice.").append(d.columnName()).append(" IS NOT DISTINCT FROM ")
+                    .append(table).append('.').append(d.columnName());
+        }
+        return where + latest.append(")");
+    }
+
     /** Most rows a slice returns. */
     public static final int SLICE_CAP = 5000;
 

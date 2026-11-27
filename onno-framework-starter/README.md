@@ -53,8 +53,9 @@ property the starter exposes. Everything else is derived from your annotated met
   - information-register, constant and enumeration persistence/managers
   - the `CommandRegistry`, `CheckRegistry` and `PickerOptionsService` over your `Commands`,
     `Checks` and `PickerOptions` beans
-  - `BackgroundJobs` and `ScheduledJobRegistrar` — only when a JobRunr `JobScheduler` bean is present
+  - `BackgroundJobs` — only when a JobRunr `JobScheduler` bean is present
     (`@ConditionalOnBean(JobScheduler.class)`)
+  - `ScheduledJobRegistrar` — always validates scheduled task declarations
 - **`OnnoRepositoriesAutoConfiguration`** — replaces Spring Boot's stock
   `JdbcRepositoriesAutoConfiguration` with one that excludes `RegisterRepository` subtypes, and
   scans register repositories separately. Register repositories are register-shaped (append-only
@@ -269,9 +270,26 @@ management:
 
 ## Background jobs
 
-If your app puts a JobRunr `JobScheduler` on the context, the starter contributes `BackgroundJobs`
-(a `JobrunrBackgroundJobs` adapter) and a `ScheduledJobRegistrar` that registers your annotated
-scheduled jobs. Without a `JobScheduler` bean these are simply absent — jobs are opt-in.
+The starter always validates `@ScheduledJob` declarations in `onno.scan-packages` (by default,
+Spring Boot's application packages). Each active concrete task must implement `BackgroundTask`
+and be a Spring bean, registered with `@Component` or `@Bean`. Missing beans fail startup with
+the job name, class and registration instructions. Declarations disabled by Spring conditions
+or profiles are excluded from scanning.
+
+Declared task beans require a JobRunr `JobScheduler`; without one, startup fails with a clear
+configuration error. Applications with no scheduled tasks still start without JobRunr.
+When a scheduler is present, the starter also contributes the `BackgroundJobs` adapter.
+
+```java
+@Component
+@ScheduledJob(name = "DailySalesReport", cron = "0 0 2 * * *")
+public class DailySalesReportJob implements BackgroundTask {
+    @Override
+    public void execute() {
+        // Generate the report.
+    }
+}
+```
 
 ## Multi-node live UI (cluster bus)
 
