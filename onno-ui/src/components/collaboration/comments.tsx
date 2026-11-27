@@ -408,7 +408,7 @@ export function CommentThread({ target, composerOnly = false, onPosted, onDraftC
       taRef.current?.focus();
     } catch (e) {
       // The api layer toasts a rejected comment (422 empty/too long); what it leaves to us (a
-      // network error, a 401) is reported here once, with this context.
+      // network error) is reported here once, with this context; a 401 goes to the auth recovery.
       notifyError(e, { format: (message) => `Couldn't post comment: ${message}` });
     } finally {
       setBusy(false);

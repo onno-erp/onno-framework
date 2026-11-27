@@ -188,4 +188,87 @@ describe("a failed command is reported once", () => {
 
     expect(toastError).not.toHaveBeenCalled();
   });
+
+  it("does not toast a lapsed session: the auth recovery takes over", () => {
+    const toastError = vi.spyOn(toast, "error");
+    const error = new ApiError("unauthenticated", 401);
+
+    renderProvider().notifyError(error);
+
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("shows a lapsed session neither as a dialog nor as a toast, even with a feedback body", async () => {
+    const toastError = vi.spyOn(toast, "error");
+    const feedback = renderProvider();
+    const lapse = () => new ApiError("Signed out", 401, undefined, { severity: "error", title: "Signed out" });
+
+    expect(feedback.fromError(lapse())).toBeUndefined();
+    act(() => feedback.notifyError(lapse()));
+
+    await Promise.resolve();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+});
+
+describe("the same feedback is shown once", () => {
+  const rejection = () => new ApiError("Stock is low", 422, undefined, {
+    severity: "warning",
+    title: "Stock is low",
+    message: "Reorder soon",
+  });
+
+  it("presenting the same feedback twice shows it once", () => {
+    const toastSuccess = vi.spyOn(toast, "success");
+    const feedback = renderProvider();
+    const done = { severity: "success" as const, message: "Imported" };
+
+    feedback.present(done);
+    feedback.present(done);
+
+    expect(toastSuccess).toHaveBeenCalledOnce();
+  });
+
+  it("outside a provider, presenting the same feedback twice shows it once", () => {
+    const toastSuccess = vi.spyOn(toast, "success");
+    let handlers: CommandFeedbackHandlers | undefined;
+    function Probe() {
+      handlers = useCommandFeedback();
+      return null;
+    }
+    render(<Probe />);
+    const done = { severity: "success" as const, message: "Imported" };
+
+    handlers!.present(done);
+    handlers!.present(done);
+
+    expect(toastSuccess).toHaveBeenCalledOnce();
+  });
+
+  it("a rejection presented by fromError is marked shown, so notifyError adds nothing", () => {
+    const toastWarning = vi.spyOn(toast, "warning");
+    const feedback = renderProvider();
+    const error = rejection();
+
+    expect(feedback.fromError(error)).toBe(error.feedback);
+    // Shown: code that reads the flag itself (a paste summary's reasons) must see it too.
+    expect(error.notified).toBe(true);
+    feedback.notifyError(error);
+
+    expect(toastWarning).toHaveBeenCalledOnce();
+  });
+
+  it("a rejection an open form shows inline is not shown again", () => {
+    const toastWarning = vi.spyOn(toast, "warning");
+    const feedback = renderProvider();
+    const error = rejection();
+
+    expect(feedback.fromError(error, true)).toBe(error.feedback);
+    expect(error.notified).toBe(true);
+    feedback.notifyError(error);
+    feedback.present(error.feedback!);
+
+    expect(toastWarning).not.toHaveBeenCalled();
+  });
 });

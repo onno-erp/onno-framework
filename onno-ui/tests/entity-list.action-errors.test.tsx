@@ -19,6 +19,7 @@ vi.mock("maplibre-gl", () => ({ default: {} }));
 
 import { EntityListView, type ListDescriptor } from "@/components/lists/entity-list";
 import { CommandFeedbackProvider } from "@/lib/command-feedback";
+import { setUnauthorizedHandler } from "@/lib/api";
 
 type Route = (url: string, method: string) => Response;
 
@@ -285,6 +286,74 @@ describe("list actions report a failure once", () => {
       expect(apiToast).toEqual(["Copy failed"]);
       expect(summary[0]).toBe("Pasted 0/1");
       expect(summary[1]?.description).toBeUndefined();
+    });
+  });
+
+  describe("a lapsed session (401) is left to the auth recovery, with no toast", () => {
+    const onUnauthorized = vi.fn();
+    beforeEach(() => setUnauthorizedHandler(onUnauthorized));
+    afterEach(() => setUnauthorizedHandler(null));
+
+    const unauthenticated = () => response(401, { error: "unauthenticated" });
+
+    /** Wait until `method path` has been answered, then let any late toast land. */
+    const answered = async (path: string, method: string) => {
+      await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url, init]) =>
+        String(url) === path && (init?.method ?? "GET").toUpperCase() === method)).toBe(true));
+      await settle();
+      await settle();
+    };
+
+    it("row command", async () => {
+      stubFetch(only("/api/commands/catalogs/orders/review", "POST", unauthenticated));
+      render(<CommandFeedbackProvider><EntityListView list={list()} /></CommandFeedbackProvider>);
+      fireEvent.click(await screen.findByRole("button", { name: "Review" }));
+      await answered("/api/commands/catalogs/orders/review", "POST");
+
+      expect(onUnauthorized).toHaveBeenCalledOnce();
+      expect(toast.error).not.toHaveBeenCalled();
+    });
+
+    it("select all matching rows", async () => {
+      vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) =>
+        new URL(String(input), "http://localhost").searchParams.get("limit") === "500"
+          ? unauthenticated()
+          : response(200, { rows, total: 1, hasMore: false, nextCursor: null })));
+      render(<EntityListView list={list()} />);
+      await screen.findByText("First");
+      fireEvent.click(screen.getByRole("checkbox", { name: "Select all matching rows" }));
+      await waitFor(() => expect(screen.getByRole("checkbox", { name: "Select all matching rows" })).not.toBeDisabled());
+      await settle();
+
+      expect(onUnauthorized).toHaveBeenCalledOnce();
+      expect(toast.error).not.toHaveBeenCalled();
+    });
+
+    it("selection download retires its loading toast", async () => {
+      stubFetch(only("/api/print/orders", "POST", unauthenticated));
+      render(<EntityListView list={{ ...list(), selectionDownloads: [{ key: "print", title: "Print", url: "/api/print/orders" }] }} />);
+      fireEvent.click(within(await selectFirst()).getByRole("button", { name: "Print" }));
+      await answered("/api/print/orders", "POST");
+
+      expect(onUnauthorized).toHaveBeenCalledOnce();
+      expect(toast.dismiss).toHaveBeenCalledWith("loading-1");
+      expect(toast.error).not.toHaveBeenCalled();
+    });
+
+    it("paste copies stops at the first 401 and shows no summary", async () => {
+      stubFetch((url, method) => {
+        if (method === "POST" && /^\/api\/catalogs\/orders\/(one|two)\/duplicate$/.test(url)) return unauthenticated();
+        throw new Error(`unexpected ${method} ${url}`);
+      });
+      render(<EntityListView list={list()} />);
+      await screen.findByText("First");
+      paste(["one", "two"]);
+      await answered("/api/catalogs/orders/one/duplicate", "POST");
+
+      expect(vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+      expect(onUnauthorized).toHaveBeenCalledOnce();
+      expect(toast.error).not.toHaveBeenCalled();
+      expect(toast.success).not.toHaveBeenCalled();
     });
   });
 });

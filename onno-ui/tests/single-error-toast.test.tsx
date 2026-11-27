@@ -59,6 +59,21 @@ async function toastsAfterFailure() {
   return toast.error.mock.calls;
 }
 
+/** Wait until `method path` has been answered, then return every error toast shown since. */
+async function toastsAfterRequest(path: string, method: string) {
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url, init]) =>
+    url === path && (init?.method ?? "GET").toUpperCase() === method)).toBe(true));
+  await settle();
+  await settle();
+  return toast.error.mock.calls;
+}
+
+/** The text of a toast's description, as the toaster would render it. */
+function descriptionText(options: { description?: unknown } | undefined): string {
+  render(<div data-testid="description">{options?.description as never}</div>);
+  return screen.getByTestId("description").textContent ?? "";
+}
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -89,20 +104,23 @@ describe("one failed request, one toast", () => {
       expect(await toastsAfterFailure()).toEqual([["Couldn't save: Database unavailable"]]);
     });
 
-    it("reports typed feedback, which the api layer leaves to it, once with its context", async () => {
+    it("reports typed feedback, which the api layer leaves to it, once under its own title", async () => {
       await save(() => response(409, {
         severity: "error",
         title: "Setting locked",
         message: "Locked by an administrator",
       }));
 
-      expect(await toastsAfterFailure()).toEqual([["Couldn't save: Locked by an administrator"]]);
+      const calls = await toastsAfterFailure();
+      expect(calls).toHaveLength(1);
+      expect(calls[0][0]).toBe("Setting locked");
+      expect(descriptionText(calls[0][1])).toBe("Locked by an administrator");
     });
 
-    it("reports a lapsed session (401), which the api layer leaves to it, once with its context", async () => {
+    it("does not toast a lapsed session (401): the auth recovery takes over", async () => {
       await save(() => response(401, { error: "unauthenticated" }));
 
-      expect(await toastsAfterFailure()).toEqual([["Couldn't save: unauthenticated"]]);
+      expect(await toastsAfterRequest("/api/settings", "PUT")).toEqual([]);
     });
   });
 
@@ -301,10 +319,10 @@ describe("one failed request, one toast", () => {
       expect(await toastsAfterFailure()).toEqual([["Comment is too long"]]);
     });
 
-    it("send: reports a lapsed session (401), which the api layer leaves to it, once with its context", async () => {
+    it("send: does not toast a lapsed session (401): the auth recovery takes over", async () => {
       await send(() => response(401, { error: "unauthenticated" }));
 
-      expect(await toastsAfterFailure()).toEqual([["Couldn't post comment: unauthenticated"]]);
+      expect(await toastsAfterRequest(thread, "POST")).toEqual([]);
     });
 
     it("send: reports field errors, which the api layer leaves to it, once with its context", async () => {
@@ -313,10 +331,13 @@ describe("one failed request, one toast", () => {
       expect(await toastsAfterFailure()).toEqual([["Couldn't post comment: Body is required"]]);
     });
 
-    it("send: reports typed feedback, which the api layer leaves to it, once with its context", async () => {
+    it("send: reports typed feedback, which the api layer leaves to it, once under its own title", async () => {
       await send(() => response(422, { severity: "error", title: "Comments are closed", message: "The thread is locked" }));
 
-      expect(await toastsAfterFailure()).toEqual([["Couldn't post comment: The thread is locked"]]);
+      const calls = await toastsAfterFailure();
+      expect(calls).toHaveLength(1);
+      expect(calls[0][0]).toBe("Comments are closed");
+      expect(descriptionText(calls[0][1])).toBe("The thread is locked");
     });
 
     it("send: reports a network failure once with its context", async () => {

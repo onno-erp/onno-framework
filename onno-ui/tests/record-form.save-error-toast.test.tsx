@@ -109,7 +109,7 @@ describe("RecordForm save failure (#505)", () => {
     expect(toast.error.mock.calls).toEqual([["Couldn't save: Failed to fetch"]]);
   });
 
-  it("reports typed feedback, which the api layer leaves to the form, once with its context", async () => {
+  it("reports typed feedback, which the api layer leaves to the form, once under its own title", async () => {
     stubFetch(() => response(409, {
       severity: "error",
       title: "Record locked",
@@ -121,7 +121,23 @@ describe("RecordForm save failure (#505)", () => {
 
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
     await settle();
-    expect(toast.error.mock.calls).toEqual([["Couldn't save: Locked by an import"]]);
+    expect(toast.error).toHaveBeenCalledOnce();
+    const [title, options] = toast.error.mock.calls[0];
+    expect(title).toBe("Record locked");
+    render(<div data-testid="description">{options?.description}</div>);
+    expect(screen.getByTestId("description")).toHaveTextContent(/^Locked by an import$/);
+  });
+
+  it("does not toast a lapsed session (401): the auth recovery takes over", async () => {
+    stubFetch(() => response(401, { error: "unauthenticated" }));
+
+    render(<RecordForm form={form} />);
+    fireEvent.click(screen.getByRole("button", { name: "Write" }));
+
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === "PUT")).toBe(true));
+    await settle();
+    await settle();
+    expect(toast.error).not.toHaveBeenCalled();
   });
 });
 
