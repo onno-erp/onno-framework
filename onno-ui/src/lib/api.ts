@@ -57,6 +57,19 @@ export function setUnauthorizedHandler(handler: (() => void) | null) {
   onUnauthorized = handler;
 }
 
+/** Hand a 401 from a request made outside this module (a raw `fetch`) to the same auth recovery. */
+export function handleUnauthorized() {
+  onUnauthorized?.();
+}
+
+/**
+ * Whether a failure is a lapsed session (HTTP 401). It goes to the auth recovery (re-authentication
+ * or the login screen), so neither the api layer nor any caller reports it.
+ */
+export function isSessionLapse(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
+}
+
 function readCsrfToken(): string | null {
   const match = document.cookie
     .split(";")
@@ -125,7 +138,8 @@ export async function streamUiEvents(
 // Collapse concurrent identical GETs into a single network round-trip: a dashboard with several
 // widgets reading the same entity would otherwise fire the same request once per widget on load.
 // Keyed by URL and cleared the moment the request settles, so this only dedupes in-flight overlap —
-// no cached response, hence no staleness (a later fetch always hits the network afresh).
+// no cached response, hence no staleness (a later fetch always hits the network afresh). Only the
+// request is shared: each caller's own options still decide its error toast (see reportFailure).
 const inFlightGets = new Map<string, Promise<unknown>>();
 
 /**
@@ -140,15 +154,35 @@ export interface FetchOptions {
 
 function fetchJson<T>(url: string, init?: RequestInit, opts?: FetchOptions): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
-  if (method !== "GET") return doFetch<T>(url, init, opts);
-  const existing = inFlightGets.get(url);
-  if (existing) return existing as Promise<T>;
-  const p = doFetch<T>(url, init, opts).finally(() => inFlightGets.delete(url));
-  inFlightGets.set(url, p);
-  return p;
+  if (method !== "GET") return reportFailure(doFetch<T>(url, init), opts);
+  let request = inFlightGets.get(url) as Promise<T> | undefined;
+  if (!request) {
+    request = doFetch<T>(url, init).finally(() => inFlightGets.delete(url));
+    inFlightGets.set(url, request);
+  }
+  return reportFailure(request, opts);
 }
 
-async function doFetch<T>(url: string, init?: RequestInit, opts?: FetchOptions): Promise<T> {
+/**
+ * The api layer's error toast, decided per call even when several callers share one in-flight GET:
+ * a failure toasts once if any of its callers is not silent, and never for a silent-only one. The
+ * error object is shared, so `notified` keeps it to one toast however many callers ask. A field-level
+ * validation error is shown inline by the form, typed feedback is presented by its caller, and a
+ * lapsed session (401) goes to the auth recovery — none of those is toasted here.
+ */
+function reportFailure<T>(request: Promise<T>, opts?: FetchOptions): Promise<T> {
+  return request.catch((error: unknown) => {
+    if (error instanceof ApiError && !opts?.silent && !error.notified
+        && !isSessionLapse(error) && !error.fieldErrors && !error.feedback) {
+      // eslint-disable-next-line onno/notify-caught-error -- this is the api layer's own toast; `notified` stops a second one
+      toast.error(error.message);
+      error.notified = true;
+    }
+    throw error;
+  });
+}
+
+async function doFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -180,14 +214,7 @@ async function doFetch<T>(url: string, init?: RequestInit, opts?: FetchOptions):
       }
     } catch { /* ignore parse errors */ }
     const error = new ApiError(message, res.status, fieldErrors, feedback);
-    // A field-level validation 422 is shown inline by the form, so don't also toast it. Other
-    // failures (auth aside) surface as a toast as before. `silent` suppresses the toast for
-    // background calls (live validation) where a transient failure must not interrupt the user.
-    // `notified` tells the caller's notifyError the user has seen it already (#505).
-    if (res.status !== 401 && !fieldErrors && !feedback && !opts?.silent) {
-      toast.error(message);
-      error.notified = true;
-    }
+    // Whether to toast is each caller's decision (reportFailure), not the request's.
     // A 401 here is a lapsed session (the login endpoint's bad-credentials 401 is handled by its
     // own caller and never reaches a logged-in tab). Hand off to the registered recovery handler.
     if (res.status === 401 && !url.includes("/auth/login")) onUnauthorized?.();
@@ -272,6 +299,7 @@ export async function uploadMedia(file: File): Promise<StoredMedia> {
       if (body.message) message = body.message;
       else if (body.error) message = body.error;
     } catch { /* ignore parse errors */ }
+    if (res.status === 401) onUnauthorized?.();
     throw new ApiError(message, res.status);
   }
   return (await res.json()) as StoredMedia;
@@ -682,8 +710,8 @@ export const api = {
       body: JSON.stringify({ outcome }),
     }),
 
-  // Catalog CRUD. Row-shaped components use the bounded keyset list feed; the old unbounded
-  // GET /api/catalogs/{name} collection route no longer exists.
+  // Catalog CRUD. These array-only convenience reads are bounded; widgets use the Page variants
+  // below to retain continuation metadata. The old unbounded collection route no longer exists.
   listCatalog: (name: string, where?: WhereClause, page?: RecordsPage) => {
     // Normalize the entity name (PascalCase → snake_case) so every caller — the built-in components
     // (which pre-snake) and app code (which may pass the logical `entityName`) — hits the
@@ -698,6 +726,9 @@ export const api = {
   listCatalogWindow: (name: string, params: URLSearchParams) =>
     fetchJson<{ rows?: EntityRecord[] }>(`${BASE}/list/catalogs/${toSnakeCase(name)}?${params.toString()}`)
       .then((page) => page.rows ?? []),
+  /** Calendar window with continuation metadata; row-shaped widgets must retain `hasMore`. */
+  listCatalogWindowPage: (name: string, params: URLSearchParams) =>
+    fetchJson<CollectionPage<EntityRecord>>(`${BASE}/list/catalogs/${toSnakeCase(name)}?${params.toString()}`),
   searchRefOptions: (request: RefOptionSearch) =>
     fetchJson<EntityRecord[]>(`${BASE}/ref-options/search`, {
       method: "POST",

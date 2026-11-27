@@ -238,3 +238,13 @@ void OwnRecord;
 
 expectTypeOf(formatRecordNumber("CON-00000001")).toEqualTypeOf<string>();
 expectTypeOf(formatRecordNumber(null)).toEqualTypeOf<string>();
+
+// Information-register list/navigation customization is typed without granting write APIs.
+defineAppTyped({
+  navigation: [{ title: "Finance", items: ["Rates", { entity: "Rates" }] }],
+  entities: { Rates: { fields: { rate: { format: { money: "USD" } } }, list: { columns: ["currency", "period", "rate"], sort: "-period" } } },
+});
+defineAppTyped({ entities: { Rates: { list: {
+  // @ts-expect-error information-register columns must exist
+  columns: ["missing"],
+} } } });

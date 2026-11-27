@@ -11,7 +11,7 @@ import {
   AttachmentTitle,
   AttachmentTrigger,
 } from "../ui/attachment";
-import { uploadMedia } from "../../lib/api";
+import { isSessionLapse, uploadMedia } from "../../lib/api";
 import { cn } from "../../lib/utils";
 
 /**
@@ -59,8 +59,9 @@ export function FilePicker({
     try {
       const stored = await uploadMedia(file);
       onChange(stored.url);
-    } catch {
-      toast.error(`Couldn't upload "${file.name}".`);
+    } catch (error) {
+      // A lapsed session is left to the auth recovery.
+      if (!isSessionLapse(error)) toast.error(`Couldn't upload "${file.name}".`);
     } finally {
       setBusy(false);
       setUploadName(null);

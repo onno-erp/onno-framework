@@ -1,4 +1,3 @@
-import { shortRecordNumber } from "../../lib/record-number";
 import { openRoute } from "../../lib/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import FullCalendar from "@fullcalendar/react";
@@ -35,6 +34,9 @@ import { useEntitySource } from "../../lib/entity-source";
 import { findEntity, useModel } from "../../lib/model-store";
 import { Boundary } from "../pages/boundary";
 import { useFillHeight } from "../../lib/fill-height";
+import { pickAvatar, recordDetails, recordTitle, useRecordColumns, type RecordColumn } from "../../lib/record-presentation";
+import { RecordsTruncated } from "./records-truncated";
+import type { CollectionPage } from "../../lib/api";
 import "./calendar.css";
 
 /**
@@ -64,7 +66,7 @@ export interface CalendarProps {
   allDay?: boolean;
   /** Each item's headline; default the record's description (catalogs) or number (documents). */
   itemTitle?: (record: EntityRecord) => string | null | undefined;
-  /** Each item's second line; default the usual `…Display` companions. */
+  /** Each item's second line; default the entity metadata's first text/reference label. */
   subtitle?: (record: EntityRecord) => string | null | undefined;
   /** Each item's colour (any CSS colour); default the draft/posted styling. */
   color?: (record: EntityRecord) => string | null | undefined;
@@ -131,29 +133,6 @@ function remember(key: string, value: string | null) {
     if (value == null) window.localStorage.removeItem(`onno.calendar.${key}`);
     else window.localStorage.setItem(`onno.calendar.${key}`, value);
   } catch { /* preference only */ }
-}
-
-function pickAvatar(row: EntityRecord): { url?: string; label?: string } {
-  for (const key of Object.keys(row)) {
-    if (key.endsWith("Avatar") && typeof row[key] === "string" && (row[key] as string).trim()) {
-      const base = key.slice(0, -"Avatar".length);
-      const label = row[`${base}Display`];
-      return {
-        url: row[key] as string,
-        label: typeof label === "string" ? label : undefined,
-      };
-    }
-  }
-  return {};
-}
-
-function pickField(row: EntityRecord, fields: string[]): string | undefined {
-  for (const f of fields) {
-    const v = row[f];
-    if (typeof v === "string" && v.trim()) return v;
-    if (typeof v === "number") return String(v);
-  }
-  return undefined;
 }
 
 /** Length of a timed item in minutes; 0 for all-day or open-ended items. */
@@ -256,21 +235,20 @@ interface CalendarData {
   move: (id: string, start: Date, end: Date | null, allDay: boolean) => Promise<void>;
   open: (id: string) => void;
   empty: string;
+  count: number;
+  truncated: boolean;
 }
 
 // ─── Entity-backed: one catalog or document ───────────────────────────────────
 
-/** The default item headline: description for catalogs, number for documents. */
+/** Framework identity, shared with the other record widgets. */
 export function defaultItemTitle(row: EntityRecord, kind: "catalog" | "document" | null): string {
-  if (kind === "catalog" && row.description != null) return String(row.description);
-  return row.number == null ? String(row.description ?? "") : shortRecordNumber(row.number);
+  return recordTitle(row, kind === "catalog" ? "description" : "number");
 }
 
-const DEFAULT_SUBTITLE = ["customerDisplay", "clientDisplay", "propertyDisplay", "warehouseDisplay", "description", "name"];
-
-/** The default item second line: the usual reference displays, then description/name. */
-export function defaultSubtitle(row: EntityRecord): string | undefined {
-  return pickField(row, DEFAULT_SUBTITLE);
+/** First declared text/reference label, excluding the record's identity. */
+export function defaultSubtitle(row: EntityRecord, columns: readonly RecordColumn[] = []): string | undefined {
+  return recordDetails(row, columns)[0];
 }
 
 /** One record as a calendar item, or null when it has no start. */
@@ -278,6 +256,7 @@ export function calendarEvent(
   item: EntityRecord,
   config: {
     kind: "catalog" | "document" | null;
+    columns?: readonly RecordColumn[];
     start: string;
     end?: string;
     duration?: string;
@@ -293,12 +272,12 @@ export function calendarEvent(
   if (typeof dateValue !== "string" || !dateValue) return null;
   const id = String(item.id ?? "");
   const primary = (config.title ? config.title(item) : defaultItemTitle(item, config.kind)) ?? "";
-  const secondary = (config.subtitle ? config.subtitle(item) : defaultSubtitle(item)) ?? undefined;
+  const secondary = (config.subtitle ? config.subtitle(item) : defaultSubtitle(item, config.columns)) ?? undefined;
   const rawAmount = config.amount ? config.amount(item) : toNumber(item.total);
   const amount = rawAmount != null && Number.isFinite(rawAmount) ? rawAmount : undefined;
   const currency = (typeof config.currency === "function" ? config.currency(item) : config.currency) ?? undefined;
   const endValue = itemEnd(item, dateValue, config.end, config.duration);
-  const avatar = pickAvatar(item);
+  const avatar = pickAvatar(item, config.columns ?? []);
   const color = config.color?.(item) ?? undefined;
   // Catalog rows have no posted state; they draw as "posted" (solid) rather than as drafts.
   const solid = config.kind === "catalog" || Boolean(item.posted);
@@ -353,8 +332,12 @@ function useEntityCalendar(props: CalendarProps, range: Range): CalendarData {
   // `where` scopes the calendar server-side (e.g. drop DRAFT/CANCELED bookings).
   const source = useEntitySource(props.entity, { dateField: props.start, where: props.where });
   const model = useModel();
+  const columns = useRecordColumns(source);
   const live = useEntityVersion(source);
   const [items, setItems] = useState<EntityRecord[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const request = useRef(0);
+  const cancelLoad = useCallback(() => { request.current++; }, []);
   const kind: "catalog" | "document" | null = source?.entityType === "catalog" ? "catalog" : source?.entityType === "document" ? "document" : null;
   const name = toSnakeCase(source?.entityName ?? "");
   const where = source?.where;
@@ -374,27 +357,33 @@ function useEntityCalendar(props: CalendarProps, range: Range): CalendarData {
   const fns = useRef(props);
   fns.current = props;
 
-  const load = useCallback(() => {
-    if (kind === "document") {
-      return api.listDocuments(name, format(range.from, "yyyy-MM-dd'T'00:00:00"),
-        format(range.to, "yyyy-MM-dd'T'23:59:59"), where).then(setItems);
-    }
-    if (kind === "catalog") {
-      return api.listCatalogWindow(name, catalogWindowParams(start, range.from, range.to, where)).then(setItems);
-    }
-    return Promise.resolve();
+  const load = useCallback(async () => {
+    const seq = ++request.current;
+    const page: CollectionPage<EntityRecord> | null = kind === "document"
+      ? await api.listDocumentsPage(name, format(range.from, "yyyy-MM-dd'T'00:00:00"),
+          format(range.to, "yyyy-MM-dd'T'23:59:59"), where, { limit: 500 })
+      : kind === "catalog"
+        ? await api.listCatalogWindowPage(name, catalogWindowParams(start, range.from, range.to, where)) : null;
+    if (seq !== request.current) return;
+    setItems(page?.rows ?? []);
+    setHasMore(page?.hasMore === true);
   }, [kind, name, where, start, range]);
 
-  useEffect(() => { void load(); }, [load, live]);
+  useEffect(() => {
+    setItems([]);
+    setHasMore(false);
+    void load().catch(notifyError);
+    return cancelLoad;
+  }, [load, live, cancelLoad]);
 
   const events: EventInput[] = useMemo(() => {
     const f = fns.current;
     const config = {
-      kind, start, end, duration, allDay,
+      kind, columns, start, end, duration, allDay,
       title: f.itemTitle, subtitle: f.subtitle, color: f.color, amount: f.amount, currency: f.currency,
     };
     return items.flatMap((item) => calendarEvent(item, config) ?? []);
-  }, [items, kind, start, end, duration, allDay]);
+  }, [items, kind, columns, start, end, duration, allDay]);
 
   const move = async (id: string, startAt: Date, endAt: Date | null) => {
     const startIso = startAt.toISOString();
@@ -405,13 +394,15 @@ function useEntityCalendar(props: CalendarProps, range: Range): CalendarData {
       if (kind === "catalog") await api.updateCatalogItem(name, id, values.payload);
       else await api.updateDocument(name, id, values.payload);
     } catch (err) {
-      void load();
+      void load().catch(notifyError);
       throw err;
     }
   };
 
   return {
     events,
+    count: items.length,
+    truncated: hasMore,
     editable,
     move,
     open: (id) => { if (kind) openRoute(`/${kind === "catalog" ? "catalogs" : "documents"}/${name}/${id}`); },
@@ -911,6 +902,7 @@ function CalendarChrome({ props, state, data }: {
         </div>
       </CardHeader>
       <CardContent className={cn(agenda && isMobile ? "px-0 pb-1" : "px-3 pb-3", fill && "flex min-h-0 flex-1 flex-col")}>
+        <RecordsTruncated count={data.count} truncated={data.truncated} />
         {agenda ? (
           fill ? <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{renderAgenda()}</div> : renderAgenda()
         ) : year ? (

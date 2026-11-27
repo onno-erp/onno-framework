@@ -20,6 +20,9 @@ export type Order = DocumentRecord & {
 };
 
 declare module "@onno/ui" {
+  interface OnnoInformationRegisters {
+    "Rates": { record: { id: string; period: string; currency: string; rate: number }; field: "currency" | "rate"; periodic: true };
+  }
   interface OnnoEntities {
     "Customers": { kind: "catalogs"; route: "/catalogs/customers"; record: Customer; field: "code" | "description" | "email" | "latitude" | "longitude"; dateField: never };
     "Orders": { kind: "documents"; route: "/documents/orders"; record: Order; field: "number" | "date" | "posted" | "customer" | "status" | "total" | "note" | "shippedAt" | "items" | "items.book" | "items.quantity"; dateField: "date" | "shippedAt" };

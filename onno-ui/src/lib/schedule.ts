@@ -108,7 +108,8 @@ export function refId(value: unknown): string {
 /** An entry's title: the configured field's display value, else a system identifier. */
 export function rowTitle(row: EntityRecord, titleField?: string): string {
   const candidates = [
-    titleField && (row[`${titleField}Display`] ?? row[titleField]),
+    titleField && (row[`${titleField}Display`]
+      ?? (titleField === "number" || titleField === "code" ? shortRecordNumber(row[titleField]) : row[titleField])),
     row.description,
     shortRecordNumber(row.number),
     shortRecordNumber(row.code),

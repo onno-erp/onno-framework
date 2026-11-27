@@ -46,8 +46,9 @@ import {
   ContextMenuSub,
 } from "../ui/context-menu";
 import { Icon } from "../../lib/icons";
-import { api, ApiError, downloadSelection } from "../../lib/api";
+import { api, ApiError, downloadSelection, handleUnauthorized, isSessionLapse } from "../../lib/api";
 import { useCommandFeedback } from "../../lib/command-feedback";
+import { errorMessage } from "../../lib/notify-error";
 import { isInteractiveLayerOpen, matchesKey, shortcutLabel } from "../../lib/keybindings";
 import { withBasePath } from "../../lib/base-path";
 import { cn, copyToClipboard, enumPillStyle, rowStyleClass } from "../../lib/utils";
@@ -2436,8 +2437,8 @@ export function EntityListView({
   // Run a command: POST /api/commands and apply the CommandResult — toast, refresh. A command with
   // inputs first opens the dialog to collect them (formInputs arrive on the second, submitting
   // call). While the (possibly slow/async) handler runs, the button shows a spinner and is
-  // disabled, so there's feedback and no double-submit. (api.runCommand is CSRF-aware and toasts
-  // failures.)
+  // disabled, so there's feedback and no double-submit. (api.runCommand is CSRF-aware; a failure
+  // is reported once — here, or by the form dialog that asked for it.)
   const runCommand = useCallback(
     (command: ListCommand, id?: string, formInputs?: CommandFormValues, propagateError = false): Promise<void> | void => {
       if (command.form?.length && !formInputs) {
@@ -2458,7 +2459,7 @@ export function EntityListView({
         })
         .catch((error) => {
           if (propagateError) throw error;
-          feedback.fromError(error);
+          feedback.notifyError(error);
         })
         .finally(() =>
           setPending((s) => {
@@ -2500,7 +2501,10 @@ export function EntityListView({
     try {
       while (true) {
         const response = await fetch(`${feedBase}?${params}`, { credentials: "include", signal: controller.signal });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) {
+          if (response.status === 401) handleUnauthorized();
+          throw new ApiError(`HTTP ${response.status}`, response.status);
+        }
         const data: FeedWindow = await response.json();
         if (controller.signal.aborted) return;
         for (const row of data.rows ?? []) {
@@ -2515,8 +2519,9 @@ export function EntityListView({
       setAllMatchingIds(ids);
       setSelected(ids);
       selAnchorRef.current = 0;
-    } catch {
-      if (!controller.signal.aborted) toast.error(t("list.selectAllFailed"));
+    } catch (error) {
+      // A lapsed session is left to the auth recovery.
+      if (!controller.signal.aborted && !isSessionLapse(error)) toast.error(t("list.selectAllFailed"));
     } finally {
       if (selectAllRequest.current === controller) {
         selectAllRequest.current = null;
@@ -2608,10 +2613,15 @@ export function EntityListView({
       await downloadSelection(download.url, ids, `${download.key}.zip`);
       toast.dismiss(toastId);
     } catch (error) {
-      // Turns the loading toast into the error; downloadSelection never toasts, so this is the only one.
-      // eslint-disable-next-line onno/notify-caught-error
-      toast.error(error instanceof Error && error.message ? error.message : t("list.download.failed", { label: download.title }),
-        { id: toastId });
+      if (isSessionLapse(error)) {
+        // A lapsed session is left to the auth recovery; just retire the loading toast.
+        toast.dismiss(toastId);
+      } else {
+        // Turns the loading toast into the error; downloadSelection never toasts, so this is the only one.
+        // eslint-disable-next-line onno/notify-caught-error
+        toast.error(error instanceof Error && error.message ? error.message : t("list.download.failed", { label: download.title }),
+          { id: toastId });
+      }
     } finally {
       setPending((s) => {
         const n = new Set(s);
@@ -2654,9 +2664,11 @@ export function EntityListView({
         clearSelection();
         reload();
       } catch (error) {
-        // the api layer already toasted the failure — just retire the loading toast
+        // Retire the loading toast; a form-driven batch hands the failure to its dialog, any other
+        // is reported here once.
         toast.dismiss(toastId);
         if (propagateFeedback) throw error;
+        feedback.notifyError(error);
       } finally {
         batchBusyRef.current = false;
         setPending((s) => {
@@ -2684,8 +2696,9 @@ export function EntityListView({
         );
         clearSelection();
         reload();
-      } catch {
+      } catch (error) {
         toast.dismiss(toastId);
+        feedback.notifyError(error);
       } finally {
         batchBusyRef.current = false;
         setPending((s) => {
@@ -2695,7 +2708,7 @@ export function EntityListView({
         });
       }
     },
-    [kind, name, reload, clearSelection, t]
+    [kind, name, reload, clearSelection, t, feedback]
   );
 
   // Surgically refresh a single changed row in place: fetch just that id (same decorated shape as a
@@ -2901,20 +2914,33 @@ export function EntityListView({
         if (batchBusyRef.current) return;
         batchBusyRef.current = true;
         let ok = 0;
+        // Why copies failed, for the summary below: only what the api layer did not toast itself
+        // (a network error, field errors, typed feedback), each reason once.
+        const reasons = new Set<string>();
         try {
           for (const id of ids) {
             try {
               if (kind === "documents") await api.duplicateDocument(name, id);
               else await api.duplicateCatalogItem(name, id);
               ok++;
-            } catch {
-              // already toasted by the api layer
+            } catch (error) {
+              // A lapsed session ends the paste with no summary: the auth recovery takes over.
+              if (isSessionLapse(error)) return;
+              if (!(error instanceof ApiError && error.notified)) reasons.add(errorMessage(error));
             }
           }
         } finally {
           batchBusyRef.current = false;
         }
-        (ok === ids.length ? toast.success : toast.error)(t("clipboard.pasted", { ok, n: ids.length }));
+        // A summary, not a report: name the first few reasons and elide the rest.
+        const SHOWN_REASONS = 3;
+        const description = reasons.size ? (
+          <div className="onno-toast__body">
+            {[...reasons].slice(0, SHOWN_REASONS).map((reason) => <p key={reason} className="onno-toast__message">{reason}</p>)}
+            {reasons.size > SHOWN_REASONS ? <p className="onno-toast__message">…</p> : null}
+          </div>
+        ) : undefined;
+        (ok === ids.length ? toast.success : toast.error)(t("clipboard.pasted", { ok, n: ids.length }), { description });
         reload();
       })();
     };

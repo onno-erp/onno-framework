@@ -153,6 +153,17 @@ Everything an app can import is in [`src/index.ts`](src/index.ts); the types are
 | Text | `useTranslate`, `useLocale`, `text`, `locale`, `formatMoney`, `formatDate`, `displayOf`. |
 | Mobile, outlets | `useMobileDetail`, `usePageSlide`, `ExtensionSlot`. |
 
+**Record widgets.** `Calendar`, `Kanban` and `RecentRecords` use the framework's record identity
+(`description`, `number`, `code`) for their default headline. Secondary text and reference photos
+follow the entity list descriptor's declared columns, without guessing application field names.
+Use `itemTitle`/`subtitle` (calendar) or `primary`/`secondary` (board/recent records) for an app-specific
+presentation. Bounded widgets retain `hasMore` and show a notice when more records match; boards,
+recent lists and maps also report rows hidden by their display limit. The notice is localized with
+`onno.ui.messages.widget.records.truncated` (`{count}` is the number of loaded/displayed records,
+not a total). `api.listCatalogPage`, `listDocumentsPage` and `listCatalogWindowPage` preserve the
+`{ rows, nextCursor, hasMore }` envelope; array-only reads (`listCatalog`, `listDocuments`,
+`useRecords`) remain bounded convenience reads and do not represent a complete collection.
+
 **Typed vocabulary.** Everything an app hands the package is a typed value, never a string it
 parses: entities by logical name (`"Orders"`); which records as a `where` object
 (`{ posted: true, total: { gte: 100 }, status: { in: [OrderStatus.NEW] } }`, sent to the server as
@@ -393,3 +404,12 @@ renderers and explicit value formats keep control of their own presentation.
 Custom React labels can use the same formatter: `import { formatRecordNumber } from "@onno/ui";`
 and `formatRecordNumber(order.number)` (also accepts catalog codes). Format only the identifier,
 not the whole label or a business description.
+
+### Information registers
+
+Readable information registers appear in default navigation, grouped by context, at
+`/information-registers/{name}`. Authored navigation can name their logical name (for example
+`"Book Prices"`), and ordinary entity list customizations apply by that name. The standard surface
+is read-only: no record form, New, Edit, Delete, balance or turnover actions. Periodic registers
+offer History (with a period range) and Latest values as of the end of a selected local date.
+Both modes use a scoped keyset feed, including sorting and authored filters.
