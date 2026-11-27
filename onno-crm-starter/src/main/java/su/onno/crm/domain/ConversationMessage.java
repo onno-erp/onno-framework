@@ -4,7 +4,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.model.CatalogObject;
@@ -13,7 +12,6 @@ import su.onno.rules.Validated;
 import su.onno.types.Ref;
 
 @Catalog(name = "CrmConversationMessages", title = "Conversation message", codePrefix = "MSG-", context = "CRM")
-@AccessControl(readRoles = {"ADMIN"}, writeRoles = {"ADMIN"})
 @Getter
 @Setter
 public class ConversationMessage extends CatalogObject implements Validated {

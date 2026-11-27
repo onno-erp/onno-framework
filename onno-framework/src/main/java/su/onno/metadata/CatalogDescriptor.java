@@ -12,8 +12,6 @@ public record CatalogDescriptor(
         boolean autoNumber,
         String codePrefix,
         String context,
-        List<String> readRoles,
-        List<String> writeRoles,
         List<AttributeDescriptor> attributes,
         List<String> previousNames,
         List<TabularSectionDescriptor> tabularSections
@@ -23,19 +21,17 @@ public record CatalogDescriptor(
     public CatalogDescriptor(
             String logicalName, String displayTitle, String tableName, Class<?> javaClass,
             int codeLength, boolean hierarchical, boolean autoNumber, String codePrefix,
-            String context, List<String> readRoles, List<String> writeRoles,
-            List<AttributeDescriptor> attributes, List<String> previousNames) {
+            String context, List<AttributeDescriptor> attributes, List<String> previousNames) {
         this(logicalName, displayTitle, tableName, javaClass, codeLength, hierarchical,
-                autoNumber, codePrefix, context, readRoles, writeRoles, attributes, previousNames, List.of());
+                autoNumber, codePrefix, context, attributes, previousNames, List.of());
     }
 
     /** Backward-compatible constructor for callers predating {@code previousNames}. */
     public CatalogDescriptor(
             String logicalName, String displayTitle, String tableName, Class<?> javaClass,
             int codeLength, boolean hierarchical, boolean autoNumber, String codePrefix,
-            String context, List<String> readRoles, List<String> writeRoles,
-            List<AttributeDescriptor> attributes) {
+            String context, List<AttributeDescriptor> attributes) {
         this(logicalName, displayTitle, tableName, javaClass, codeLength, hierarchical,
-                autoNumber, codePrefix, context, readRoles, writeRoles, attributes, List.of());
+                autoNumber, codePrefix, context, attributes, List.of());
     }
 }

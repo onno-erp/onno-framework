@@ -265,7 +265,13 @@ onno:
   that nobody can sign in.
 - **Management.** `UserAccounts` (inject it) creates accounts with a generated one-time password,
   disables/enables them, replaces roles, resets passwords and signs an account out everywhere. The
-  last enabled `ADMIN` can be neither disabled nor demoted.
+  last enabled account holding `users.manage` (`AuthPermissions.MANAGE_USERS`, granted in the app's
+  `RoleGrants`) can be neither disabled nor demoted. When no seed would hold `users.manage`, the
+  first seeded account gets the first declared role that grants it (logged). When accounts already exist but
+  none holds `users.manage` (for example after upgrading from the `ADMIN` superuser), startup logs a
+  warning naming the roles that grant it. Account roles are
+  normalized when written (`role_manager` → `MANAGER`); roles stored earlier are normalized when
+  compared.
 - **Immediate effect.** Each change bumps the account's security stamp. A guard filter re-reads the
   account on every request and signs out sessions issued under an older stamp (`401
   session_revoked`); remember-me cookies are bound to the stamp too.
@@ -284,11 +290,11 @@ onno:
 |--------|------|------|------|----------|
 | `GET` | `/api/auth/password-policy` | authenticated | — | `{"minLength":8}` |
 | `POST` | `/api/auth/password` | authenticated | `{"currentPassword":"…","newPassword":"…"}` | `204`; the session and remember-me cookie are re-issued under the new stamp. `400` with `message` on a wrong current password or a policy breach |
-| `GET` | `/api/auth/users` | `ADMIN` | — | Accounts (`id`, `username`, `roles`, `enabled`, `passwordChangeRequired`, `createdAt`, `passwordChangedAt`, `lastLoginAt`) |
-| `POST` | `/api/auth/users` | `ADMIN` | `{"username":"…","roles":["…"],"password":null}` | `201` `{account, temporaryPassword}` — the generated one-time password is returned only here. `409` on a duplicate username |
-| `PATCH` | `/api/auth/users/{id}` | `ADMIN` | `{"roles":[…]?,"enabled":bool?}` | The account. `409` when it would remove the last enabled administrator |
-| `POST` | `/api/auth/users/{id}/reset-password` | `ADMIN` | — | `{"temporaryPassword":"…"}`; the account is signed out everywhere |
-| `POST` | `/api/auth/users/{id}/sign-out` | `ADMIN` | — | The account; every session and remember-me cookie ends |
+| `GET` | `/api/auth/users` | `users.manage` | — | Accounts (`id`, `username`, `roles`, `enabled`, `passwordChangeRequired`, `createdAt`, `passwordChangedAt`, `lastLoginAt`) |
+| `POST` | `/api/auth/users` | `users.manage` | `{"username":"…","roles":["…"],"password":null}` | `201` `{account, temporaryPassword}` — the generated one-time password is returned only here. `409` on a duplicate username |
+| `PATCH` | `/api/auth/users/{id}` | `users.manage` | `{"roles":[…]?,"enabled":bool?}` | The account. `409` when it would remove the last enabled holder of `users.manage` |
+| `POST` | `/api/auth/users/{id}/reset-password` | `users.manage` | — | `{"temporaryPassword":"…"}`; the account is signed out everywhere |
+| `POST` | `/api/auth/users/{id}/sign-out` | `users.manage` | — | The account; every session and remember-me cookie ends |
 
 Not yet included (tracked in #545): password reset by e-mailed link, one-time-code login, password
 expiry/history, lockout, and a login journal with an active-session list.
@@ -595,6 +601,9 @@ class EmailCodeLogin implements LoginMethod {
   handling is on (`server.forward-headers-strategy=framework`) so `{baseUrl}` expands to the public
   origin and not the internal `http://localhost`.
 
-ADMIN bypasses entity role checks and ordinary `EntityAccessPolicy` gates. Policies explicitly
-returning `includesAdministrators() == true` enforce additional privacy boundaries even for ADMIN
+There is no superuser: the application's `RoleGrants` bean decides what each role may do (an app
+without one runs open — every signed-in user may do everything). IdP and account roles are
+normalized the same way (`ROLE_manager` → `MANAGER`; the configured `roles.prefix` is added to the
+normalized name) and matched to the declared roles, or to other names through `fromIdp(...)`.
+Every `EntityAccessPolicy` constrains every role — that is how privacy boundaries hold for everyone
 (for example, CRM personal-account records must use owner-scoped APIs).

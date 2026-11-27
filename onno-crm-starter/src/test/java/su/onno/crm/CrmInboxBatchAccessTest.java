@@ -29,7 +29,7 @@ import su.onno.service.AccessService;
 class CrmInboxBatchAccessTest {
 
     private final Principal alice = () -> "alice";
-    private final AccessService access = mock(AccessService.class);
+    private final AccessService access = su.onno.crm.TestBindings.withGrants(mock(AccessService.class));
     private final CrmContactService contacts = mock(CrmContactService.class);
 
     private Conversation conversation(String channel, UUID customer) {

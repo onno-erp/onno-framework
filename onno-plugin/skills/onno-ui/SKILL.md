@@ -15,7 +15,7 @@ description: >-
 
 The Java model is the source of truth. With no UI code at all an app already has navigation
 (entities grouped by their annotation `context`), a home page, and a list + record form for every
-entity the signed-in user may read — `@AccessControl` and record policies decide what exists for
+entity the signed-in user may read — `RoleGrants` and record policies decide what exists for
 whom. The server describes **data and permissions**, never screens; the browser decides
 presentation.
 
@@ -98,7 +98,7 @@ defineApp({
   pages: [
     { path: "/", component: HomePage },
     { path: "/ops", component: SalesOpsPage, label: "Sales Ops", icon: Activity },
-    { path: "/settings", component: SettingsPage, label: "Settings", icon: Settings, roles: ["ADMIN"] },
+    { path: "/settings", component: SettingsPage, label: "Settings", icon: Settings, permission: "settings.edit" },
   ],
   navigation: [
     { title: "Sales", icon: ShoppingCart, items: ["Orders", "Customers", "/ops"] },
@@ -123,8 +123,12 @@ app configuration in module state.
 - **Enums are constants with UUID values**, plus label maps:
   `import { OrderStatus, OrderStatusLabels } from "../model.gen"`; compare
   `order.status === OrderStatus.NEW`. Never compare against the constant's name string.
-- **Roles**: `RoleName` is every role an `@AccessControl` names plus `ADMIN`. A role that appears
-  only in a command's `roles(...)` or in configured users is declared by the app:
+- **Roles and permissions**: `RoleName` is every constant of the app's `RoleKey` enums and
+  `PermissionName` every `public static final` `Permission` constant of the framework modules and
+  the app's scanned packages (gate with `roles` / `permission`, check with
+  `useHasRole` / `useHasPermission`; no role passes implicitly). A role name that is no `RoleKey`
+  constant — an identity-provider name mapped with `fromIdp(...)`, or any role of an app without
+  grants — is declared by the app:
 
   ```ts
   declare module "@onno/ui" { interface OnnoRoles { SUPPORT: true } }

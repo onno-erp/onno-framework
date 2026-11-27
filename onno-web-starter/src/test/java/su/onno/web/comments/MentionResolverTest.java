@@ -1,5 +1,8 @@
 package su.onno.web.comments;
 
+import su.onno.access.RoleGrants;
+import su.onno.access.RoleKey;
+
 import su.onno.access.AccessSubject;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
@@ -29,11 +32,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * {@link MentionResolver} resolves a mention's live display + avatar from its target record and gates
- * every mention on the viewer's per-entity read access. Catalogs/documents here carry no
- * {@code @AccessControl}, so they're deny-by-default: only an {@code ADMIN} viewer reads them, which
+ * every mention on the viewer's per-entity read access. Only the READER role is granted read on the
+ * catalogs/documents here, so a viewer without it is denied, which
  * is exactly the lever needed to prove the readable vs. degraded-to-plain-text split.
  */
 class MentionResolverTest {
+
+    enum TestRole implements RoleKey { READER }
 
     @Catalog(name = "MnCustomers")
     static class Customer extends CatalogObject {
@@ -76,7 +81,8 @@ class MentionResolverTest {
         insertCustomer(globex, "C-2", "Globex", null);
         insertInvoice(inv, "INV-42");
 
-        resolver = new MentionResolver(registry, new AccessService(registry), jdbi);
+        resolver = new MentionResolver(registry, new AccessService(registry, RoleGrants.of(TestRole.class)
+                .role(TestRole.READER, r -> r.read(Customer.class, Invoice.class))), jdbi);
     }
 
     @Test
@@ -163,7 +169,7 @@ class MentionResolverTest {
     }
 
     private static AccessSubject admin() {
-        return AccessSubject.user("root", java.util.Set.of("ADMIN"));
+        return AccessSubject.user("root", java.util.Set.of("READER"));
     }
 
     private static AccessSubject nobody() {

@@ -38,21 +38,43 @@ public class OnnoServicesAutoConfiguration {
                                          CommandRegistry commandRegistry,
                                          WebProperties webProperties,
                                          BatchRunner batchRunner) {
+        commandRegistry.requireKnownRoles(access.grants());
         return new CommandService(catalogQueryService, documentQueryService, access, commandRegistry,
                 webProperties, batchRunner);
     }
 
+    /**
+     * The application's grants when it declares none: {@link su.onno.access.RoleGrants#open()},
+     * every signed-in user may do everything. Declaring a {@code RoleGrants} bean replaces it and
+     * switches the application to deny by default.
+     */
     @Bean
-    public AccessService uiAccessService(MetadataRegistry registry, org.springframework.beans.factory.ObjectProvider<EntityAccessPolicy> policies) {
-        return new AccessService(registry, () -> policies.orderedStream().toList());
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+    public su.onno.access.RoleGrants roleGrants() {
+        return su.onno.access.RoleGrants.open();
+    }
+
+    /** Entity-level access; boot fails here on a grant that does not fit the model. */
+    @Bean
+    public AccessService uiAccessService(MetadataRegistry registry, su.onno.access.RoleGrants grants,
+                                         org.springframework.beans.factory.ObjectProvider<EntityAccessPolicy> policies) {
+        if (grants.isOpen()) {
+            org.slf4j.LoggerFactory.getLogger(AccessService.class).warn(
+                    "No RoleGrants bean: access control runs open, every signed-in user may read, write, post "
+                            + "and unpost every entity and holds every permission. Declare a RoleGrants bean to "
+                            + "switch to deny by default.");
+        } else {
+            org.slf4j.LoggerFactory.getLogger(AccessService.class).info("Access control: {}", grants);
+        }
+        return new AccessService(registry, grants, () -> policies.orderedStream().toList());
     }
 
     /** The validated record policies; boot fails here on an invalid {@code RecordAccessPolicy}. */
     @Bean
     public su.onno.access.RecordPolicies recordPolicies(
-            MetadataRegistry registry,
+            MetadataRegistry registry, su.onno.access.RoleGrants grants,
             org.springframework.beans.factory.ObjectProvider<su.onno.access.RecordAccessPolicy> policies) {
-        return new su.onno.access.RecordPolicies(registry, policies.orderedStream().toList());
+        return new su.onno.access.RecordPolicies(registry, policies.orderedStream().toList(), grants);
     }
 
     @Bean

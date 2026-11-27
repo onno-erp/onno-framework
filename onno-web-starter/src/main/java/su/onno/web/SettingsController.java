@@ -1,5 +1,6 @@
 package su.onno.web;
 
+import su.onno.access.CorePermissions;
 import su.onno.service.AccessService;
 import su.onno.metadata.ConstantDescriptor;
 import su.onno.metadata.MetadataRegistry;
@@ -23,8 +24,8 @@ import java.util.Map;
 /**
  * App settings backed by the framework's {@link su.onno.annotations.Constant}s. {@code GET} lists
  * every registered constant as {@code {name, type, value}} (the Java value type's simple name — the
- * client picks the control); {@code PUT} persists changes via {@link ConstantManager}. Admin-gated
- * — settings are app-wide.
+ * client picks the control); {@code PUT} persists changes via {@link ConstantManager}. Both need
+ * {@link CorePermissions#EDIT_SETTINGS} — settings are app-wide.
  */
 @RestController
 @RequestMapping("/api/settings")
@@ -42,7 +43,7 @@ public class SettingsController {
 
     @GetMapping
     public List<Map<String, Object>> list(Principal principal) {
-        requireAdmin(principal);
+        requireSettingsEditor(principal);
         if (registry.allConstants().size() > 500) throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                 "Settings exceed the 500-item metadata limit");
         return registry.allConstants().stream()
@@ -59,7 +60,7 @@ public class SettingsController {
 
     @PutMapping
     public void update(@RequestBody Map<String, Object> body, Principal principal) {
-        requireAdmin(principal);
+        requireSettingsEditor(principal);
         Map<String, ConstantDescriptor> byName = new LinkedHashMap<>();
         for (ConstantDescriptor d : registry.allConstants()) {
             byName.put(d.logicalName(), d);
@@ -72,9 +73,9 @@ public class SettingsController {
         });
     }
 
-    private void requireAdmin(Principal principal) {
-        if (!access.roles(principal).contains("ADMIN")) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Settings are administrator-only");
+    private void requireSettingsEditor(Principal principal) {
+        if (!access.has(principal, CorePermissions.EDIT_SETTINGS)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Settings need the settings.edit permission");
         }
     }
 

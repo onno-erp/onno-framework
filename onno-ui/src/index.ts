@@ -22,6 +22,7 @@ import { openRecord as openRecordImpl, useCommandPresentations as useCommandPres
 import { openRoute as openRouteImpl } from "./lib/navigation";
 import { links as linksImpl, type OnnoLink } from "./lib/links";
 import { useModel } from "./lib/model-store";
+import { holdsPermission, holdsRole } from "./lib/app-model";
 import { subscribeUiEvents as subscribeUiEventsImpl, useUiEvents as useUiEventsImpl } from "./hooks/use-ui-events";
 import { localeOutsideReact, translateOutsideReact } from "./lib/messages-outside-react";
 import type { CommandInputs, CommandResult } from "./lib/types";
@@ -29,7 +30,7 @@ import type {
   AggregateBuckets, AppDefinition, By, ConstantName, ConstantValue, InformationRecordOf, InformationRegisterName,
   InformationWhere, Measure, MeasureWhere, MovementWhere, NumericField, SettingProps, Where, CalendarProps, ChartProps, DocumentName, EntityListProps,
   EntityMapProps, EntityMutation, EntityName, EntityQuery, FieldOf, GaugeProps, KanbanProps, RecentRecordsProps,
-  RoleName, RecordPageLayoutProps, RecordFieldsProps, RecordLinesProps, SectionOf,
+  PermissionName, RoleName, RecordPageLayoutProps, RecordFieldsProps, RecordLinesProps, SectionOf,
   PagePath, RecordOf, RegisterName, SparklineProps, StatProps, TopField, ValuesOf,
 } from "./public-types";
 import { Stat as StatImpl } from "./components/widgets/stat";
@@ -90,10 +91,22 @@ export const links = linksImpl as {
 /** The business model as the signed-in user sees it, or null until loaded. */
 export { useModel };
 
-/** Whether the signed-in user holds any of these roles (false until the model loads). */
+/**
+ * Whether the signed-in user holds any of these roles, compared normalized (false until the model
+ * loads). No role passes implicitly.
+ */
 export function useHasRole(...roles: RoleName[]): boolean {
   const model = useModel();
-  return !!model && roles.some((r) => model.user.roles.includes(r));
+  return !!model && roles.length > 0 && holdsRole(model, roles);
+}
+
+/**
+ * Whether the signed-in user holds this permission (false until the model loads). True for every
+ * user of an app without role grants; the server enforces every permission regardless.
+ */
+export function useHasPermission(permission: PermissionName): boolean {
+  const model = useModel();
+  return !!model && holdsPermission(model, permission);
 }
 
 // ---- page building blocks ---------------------------------------------------------------------
@@ -224,7 +237,7 @@ export const useTurnover = data.useTurnover as <E extends RegisterName>(register
 export const useMovements = data.useMovements as <E extends RegisterName>(register: E, options?: { from?: string; to?: string; where?: MovementWhere<E> }) => EntityQuery<RecordOf<E>[]>;
 /** An information register's slice of last values: per dimension tuple, the record in force `at` (default now). */
 export const useInformationRegister = data.useInformationRegister as <N extends InformationRegisterName>(register: N, options?: { where?: InformationWhere<N>; at?: string }) => UseQueryResult<InformationRecordOf<N>[]>;
-/** One `@Constant` setting's value (administrators only, like the settings themselves). */
+/** One `@Constant` setting's value (holders of `settings.edit` only, like the settings themselves). */
 export const useConstant = data.useConstant as <N extends ConstantName>(name: N) => UseQueryResult<ConstantValue<N> | null | undefined>;
 /** Set `@Constant` values: `set.mutate({ "Store Name": "Books & Co" })`; every `useConstant` refreshes. */
 export const useSetConstants = data.useSetConstants as () => UseMutationResult<void, Error, { [N in ConstantName]?: ConstantValue<N> }>;

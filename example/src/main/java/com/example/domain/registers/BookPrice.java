@@ -1,7 +1,6 @@
 package com.example.domain.registers;
 
 import com.example.domain.catalogs.Book;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Dimension;
 import su.onno.annotations.InformationRegister;
 import su.onno.annotations.Resource;
@@ -14,7 +13,6 @@ import java.math.BigDecimal;
 
 /** Demonstration of dated values, independent of the price paid on an order. */
 @InformationRegister(name = "Book Prices", title = "Book prices", periodicity = Periodicity.DAY, context = "Catalog")
-@AccessControl(readRoles = {"MANAGER"})
 @Getter
 @Setter
 public class BookPrice extends InformationRecord {

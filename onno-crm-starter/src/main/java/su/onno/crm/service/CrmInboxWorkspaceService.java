@@ -29,6 +29,24 @@ public class CrmInboxWorkspaceService {
             if(!keys.add(definition.key())) throw new IllegalArgumentException("Duplicate inbox workspace key: "+definition.key());
         }
     }
+
+    /**
+     * As the other constructor, and checks at startup that every workspace's read and write roles
+     * are roles the application declares (or maps with {@code fromIdp}): a misspelled role would
+     * otherwise silently close the workspace to everyone.
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    public CrmInboxWorkspaceService(List<CrmInboxWorkspace> definitions, ConversationRepository conversations,
+                                    AccessService access, CrmWorkspaceService configuration, CrmContactService contacts,
+                                    CrmConnectionAccounts connectionAccounts,
+                                    org.springframework.beans.factory.ObjectProvider<su.onno.access.RoleGrants> grants) {
+        this(definitions, conversations, access, configuration, contacts, connectionAccounts);
+        var roleGrants = grants.getIfAvailable(su.onno.access.RoleGrants::open);
+        for(var workspace:this.definitions) {
+            roleGrants.requireRecognized("inbox workspace '"+workspace.key()+"' readRoles", workspace.readRoles());
+            roleGrants.requireRecognized("inbox workspace '"+workspace.key()+"' writeRoles", workspace.writeRoles());
+        }
+    }
     public void requireAccess(Principal principal, boolean write) {
         if(principal==null || definitions.stream().noneMatch(w->permitted(w,principal,write)))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Inbox workspace access required");
@@ -36,7 +54,8 @@ public class CrmInboxWorkspaceService {
     public boolean enabled(){return !definitions.isEmpty();}
     public boolean permitted(CrmInboxWorkspace workspace, Principal principal, boolean write) {
         var roles=access.roles(principal);
-        if(roles.contains("ADMIN"))return true;
+        // Only an explicit crm.administer grant opens every workspace (never an application without grants).
+        if(access.access(principal).granted(su.onno.crm.CrmPermissions.ADMINISTER))return true;
         return !Collections.disjoint(roles,workspace.readRoles()) && (!write || !Collections.disjoint(roles,workspace.writeRoles()));
     }
     public List<CrmInboxWorkspace> available(Principal principal){return definitions.stream().filter(w->permitted(w,principal,false)).toList();}

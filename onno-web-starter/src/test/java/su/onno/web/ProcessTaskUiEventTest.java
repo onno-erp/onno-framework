@@ -13,18 +13,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ProcessTaskUiEventTest {
 
     @Test
-    void routesOnlyToCandidatesAndAdmins() {
+    void routesOnlyToCandidatesAndProcessAdministrators() {
         Set<String> users = Set.of("alex");
         Set<String> roles = Set.of("MANAGER");
 
         assertThat(EventPublisher.canReceiveProcessTasks(
-                Set.of("VIEWER"), "alex", users, roles)).isTrue();
+                false, Set.of("VIEWER"), "alex", users, roles)).isTrue();
         assertThat(EventPublisher.canReceiveProcessTasks(
-                Set.of("MANAGER"), "mara", users, roles)).isTrue();
+                false, Set.of("MANAGER"), "mara", users, roles)).isTrue();
+        // processes.administer, not a role name, widens the audience.
         assertThat(EventPublisher.canReceiveProcessTasks(
-                Set.of("ADMIN"), "root", users, roles)).isTrue();
+                true, Set.of("VIEWER"), "root", users, roles)).isTrue();
         assertThat(EventPublisher.canReceiveProcessTasks(
-                Set.of("VIEWER"), "olivia", users, roles)).isFalse();
+                false, Set.of("ADMIN"), "root", users, roles)).isFalse();
+        assertThat(EventPublisher.canReceiveProcessTasks(
+                false, Set.of("VIEWER"), "olivia", users, roles)).isFalse();
     }
 
     @Test

@@ -2,14 +2,15 @@ package su.onno.process;
 
 import java.util.Arrays;
 import java.util.LinkedHashSet;
-import java.util.Locale;
 import java.util.Set;
+import su.onno.access.AccessSubject;
 import su.onno.types.Ref;
 
 /**
  * Candidate stable identities and roles allowed to claim a human task.
  *
- * <p>An empty assignment is deliberately not public: only {@code ADMIN} can operate it. Use
+ * <p>An empty assignment is deliberately not public: only a process administrator
+ * ({@link ProcessActor#administrator()}, from {@code processes.administer}) can operate it. Use
  * {@link #roles} or {@link #identities} to make the work visible to business users.</p>
  */
 public record TaskAssignment(Set<ProcessActorId> actors, Set<String> roles) {
@@ -17,8 +18,8 @@ public record TaskAssignment(Set<ProcessActorId> actors, Set<String> roles) {
     public TaskAssignment {
         actors = actors == null ? Set.of() : Set.copyOf(actors);
         roles = roles == null ? Set.of() : roles.stream()
-                .filter(role -> role != null && !role.isBlank())
-                .map(TaskAssignment::normalizeRole)
+                .map(AccessSubject::normalizeRole)
+                .filter(role -> !role.isEmpty())
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
@@ -46,7 +47,7 @@ public record TaskAssignment(Set<ProcessActorId> actors, Set<String> roles) {
     }
 
     public boolean allows(ProcessActor actor) {
-        if (actor.roles().contains("ADMIN")) {
+        if (actor.administrator()) {
             return true;
         }
         return actors.contains(actor.id())
@@ -60,10 +61,5 @@ public record TaskAssignment(Set<ProcessActorId> actors, Set<String> roles) {
                     .map(String::trim).forEach(result::add);
         }
         return Set.copyOf(result);
-    }
-
-    private static String normalizeRole(String role) {
-        String normalized = role.trim().toUpperCase(Locale.ROOT);
-        return normalized.startsWith("ROLE_") ? normalized.substring(5) : normalized;
     }
 }

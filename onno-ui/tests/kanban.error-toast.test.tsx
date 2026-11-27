@@ -38,7 +38,8 @@ const response = (status: number, body: unknown) => new Response(JSON.stringify(
 
 // The board resolves `entity` (and the viewer's write right) from the loaded model.
 setModel({
-  user: { username: "u", displayName: "U", avatarUrl: "", roles: [] },
+  user: { username: "u", displayName: "U", avatarUrl: "", roles: [], permissions: [], unrestricted: false },
+  roles: [],
   features: { comments: false, notifications: false },
   informationRegisters: [],
   constants: [],

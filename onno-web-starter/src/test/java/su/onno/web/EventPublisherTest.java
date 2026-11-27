@@ -54,7 +54,7 @@ class EventPublisherTest {
 
     private EventPublisher publisherWith(FailingSseEmitter emitter) {
         EventPublisher publisher =
-                new EventPublisher(new AccessService(null), false, () -> emitter);
+                new EventPublisher(new AccessService(new su.onno.metadata.MetadataRegistry()), false, () -> emitter);
         publishers.add(publisher);
         return publisher;
     }

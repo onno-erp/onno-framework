@@ -1,7 +1,6 @@
 package su.onno.service;
 
 import su.onno.access.AccessSubject;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.annotations.Document;
@@ -49,13 +48,11 @@ class TemporalRoundTripPostgresIT {
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
 
     @Catalog(name = "Pg Episodes", autoNumber = false)
-    @AccessControl(readRoles = "ADMIN", writeRoles = "ADMIN")
     static class PgEpisode extends CatalogObject {
         @Attribute private LocalDateTime observedAt;
     }
 
     @Document(name = "Pg Events", numberPrefix = "PE-")
-    @AccessControl(readRoles = "ADMIN", writeRoles = "ADMIN")
     static class PgEvent extends DocumentObject {
         @Attribute private LocalDateTime startsAt;
 

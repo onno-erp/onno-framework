@@ -23,7 +23,6 @@ import java.util.UUID;
  * @param logicalName     the registered logical name
  * @param tableName       the main table (movements for an accumulation register)
  * @param totalsTableName the balance totals table of an accumulation register, else {@code null}
- * @param readRoles       the entity-level read roles
  * @param fields          field name to scope-able field
  */
 public record ScopedEntity(
@@ -32,7 +31,6 @@ public record ScopedEntity(
         String logicalName,
         String tableName,
         String totalsTableName,
-        List<String> readRoles,
         Map<String, Field> fields
 ) {
 
@@ -78,7 +76,7 @@ public record ScopedEntity(
         }
         addAttributes(fields, d.attributes());
         return new ScopedEntity(d.javaClass(), Kind.CATALOG, d.logicalName(), d.tableName(), null,
-                d.readRoles(), Collections.unmodifiableMap(fields));
+                Collections.unmodifiableMap(fields));
     }
 
     static ScopedEntity of(DocumentDescriptor d) {
@@ -89,21 +87,21 @@ public record ScopedEntity(
         fields.put("posted", new Field("posted", "_posted", Boolean.class, null));
         addAttributes(fields, d.attributes());
         return new ScopedEntity(d.javaClass(), Kind.DOCUMENT, d.logicalName(), d.tableName(), null,
-                d.readRoles(), Collections.unmodifiableMap(fields));
+                Collections.unmodifiableMap(fields));
     }
 
     static ScopedEntity of(AccumulationRegisterDescriptor d) {
         Map<String, Field> fields = new LinkedHashMap<>();
         addAttributes(fields, d.dimensions());
         return new ScopedEntity(d.javaClass(), Kind.ACCUMULATION_REGISTER, d.logicalName(), d.tableName(),
-                d.totalsTableName(), d.readRoles(), Collections.unmodifiableMap(fields));
+                d.totalsTableName(), Collections.unmodifiableMap(fields));
     }
 
     static ScopedEntity of(InformationRegisterDescriptor d) {
         Map<String, Field> fields = new LinkedHashMap<>();
         addAttributes(fields, d.dimensions());
         return new ScopedEntity(d.javaClass(), Kind.INFORMATION_REGISTER, d.logicalName(), d.tableName(),
-                null, d.readRoles(), Collections.unmodifiableMap(fields));
+                null, Collections.unmodifiableMap(fields));
     }
 
     private static void addAttributes(Map<String, Field> fields, List<AttributeDescriptor> attributes) {

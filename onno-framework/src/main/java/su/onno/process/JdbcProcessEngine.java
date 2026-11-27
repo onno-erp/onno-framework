@@ -203,7 +203,10 @@ public final class JdbcProcessEngine implements ProcessEngine {
     }
 
     private String actorContext(ProcessActor actor) {
-        return actor.id().value() + ":" + actor.roles().stream().sorted().toList();
+        // The administrator flag widens what the actor sees, so it is part of the cursor context:
+        // a cursor minted for an administrator does not resume for the same login without it.
+        return actor.id().value() + ":" + actor.roles().stream().sorted().toList()
+                + (actor.administrator() ? ":administrator" : "");
     }
 
     /**
@@ -1703,7 +1706,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
     }
 
     private static boolean isAdmin(ProcessActor actor) {
-        return actor.roles().contains("ADMIN");
+        return actor.administrator();
     }
 
     private static ProcessActorId actorId(String value) {

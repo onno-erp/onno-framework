@@ -1,5 +1,8 @@
 package su.onno.web;
 
+import su.onno.access.RoleGrants;
+import su.onno.access.RoleKey;
+
 import su.onno.service.AccessService;
 import su.onno.service.AggregateBuckets;
 import su.onno.service.CatalogQueryService;
@@ -11,7 +14,6 @@ import su.onno.access.AccessSubject;
 import su.onno.access.RecordAccessPolicy;
 import su.onno.access.RecordPolicies;
 import su.onno.access.RecordScope;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.annotations.Document;
@@ -53,17 +55,21 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class WhereEndpointsTest {
 
+    enum TestRole implements RoleKey { CLERK, CUSTOMER }
+
+    private static final RoleGrants GRANTS = RoleGrants.of(TestRole.class)
+            .role(TestRole.CLERK, r -> r.write(Client.class).post(Order.class).unpost(Order.class))
+            .role(TestRole.CUSTOMER, r -> r.write(Client.class));
+
     @Enumeration(name = "WhereStatuses")
     enum Status { OPEN, CLOSED }
 
-    @AccessControl(readRoles = {"CLERK", "CUSTOMER"})
     @Catalog(name = "WhereClients")
     static class Client extends CatalogObject {
         @Attribute(length = 40)
         private String tier;
     }
 
-    @AccessControl(readRoles = "CLERK")
     @Document(name = "WhereOrders")
     static class Order extends DocumentObject {
         @Attribute(precision = 15, scale = 2)
@@ -108,7 +114,7 @@ class WhereEndpointsTest {
         RecordScopeCompiler scopes = new RecordScopeCompiler(new RecordPolicies(registry, List.of(
                 RecordAccessPolicy.forCatalog(Client.class).appliesTo("CUSTOMER")
                         .read(RecordScope.or(RecordScope.eq("tier", "gold"), RecordScope.eq("tier", "silver"))))));
-        AccessService access = new AccessService(registry);
+        AccessService access = new AccessService(registry, GRANTS);
         CatalogQueryService catalogQuery = new CatalogQueryService(registry, jdbi, scopes, access);
         DocumentQueryService documentQuery = new DocumentQueryService(registry, jdbi, scopes, access);
         list = new ListDataController(catalogQuery, documentQuery, access, new CommandRegistry(List.of()));

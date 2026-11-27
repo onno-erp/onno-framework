@@ -24,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -42,17 +43,28 @@ import java.util.UUID;
 public final class RecordPolicies {
 
     private final MetadataRegistry registry;
+    private final RoleGrants grants;
     private final Map<Class<?>, List<RecordAccessPolicy>> byEntity;
     private final Map<Class<?>, ScopedEntity> entities = new HashMap<>();
     private final Map<String, ScopedEntity> entitiesByLogicalName = new HashMap<>();
 
     /** No policies: every subject is unscoped. */
     public static RecordPolicies none(MetadataRegistry registry) {
-        return new RecordPolicies(registry, List.of());
+        return new RecordPolicies(registry, List.of(), RoleGrants.open());
     }
 
+    /** Policies validated against an application without grants ({@link RoleGrants#open()}). */
     public RecordPolicies(MetadataRegistry registry, Collection<RecordAccessPolicy> policies) {
+        this(registry, policies, RoleGrants.open());
+    }
+
+    /**
+     * Policies validated against the application's {@code grants}: a policy whose {@code appliesTo}
+     * roles may not read its entity can never narrow anything and fails startup as dead.
+     */
+    public RecordPolicies(MetadataRegistry registry, Collection<RecordAccessPolicy> policies, RoleGrants grants) {
         this.registry = registry;
+        this.grants = Objects.requireNonNull(grants, "grants");
         for (CatalogDescriptor d : registry.allCatalogs()) index(ScopedEntity.of(d));
         for (DocumentDescriptor d : registry.allDocuments()) index(ScopedEntity.of(d));
         for (AccumulationRegisterDescriptor d : registry.allRegisters()) index(ScopedEntity.of(d));
@@ -110,7 +122,7 @@ public final class RecordPolicies {
         if (subject == null) {
             throw new IllegalArgumentException("AccessSubject is required; pass AccessSubject.system() for trusted code");
         }
-        if (subject.superuser()) return RecordScope.all();
+        if (subject.trusted()) return RecordScope.all();
         List<RecordAccessPolicy> policies = byEntity.get(type);
         if (policies == null) return RecordScope.all();
         List<RecordScope> scopes = new ArrayList<>();
@@ -129,7 +141,7 @@ public final class RecordPolicies {
 
     /** Whether any policy restricts {@code subject} anywhere — an "external user". */
     public boolean restricts(AccessSubject subject) {
-        if (subject.superuser()) return false;
+        if (subject.trusted()) return false;
         for (Class<?> type : byEntity.keySet()) {
             if (isScoped(type, subject, AccessMode.READ) || isScoped(type, subject, AccessMode.WRITE)) {
                 return true;
@@ -144,7 +156,7 @@ public final class RecordPolicies {
      * is omitted (the write scope then rejects the record, failing closed).
      */
     public Map<String, Object> defaultsFor(Class<?> type, AccessSubject subject) {
-        if (subject.superuser()) return Map.of();
+        if (subject.trusted()) return Map.of();
         Map<String, Object> values = new LinkedHashMap<>();
         for (RecordAccessPolicy p : policiesFor(type)) {
             if (!p.appliesTo(subject) || p.isExempt(subject)) continue;
@@ -300,12 +312,22 @@ public final class RecordPolicies {
                     }
                     case ANY -> { }
                 }
+                for (String role : p.appliesToRoles()) {
+                    if (!grants.recognizes(role)) {
+                        problems.add(where + ": appliesTo role " + role + " is neither a declared role nor a fromIdp name");
+                    }
+                }
+                for (String role : p.exemptRoleSet()) {
+                    if (!grants.recognizes(role)) {
+                        problems.add(where + ": exemptRoles role " + role + " is neither a declared role nor a fromIdp name");
+                    }
+                }
                 if (p.appliesToRoles().isEmpty()) {
                     problems.add(where + ": appliesTo(...) names no role, so the policy applies to nobody");
-                } else if (!grantsRead(e, p.appliesToRoles())) {
+                } else if (!grants.resolve(p.appliesToRoles()).can(e.type(), EntityRight.READ)) {
                     problems.add(where + ": none of appliesTo " + p.appliesToRoles()
-                            + " may read " + e.logicalName() + " (entity readRoles " + e.readRoles()
-                            + "), so the policy is dead");
+                            + " is granted read on " + e.logicalName()
+                            + " in RoleGrants, so the policy is dead");
                 }
                 if (p.readScope() == null) {
                     problems.add(where + ": read(...) scope is required");
@@ -339,13 +361,6 @@ public final class RecordPolicies {
             throw new IllegalStateException("Invalid record access policies:\n  - "
                     + String.join("\n  - ", new LinkedHashSet<>(problems)));
         }
-    }
-
-    private static boolean grantsRead(ScopedEntity e, Set<String> roles) {
-        for (String r : e.readRoles()) {
-            if (roles.contains(AccessSubject.normalizeRole(r))) return true;
-        }
-        return false;
     }
 
     private void validateScope(ScopedEntity e, RecordScope scope, String where, List<String> problems) {

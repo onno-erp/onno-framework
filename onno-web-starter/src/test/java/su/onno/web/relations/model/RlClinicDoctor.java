@@ -1,6 +1,5 @@
 package su.onno.web.relations.model;
 
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.model.CatalogObject;
@@ -12,7 +11,6 @@ import java.util.List;
 
 /** The join entity: a doctor works at a clinic in a role. */
 @Catalog(name = "RlClinicDoctors")
-@AccessControl(readRoles = {"WRITER", "LIMITED"}, writeRoles = {"WRITER", "LIMITED"})
 public class RlClinicDoctor extends CatalogObject implements Validated {
     @Attribute(required = true)
     private Ref<RlClinic> clinic;

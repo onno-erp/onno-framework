@@ -20,7 +20,8 @@ set and business logic branches on constants.
    `displayName`, `@EnumLabel`, and the UI entity customization's `fields[f].label` (the only way to
    relabel `code`/`description`).
 3. Use `Ref<T>` for links to catalogs/documents. Do not embed target objects.
-4. Add `@AccessControl`; entities without explicit roles are deny-by-default.
+4. Grant the catalog to roles in the app's `RoleGrants` bean (`read`/`write(Customer.class)`); once
+   grants are declared, an entity no role is granted is invisible to everyone.
 5. Every readable catalog gets a default list and form, REST endpoints and MCP tools from metadata
    and RBAC alone. Customize its presentation in `src/main/ui/entities/` (`onno-ui-entities`) and
    place it in `navigation` (`onno-ui-pages`) only where the defaults don't fit.

@@ -56,11 +56,38 @@ property the starter exposes. Everything else is derived from your annotated met
   scans register repositories separately. Register repositories are register-shaped (append-only
   movement records) rather than aggregate-shaped, so they need their own factory.
 
+### Access: `RoleGrants`
+
+`OnnoServicesAutoConfiguration` builds `AccessService` from the application's `RoleGrants` bean —
+roles as an enum implementing `RoleKey`, each granted entity rights (`read`/`write`/`post`/`unpost`)
+and capability `Permission`s; there is no superuser. Declare it to switch the app to deny by default:
+
+```java
+enum AppRole implements RoleKey { MANAGER, IT }
+
+@Bean
+RoleGrants roleGrants() {
+    return RoleGrants.of(AppRole.class)
+            .role(AppRole.MANAGER, r -> r.read(Customer.class).post(Order.class))
+            .role(AppRole.IT, r -> r.permit(AuthPermissions.MANAGE_USERS).fromIdp("erp-admins"));
+}
+```
+
+Without one, a `RoleGrants.open()` bean is registered and startup logs a warning: every signed-in
+user may do everything, except the explicit-only `periodClose.override`, `processes.administer` and
+`crm.administer`. Startup fails on a grant for a class that is not a registered entity, on a
+role string (a static command's `.roles(...)`, a record policy's `appliesTo`/`exemptRoles`) that
+names no declared role or `fromIdp` name, or on
+post/unpost granted on a non-document. Record-level `RecordAccessPolicy` beans narrow the grants
+further; see [docs/RECORD_ACCESS_POLICIES.md](../docs/RECORD_ACCESS_POLICIES.md).
+
 ### TypeScript model for the UI
 
 `su.onno.spring.codegen.TypeScriptModelGenerator` writes `model.gen.ts` — the entities, their
 fields and record types, enumerations (values and `@EnumLabel` labels), information registers,
-constants and `@AccessControl` roles — for an app's React UI. The `su.onno.ui` Gradle plugin
+constants, the roles of the app's `RoleKey` enums (`OnnoRoles`) and the `public static final`
+`Permission` constants of the framework modules on the classpath and of the scanned packages
+(`OnnoPermissions`) — for an app's React UI. The `su.onno.ui` Gradle plugin
 ([onno-ui-gradle-plugin](../onno-ui-gradle-plugin/README.md)) runs it as `generateUiModel` before
 every UI build.
 

@@ -48,7 +48,7 @@ class ServiceLayerArchitectureTest {
                 .that(arePublicServiceOperations())
                 .should(takeAnAccessSubject())
                 .because("every su.onno.service query/command method takes the caller's AccessSubject "
-                        + "so @AccessControl and RecordAccessPolicy scopes apply: add an AccessSubject "
+                        + "so RoleGrants and RecordAccessPolicy scopes apply: add an AccessSubject "
                         + "parameter (request code passes the resolved subject, trusted background code "
                         + "AccessSubject.system()). A method that reads no records belongs in "
                         + "METADATA_ONLY with that justification")

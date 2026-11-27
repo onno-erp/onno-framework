@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Links a signed-in login to its Employee row by email, so the person can be greeted, shown as a
  * comment author and routed tasks. The lookup reads the row directly, bypassing
- * {@code @AccessControl}.
+ * the role grants.
  */
 @Configuration
 public class IdentityConfiguration {

@@ -1,7 +1,6 @@
 package su.onno.service;
 
 import su.onno.access.AccessSubject;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.annotations.Document;
@@ -43,11 +42,9 @@ class DocumentWidgetRefFilterPostgresIT {
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
 
     @Catalog(name = "Pg Databases")
-    @AccessControl(readRoles = "ADMIN", writeRoles = "ADMIN")
     public static class PgDatabase extends CatalogObject { }
 
     @Document(name = "Pg Samples", numberPrefix = "S-")
-    @AccessControl(readRoles = "ADMIN", writeRoles = "ADMIN")
     public static class PgSample extends DocumentObject {
         @Attribute private Ref<PgDatabase> database;
         @Attribute private BigDecimal events;

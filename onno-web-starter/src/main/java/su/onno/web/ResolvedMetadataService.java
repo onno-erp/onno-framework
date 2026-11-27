@@ -38,8 +38,6 @@ public class ResolvedMetadataService {
         map.put("autoNumber", d.autoNumber());
         map.put("codePrefix", d.codePrefix());
         map.put("context", d.context());
-        map.put("readRoles", d.readRoles());
-        map.put("writeRoles", d.writeRoles());
         map.put("attributes", describeAttributes(d.attributes()));
         map.put("tabularSections", describeSections(d.tabularSections()));
         map.put("systemColumns", List.of(
@@ -58,10 +56,6 @@ public class ResolvedMetadataService {
         map.put("autoNumber", d.autoNumber());
         map.put("numberPrefix", d.numberPrefix());
         map.put("context", d.context());
-        map.put("readRoles", d.readRoles());
-        map.put("writeRoles", d.writeRoles());
-        map.put("postRoles", d.postRoles());
-        map.put("unpostRoles", d.unpostRoles());
         // Whether this document type can be posted (implements Postable). The UI uses it to
         // decide whether to offer Post / Re-post / Unpost actions; a non-postable document
         // only ever gets a plain Save.
@@ -106,8 +100,6 @@ public class ResolvedMetadataService {
         map.put("allowNegative", d.allowNegative());
         map.put("postingOrder", d.postingOrder().name());
         map.put("context", d.context());
-        map.put("readRoles", d.readRoles());
-        map.put("writeRoles", d.writeRoles());
         map.put("dimensions", describeAttributes(d.dimensions()));
         map.put("resources", describeAttributes(d.resources()));
         return map;

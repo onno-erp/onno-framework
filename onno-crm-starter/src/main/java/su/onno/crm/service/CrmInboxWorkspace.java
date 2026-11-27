@@ -38,7 +38,8 @@ public record CrmInboxWorkspace(String key, String label, Set<String> readRoles,
             throw new IllegalArgumentException("Inbox workspaces require a stable key and label");
         if (facets == null || facets.stream().anyMatch(Objects::isNull)) throw new IllegalArgumentException("Facets must not be null");
         facets = uniqueFacets(List.copyOf(facets));
-        readRoles = Set.copyOf(readRoles); writeRoles = Set.copyOf(writeRoles);
+        // Role names compare normalized, like every role list ("manager" matches MANAGER).
+        readRoles = normalized(readRoles); writeRoles = normalized(writeRoles);
         if (readRoles.isEmpty() || selection == null || configure == null) throw new IllegalArgumentException("Workspace access and selection must be explicit");
     }
     public CrmInboxWorkspace(String key, String label, Set<String> readRoles, Set<String> writeRoles,
@@ -143,6 +144,12 @@ public record CrmInboxWorkspace(String key, String label, Set<String> readRoles,
         var next = new ArrayList<>(facets);
         next.add(facet);
         return new CrmInboxWorkspace(key, label, readRoles, writeRoles, selection, configure, next);
+    }
+
+    /** Role names normalized by {@link su.onno.access.AccessSubject#normalizeRole}. */
+    private static Set<String> normalized(Set<String> roles) {
+        return roles.stream().map(su.onno.access.AccessSubject::normalizeRole)
+                .filter(r -> !r.isEmpty()).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     /** Facet keys must not collide with each other. */

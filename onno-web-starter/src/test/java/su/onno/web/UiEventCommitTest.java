@@ -21,7 +21,7 @@ class UiEventCommitTest {
         JdbcTemplate jdbc = new JdbcTemplate(source);
         jdbc.execute("CREATE TABLE conversations (id INT PRIMARY KEY)");
         List<Integer> visibleCounts = new ArrayList<>();
-        EventPublisher publisher = new EventPublisher(new AccessService(null)) {
+        EventPublisher publisher = new EventPublisher(new AccessService(new su.onno.metadata.MetadataRegistry())) {
             @Override public void publish(String type, String entityType, String entityName, Object id, String naturalKey) {
                 // Use a separate connection, just like the browser's concurrent list request.
                 try (var connection = source.getConnection(); var statement = connection.createStatement();

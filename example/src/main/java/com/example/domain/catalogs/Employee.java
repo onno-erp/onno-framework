@@ -1,7 +1,6 @@
 package com.example.domain.catalogs;
 
 import com.example.domain.enumerations.Position;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.model.CatalogObject;
@@ -14,12 +13,11 @@ import lombok.Setter;
  * {@code Employee} row by {@code email} (see {@link com.example.IdentityConfiguration}), so the
  * person can be greeted and shown as a comment author, and an order can be assigned to them.
  *
- * <p>Writing employees is ADMIN-only — {@code @AccessControl} grants MANAGER read (so the order
- * "Assigned to" picker works) but reserves writes for ADMIN. The human label is the inherited
- * {@code description} (the person's name).</p>
+ * <p>Writing employees is ADMIN-only — the role grants ({@link com.example.access.AccessConfiguration})
+ * give MANAGER read (so the order "Assigned to" picker works) but reserve writes for ADMIN. The
+ * human label is the inherited {@code description} (the person's name).</p>
  */
 @Catalog(name = "Employees", codePrefix = "E-", context = "People")
-@AccessControl(readRoles = {"MANAGER", "ADMIN"}, writeRoles = {"ADMIN"})
 @Getter
 @Setter
 public class Employee extends CatalogObject {

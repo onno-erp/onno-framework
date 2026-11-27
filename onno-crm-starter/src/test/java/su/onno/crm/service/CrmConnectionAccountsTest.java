@@ -34,7 +34,7 @@ class CrmConnectionAccountsTest {
     @Test void ownershipSurvivesRecreatingTheServiceAndHiddenInboxesApplyToSingleAndBatchReads() {
         var personal=accounts.create("gmail",su.onno.crm.service.CrmConnectionAccounts.Scope.PERSONAL,"Private",alice);UUID inbox=UUID.randomUUID();accounts.bindInbox(personal.id(),inbox);
         var c=new Conversation();c.setId(UUID.randomUUID());c.setCustomer(UUID.randomUUID());c.setInbox(su.onno.types.Ref.of(Inbox.class,inbox));
-        var access=mock(AccessService.class);when(access.roles(any())).thenReturn(Set.of("ADMIN"));
+        var access=su.onno.crm.TestBindings.withGrants(mock(AccessService.class));when(access.roles(any())).thenReturn(Set.of("ADMIN"));
         var contacts=mock(CrmContactService.class);when(contacts.canRead(any(),any())).thenReturn(true);when(contacts.readable(any(),any())).thenReturn(Set.of(c.getCustomer()));
         var repository=mock(ConversationRepository.class);when(repository.findActiveById(c.getId())).thenReturn(Optional.of(c));
         var service=new CrmInboxWorkspaceService(List.of(new CrmInboxWorkspace("all","All",Set.of("ADMIN"),row->true)),repository,access,mock(CrmWorkspaceService.class),contacts,accounts);
@@ -47,12 +47,11 @@ class CrmConnectionAccountsTest {
         }
     }
     @Test void genericPolicyClosesCrmCatalogsToAdministratorsOnlyWhenPersonalAccountsAreEnabled() {
-        var closed=new su.onno.crm.OnnoCrmAutoConfiguration().crmWorkspaceGenericAccess(CrmFeatures.defaults().withPersonalAccounts(true));
-        assertThat(closed.includesAdministrators()).isTrue();
+        var closed=new su.onno.crm.OnnoCrmAutoConfiguration().crmWorkspaceGenericAccess(CrmFeatures.defaults().withPersonalAccounts(true), su.onno.crm.TestBindings.GRANTS);
         for(String catalog:List.of("crmconversations","crmconversationmessages","crmcontactidentities","crminboxes"))
             assertThat(closed.allows(Set.of("ADMIN"),"catalog",catalog,false)).isFalse();
         assertThat(closed.allows(Set.of("ADMIN"),"catalog","contacts",false)).isTrue();
-        var open=new su.onno.crm.OnnoCrmAutoConfiguration().crmWorkspaceGenericAccess(CrmFeatures.defaults());
+        var open=new su.onno.crm.OnnoCrmAutoConfiguration().crmWorkspaceGenericAccess(CrmFeatures.defaults(), su.onno.crm.TestBindings.GRANTS);
         assertThat(open.allows(Set.of("ADMIN"),"catalog","crm_conversations",false)).isTrue();
         assertThat(open.allows(Set.of("CRM_AGENT"),"catalog","crm_conversations",false)).isFalse();
     }

@@ -65,14 +65,14 @@ public final class OnnoRules {
             "su.onno.annotations.Constant",
             "su.onno.annotations.Enumeration");
 
-    /** Unscoped persistence: typed repositories ignore {@code @AccessControl} and record policies. */
+    /** Unscoped persistence: typed repositories ignore the {@code RoleGrants} entity grants and record policies. */
     static final List<String> UNSCOPED_REPOSITORIES = List.of(
             "su.onno.repository.CatalogRepository",
             "su.onno.repository.DocumentRepository",
             "su.onno.repository.RegisterRepository",
             "su.onno.repository.InformationRegisterRepository");
 
-    /** Trusted posting entry points: they do not check {@code postRoles}/{@code unpostRoles}. */
+    /** Trusted posting entry points: they do not check the post/unpost grants of {@code RoleGrants}. */
     static final List<String> TRUSTED_POSTING = List.of(
             "su.onno.posting.PostingService",
             "su.onno.posting.PostingEngine");
@@ -127,7 +127,7 @@ public final class OnnoRules {
             .that().areMetaAnnotatedWith(CONTROLLER)
             .should().dependOnClassesThat(isAnyOf(UNSCOPED_REPOSITORIES).or(isAnyOf(TRUSTED_POSTING)))
             .because("typed onno repositories and PostingService are unscoped: they ignore "
-                    + "@AccessControl, RecordAccessPolicy and postRoles/unpostRoles. Serve requests "
+                    + "the RoleGrants entity and post/unpost grants and RecordAccessPolicy. Serve requests "
                     + "through the su.onno.service query/command services with the request's "
                     + "AccessSubject (or a Commands<E> bean); if custom code must use a repository, "
                     + "move it into a service that first calls "

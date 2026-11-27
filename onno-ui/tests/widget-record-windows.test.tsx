@@ -37,7 +37,7 @@ beforeEach(() => {
   queryClient.clear();
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
-  setModel({ user: { username: "u", displayName: "U", avatarUrl: "", roles: [] },
+  setModel({ user: { username: "u", displayName: "U", avatarUrl: "", roles: [], permissions: [], unrestricted: false }, roles: [],
     features: { comments: false, notifications: false }, informationRegisters: [], constants: [],
     entities: ["visits", "empty"].map(name => ({ kind: "documents" as const, name,
       logicalName: name, title: name, context: "", route: `/documents/${name}`, canWrite: false })) });

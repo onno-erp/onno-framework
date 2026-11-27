@@ -80,7 +80,7 @@ Several beans for one entity merge; the first declaring a key wins.
 | `title(row -> …)` | Per-record title (`"→ Shipped"`, `"Resume"`/`"Suspend"`). |
 | `description(String)` | One or two sentences: the MCP tool description and UI tooltip. Write it for an AI agent. |
 | `group(String)` | Semantic grouping; the UI shows commands sharing a group as one submenu (`"Change status"`). |
-| `roles(String...)` | Any-of role gate on top of entity write access (`ADMIN` always passes). |
+| `roles(String...)` | Any-of role gate on top of entity write access, compared normalized; no role passes implicitly. |
 | `availableWhen(row -> …)` | Offered and runnable only where true; elsewhere not listed and rejected. |
 | `enabledWhen(row -> …)` | Listed but disabled where false. |
 | `input(key, i -> …)` | A scalar input: `text()` (default), `longText()`, `date()` (ISO), `number()`, `oneOf("A", "B")`, `reference(Supplier.class)` (a record id), `defaultValue(…)`, `required()`, `title(…)`. |

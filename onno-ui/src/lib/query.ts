@@ -265,7 +265,7 @@ export function useInformationRegister(register: string, options: { where?: Wher
   });
 }
 
-/** The settings query: every `@Constant` with its value (administrators only, like the endpoint). */
+/** The settings query: every `@Constant` with its value (`settings.edit` only, like the endpoint). */
 export const settingsKey = ["onno", "settings"] as const;
 
 /** One `@Constant`'s value, live across `Setting` editors and `useSetConstant`. */

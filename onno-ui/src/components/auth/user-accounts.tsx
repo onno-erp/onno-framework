@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { Copy, KeyRound, LogOut, Plus, UserRoundCheck, UserRoundX } from "lucide-react";
 import { api, ApiError } from "../../lib/api";
 import { notifyError } from "../../lib/notify-error";
+import { normalizeRole } from "../../lib/app-model";
+import { useModel } from "../../lib/model-store";
 import type { UserAccountView } from "../../lib/types";
 import { Boundary } from "../pages/boundary";
 import { toast } from "../ui/toast";
@@ -21,9 +23,10 @@ const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString() : "�
 
 /**
  * Account administration for onno.auth.mode=database — `<UserAccounts />`. Lists
- * accounts and lets an ADMIN create one (with a generated one-time password), change roles,
- * disable/enable, reset the password and sign an account out everywhere. Every command goes
- * through /api/auth/users, which enforces ADMIN and the last-administrator guard server-side.
+ * accounts and lets a holder of `users.manage` create one (with a generated one-time password),
+ * change roles (offering the roles the app declares), disable/enable, reset the password and sign
+ * an account out everywhere. Every command goes through /api/auth/users, which enforces
+ * `users.manage` and the last-manager guard server-side.
  */
 export function UserAccounts({ title, hint }: UserAccountsProps) {
   return (
@@ -58,7 +61,7 @@ function UserAccountsBody({ title, hint }: UserAccountsProps) {
           status === 404
             ? "Account management needs onno.auth.mode=database."
             : status === 403
-              ? "Only administrators can manage accounts."
+              ? "Managing accounts needs the users.manage permission."
               : e instanceof Error
                 ? e.message
                 : String(e)
@@ -68,9 +71,13 @@ function UserAccountsBody({ title, hint }: UserAccountsProps) {
 
   useEffect(load, [load]);
 
+  // The roles the app declares (its RoleKey enum), plus any an account already holds — normalized,
+  // so an account stored before roles were upper-cased ("manager") does not offer MANAGER twice.
+  const declaredRoles = useModel()?.roles;
   const knownRoles = useMemo(
-    () => Array.from(new Set(["ADMIN", ...(accounts ?? []).flatMap((a) => a.roles)])).sort(),
-    [accounts]
+    () => Array.from(new Set([...(declaredRoles ?? []), ...(accounts ?? []).flatMap((a) => a.roles)]
+      .map(normalizeRole).filter(Boolean))).sort(),
+    [accounts, declaredRoles]
   );
 
   const run = async (label: string, action: () => Promise<unknown>) => {

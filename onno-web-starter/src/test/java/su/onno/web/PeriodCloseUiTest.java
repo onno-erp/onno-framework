@@ -7,7 +7,9 @@ import su.onno.service.DocumentCommandService;
 import su.onno.service.DocumentQueryService;
 import su.onno.service.WebProperties;
 import su.onno.access.AccessSubject;
-import su.onno.annotations.AccessControl;
+import su.onno.access.CorePermissions;
+import su.onno.access.RoleGrants;
+import su.onno.access.RoleKey;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Document;
 import su.onno.metadata.DefaultNamingStrategy;
@@ -49,19 +51,26 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Period close on the generic UI/REST command path (which writes through JDBI, not the repository),
- * plus the admin API, the built-in page and the role-based override.
+ * plus the admin API, the built-in page and the permission-based override.
  */
 class PeriodCloseUiTest {
 
+    enum TestRole implements RoleKey { ACCOUNTANT, CHIEF_ACCOUNTANT, ADMIN }
+
+    /** Accountants edit; the chief closes, reopens and overrides; ADMIN only closes and reopens. */
+    private static final RoleGrants GRANTS = RoleGrants.of(TestRole.class)
+            .role(TestRole.ACCOUNTANT, r -> r.write(PeriodInvoice.class, PeriodEvent.class))
+            .role(TestRole.CHIEF_ACCOUNTANT, r -> r.permit(
+                    CorePermissions.MANAGE_PERIOD_CLOSE, CorePermissions.OVERRIDE_PERIOD_CLOSE))
+            .role(TestRole.ADMIN, r -> r.permit(CorePermissions.MANAGE_PERIOD_CLOSE));
+
     @Document(name = "PeriodInvoices", numberPrefix = "PI-", context = "Finance")
-    @AccessControl(readRoles = "ACCOUNTANT", writeRoles = "ACCOUNTANT")
     @SuppressWarnings("unused") // Reflective model fixture.
     public static class PeriodInvoice extends DocumentObject {
         @Attribute(length = 60) private String title;
     }
 
     @Document(name = "PeriodEvents", numberPrefix = "PE-")
-    @AccessControl(readRoles = "ACCOUNTANT", writeRoles = "ACCOUNTANT")
     @PeriodCloseExempt
     @SuppressWarnings("unused") // Reflective model fixture.
     public static class PeriodEvent extends DocumentObject {
@@ -91,7 +100,7 @@ class PeriodCloseUiTest {
 
         periods = new PeriodCloseService(jdbi, registry);
         periods.ensureSchema();
-        access = new AccessService(registry);
+        access = new AccessService(registry, GRANTS);
         TestEntityStore.Stack stack = TestEntityStore.builder(ds, registry).numbers(new WriteLifecycleCommandServiceTest.SequentialNumbers()).cipher(new SecretCipher(null)).events(event -> { }).periodClose(periods).build();
         commands = new DocumentCommandService(registry, stack.jdbi(), new WebProperties(), null, new DocumentQueryService(registry, jdbi), access, stack.store());
         commands.setPeriodCloseService(periods);
@@ -142,8 +151,8 @@ class PeriodCloseUiTest {
     }
 
     @Test
-    void overrideRole_bypassesTheClose_andIsAudited() {
-        PeriodCloseAccess policy = new PeriodCloseAccess(access, List.of(), List.of("CHIEF_ACCOUNTANT"));
+    void overridePermission_bypassesTheClose_andIsAudited() {
+        PeriodCloseAccess policy = new PeriodCloseAccess(access);
         periods.setOverridePolicy(policy);
         periods.close(PeriodScope.global(), LocalDate.of(2026, 1, 31), "admin", null);
         Map<String, Object> body = Map.of("title", "Correction", "date", "2026-01-15T10:00:00");
@@ -151,7 +160,7 @@ class PeriodCloseUiTest {
         signIn("ann", "ACCOUNTANT");
         assertThatThrownBy(() -> commands.create(invoices, body, accountant))
                 .isInstanceOf(PeriodClosedException.class);
-        // ADMIN is not exempt unless listed.
+        // Managing periods does not imply overriding them.
         signIn("root", "ADMIN");
         assertThatThrownBy(() -> commands.create(invoices, body, accountant))
                 .isInstanceOf(PeriodClosedException.class);
@@ -164,8 +173,8 @@ class PeriodCloseUiTest {
     }
 
     @Test
-    void controller_gatesCloseAndReopenOnManageRoles() {
-        PeriodCloseAccess policy = new PeriodCloseAccess(access, List.of("CHIEF_ACCOUNTANT"), List.of());
+    void controller_gatesCloseAndReopenOnTheManagePermission() {
+        PeriodCloseAccess policy = new PeriodCloseAccess(access);
         PeriodCloseController controller =
                 new PeriodCloseController(periods, policy, access, new WebProperties());
         Authentication ann = token("ann", "ACCOUNTANT");
@@ -202,20 +211,31 @@ class PeriodCloseUiTest {
     }
 
     @Test
-    void controller_hardClose_isReportedAndBlocksOverrideRoles() {
-        PeriodCloseAccess policy = new PeriodCloseAccess(access, List.of(), List.of("ADMIN"));
+    void controller_hardClose_isReportedAndBlocksTheOverridePermission() {
+        PeriodCloseAccess policy = new PeriodCloseAccess(access);
         periods.setOverridePolicy(policy);
         PeriodCloseController controller = new PeriodCloseController(periods, policy, access, new WebProperties());
-        Authentication root = token("root", "ADMIN");
-        signIn("root", "ADMIN");
+        // The chief holds the override, which a hard close still refuses.
+        Authentication vera = token("vera", "CHIEF_ACCOUNTANT");
+        signIn("vera", "CHIEF_ACCOUNTANT");
         UUID january = id(commands.create(invoices,
                 Map.of("title", "January", "date", "2026-01-15T10:00:00"), accountant));
 
-        assertThat(controller.close(Map.of("scope", "global", "closedThrough", "2026-01-31", "hard", true), root))
+        assertThat(controller.close(Map.of("scope", "global", "closedThrough", "2026-01-31", "hard", true), vera))
                 .containsEntry("state", "hard");
         assertThatThrownBy(() -> commands.update(invoices, january, Map.of("title", "Edited"), accountant))
                 .isInstanceOf(PeriodClosedException.class);
-        assertThat(controller.audit(10, root)).singleElement().satisfies(row -> assertThat(row).containsEntry("hard", true));
+        assertThat(controller.audit(10, vera)).singleElement().satisfies(row -> assertThat(row).containsEntry("hard", true));
+    }
+
+    @Test
+    void anApplicationWithoutGrantsNeverOverridesAClose() {
+        // Without RoleGrants every user holds every ordinary permission; the override is explicit-only,
+        // or every user could change a closed period.
+        PeriodCloseAccess open = new PeriodCloseAccess(new AccessService(new MetadataRegistry()));
+        signIn("anyone", "ACCOUNTANT");
+        assertThat(open.current()).isEmpty();
+        assertThat(open.canManage(token("anyone", "ACCOUNTANT"))).isTrue();
     }
 
     @Test

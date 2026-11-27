@@ -172,7 +172,7 @@ class PresenceControllerTest {
         String lastName; // the entity name the gate was asked about (to assert decoding)
 
         FakeAccess() {
-            super(null);
+            super(new su.onno.metadata.MetadataRegistry());
         }
 
         @Override
@@ -206,7 +206,7 @@ class PresenceControllerTest {
         CapturingRegistry() {
             // The publisher is never exercised here (onLocal is overridden to just record the call,
             // bypassing the fan-out), so a null-registry access service is fine.
-            super(new NoOpClusterEventBus(), new EventPublisher(new AccessService(null)));
+            super(new NoOpClusterEventBus(), new EventPublisher(new AccessService(new su.onno.metadata.MetadataRegistry())));
         }
 
         @Override

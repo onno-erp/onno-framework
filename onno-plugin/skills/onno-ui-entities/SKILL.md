@@ -223,7 +223,7 @@ decision (it records on every write path), never a UI one.
 
 ## Rules
 
-- Presentation only. Never hide a field to "secure" it; use `@AccessControl`/record policies.
+- Presentation only. Never hide a field to "secure" it; use `RoleGrants`/record policies.
 - Give every column a human label — directly (`labels`) or through the field's `label`/Java
   `displayName`.
 - Don't rebuild the list in a component to change columns or filters; customize it.

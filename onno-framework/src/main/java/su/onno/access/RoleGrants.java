@@ -1,5 +1,7 @@
 package su.onno.access;
 
+import su.onno.model.DocumentObject;
+
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -28,7 +30,7 @@ import java.util.function.Consumer;
  *             .role(AppRole.ACCOUNTANT, r -> r
  *                     .readAll()
  *                     .unpost(Invoice.class)
- *                     .permit(PeriodClosePermissions.MANAGE))
+ *                     .permit(CorePermissions.MANAGE_PERIOD_CLOSE))
  *             .role(AppRole.IT, r -> r
  *                     .permit(AuthPermissions.MANAGE_USERS, CorePermissions.EDIT_SETTINGS)
  *                     .fromIdp("erp-admins"));                  // also matched by this IdP role
@@ -66,7 +68,12 @@ public final class RoleGrants {
         Objects.requireNonNull(roleType, "roleType");
         Map<String, RoleGrant> empty = new LinkedHashMap<>();
         for (R role : roleType.getEnumConstants()) {
-            empty.put(normalize(role.name()), RoleGrant.empty(role.name()));
+            RoleGrant previous = empty.putIfAbsent(normalize(role.name()), RoleGrant.empty(role.name()));
+            if (previous != null) {
+                throw new IllegalArgumentException("Roles " + previous.name() + " and " + role.name() + " of "
+                        + roleType.getName() + " are the same role: both normalize to " + normalize(role.name())
+                        + ". Remove one of them.");
+            }
         }
         return new RoleGrants(roleType, Collections.unmodifiableMap(empty));
     }
@@ -109,6 +116,64 @@ public final class RoleGrants {
         Set<Class<?>> out = new LinkedHashSet<>();
         for (RoleGrant g : roles.values()) out.addAll(g.entities().keySet());
         return Collections.unmodifiableSet(out);
+    }
+
+    /**
+     * Every entity class some role names with exactly {@code right} (not one it merely implies),
+     * for startup validation — e.g. that {@code post(...)} names only documents.
+     */
+    public Set<Class<?>> entities(EntityRight right) {
+        Objects.requireNonNull(right, "right");
+        Set<Class<?>> out = new LinkedHashSet<>();
+        for (RoleGrant g : roles.values()) {
+            g.entities().forEach((type, rights) -> {
+                if (rights.contains(right)) out.add(type);
+            });
+        }
+        return Collections.unmodifiableSet(out);
+    }
+
+    /**
+     * Whether {@code role} names a role of the application's {@link RoleKey} enum or an
+     * identity-provider name mapped with {@link Spec#fromIdp} (compared normalized). Always true for
+     * {@link #open()}: an application without grants has no role vocabulary to check against.
+     */
+    public boolean recognizes(String role) {
+        if (isOpen()) return true;
+        String name = normalize(role);
+        return roles.containsKey(name) || roles.values().stream().anyMatch(g -> g.idpNames().contains(name));
+    }
+
+    /**
+     * Startup check of a role list written as strings (a command's {@code .roles(...)}, a print
+     * form's roles, a workspace's roles, a record policy's roles, an {@code @McpTool}'s roles):
+     * throws when a name is neither a role of the application's {@link RoleKey} enum nor a
+     * {@link Spec#fromIdp} name, so a typo such as {@code "MANGER"} fails startup instead of
+     * silently denying everyone. Does nothing for {@link #open()}.
+     *
+     * @param where what declares the list, for the message (e.g. {@code "command Orders#cancel .roles(...)"})
+     */
+    public void requireRecognized(String where, Collection<String> roleNames) {
+        if (isOpen() || roleNames == null) return;
+        List<String> unknown = roleNames.stream()
+                .filter(r -> !recognizes(r))
+                .map(r -> normalize(r).isEmpty() ? "<blank>" : normalize(r))
+                .distinct()
+                .toList();
+        if (!unknown.isEmpty()) {
+            throw new IllegalStateException("Unknown role " + unknown + " in " + where + ": a role must be a "
+                    + "constant of " + roleType.getName() + " or a name mapped with fromIdp(...). Fix the name, "
+                    + "add the role to the enum, or map it with fromIdp(...) in RoleGrants.");
+        }
+    }
+
+    /** The declared roles that grant {@code permission}, by name, in declaration order. */
+    public List<String> rolesGranting(Permission permission) {
+        Objects.requireNonNull(permission, "permission");
+        return roles.values().stream()
+                .filter(g -> g.permissions().contains(permission))
+                .map(RoleGrant::name)
+                .toList();
     }
 
     /** Every permission some role is granted. */
@@ -200,13 +265,19 @@ public final class RoleGrants {
             return this;
         }
 
-        /** Post every document of the model. */
+        /**
+         * Post every document of the model, which includes writing and reading them. Catalogs and
+         * registers are not documents: this grants nothing on them.
+         */
         public Spec postAll() {
             everyEntity.add(EntityRight.POST);
             return this;
         }
 
-        /** Unpost every document of the model. */
+        /**
+         * Unpost every document of the model, which includes writing and reading them. Catalogs and
+         * registers are not documents: this grants nothing on them.
+         */
         public Spec unpostAll() {
             everyEntity.add(EntityRight.UNPOST);
             return this;
@@ -257,7 +328,14 @@ public final class RoleGrants {
         }
 
         boolean can(Class<?> type, EntityRight right) {
-            if (everyEntity.stream().anyMatch(r -> r.implies(right))) return true;
+            // postAll()/unpostAll() reach documents only: on a catalog or register they would
+            // otherwise imply writing every one of them.
+            boolean document = type != null && DocumentObject.class.isAssignableFrom(type);
+            if (everyEntity.stream()
+                    .filter(r -> document || (r != EntityRight.POST && r != EntityRight.UNPOST))
+                    .anyMatch(r -> r.implies(right))) {
+                return true;
+            }
             Set<EntityRight> rights = entities.get(type);
             return rights != null && rights.stream().anyMatch(r -> r.implies(right));
         }

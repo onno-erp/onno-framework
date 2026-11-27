@@ -293,6 +293,7 @@ export function NavigationLink({
   label,
   icon,
   roles,
+  permission,
   className,
 }: {
   entity?: string;
@@ -300,13 +301,14 @@ export function NavigationLink({
   label?: string;
   icon?: IconSource;
   roles?: string[];
+  permission?: string;
   className?: string;
 }) {
   const { app, pageAllowed } = useAppConfig();
   const model = useModel();
   if (!model) return null;
   const sections = buildNavigation(
-    { ...app, navigation: [{ items: [{ entity, path, label, icon, roles }] }] },
+    { ...app, navigation: [{ items: [{ entity, path, label, icon, roles, permission }] }] },
     model,
     pageAllowed,
   );

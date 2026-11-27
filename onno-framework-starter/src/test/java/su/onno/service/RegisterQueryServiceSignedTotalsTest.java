@@ -295,7 +295,6 @@ class RegisterQueryServiceSignedTotalsTest {
     // MetadataScanner reads fixture fields reflectively.
     @SuppressWarnings("unused")
     @AccumulationRegister(name = "TestBalance", type = AccumulationType.BALANCE)
-    @su.onno.annotations.AccessControl(readRoles = "CUSTOMER")
     static class BalanceRegisterFixture extends AccumulationRecord {
         @Dimension
         private UUID property;

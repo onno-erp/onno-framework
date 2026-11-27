@@ -45,7 +45,7 @@ class EntitySurfaceDescriptorTest {
         AttributeDescriptor apiKey = attribute("api_key", true);
         CatalogDescriptor catalog = new CatalogDescriptor(
                 "Accounts", "Accounts", "accounts", Object.class,
-                9, false, true, "", "", List.of(), List.of(), List.of(publicName, apiKey));
+                9, false, true, "", "", List.of(publicName, apiKey));
 
         EntitySurfaceDescriptor surface = EntitySurfaceDescriptor.catalog(catalog);
 

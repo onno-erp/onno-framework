@@ -58,7 +58,7 @@ defineApp({
   pages: [
     { path: "/", component: HomePage },                                           // home
     { path: "/ops", component: SalesOpsPage, label: "Sales Ops", icon: Activity },
-    { path: "/settings", component: SettingsPage, label: "Settings", icon: Settings, roles: ["ADMIN"] },
+    { path: "/settings", component: SettingsPage, label: "Settings", icon: Settings, permission: "settings.edit" },
     { path: "/support", component: SupportPage, label: "Inbox", icon: Inbox, when: crmInboxAvailable },
     { list: "Suppliers", component: SuppliersPage },                    // replaces a default screen
     { path: "/registers/book_sales", component: SalesReportPage, view: false },
@@ -72,7 +72,8 @@ defineApp({
 | `path` | The route without the `/ui` prefix. `"/"` is home. An entity route (`/catalogs/<route>`, `/documents/<route>`, `/registers/<route>`, lowercase snake case of the logical name) replaces that entity's default screen. `:param` and `*` capture. |
 | `component` | Receives `RouteProps`: `path`, `params`, `query`, `view` (the server's default view for the route, if fetched) and `renderDefault()`. |
 | `label`, `icon` | How navigation shows the page. |
-| `roles` | Only these roles see the page and its link (`ADMIN` always does). Presentation only — data stays guarded by `@AccessControl`. |
+| `roles` | Only these roles see the page and its link (compared normalized; no role passes implicitly). Presentation only — data stays guarded by `RoleGrants`. |
+| `permission` | Only holders of this permission (`"settings.edit"`, typed from `model.gen.ts`) see the page and its link; the server checks it again. |
 | `when` | `(model) => boolean \| Promise<boolean>` — e.g. an optional module being present. |
 | `view` | Fetch the server's default view for the route (default: only on entity routes). `false` for a purely client-side page at an entity route. |
 

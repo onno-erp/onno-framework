@@ -1,6 +1,5 @@
 package com.example.domain.catalogs;
 
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.model.CatalogObject;
@@ -22,7 +21,6 @@ import java.math.BigDecimal;
  * {@code description} (the title).</p>
  */
 @Catalog(name = "Books", codePrefix = "B-", context = "Catalog")
-@AccessControl(readRoles = {"MANAGER"}, writeRoles = {"MANAGER"})
 @Getter
 @Setter
 public class Book extends CatalogObject {

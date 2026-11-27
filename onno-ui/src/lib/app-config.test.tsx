@@ -10,8 +10,16 @@ const entity = (logicalName: string, kind: "catalogs" | "documents" = "documents
   route: `/${kind}/${logicalName.toLowerCase()}`, canWrite: true,
 });
 
-const model = (roles: string[], entities = [entity("Orders"), entity("Employees", "catalogs")]): AppModel => ({
-  user: { username: "u", displayName: "U", avatarUrl: "", roles },
+const model = (
+  roles: string[],
+  entities = [entity("Orders"), entity("Employees", "catalogs")],
+  access: { permissions?: string[]; unrestricted?: boolean } = {},
+): AppModel => ({
+  user: {
+    username: "u", displayName: "U", avatarUrl: "", roles,
+    permissions: access.permissions ?? [], unrestricted: access.unrestricted ?? false,
+  },
+  roles: [],
   features: { comments: false, notifications: false },
   entities,
   informationRegisters: [],
@@ -28,11 +36,11 @@ describe("buildNavigation", () => {
       entities: { Orders: { icon: "file" } },
       pages: [
         { path: "/ops", component: Page, label: "Ops", icon: "activity" },
-        { path: "/settings", component: Page, label: "Settings", roles: ["ADMIN"] },
+        { path: "/settings", component: Page, label: "Settings", roles: ["HR"] },
       ],
       navigation: [
         { title: "Sales", items: ["Orders", "Invoices", "/ops"] },
-        { title: "People", items: [{ entity: "Employees", roles: ["ADMIN"] }] },
+        { title: "People", items: [{ entity: "Employees", roles: ["HR"] }] },
         { title: "System", items: ["/settings"] },
       ],
     };
@@ -42,7 +50,26 @@ describe("buildNavigation", () => {
         { label: "Ops", icon: "activity", path: "/ops" },
       ] },
     ]);
-    expect(buildNavigation(app, model(["ADMIN"]), () => true).map((s) => s.title)).toEqual(["Sales", "People", "System"]);
+    expect(buildNavigation(app, model(["HR"]), () => true).map((s) => s.title)).toEqual(["Sales", "People", "System"]);
+  });
+
+  it("lets no role through implicitly and compares role names normalized", () => {
+    const app: AppDefinition = { navigation: [{ title: "People", items: [{ entity: "Employees", roles: ["manager"] }] }] };
+    // A role literally called ADMIN is an ordinary role: it does not pass another role's gate.
+    expect(buildNavigation(app, model(["ADMIN"]), allowAll)).toEqual([]);
+    expect(buildNavigation(app, model(["MANAGER"]), allowAll).map((s) => s.title)).toEqual(["People"]);
+  });
+
+  it("gates entries on a permission, which every user holds in an app without grants", () => {
+    const app: AppDefinition = {
+      pages: [{ path: "/settings", component: Page, label: "Settings" }],
+      navigation: [{ title: "System", permission: "settings.edit", items: ["/settings"] }],
+    };
+    expect(buildNavigation(app, model([]), allowAll)).toEqual([]);
+    expect(buildNavigation(app, model([], undefined, { permissions: ["settings.edit"] }), allowAll)
+      .map((s) => s.title)).toEqual(["System"]);
+    expect(buildNavigation(app, model([], undefined, { unrestricted: true }), allowAll)
+      .map((s) => s.title)).toEqual(["System"]);
   });
 
   it("puts labelled pages first when the app declares no navigation", () => {
@@ -106,7 +133,7 @@ describe("entity page registration", () => {
   });
 
   it("hides an entity link when its replacement list page is gated", () => {
-    const app: AppDefinition = { pages: [{ list: "Orders", component: Page, roles: ["ADMIN"] }],
+    const app: AppDefinition = { pages: [{ list: "Orders", component: Page, roles: ["HR"] }],
       navigation: [{ items: ["Orders"] }] };
     expect(buildNavigation(app, model([]), allowAll)).toEqual([]);
   });

@@ -11,7 +11,7 @@ import static org.mockito.Mockito.*;
 
 class CrmChatGroupControllerTest {
     @Test void deniesUnauthorizedWorkspaceAndConversationBeforeWritingGroups() {
-        var groups=mock(CrmChatGroupService.class);var workspaces=mock(CrmInboxWorkspaceService.class);var access=mock(AccessService.class);
+        var groups=mock(CrmChatGroupService.class);var workspaces=mock(CrmInboxWorkspaceService.class);var access=su.onno.crm.TestBindings.withGrants(mock(AccessService.class));
         var controller=new CrmChatGroupController(groups,workspaces,access);Principal alice=()->"alice";
         doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN)).when(workspaces).requireAccess(alice,false);
         assertThatThrownBy(()->controller.list(null,alice)).isInstanceOf(ResponseStatusException.class);

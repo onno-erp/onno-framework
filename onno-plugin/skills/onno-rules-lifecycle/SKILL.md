@@ -22,7 +22,7 @@ Lifecycle hooks run on domain objects, not Spring beans. Do not `@Autowired` ins
 | validate invariants | `Validated` and `BusinessRule` |
 | validate immediately before posting | `BeforePostHandler` or `Validated` |
 | veto an unpost by document state | `BeforeUnpostHandler` |
-| restrict who may post/unpost | `@AccessControl(postRoles, unpostRoles)` |
+| restrict who may post/unpost | `RoleGrants` `post(...)` / `unpost(...)` |
 | write register movements | `Postable` |
 | call Spring services after post | `@EventListener DocumentPostedEvent` |
 | react immediately after a successful entity persist | `AfterWriteHandler` |

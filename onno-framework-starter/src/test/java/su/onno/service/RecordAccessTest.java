@@ -4,7 +4,6 @@ import su.onno.access.AccessSubject;
 import su.onno.access.RecordAccessPolicy;
 import su.onno.access.RecordPolicies;
 import su.onno.access.RecordScope;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.annotations.Document;
@@ -31,20 +30,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * {@link RecordAccess#canReadRecord} and {@link RecordAccess#canReadRoute} fail closed (#462): a
  * missing subject throws and a non-UUID id is denied, with or without policies; for a subject some
- * policy narrows, an unknown entity is denied too. Subjects no policy narrows (ADMIN, system, uncovered
+ * policy narrows, an unknown entity is denied too. Subjects no policy narrows (system, uncovered
  * roles) are never narrowed. A list or {@code new} route carries no record id, so {@code canReadRoute}
  * still allows it.
  */
 class RecordAccessTest {
 
-    @AccessControl(readRoles = {"CUSTOMER", "STAFF"})
     @Catalog(name = "RaTenants", previousNames = "RaLessees")
     static class Tenant extends CatalogObject {
         @Attribute(length = 20)
         private String region;
     }
 
-    @AccessControl(readRoles = {"CUSTOMER", "STAFF"})
     @Document(name = "RaOrders")
     static class Order extends DocumentObject {
     }
@@ -121,7 +118,7 @@ class RecordAccessTest {
 
     @Test
     void anUnknownEntityIsNotNarrowedForASubjectNoPolicyNarrows() {
-        // ADMIN and system are exempt and STAFF is not covered: a link to a removed entity stays theirs.
+        // System is exempt and STAFF and ADMIN are not covered: a link to a removed entity stays theirs.
         String id = UUID.randomUUID().toString();
         for (AccessSubject subject : List.of(STAFF, ADMIN, AccessSubject.system())) {
             assertThat(access.canReadRecord(subject, "catalogs", "Nope", id)).as("%s", subject).isTrue();

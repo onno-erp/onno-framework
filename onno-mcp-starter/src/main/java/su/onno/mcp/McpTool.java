@@ -27,7 +27,7 @@ public @interface McpTool {
     /** Description shown to MCP clients. */
     String description() default "";
 
-    /** Roles allowed to call the tool. Empty means any authenticated user. */
+    /** Roles allowed to call the tool, compared normalized; no role passes implicitly. Empty means any authenticated user. */
     String[] roles() default {};
 
     /** MCP read-only safety hint. Non-read-only tools obey {@code onno.mcp.writes-enabled}. */

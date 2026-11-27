@@ -134,25 +134,33 @@ class TypeScriptModelGeneratorTest {
                         + "    \"Gen Shop Name\": { value: string };\n");
     }
 
-    @Document(name = "GenGuarded")
-    @su.onno.annotations.AccessControl(readRoles = {"SALES", "MANAGER"}, writeRoles = "MANAGER",
-            postRoles = "ACCOUNTANT")
-    static class GenGuarded extends DocumentObject {
-        @Attribute
-        @su.onno.annotations.AccessControl(readRoles = "AUDITOR")
-        private BigDecimal margin;
+    private static final List<String> ACCESS_FIXTURES = List.of("su.onno.spring.codegen.accessfixtures");
+
+    @Test
+    void rolesComeFromRoleKeyEnumsNormalized() {
+        assertThat(TypeScriptModelGenerator.roles(ACCESS_FIXTURES)).containsExactly("AUDITOR", "MANAGER", "SALES");
+        String generated = TypeScriptModelGenerator.generate(new MetadataRegistry(),
+                TypeScriptModelGenerator.roles(ACCESS_FIXTURES), java.util.Map.of());
+        assertThat(generated)
+                .contains("export type Role = \"AUDITOR\" | \"MANAGER\" | \"SALES\";")
+                .contains("  interface OnnoRoles {\n    \"AUDITOR\": true;\n    \"MANAGER\": true;\n    \"SALES\": true;\n  }")
+                .doesNotContain("\"ADMIN\"");
+        // No RoleKey enum: no roles, and no implicit ADMIN.
+        assertThat(TypeScriptModelGenerator.generate(new MetadataRegistry())).contains("export type Role = never;");
     }
 
     @Test
-    void rolesAreTheOnesTheModelNamesStaticallyPlusAdmin() {
-        MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
-        MetadataRegistry registry = new MetadataRegistry();
-        registry.registerDocument(scanner.scanDocument(GenGuarded.class));
-        String generated = TypeScriptModelGenerator.generate(registry);
+    void permissionsAreTheFrameworkHoldersPlusTheAppsPublicConstants() {
+        java.util.Map<String, String> permissions = TypeScriptModelGenerator.permissions(ACCESS_FIXTURES);
+        assertThat(permissions)
+                .containsEntry("gen.export", "Export the ledger")
+                .containsKeys("settings.edit", "comments.moderate", "periodClose.manage", "periodClose.override",
+                        "processes.administer")
+                .doesNotContainKeys("gen.hidden", "gen.mutable");
+        String generated = TypeScriptModelGenerator.generate(new MetadataRegistry(), java.util.Set.of(), permissions);
         assertThat(generated)
-                .contains("export type Role = \"ACCOUNTANT\" | \"ADMIN\" | \"AUDITOR\" | \"MANAGER\" | \"SALES\";")
-                .contains("  interface OnnoRoles {\n    \"ACCOUNTANT\": true;\n    \"ADMIN\": true;\n");
-        assertThat(TypeScriptModelGenerator.generate(new MetadataRegistry())).contains("export type Role = \"ADMIN\";");
+                .contains("export type PermissionKey = ")
+                .contains("    /** Export the ledger */\n    \"gen.export\": true;\n");
     }
 
     @Test

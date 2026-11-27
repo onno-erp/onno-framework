@@ -4,7 +4,6 @@ import su.onno.access.AccessSubject;
 import su.onno.access.RecordAccessPolicy;
 import su.onno.access.RecordPolicies;
 import su.onno.access.RecordScope;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.annotations.Document;
@@ -39,7 +38,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class KeysetFocusWindowTest {
 
-    @AccessControl(readRoles = "CUSTOMER")
     @Catalog(name = "FwClients")
     static class Client extends CatalogObject {
         @Attribute(length = 40)

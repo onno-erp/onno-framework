@@ -150,7 +150,7 @@ function TemplateRow({ form, uploadsEnabled, reload }: { form: TemplateInfo; upl
 /**
  * Template management for print forms: download each form's template, upload an edited copy (it
  * replaces the built-in one for every user), or reset to the built-in file. Put it on an admin
- * page; the API enforces onno.print.templates.manage-roles.
+ * page; the API enforces the print.templates.manage permission.
  *
  *   <PrintTemplates title="Print templates" />
  */

@@ -1,5 +1,6 @@
 package su.onno.command;
 
+import su.onno.access.RoleGrants;
 import su.onno.metadata.AttributeDescriptor;
 
 import java.util.ArrayList;
@@ -62,6 +63,21 @@ public class CommandRegistry {
     /** The entity's static commands (dynamic providers are not evaluated). */
     public List<Command<?>> staticCommands(Class<?> entity) {
         return byEntity.getOrDefault(entity, List.of());
+    }
+
+    /**
+     * Startup check: every static command's {@code .roles(...)} names a role the application
+     * declares (or maps with {@code fromIdp}), so a misspelled role fails startup instead of
+     * silently hiding the command from everyone. Dynamic commands are built from live data and are
+     * not checked here.
+     */
+    public void requireKnownRoles(RoleGrants grants) {
+        for (Class<?> entity : entities()) {
+            for (Command<?> command : staticCommands(entity)) {
+                grants.requireRecognized("command " + entity.getSimpleName() + "#" + command.key() + " .roles(...)",
+                        command.roles());
+            }
+        }
     }
 
     /**

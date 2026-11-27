@@ -33,7 +33,7 @@ security filter chain scoped to that endpoint that reuses your existing
 | `create_document`, `update_document`, `delete_document` | write | Create/update/soft-delete documents. A posted document must be unposted first. *(gated by `onno.mcp.writes-enabled`)* |
 | `posting_preview` | read | Show the register movements a document would make if posted. *(gated by `onno.mcp.posting-enabled`)* |
 | `period_close_status` | read | Closed accounting periods (scope, inclusive `closedThrough`, `soft`/`hard`), so an agent knows a backdated write will be rejected. Registered when period close is enabled. |
-| `post_document`, `unpost_document` | write | Post/unpost a document to registers. **Has ledger side-effects.** Honours the document's `@AccessControl(postRoles/unpostRoles)` like the REST API. *(gated by `onno.mcp.posting-enabled`)* |
+| `post_document`, `unpost_document` | write | Post/unpost a document to registers. **Has ledger side-effects.** Honours the `post` / `unpost` grants of the app's `RoleGrants` like the REST API. *(gated by `onno.mcp.posting-enabled`)* |
 | `<entity>_<command>` | write | One tool per command of a `Commands<E>` bean (see below). *(gated by `onno.mcp.writes-enabled`)* |
 
 ## Usage
@@ -116,7 +116,8 @@ optional output-schema metadata.
 
 Custom tools are additive to the generated onno tools. Tool names must be unique across all
 contributors; duplicates fail startup. Calls require an authenticated user, and `roles` is an
-any-of allowlist with `ADMIN` as superuser. A custom tool with `readOnly = false` is omitted when
+any-of allowlist compared normalized (`ROLE_manager` matches `MANAGER`); no role passes implicitly, and
+with `RoleGrants` declared every name must be a declared role or `fromIdp` name, or startup fails. A custom tool with `readOnly = false` is omitted when
 `onno.mcp.writes-enabled=false`.
 
 For an SDK-level tool, register an `McpToolProvider` bean returning

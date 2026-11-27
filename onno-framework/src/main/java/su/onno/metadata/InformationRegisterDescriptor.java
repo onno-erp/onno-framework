@@ -11,8 +11,6 @@ public record InformationRegisterDescriptor(
         Class<?> javaClass,
         Periodicity periodicity,
         String context,
-        List<String> readRoles,
-        List<String> writeRoles,
         List<AttributeDescriptor> dimensions,
         List<AttributeDescriptor> resources,
         List<AttributeDescriptor> attributes

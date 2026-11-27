@@ -34,7 +34,8 @@ afterEach(() => {
 function model(entityType: "catalog" | "document", canWrite = true) {
   const kind = entityType === "catalog" ? "catalogs" : "documents";
   setModel({
-    user: { username: "u", displayName: "U", avatarUrl: "", roles: [] },
+    user: { username: "u", displayName: "U", avatarUrl: "", roles: [], permissions: [], unrestricted: false },
+    roles: [],
     features: { comments: false, notifications: false },
     informationRegisters: [],
     constants: [],

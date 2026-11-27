@@ -24,7 +24,7 @@ class CrmActionControllerTest {
   var descriptor=mock(CatalogDescriptor.class);var id=UUID.randomUUID();java.security.Principal principal=()->"reader";
   when(catalogs.forClass(Conversation.class)).thenReturn(descriptor);
   when(catalogs.get(su.onno.access.AccessSubject.system(),descriptor,id)).thenReturn(Map.of("subject","allowed"));
-  var controller=new CrmActionController(scopes,new CommandRegistry(List.of(view)),mock(AccessService.class),catalogs,new WebProperties());
+  var controller=new CrmActionController(scopes,new CommandRegistry(List.of(view)),su.onno.crm.TestBindings.withGrants(mock(AccessService.class)),catalogs,new WebProperties());
   controller.run("support",id,"host.review",Map.of("inputs",Map.of("reason","Review requested")),principal,su.onno.access.AccessSubject.user("reader",java.util.Set.of()));
   assertThat(calls).hasValue(1);
   when(catalogs.get(su.onno.access.AccessSubject.system(),descriptor,id)).thenReturn(Map.of("subject","blocked"));
@@ -41,7 +41,7 @@ class CrmActionControllerTest {
     .run(ctx->{calls.incrementAndGet();return CommandResult.ok();});}
   };
   var ui=new WebProperties();ui.setReadOnly(true);
-  var controller=new CrmActionController(mock(CrmInboxWorkspaceService.class),new CommandRegistry(List.of(view)),mock(AccessService.class),mock(CatalogQueryService.class),ui);
+  var controller=new CrmActionController(mock(CrmInboxWorkspaceService.class),new CommandRegistry(List.of(view)),su.onno.crm.TestBindings.withGrants(mock(AccessService.class)),mock(CatalogQueryService.class),ui);
   assertThatThrownBy(()->controller.run("support",UUID.randomUUID(),"host.review",Map.of(),()->"reader",su.onno.access.AccessSubject.user("reader",java.util.Set.of())))
    .isInstanceOf(org.springframework.web.server.ResponseStatusException.class).hasMessageContaining("read-only");
   assertThat(calls).hasValue(0);
@@ -59,7 +59,7 @@ class CrmActionControllerTest {
   when(catalogs.get(su.onno.access.AccessSubject.system(),descriptor,id)).thenReturn(Map.of());
   when(scopes.permitted(any(),any(),anyBoolean())).thenReturn(true);
   var ui=new WebProperties();
-  var controller=new CrmActionController(scopes,new CommandRegistry(List.of(view)),mock(AccessService.class),catalogs,ui);
+  var controller=new CrmActionController(scopes,new CommandRegistry(List.of(view)),su.onno.crm.TestBindings.withGrants(mock(AccessService.class)),catalogs,ui);
   assertThat((List<Map<String,Object>>)controller.list("support",id,principal)).extracting(a->a.get("enabled")).containsExactly(true);
   ui.setReadOnly(true);
   assertThat((List<Map<String,Object>>)controller.list("support",id,principal)).extracting(a->a.get("enabled")).containsExactly(false);

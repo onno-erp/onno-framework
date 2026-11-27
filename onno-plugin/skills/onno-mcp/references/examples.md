@@ -73,7 +73,7 @@ Do not guess route/entity names from Java classes. Use metadata.
 
 - `onno.mcp.writes-enabled=false` removes create/update/delete tools.
 - `onno.mcp.posting-enabled=false` removes post/unpost/preview tools.
-- Entity `@AccessControl` still gates every operation.
+- The app's `RoleGrants` entity grants (and `post`/`unpost` grants) still gate every operation.
 - `onno.web.read-only=true` independently blocks mutation services even if MCP write tools exist.
 - The HTTP chain rejects anonymous requests. Direct/internal anonymous metadata calls hide
   RBAC-controlled entities; enum metadata is not a substitute for authenticated entity access.
@@ -112,7 +112,7 @@ when `onno.mcp.writes-enabled=false`. Use an `McpToolProvider` bean for direct S
 
 ## Debugging
 
-- If `describe_metadata` is empty, check user roles and `@AccessControl`.
+- If `describe_metadata` is empty, check the user's roles and their read grants in `RoleGrants`.
 - If writes are missing, check `onno.mcp.writes-enabled`.
 - If posting tools are missing, check `onno.mcp.posting-enabled`.
 - If tools exist but writes return `403`, check `onno.web.read-only` and entity write roles.

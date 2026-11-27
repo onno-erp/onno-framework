@@ -1,5 +1,8 @@
 package su.onno.web;
 
+import su.onno.access.RoleGrants;
+import su.onno.access.RoleKey;
+
 import su.onno.service.AccessService;
 import su.onno.service.InformationRegisterQueryService;
 import su.onno.service.RecordScopeCompiler;
@@ -34,17 +37,20 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class InformationRegisterControllerTest {
+
+    enum TestRole implements RoleKey { CUSTOMER }
+
+    private static final RoleGrants GRANTS = RoleGrants.of(TestRole.class)
+            .role(TestRole.CUSTOMER, r -> r.read(Client.class, Price.class, CurrentPrice.class));
     // Fixture fields are read reflectively by MetadataScanner, not by test code.
     @SuppressWarnings("unused")
     @Catalog(name = "HistoryClients")
-    @AccessControl(readRoles = "CUSTOMER")
     static class Client extends CatalogObject {
         @Attribute private UUID owner;
     }
 
     @SuppressWarnings("unused")
     @InformationRegister(name = "PriceHistory", periodicity = Periodicity.SECOND)
-    @AccessControl(readRoles = "CUSTOMER")
     static class Price extends InformationRecord {
         @Dimension private Ref<Client> customer;
         @Dimension private String region;
@@ -55,7 +61,6 @@ class InformationRegisterControllerTest {
 
     @SuppressWarnings("unused")
     @InformationRegister(name = "CurrentPrices")
-    @AccessControl(readRoles = "CUSTOMER")
     static class CurrentPrice extends InformationRecord {
         @Dimension private Ref<Client> customer;
         @Resource private BigDecimal amount;
@@ -94,7 +99,7 @@ class InformationRegisterControllerTest {
                         .read(RecordScope.eq("owner", Subject.recordId())),
                 RecordAccessPolicy.forRegister(Price.class).appliesTo("CUSTOMER").read(RecordScope.via("customer")),
                 RecordAccessPolicy.forRegister(CurrentPrice.class).appliesTo("CUSTOMER").read(RecordScope.via("customer"))));
-        var access = new AccessService(registry);
+        var access = new AccessService(registry, GRANTS);
         var query = new InformationRegisterQueryService(registry, jdbi, new RecordScopeCompiler(policies), access);
         controller = new GenericInformationRegisterController(query, access);
         listController = new InformationRegisterListController(registry, query, access,

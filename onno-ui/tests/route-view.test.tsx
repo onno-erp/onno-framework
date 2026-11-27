@@ -19,7 +19,8 @@ vi.mock("@/components/collaboration/comments", () => ({
 
 function model(comments: boolean): AppModel {
   return {
-    user: { username: "u", displayName: "U", avatarUrl: "", roles: [] },
+    user: { username: "u", displayName: "U", avatarUrl: "", roles: [], permissions: [], unrestricted: false },
+    roles: [],
     features: { comments, notifications: false },
     entities: [{ kind: "documents", name: "orders", logicalName: "Orders", title: "Orders", context: "",
       route: "/documents/orders", canWrite: true }],

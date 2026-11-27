@@ -302,12 +302,22 @@ public final class ProcessController {
         }
     }
 
+    /**
+     * Whether the caller operates every process task and instance. Only an explicit
+     * {@code processes.administer} grant: in an application without grants every user would
+     * otherwise see every task in their inbox.
+     */
+    private boolean administrator(Principal principal) {
+        return access.access(principal).granted(su.onno.access.CorePermissions.ADMINISTER_PROCESSES);
+    }
+
     private ProcessActor actor(Principal principal) {
         if (principal == null || principal.getName() == null || principal.getName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication is required");
         }
         if (currentUser == null) {
-            return new ProcessActor(principal.getName(), access.roles(principal));
+            return new ProcessActor(ProcessIdentity.unlinked(principal.getName()), access.roles(principal),
+                    administrator(principal));
         }
         CurrentUserResolver.CurrentUser resolved = currentUser.resolve(principal);
         String stableId = resolved.recordId() == null
@@ -317,7 +327,8 @@ public final class ProcessController {
                         ProcessActorId.of(stableId),
                         resolved.username(),
                         resolved.displayName()),
-                access.roles(principal));
+                access.roles(principal),
+                administrator(principal));
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})

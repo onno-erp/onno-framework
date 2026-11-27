@@ -28,11 +28,12 @@ import java.util.function.Consumer;
  * <p>Applicability is deliberately simple and auditable:
  * <ol>
  *   <li>A policy <em>applies</em> to a subject holding at least one of its {@link #appliesTo} roles.</li>
- *   <li>A subject holding {@code ADMIN} or one of the policy's {@link #exemptRoles} is exempt, and
- *       exemption wins over applicability.</li>
+ *   <li>A subject holding one of the policy's {@link #exemptRoles} is exempt, and exemption wins
+ *       over applicability. No role is exempt implicitly; trusted code
+ *       ({@link AccessSubject#system()}) is never scoped.</li>
  *   <li>Scopes of several applicable policies for the same entity are OR'ed.</li>
- *   <li>With no applicable policy the entity is unscoped; entity-level {@code @AccessControl}
- *       stays the only gate.</li>
+ *   <li>With no applicable policy the entity is unscoped; the entity grants of {@link RoleGrants}
+ *       stay the only gate.</li>
  *   <li>A policy never widens access: the entity-level read/write grant is checked first.</li>
  * </ol>
  *
@@ -91,7 +92,7 @@ public final class RecordAccessPolicy {
         return new RecordAccessPolicy(entityType, kind, roleSet(roles), exemptRoles, read, write, defaults);
     }
 
-    /** Roles exempt from this policy (in addition to {@code ADMIN}); exemption wins over applicability. */
+    /** Roles exempt from this policy; exemption wins over applicability. */
     public RecordAccessPolicy exemptRoles(String... roles) {
         return new RecordAccessPolicy(entityType, kind, appliesTo, roleSet(roles), read, write, defaults);
     }
@@ -165,9 +166,9 @@ public final class RecordAccessPolicy {
         return false;
     }
 
-    /** Whether the subject is exempt from this policy ({@code ADMIN}, an exempt role, or system code). */
+    /** Whether the subject is exempt from this policy (an exempt role, or trusted system code). */
     public boolean isExempt(AccessSubject subject) {
-        if (subject.superuser()) return true;
+        if (subject.trusted()) return true;
         for (String role : exemptRoles) {
             if (subject.roles().contains(role)) return true;
         }

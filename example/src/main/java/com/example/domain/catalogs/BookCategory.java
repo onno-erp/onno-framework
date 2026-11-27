@@ -1,6 +1,5 @@
 package com.example.domain.catalogs;
 
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.model.CatalogObject;
@@ -17,7 +16,6 @@ import lombok.Setter;
  * browses as a folder tree (#411).
  */
 @Catalog(name = "Categories", codePrefix = "CAT-", context = "Catalog", hierarchical = true)
-@AccessControl(readRoles = {"MANAGER"}, writeRoles = {"MANAGER"})
 @Getter
 @Setter
 public class BookCategory extends CatalogObject {

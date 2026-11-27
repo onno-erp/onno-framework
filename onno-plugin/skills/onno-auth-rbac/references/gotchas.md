@@ -26,7 +26,11 @@ that list is ignored.
 - Mutation returns `403` in in-memory/OIDC mode: authenticate, fetch `/api/auth/csrf`, and echo its
   token in `X-XSRF-TOKEN`.
 - Mutation returns `403` in resource-server mode: CSRF is not the cause; check bearer validity,
-  mapped roles, entity `@AccessControl`, and `onno.web.read-only`.
+  mapped roles, the entity grants in `RoleGrants`, and `onno.web.read-only`.
+- Everything is allowed for every user: the app declares no `RoleGrants` bean, so it runs open
+  (see the startup warning). Declare one to switch to deny-by-default.
+- An admin screen is gone after an upgrade: there is no `ADMIN` superuser any more; grant the
+  screen's permission (`settings.edit`, `users.manage`, …) to the role that should have it.
 - Resource-server `/api/auth/login` returns `409`: clients authenticate with bearer tokens; the
   starter does not issue them.
 - A same-port Actuator/custom non-API route is unexpectedly public: the default chain protects

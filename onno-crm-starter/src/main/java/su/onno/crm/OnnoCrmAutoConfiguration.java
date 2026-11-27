@@ -36,41 +36,49 @@ public class OnnoCrmAutoConfiguration {
     @Bean @ConditionalOnMissingBean
     public CrmStateConfiguration crmStateConfiguration() { return CrmStateConfiguration.empty(); }
 
+    /** Shared channel connections are managed by explicit holders of {@link CrmPermissions#ADMINISTER}. */
     @Bean @ConditionalOnMissingBean
     public CrmChannelAccess crmChannelAccess(su.onno.service.AccessService access) {
-        return principal -> access.roles(principal).contains("ADMIN");
+        return principal -> principal != null && access.access(principal).granted(CrmPermissions.ADMINISTER);
     }
     @Bean @ConditionalOnMissingBean
     public CrmFeatures crmFeatures() { return CrmFeatures.defaults(); }
 
     /**
      * Scoped inbox endpoints own record access; generic surfaces (REST, UI, MCP, events) must not
-     * bypass workspace policies. Non-administrators never read these catalogs generically.
+     * bypass workspace policies. Only explicit holders of {@link CrmPermissions#ADMINISTER} read
+     * these catalogs generically (with an entity grant on them, like any catalog).
      *
-     * <p>Administrators keep generic access unless {@link CrmFeatures#personalAccounts()} is on:
-     * generic surfaces cannot apply the per-row personal-inbox rule, so the catalogs are then closed
-     * to every role. The decision is configuration, never data, so it cannot flip at runtime when
-     * someone connects an account.</p>
+     * <p>Even they lose generic access when {@link CrmFeatures#personalAccounts()} is on: generic
+     * surfaces cannot apply the per-row personal-inbox rule, so the catalogs are then closed to every
+     * role. The decision is configuration, never data, so it cannot flip at runtime when someone
+     * connects an account.</p>
      */
-    @Bean public EntityAccessPolicy crmWorkspaceGenericAccess(CrmFeatures features) {
-        return new CrmGenericAccessPolicy(features.personalAccounts());
+    @Bean public EntityAccessPolicy crmWorkspaceGenericAccess(CrmFeatures features,
+            ObjectProvider<su.onno.access.RoleGrants> grants) {
+        return crmWorkspaceGenericAccess(features, grants.getIfAvailable(su.onno.access.RoleGrants::open));
     }
 
-    /** See {@link #crmWorkspaceGenericAccess}. */
+    /** See {@link #crmWorkspaceGenericAccess(CrmFeatures, ObjectProvider)}. */
+    public EntityAccessPolicy crmWorkspaceGenericAccess(CrmFeatures features, su.onno.access.RoleGrants grants) {
+        return new CrmGenericAccessPolicy(features.personalAccounts(), grants);
+    }
+
+    /** See {@link #crmWorkspaceGenericAccess(CrmFeatures, ObjectProvider)}. */
     static final class CrmGenericAccessPolicy implements EntityAccessPolicy {
         private static final Set<String> PROTECTED = Set.of(
                 "crmconversations", "crmconversationmessages", "crmcontactidentities", "crminboxes");
         private final boolean personalAccounts;
+        private final su.onno.access.RoleGrants grants;
 
-        CrmGenericAccessPolicy(boolean personalAccounts) {
+        CrmGenericAccessPolicy(boolean personalAccounts, su.onno.access.RoleGrants grants) {
             this.personalAccounts = personalAccounts;
+            this.grants = Objects.requireNonNull(grants, "grants");
         }
-
-        @Override public boolean includesAdministrators() { return true; }
 
         @Override public boolean allows(Set<String> roles, String type, String name, boolean write) {
             if (!type.equals("catalog") || !PROTECTED.contains(name.replace("_", "").toLowerCase(Locale.ROOT))) return true;
-            return roles.contains("ADMIN") && !personalAccounts;
+            return !personalAccounts && grants.resolve(roles).granted(CrmPermissions.ADMINISTER);
         }
     }
 

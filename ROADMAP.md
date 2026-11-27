@@ -15,8 +15,8 @@ Implemented:
 - Web starter (`onno-web-starter`) with the generic catalog, document and register APIs and the `/api/ui` model
 - UI auth foundation with login screen, protected routes, `GET /api/auth/me`, JSON `POST /api/auth/login` and `/api/auth/logout`, session cookies, CSRF
 - Production auth modes shipped in `onno-auth-starter`: `in-memory`, `oidc` (Keycloak/Zitadel/custom SSO), and `resource-server` (stateless JWT bearer)
-- Per-entity, deny-by-default RBAC via `@AccessControl(readRoles, writeRoles)` enforced across REST, UI, and MCP (`ADMIN` is a superuser)
-- Document post/unpost rights separate from write access: `@AccessControl(postRoles, unpostRoles)` narrows who may post, re-post or unpost on REST, MCP and the built-in UI actions; a posted document must be unposted explicitly before deletion; `BeforeUnpostHandler` lets the domain veto an unpost
+- Typed role grants: roles are an application `RoleKey` enum and one `RoleGrants` bean declares each role's entity rights (read < write < post/unpost) and capability `Permission`s (`settings.edit`, `users.manage`, `periodClose.manage`, …), enforced across REST, UI, MCP and SSE with no superuser; an app without grants runs open, IdP roles map by normalized name or `fromIdp(...)`, and `model.gen.ts` types roles and permissions
+- Document post/unpost rights separate from write access: `RoleGrants` grants `post(...)` and `unpost(...)` on their own, deciding who may post, re-post or unpost on REST, MCP and the built-in UI actions; a posted document must be unposted explicitly before deletion; `BeforeUnpostHandler` lets the domain veto an unpost
 - Record-level access policies (`RecordAccessPolicy` + `RecordScope`): declarative, query-pushed-down "which records" rules for external users, enforced on every generic read/write path (lists, aggregates, search, refs, writes, actions, import, comments, tags, presence, notifications, SSE, MCP, CRM inbox) with a shipped leak-test conformance suite
 - Structured reference resolution for API rows via `{column}_display` and `{column}_ref`
 - Record change history: opt-in `@Catalog/@Document(history = true)` field-level audit log (who, when, old and new value; tabular-section rows; post/unpost/delete events) recorded on the generic command path and typed repository saves, with a History panel on the default record page (`<RecordHistory />`) and `GET /api/history/{kind}/{name}/{id}` under the record's own read access
@@ -73,7 +73,7 @@ Good next slices:
 - A native mobile client on the same `/api/ui` model and `onno://` link protocol the web UI uses
 
 Recently shipped (formerly on this list): role-aware deny-by-default authorization
-(`@AccessControl`), OIDC/Keycloak production auth, diff-based migration with snapshots and model
+(`RoleGrants`), OIDC/Keycloak production auth, diff-based migration with snapshots and model
 diffs, the React-only UI on `@onno/ui`, horizontal scale-out (cluster bus in the framework starter), and
 record-level presence markers (live "who else is viewing this record" avatars, cluster-relayed).
 
@@ -84,7 +84,7 @@ Current auth ships in `onno-auth-starter` with three modes selected by `onno.aut
 - `oidc`: server-side OpenID Connect SSO (Keycloak/Zitadel/custom) with realm/client role mapping and RP-initiated logout.
 - `resource-server`: stateless JWT bearer validation for API-only clients.
 - 401 JSON entry point for unauthenticated API calls; SPA login screen wired to it.
-- Per-entity authorization is deny-by-default via `@AccessControl(readRoles, writeRoles)`; `ADMIN` is a superuser.
+- Authorization comes from the application's `RoleGrants` bean (deny-by-default once declared; no superuser); admin capabilities are named `Permission`s an IdP role can be granted through `fromIdp(...)`.
 - Any consumer can set `onno.auth.enabled=false` and override the `SecurityFilterChain`, `UserDetailsService`, or `PasswordEncoder` bean.
 - Delegated "connect external account" / "Connect with X" flows (distinct from logging a user *in*) belong to the connector boundary, including its authorization redirect/callback endpoint. Generic command results carry structured feedback, refresh intent and an optional in-app `navigateTo` only; the turnkey authorization-code mechanics (`AuthorizationCodeFlow` + `TokenStore` that seeds a connector's `OAuthTokenManager`) live in the commercial `onno-connector-support`.
 

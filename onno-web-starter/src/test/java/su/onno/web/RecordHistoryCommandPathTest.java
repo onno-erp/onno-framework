@@ -1,5 +1,8 @@
 package su.onno.web;
 
+import su.onno.access.RoleGrants;
+import su.onno.access.RoleKey;
+
 import su.onno.service.TestEntityStore;
 
 import su.onno.service.AccessService;
@@ -14,7 +17,6 @@ import su.onno.access.AccessSubject;
 import su.onno.access.RecordAccessPolicy;
 import su.onno.access.RecordPolicies;
 import su.onno.access.RecordScope;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.annotations.Document;
@@ -64,18 +66,23 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class RecordHistoryCommandPathTest {
 
+    enum TestRole implements RoleKey { VET, CLIENT }
+
+    private static final RoleGrants GRANTS = RoleGrants.of(TestRole.class)
+            .role(TestRole.VET, r -> r.write(Owner.class, Patient.class, Untracked.class)
+                    .post(Visit.class).unpost(Visit.class))
+            .role(TestRole.CLIENT, r -> r.read(Owner.class, Patient.class));
+
     @Enumeration(name = "HistSpecies")
     public enum Species { DOG, CAT }
 
     @Catalog(name = "HistOwners")
-    @AccessControl(readRoles = {"VET", "CLIENT"}, writeRoles = "VET")
     @SuppressWarnings("unused")
     public static class Owner extends CatalogObject {
         @Attribute(length = 20) private String tier;
     }
 
     @Catalog(name = "HistPatients", history = true)
-    @AccessControl(readRoles = {"VET", "CLIENT"}, writeRoles = "VET")
     @SuppressWarnings({"unused", "FieldMayBeFinal", "MismatchedQueryAndUpdateOfCollection"})
     public static class Patient extends CatalogObject {
         @Attribute(length = 60, displayName = "Pet name") private String name;
@@ -92,7 +99,6 @@ class RecordHistoryCommandPathTest {
     }
 
     @Document(name = "HistVisits", numberPrefix = "V-", history = true)
-    @AccessControl(readRoles = "VET", writeRoles = "VET")
     @SuppressWarnings({"unused", "FieldMayBeFinal", "MismatchedQueryAndUpdateOfCollection"})
     public static class Visit extends DocumentObject {
         @Attribute(length = 200) private String complaint;
@@ -107,7 +113,6 @@ class RecordHistoryCommandPathTest {
     }
 
     @Catalog(name = "HistUntracked")
-    @AccessControl(readRoles = "VET", writeRoles = "VET")
     @SuppressWarnings("unused")
     public static class Untracked extends CatalogObject {
         @Attribute(length = 60) private String label;
@@ -155,7 +160,7 @@ class RecordHistoryCommandPathTest {
                         .read(RecordScope.eq("tier", "own")),
                 RecordAccessPolicy.forCatalog(Owner.class).appliesTo("CLIENT")
                         .read(RecordScope.eq("tier", "own")))));
-        AccessService access = new AccessService(registry);
+        AccessService access = new AccessService(registry, GRANTS);
         SecretCipher cipher = new SecretCipher("history-test-key");
         history = new RecordHistory(jdbi, registry, cipher, null);
 

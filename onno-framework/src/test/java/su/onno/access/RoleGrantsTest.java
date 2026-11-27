@@ -6,6 +6,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import su.onno.model.CatalogObject;
+import su.onno.model.DocumentObject;
 
 class RoleGrantsTest {
 
@@ -104,6 +106,80 @@ class RoleGrantsTest {
         assertThat(grants.roleNames()).containsExactly("MANAGER", "ACCOUNTANT", "IT", "GUEST");
         assertThat(grants.entities()).containsExactlyInAnyOrder(Customer.class, Order.class, Invoice.class);
         assertThat(grants.permissions()).containsExactlyInAnyOrder(EDIT_SETTINGS, MANAGE_USERS);
+    }
+
+    @Test
+    void explicitGrantIsNeverImpliedByUnrestrictedAccess() {
+        assertThat(grants.resolve(List.of("IT")).granted(MANAGE_USERS)).isTrue();
+        assertThat(grants.resolve(List.of("MANAGER")).granted(MANAGE_USERS)).isFalse();
+        // Everyone holds every permission in an open application, but nobody holds one explicitly.
+        assertThat(RoleGrants.open().resolve(List.of()).has(MANAGE_USERS)).isTrue();
+        assertThat(RoleGrants.open().resolve(List.of()).granted(MANAGE_USERS)).isFalse();
+        assertThat(grants.resolve(AccessSubject.system()).granted(MANAGE_USERS)).isFalse();
+    }
+
+    @Test
+    void exposesEntitiesByExactRightAndRolesByPermission() {
+        assertThat(grants.entities(EntityRight.POST)).containsExactly(Order.class);
+        assertThat(grants.entities(EntityRight.UNPOST)).containsExactly(Invoice.class);
+        assertThat(grants.entities(EntityRight.READ)).containsExactly(Customer.class);
+        assertThat(grants.rolesGranting(EDIT_SETTINGS)).containsExactly("ACCOUNTANT");
+        assertThat(grants.rolesGranting(Permission.of("print.templates.manage", ""))).isEmpty();
+    }
+
+    @Test
+    void recognizesDeclaredRolesAndIdpNamesOnly() {
+        assertThat(grants.recognizes("ROLE_manager")).isTrue();
+        assertThat(grants.recognizes("guest")).as("an enum role that grants nothing still exists").isTrue();
+        assertThat(grants.recognizes("erp-admins")).as("a fromIdp name").isTrue();
+        assertThat(grants.recognizes("MANGER")).isFalse();
+        assertThat(RoleGrants.open().recognizes("anything")).isTrue();
+
+        grants.requireRecognized("test list", List.of("MANAGER", "ERP-ADMINS"));
+        assertThatThrownBy(() -> grants.requireRecognized("command Orders#cancel .roles(...)", List.of("MANAGER", "MANGER")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("[MANGER]")
+                .hasMessageContaining("command Orders#cancel")
+                .hasMessageContaining("fromIdp");
+        RoleGrants.open().requireRecognized("anything", List.of("MANGER"));
+        assertThatThrownBy(() -> grants.requireRecognized("print form invoice", List.of("MANAGER", " ")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("[<blank>]");
+    }
+
+    static final class Receipt extends DocumentObject {}
+    static final class Supplier extends CatalogObject {}
+
+    @Test
+    void wholeModelPostingReachesDocumentsOnly() {
+        EffectiveAccess poster = RoleGrants.of(AppRole.class)
+                .role(AppRole.MANAGER, r -> r.readAll().postAll().unpostAll())
+                .resolve(List.of("MANAGER"));
+        assertThat(poster.can(Receipt.class, EntityRight.POST)).isTrue();
+        assertThat(poster.can(Receipt.class, EntityRight.UNPOST)).isTrue();
+        assertThat(poster.can(Receipt.class, EntityRight.WRITE)).isTrue();
+        assertThat(poster.can(Supplier.class, EntityRight.READ)).isTrue();
+        assertThat(poster.can(Supplier.class, EntityRight.WRITE)).as("postAll() does not write catalogs").isFalse();
+        assertThat(poster.can(Supplier.class, EntityRight.POST)).isFalse();
+        assertThat(poster.can(null, EntityRight.POST)).as("an unknown type is no document").isFalse();
+    }
+
+    enum ClashingRole implements RoleKey { ADMIN, ROLE_ADMIN }
+
+    @Test
+    void rolesThatNormalizeAlikeAreRejected() {
+        assertThatThrownBy(() -> RoleGrants.of(ClashingRole.class))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("ADMIN and ROLE_ADMIN");
+    }
+
+    @Test
+    void anAnonymousCallerHoldsNothing() {
+        assertThat(EffectiveAccess.NONE.unrestricted()).isFalse();
+        assertThat(EffectiveAccess.NONE.can(Order.class, EntityRight.READ)).isFalse();
+        assertThat(EffectiveAccess.NONE.has(MANAGE_USERS)).isFalse();
+        assertThat(EffectiveAccess.NONE.granted(MANAGE_USERS)).isFalse();
+        assertThat(EffectiveAccess.NONE.roles()).isEmpty();
     }
 
     @Test

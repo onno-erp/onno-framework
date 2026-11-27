@@ -109,10 +109,16 @@ final class ClaimRoleConverter {
         return result;
     }
 
+    /**
+     * Each role is normalized ({@link su.onno.access.AccessSubject#normalizeRole}: {@code manager} and
+     * {@code ROLE_manager} become {@code MANAGER}) before the prefix is added, so Spring's
+     * {@code hasRole("MANAGER")} and the framework's role grants see the same name.
+     */
     private void addRoles(Set<GrantedAuthority> authorities, List<String> roles) {
         for (String role : roles) {
-            if (role != null && !role.isBlank()) {
-                authorities.add(new SimpleGrantedAuthority(prefix + role));
+            String normalized = su.onno.access.AccessSubject.normalizeRole(role);
+            if (!normalized.isEmpty()) {
+                authorities.add(new SimpleGrantedAuthority(prefix + normalized));
             }
         }
     }

@@ -407,7 +407,7 @@ The generated API and screens should read like the business to a business user:
 
 - names should be business terms
 - contexts should match business areas
-- `@AccessControl` roles decide which entities each role sees
+- the `RoleGrants` bean decides which entities each role sees and which capabilities it holds
 - refs should point to meaningful catalogs/documents
 - registers should clearly represent balances, turnover, or historical facts
 

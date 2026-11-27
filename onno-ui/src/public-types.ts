@@ -58,16 +58,25 @@ export interface OnnoInformationRegisters {}
 export interface OnnoConstants {}
 
 /**
- * Every role the app knows, augmented by `model.gen.ts` with the roles its `@AccessControl`
- * annotations name (plus `ADMIN`). A role that appears only at runtime — in a command's
- * `roles(...)` or the configured users — is added by the app:
- * `declare module "@onno/ui" { interface OnnoRoles { SUPPORT: true } }`.
+ * Every role the app knows, augmented by `model.gen.ts` with the constants of the app's Java
+ * `RoleKey` enums (normalized: upper case, no `ROLE_`). A role that exists only at runtime is added
+ * by the app: `declare module "@onno/ui" { interface OnnoRoles { SUPPORT: true } }`.
  */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- augmented by model.gen.ts
 export interface OnnoRoles {}
 
 /** A role name, checked against `OnnoRoles` when generated. */
 export type RoleName = [keyof OnnoRoles] extends [never] ? string : Extract<keyof OnnoRoles, string>;
+
+/**
+ * Every permission key, augmented by `model.gen.ts` with each Java `Permission` constant of the app
+ * and of the framework modules on its classpath (`"settings.edit"`, `"users.manage"`, …).
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- augmented by model.gen.ts
+export interface OnnoPermissions {}
+
+/** A permission key, checked against `OnnoPermissions` when generated. */
+export type PermissionName = [keyof OnnoPermissions] extends [never] ? string : Extract<keyof OnnoPermissions, string>;
 
 type Entities = OnnoEntities;
 type Typed = [keyof Entities] extends [never] ? false : true;
@@ -615,6 +624,8 @@ export interface PageOptions {
   label?: string;
   icon?: LucideIcon;
   roles?: RoleName[];
+  /** Only users holding this permission see the page and its nav link. */
+  permission?: PermissionName;
   when?: (model: AppModel) => boolean | Promise<boolean>;
   view?: boolean;
 }
@@ -710,15 +721,15 @@ export type NavItemSpec<P extends PagePath = PagePath> =
   | NavGroupSpec<P>
   | NavigationEntityName
   | P
-  | { entity: NavigationEntityName; label?: string; icon?: LucideIcon; roles?: RoleName[] }
-  | { path: P; label?: string; icon?: LucideIcon; roles?: RoleName[] };
+  | { entity: NavigationEntityName; label?: string; icon?: LucideIcon; roles?: RoleName[]; permission?: PermissionName }
+  | { path: P; label?: string; icon?: LucideIcon; roles?: RoleName[]; permission?: PermissionName };
 
-export interface NavGroupSpec<P extends PagePath = PagePath> { title: string; icon?: LucideIcon; actions?: ReactNode; roles?: RoleName[]; items: NavItemSpec<P>[] }
-export interface NavSectionSpec<P extends PagePath = PagePath> { title?: string | null; icon?: LucideIcon; actions?: ReactNode; roles?: RoleName[]; items: NavItemSpec<P>[] }
+export interface NavGroupSpec<P extends PagePath = PagePath> { title: string; icon?: LucideIcon; actions?: ReactNode; roles?: RoleName[]; permission?: PermissionName; items: NavItemSpec<P>[] }
+export interface NavSectionSpec<P extends PagePath = PagePath> { title?: string | null; icon?: LucideIcon; actions?: ReactNode; roles?: RoleName[]; permission?: PermissionName; items: NavItemSpec<P>[] }
 export type NavigationProps = Omit<import("./components/shell/navigation").NavigationProps, "navigation"> & { navigation: NavSection[] };
 export type NavigationGroupProps = { title: string; icon?: LucideIcon; actions?: ReactNode; children: ReactNode; defaultOpen?: boolean };
 export type NavigationLinkProps = ({ entity: NavigationEntityName; path?: never } | { path: PagePath; entity?: never }) & {
-  label?: string; icon?: LucideIcon; roles?: RoleName[]; className?: string;
+  label?: string; icon?: LucideIcon; roles?: RoleName[]; permission?: PermissionName; className?: string;
 };
 
 /**

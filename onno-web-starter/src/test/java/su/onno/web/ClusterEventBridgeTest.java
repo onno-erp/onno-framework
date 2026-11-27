@@ -41,7 +41,7 @@ class ClusterEventBridgeTest {
 
         RecordingPublisher() {
             // publish(...) is overridden to record, so the access service is never consulted.
-            super(new AccessService(null));
+            super(new AccessService(new su.onno.metadata.MetadataRegistry()));
         }
 
         @Override

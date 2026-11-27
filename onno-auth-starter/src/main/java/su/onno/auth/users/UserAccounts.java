@@ -2,6 +2,9 @@ package su.onno.auth.users;
 
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import su.onno.access.AccessSubject;
+import su.onno.access.RoleGrants;
+import su.onno.auth.AuthPermissions;
 
 import java.security.SecureRandom;
 import java.time.Clock;
@@ -9,6 +12,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -25,13 +29,11 @@ import java.util.regex.Pattern;
  * security stamp}; a session or remember-me login issued under an older stamp is signed out on its
  * next request. Disabling an account or resetting its password therefore takes effect immediately.
  *
- * <p>The last enabled {@code ADMIN} can be neither disabled nor demoted, so an administrator cannot
+ * <p>The last enabled account holding {@link AuthPermissions#MANAGE_USERS} (through the application's
+ * {@link RoleGrants}) can be neither disabled nor demoted, so an administrator cannot
  * lock everyone out of user management.
  */
 public class UserAccounts {
-
-    /** The role that may manage accounts. */
-    public static final String ADMIN_ROLE = "ADMIN";
 
     private static final Pattern ROLE = Pattern.compile("[A-Za-z][A-Za-z0-9_\\-]*");
     private static final char[] TEMP_ALPHABET =
@@ -41,22 +43,44 @@ public class UserAccounts {
     private final UserStore store;
     private final PasswordEncoder encoder;
     private final PasswordPolicy policy;
+    private final RoleGrants grants;
     private final Clock clock;
     private final SecureRandom random = new SecureRandom();
 
+    /** Accounts of an application without grants ({@link RoleGrants#open()}). */
     public UserAccounts(UserStore store, PasswordEncoder encoder, PasswordPolicy policy) {
-        this(store, encoder, policy, Clock.systemUTC());
+        this(store, encoder, policy, RoleGrants.open());
     }
 
-    UserAccounts(UserStore store, PasswordEncoder encoder, PasswordPolicy policy, Clock clock) {
+    public UserAccounts(UserStore store, PasswordEncoder encoder, PasswordPolicy policy, RoleGrants grants) {
+        this(store, encoder, policy, grants, Clock.systemUTC());
+    }
+
+    UserAccounts(UserStore store, PasswordEncoder encoder, PasswordPolicy policy, RoleGrants grants, Clock clock) {
         this.store = store;
         this.encoder = encoder;
         this.policy = policy;
+        this.grants = Objects.requireNonNull(grants, "grants");
         this.clock = clock;
     }
 
     public PasswordPolicy policy() {
         return policy;
+    }
+
+    /** The application's grants, which decide who may manage accounts. */
+    public RoleGrants grants() {
+        return grants;
+    }
+
+    /** Whether a holder of {@code roles} may manage accounts. */
+    public boolean canManage(Collection<String> roles) {
+        return grants.resolve(roles).has(AuthPermissions.MANAGE_USERS);
+    }
+
+    /** Whether some enabled account may manage accounts ({@code users.manage}). */
+    public boolean anyEnabledAccountManages() {
+        return store.findAll().stream().anyMatch(this::isActiveManager);
     }
 
     public List<UserAccount> list() {
@@ -199,17 +223,19 @@ public class UserAccounts {
     private UserAccount modify(UUID id, UnaryOperator<UserAccount> change) {
         UserAccount before = require(id);
         UserAccount after = change.apply(before);
-        if (isActiveAdmin(before) && !isActiveAdmin(after)
-                && store.findAll().stream().filter(this::isActiveAdmin).count() <= 1) {
+        if (isActiveManager(before) && !isActiveManager(after)
+                && store.findAll().stream().filter(this::isActiveManager).count() <= 1) {
             throw new UserAccountException(UserAccountException.Reason.CONFLICT,
-                    "This is the last enabled administrator. Grant ADMIN to another account first.");
+                    "This is the last enabled account that may manage accounts (users.manage). "
+                            + "Give another account a role holding it first.");
         }
         store.update(after);
         return after;
     }
 
-    private boolean isActiveAdmin(UserAccount account) {
-        return account.enabled() && account.roles().contains(ADMIN_ROLE);
+    /** An enabled account whose roles hold {@code users.manage}. */
+    private boolean isActiveManager(UserAccount account) {
+        return account.enabled() && canManage(account.roles());
     }
 
     private UserAccount require(UUID id) {
@@ -244,10 +270,8 @@ public class UserAccounts {
                 if (raw == null || raw.isBlank()) {
                     continue;
                 }
-                String role = raw.trim();
-                if (role.startsWith("ROLE_")) {
-                    role = role.substring("ROLE_".length());
-                }
+                // The one normalization: "role_manager" and "ROLE_MANAGER" are stored as MANAGER.
+                String role = AccessSubject.normalizeRole(raw);
                 if (!ROLE.matcher(role).matches()) {
                     throw new UserAccountException(UserAccountException.Reason.INVALID,
                             "\"" + raw + "\" is not a valid role name.");

@@ -103,7 +103,7 @@ final class RecordWriteGuard {
      * record policy — with an entity-level read grant on the target. 422 otherwise.
      */
     void requireReadableRefs(List<AttributeDescriptor> attributes, Map<String, Object> body, AccessSubject subject) {
-        if (subject.superuser() || scopes.policies().isEmpty()) return;
+        if (subject.trusted() || scopes.policies().isEmpty()) return;
         boolean restricted = scopes.policies().restricts(subject);
         for (AttributeDescriptor attr : attributes) {
             if (!attr.isRef() || !body.containsKey(attr.fieldName())) continue;
@@ -141,7 +141,7 @@ final class RecordWriteGuard {
      */
     void preserveRestrictedRefs(String table, List<AttributeDescriptor> attributes, UUID id,
                                 Map<String, Object> body, AccessSubject subject, Class<?> parentType) {
-        if (subject.superuser()) return;
+        if (subject.trusted()) return;
         Map<String, Object> stored = null;
         for (AttributeDescriptor attr : attributes) {
             if (!attr.isRef() || !body.containsKey(attr.fieldName())) continue;

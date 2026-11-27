@@ -6,7 +6,7 @@ description: Diagnose onno CRM channel connection, missing chats, duplicate cont
 # Diagnose CRM messaging
 
 Start with the observed symptom and the running app/version. Inspect connection-card state through
-`GET /api/crm/channels` as an authorized CRM user. Connection commands require host CrmChannelAccess (ADMIN by default).
+`GET /api/crm/channels` as an authorized CRM user. Connection commands require host CrmChannelAccess (an explicit `crm.administer` grant by default).
 Check which process, port, database and external configuration actually run before restarting.
 Preserve database files and credentials; stop the actual old listener before starting a replacement.
 

@@ -52,6 +52,28 @@ class AnnotatedMcpToolProviderTest {
         }
     }
 
+    enum TestRole implements su.onno.access.RoleKey { OPS, SALES }
+
+    enum OtherRole implements su.onno.access.RoleKey { SALES }
+
+    @Test
+    void toolRolesMustBeDeclaredRoles() {
+        try (GenericApplicationContext context = contextWith(SampleTools.class)) {
+            var properties = new OnnoMcpProperties();
+            properties.setWritesEnabled(true);
+            var declared = su.onno.access.RoleGrants.of(TestRole.class);
+            assertThat(new AnnotatedMcpToolProvider(context.getBeanFactory(), properties,
+                    new su.onno.service.WebProperties(), json, declared).tools()).hasSize(1);
+
+            var missing = su.onno.access.RoleGrants.of(OtherRole.class);
+            assertThatThrownBy(() -> new AnnotatedMcpToolProvider(context.getBeanFactory(), properties,
+                    new su.onno.service.WebProperties(), json, missing).tools())
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("[OPS]")
+                    .hasMessageContaining("@McpTool shipping_quote");
+        }
+    }
+
     @Test
     void deniesAnonymousAndWrongRole() {
         try (GenericApplicationContext context = contextWith(SampleTools.class)) {

@@ -35,7 +35,7 @@ class ClaimRoleConverterTest {
     @Test
     void mapsRealmRolesWithRolePrefixByDefault() {
         assertThat(authorities(converter(keycloak()).convert(keycloakClaims())))
-                .containsExactlyInAnyOrder("ROLE_admin", "ROLE_rentals");
+                .containsExactlyInAnyOrder("ROLE_ADMIN", "ROLE_RENTALS");
     }
 
     @Test
@@ -46,7 +46,7 @@ class ClaimRoleConverterTest {
         oidc.getRoles().setClientId("rentals-app");
 
         assertThat(authorities(converter(oidc).convert(keycloakClaims())))
-                .containsExactly("ROLE_billing");
+                .containsExactly("ROLE_BILLING");
     }
 
     @Test
@@ -56,7 +56,7 @@ class ClaimRoleConverterTest {
         oidc.getRoles().setClientId("rentals-app");
 
         assertThat(authorities(converter(oidc).convert(keycloakClaims())))
-                .containsExactlyInAnyOrder("ROLE_admin", "ROLE_rentals", "ROLE_billing");
+                .containsExactlyInAnyOrder("ROLE_ADMIN", "ROLE_RENTALS", "ROLE_BILLING");
     }
 
     @Test
@@ -65,7 +65,7 @@ class ClaimRoleConverterTest {
         oidc.getRoles().setPrefix("");
 
         assertThat(authorities(converter(oidc).convert(keycloakClaims())))
-                .containsExactlyInAnyOrder("admin", "rentals");
+                .containsExactlyInAnyOrder("ADMIN", "RENTALS");
     }
 
     @Test
@@ -100,7 +100,7 @@ class ClaimRoleConverterTest {
                         "user", Map.of("orgId", "acme.example.com")));
 
         assertThat(authorities(converter(oidc).convert(claims)))
-                .containsExactlyInAnyOrder("ROLE_admin", "ROLE_user");
+                .containsExactlyInAnyOrder("ROLE_ADMIN", "ROLE_USER");
     }
 
     @Test
@@ -115,7 +115,7 @@ class ClaimRoleConverterTest {
         Map<String, Object> claims = Map.of(
                 "urn:zitadel:iam:org:project:123456:roles", Map.of("ceo", Map.of()));
 
-        assertThat(authorities(converter(oidc).convert(claims))).containsExactly("ROLE_ceo");
+        assertThat(authorities(converter(oidc).convert(claims))).containsExactly("ROLE_CEO");
     }
 
     @Test
@@ -127,7 +127,21 @@ class ClaimRoleConverterTest {
                 "roles", OnnoAuthProperties.Shape.ARRAY));
 
         assertThat(authorities(converter(oidc).convert(Map.of("roles", List.of("a", "b")))))
-                .containsExactlyInAnyOrder("ROLE_a", "ROLE_b");
+                .containsExactlyInAnyOrder("ROLE_A", "ROLE_B");
+    }
+
+    @Test
+    void normalizesIdpRoleNamesThroughTheOneFrameworkNormalization() {
+        // An IdP that already prefixes or lower-cases roles maps to the same name RoleGrants and
+        // Spring's hasRole(...) use: no ROLE_ROLE_ double prefix, no case mismatch.
+        OnnoAuthProperties.Oidc oidc = new OnnoAuthProperties.Oidc();
+        oidc.setProvider(OnnoAuthProperties.Provider.CUSTOM);
+        oidc.setRegistrationId("my-idp");
+        oidc.getRoles().getSources().add(new OnnoAuthProperties.RoleSource(
+                "roles", OnnoAuthProperties.Shape.ARRAY));
+
+        assertThat(authorities(converter(oidc).convert(Map.of("roles", List.of("ROLE_manager", " erp-admins ", "")))))
+                .containsExactlyInAnyOrder("ROLE_MANAGER", "ROLE_ERP-ADMINS");
     }
 
     // --- preset resolution ---------------------------------------------------------------

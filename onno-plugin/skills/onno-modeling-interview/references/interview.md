@@ -86,12 +86,13 @@ Map answers:
 | "We maintain customers/suppliers/products/warehouses" | `@Catalog` |
 | "Products belong to categories" | `Ref<ProductCategory>` or hierarchical catalog |
 | "Categories can contain subcategories" | `@Catalog(hierarchical = true)` |
-| "Only admins change employees" | Confirm non-admin readers; `ADMIN` is already the superuser bypass |
+| "Only admins change employees" | `RoleGrants`: `.role(AppRole.ADMIN, r -> r.write(Employee.class))`, other roles `read(Employee.class)`; there is no superuser |
 | "The picker needs phone/email under the name" | UI customization `fields: { customer: { refSecondary: "phone" } }` |
 
-`@AccessControl` is deny-by-default. Ask which non-admin roles may read and write; omit `ADMIN` from
-the arrays because it always bypasses. Empty `writeRoles` inherits `readRoles`, so enumerate
-non-admin writers explicitly when they differ.
+Access is one `RoleGrants` bean, deny-by-default once declared, with no superuser. Ask for every
+role (admins included) which entities it reads, writes, posts and unposts, and which capabilities
+it needs (`settings.edit`, `users.manage`, `periodClose.manage`, …). Roles become a `RoleKey` enum;
+ask which identity-provider role names map to them (`fromIdp(...)`).
 
 Follow-up questions:
 
@@ -237,7 +238,7 @@ Map answers:
 | "Cannot post with empty lines" | `Validated` |
 | "Cannot ship more than stock" | BALANCE register negative guard |
 | "New orders default to today and Draft" | `OnFillingHandler` + field initializer |
-| "Only finance can delete posted invoices" | `@AccessControl` plus action/hook guard |
+| "Only finance can delete posted invoices" | `RoleGrants` `unpost(Invoice.class)` for finance only (a posted document must be unposted before it can be deleted) |
 
 Follow-up questions:
 
@@ -267,7 +268,7 @@ Map answers:
 
 | Answer pattern | onno concept |
 | --- | --- |
-| "Managers see sales, warehouse sees receipts" | `@AccessControl` read roles (nav drops what a role can't read) + `roles` on pages/nav items |
+| "Managers see sales, warehouse sees receipts" | `RoleGrants` read grants (nav drops what a role can't read) + `roles`/`permission` on pages/nav items |
 | "Orders board grouped by status" | entity customization `list.groupBy`/`groupable`, `filters`, `rowStyle`; or a `Kanban` |
 | "Advance order from the row" | a `Commands<Order>` command + `commands: { advance: { placement: "row" } }` |
 | "Dashboard has revenue and open orders" | a `/` page with `Stat`/`Chart` over `count`/`sum` measures |

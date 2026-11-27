@@ -1,7 +1,6 @@
 package su.onno.service;
 
 import su.onno.access.AccessSubject;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.annotations.Document;
@@ -52,7 +51,6 @@ class NullRefBindingPostgresIT {
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
 
     @Catalog(name = "Pg Telegram Users", autoNumber = false, codeLength = 15)
-    @AccessControl(readRoles = "ADMIN", writeRoles = "ADMIN")
     public static class PgTelegramUser extends CatalogObject {
         @Attribute(length = 64) private String username;
         @Attribute private Boolean active;
@@ -60,7 +58,6 @@ class NullRefBindingPostgresIT {
     }
 
     @Document(name = "Pg Approvals", numberPrefix = "PA-")
-    @AccessControl(readRoles = "ADMIN", writeRoles = "ADMIN")
     public static class PgApproval extends DocumentObject {
         @Attribute(length = 60) private String note;
         @Attribute private Ref<PgTelegramUser> approver; // nullable ref attribute

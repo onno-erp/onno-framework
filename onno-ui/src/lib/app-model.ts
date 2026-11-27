@@ -6,7 +6,7 @@ import type { ShellData, ShellNavSection } from "./view-types";
 /**
  * The business model as the signed-in user sees it (`GET /api/ui/model`): every readable catalog,
  * document and register with its route, title, bounded context and the user's rights, the readable
- * information registers and (for administrators) the settings, plus the user. The client builds
+ * information registers and (with `settings.edit`) the settings, plus the user. The client builds
  * navigation and default screens from this. Branding is not part of it: it comes from
  * `GET /api/branding` ({@link useBranding}), the one place the server serves it.
  */
@@ -28,15 +28,53 @@ export type ModelEntity = {
 };
 
 export type AppModel = {
-  user: { username: string; displayName: string; avatarUrl: string; roles: string[] };
+  user: {
+    username: string;
+    displayName: string;
+    avatarUrl: string;
+    /** The user's roles, normalized (upper case, no `ROLE_` prefix). */
+    roles: string[];
+    /** The permission keys the user's roles are granted (`"settings.edit"`, …). */
+    permissions: string[];
+    /** True when the app declares no role grants: every user holds every permission. */
+    unrestricted: boolean;
+  };
+  /** Every role the app declares (its `RoleKey` enum), normalized; empty without role grants. */
+  roles: string[];
   /** `periodClose` when period close is configured (the `/api/period-close` endpoints exist). */
   features: { comments: boolean; notifications: boolean; periodClose?: boolean };
   entities: ModelEntity[];
   /** The readable information registers (read with `useInformationRegister`). */
   informationRegisters: ModelInformationRegister[];
-  /** The `@Constant` settings and their Java value type — administrators only (empty otherwise). */
+  /** The `@Constant` settings and their Java value type — only with `settings.edit` (empty otherwise). */
   constants: { name: string; type: string }[];
 };
+
+/**
+ * The framework's one role-name normalization, as on the server: trim, upper-case and strip a
+ * `ROLE_` prefix (`"ROLE_manager"` → `"MANAGER"`).
+ */
+export function normalizeRole(role: string): string {
+  const upper = role.trim().toUpperCase();
+  return upper.startsWith("ROLE_") ? upper.slice("ROLE_".length) : upper;
+}
+
+/** Whether the user holds any of `roles` (compared normalized); true for an empty or absent list. */
+export function holdsRole(model: AppModel, roles: readonly string[] | undefined): boolean {
+  if (!roles?.length) return true;
+  const held = new Set(model.user.roles.map(normalizeRole));
+  return roles.some((r) => held.has(normalizeRole(r)));
+}
+
+/**
+ * Whether the user holds `permission`; true when none is required. In an app without role grants
+ * every permission is held — except the few the server only honours when granted explicitly
+ * (`periodClose.override`, `processes.administer`, `crm.administer`), which it checks itself.
+ */
+export function holdsPermission(model: AppModel, permission: string | undefined): boolean {
+  if (!permission) return true;
+  return model.user.unrestricted || model.user.permissions.includes(permission);
+}
 
 /** An information register in the model. */
 export type ModelInformationRegister = { logicalName: string; title: string; context: string; periodic: boolean; name?: string; route?: string };

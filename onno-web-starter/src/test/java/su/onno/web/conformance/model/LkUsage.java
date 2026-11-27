@@ -1,6 +1,5 @@
 package su.onno.web.conformance.model;
 
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.AccumulationRegister;
 import su.onno.annotations.Dimension;
 import su.onno.annotations.Resource;
@@ -12,7 +11,6 @@ import java.math.BigDecimal;
 
 /** A balance register scoped by its tenant dimension (movements and the totals table). */
 @AccumulationRegister(name = "LkUsage", type = AccumulationType.BALANCE)
-@AccessControl(readRoles = {"CUSTOMER", "STAFF"})
 public class LkUsage extends AccumulationRecord {
 
     @Dimension

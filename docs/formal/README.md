@@ -102,7 +102,7 @@ cancelled, or a migration runs.
 - **One instance, one graph.** Process-definition validation (`ProcessGraph`), payloads, automatic
   steps and decisions (immediate nodes that run inside the same transaction as the step that
   reaches them) are not modelled: they do not create, wait on or remove tokens.
-- **Assignment and access.** Candidates, claiming, delegation and the `ADMIN` superuser change who
+- **Assignment and access.** Candidates, claiming, delegation and the process administrator (an explicit `processes.administer` grant) change who
   may act, not what a completion does to tokens.
 - **Time.** A timer is simply "due at some point"; the job runner may fire it in any later state.
 - **Concurrency.** The instance row lock serialises every mutation of one instance, so each Java

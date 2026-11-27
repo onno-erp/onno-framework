@@ -79,9 +79,9 @@ defineApp({
       component: SettingsPage,
       label: "Settings",
       icon: Settings,
-      roles: ["ADMIN"],
+      permission: "settings.edit",
     },
-    { path: "/period-close", component: PeriodClosePage, label: "Period close", icon: Lock, roles: ["ADMIN"], when: (model) => model.features.periodClose === true },
+    { path: "/period-close", component: PeriodClosePage, label: "Period close", icon: Lock, permission: "periodClose.manage", when: (model) => model.features.periodClose === true },
     // Optional modules: the page and its link exist only when the module does.
     {
       path: "/support",
@@ -95,7 +95,7 @@ defineApp({
       component: ConnectionsPage,
       label: "Connections",
       icon: Plug,
-      roles: ["ADMIN"],
+      permission: "crm.administer",
       when: crmInboxAvailable,
     },
     {

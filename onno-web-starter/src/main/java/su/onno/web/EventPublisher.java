@@ -1,5 +1,6 @@
 package su.onno.web;
 
+import su.onno.access.CorePermissions;
 import su.onno.service.AccessService;
 import su.onno.service.EntityNames;
 import su.onno.service.RecordAccess;
@@ -253,19 +254,21 @@ public class EventPublisher {
         payload.put("timestamp", Instant.now().toString());
 
         for (Subscriber subscriber : subscribers) {
-            if (canReceiveProcessTasks(subscriber.roles(), subscriber.userId(), users, roles)) {
+            boolean administrator = access.access(subscriber.roles()).granted(CorePermissions.ADMINISTER_PROCESSES);
+            if (canReceiveProcessTasks(administrator, subscriber.roles(), subscriber.userId(), users, roles)) {
                 send(subscriber, "tasks-changed", payload);
             }
         }
     }
 
     static boolean canReceiveProcessTasks(
+            boolean administrator,
             Set<String> subscriberRoles,
             String actorId,
             Set<String> audienceUsers,
             Set<String> audienceRoles
     ) {
-        return subscriberRoles.contains("ADMIN")
+        return administrator
                 || audienceUsers.contains(actorId)
                 || audienceRoles.stream().anyMatch(subscriberRoles::contains);
     }

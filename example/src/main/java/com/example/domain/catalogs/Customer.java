@@ -1,7 +1,6 @@
 package com.example.domain.catalogs;
 
 import com.example.domain.enumerations.CustomerStatus;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.model.CatalogObject;
@@ -20,7 +19,6 @@ import java.math.BigDecimal;
  * plain decimal attributes; the framework's map widget plots one marker per row.</p>
  */
 @Catalog(name = "Customers", codePrefix = "CU-", context = "Sales", history = true)
-@AccessControl(readRoles = {"MANAGER"}, writeRoles = {"MANAGER"})
 @Getter
 @Setter
 public class Customer extends CatalogObject {

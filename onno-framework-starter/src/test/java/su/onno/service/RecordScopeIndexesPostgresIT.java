@@ -4,7 +4,6 @@ import su.onno.access.RecordAccessPolicy;
 import su.onno.access.RecordPolicies;
 import su.onno.access.RecordScope;
 import su.onno.access.Subject;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.metadata.CatalogDescriptor;
@@ -58,7 +57,6 @@ class RecordScopeIndexesPostgresIT {
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
 
     @Catalog(name = "Pg Scoped Notes")
-    @AccessControl(readRoles = "CUSTOMER")
     public static class PgScopedNote extends CatalogObject {
         @Attribute private UUID owner; // scalar, so the schema itself leaves it unindexed
     }

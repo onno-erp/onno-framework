@@ -2,6 +2,8 @@ package su.onno.web.conformance;
 
 import su.onno.access.RecordAccessPolicy;
 import su.onno.access.RecordScope;
+import su.onno.access.RoleGrants;
+import su.onno.access.RoleKey;
 import su.onno.access.Subject;
 import su.onno.command.CommandResult;
 import su.onno.command.CommandSpec;
@@ -10,6 +12,7 @@ import su.onno.identity.IdentityLink;
 import su.onno.web.conformance.model.LkBuildJob;
 import su.onno.web.conformance.model.LkInstance;
 import su.onno.web.conformance.model.LkOwner;
+import su.onno.web.conformance.model.LkPlan;
 import su.onno.web.conformance.model.LkTenant;
 import su.onno.web.conformance.model.LkTenantFacts;
 import su.onno.web.conformance.model.LkUsage;
@@ -30,6 +33,22 @@ public class LeakTestApp {
 
     /** Counts handler runs of the {@code touch} action, so tests can assert one never ran. */
     public static final AtomicInteger TOUCHES = new AtomicInteger();
+
+    enum LkRole implements RoleKey { CUSTOMER, STAFF }
+
+    /** Both roles work every entity; only STAFF changes plans. No role edits settings. */
+    @Bean
+    RoleGrants leakRoles() {
+        return RoleGrants.of(LkRole.class)
+                .role(LkRole.CUSTOMER, r -> r
+                        .write(LkOwner.class, LkTenant.class, LkInstance.class)
+                        .post(LkBuildJob.class).unpost(LkBuildJob.class)
+                        .read(LkPlan.class, LkUsage.class, LkTenantFacts.class))
+                .role(LkRole.STAFF, r -> r
+                        .write(LkOwner.class, LkTenant.class, LkInstance.class, LkPlan.class)
+                        .post(LkBuildJob.class).unpost(LkBuildJob.class)
+                        .read(LkUsage.class, LkTenantFacts.class));
+    }
 
     @Bean
     RecordAccessPolicy ownersBySelf() {

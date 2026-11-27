@@ -29,7 +29,7 @@ import java.util.UUID;
  *
  * <p>Every mutating method enforces {@code requireWritable()} (global read-only mode),
  * {@link AccessService#requireWrite} (posting and unposting additionally the document's
- * {@code @AccessControl(postRoles/unpostRoles)} gate) and the record policies against the caller's
+ * post / unpost grant in {@code RoleGrants}) and the record policies against the caller's
  * {@link AccessSubject}: an existing document must be inside the write scope (404 otherwise), the
  * written document must still satisfy it (403, rolled back), and every reference written — header
  * or line — must be readable (422). Tabular sections inherit the document's scope. See

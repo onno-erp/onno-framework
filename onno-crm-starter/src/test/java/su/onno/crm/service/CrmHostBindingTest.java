@@ -27,7 +27,7 @@ class CrmHostBindingTest {
     Map<UUID,ContactIdentity> identityRows=new HashMap<>();
     ConversationRepository conversations=mock(ConversationRepository.class);
     ContactIdentityRepository identities=mock(ContactIdentityRepository.class);
-    AccessService access=mock(AccessService.class);
+    AccessService access=su.onno.crm.TestBindings.withGrants(mock(AccessService.class));
     JdbcTemplate jdbc;
     CrmCatalogBinding<Guest> catalog;
     CrmWorkspaceService workspace;

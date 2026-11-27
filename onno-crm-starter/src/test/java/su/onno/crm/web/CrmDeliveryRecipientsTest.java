@@ -30,7 +30,7 @@ class CrmDeliveryRecipientsTest {
         conversation.setId(UUID.randomUUID()); conversation.setCustomer(UUID.randomUUID()); conversation.setChannel(Channel.EMAIL);
         var conversations = mock(ConversationRepository.class);
         when(conversations.findActiveById(conversation.getId())).thenReturn(Optional.of(conversation));
-        var access = mock(AccessService.class);
+        var access = su.onno.crm.TestBindings.withGrants(mock(AccessService.class));
         when(access.roles(alice)).thenReturn(Set.of("SUPPORT"));
         var accounts = mock(CrmConnectionAccounts.class);
         when(accounts.hiddenInboxes(alice)).thenReturn(Set.of(personal));
@@ -74,7 +74,7 @@ class CrmDeliveryRecipientsTest {
         conversation.setId(UUID.randomUUID()); conversation.setCustomer(UUID.randomUUID()); conversation.setChannel(Channel.EMAIL);
         var conversations = mock(ConversationRepository.class);
         when(conversations.findActiveById(conversation.getId())).thenReturn(Optional.of(conversation));
-        var access = mock(AccessService.class);
+        var access = su.onno.crm.TestBindings.withGrants(mock(AccessService.class));
         when(access.roles(alice)).thenReturn(Set.of("SUPPORT"));
         var contacts = su.onno.crm.TestBindings.readableContacts();
         when(contacts.canonical(any())).thenAnswer(call -> call.getArgument(0));

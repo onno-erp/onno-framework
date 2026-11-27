@@ -1,6 +1,6 @@
 # Record-level access policies
 
-Entity-level RBAC (`@AccessControl(readRoles, writeRoles)`) decides *which entities* a role may
+Entity-level access (the application's `RoleGrants` bean: `read`, `write`, `post`, `unpost` per entity) decides *which entities* a role may
 see. A **record access policy** decides *which records* of an entity a user may see and change — the
 missing piece for apps with external users (a customer portal, a client seeing their own orders, a
 tenant console). Policies are declared once, as Spring beans, and enforced by the framework on every
@@ -85,10 +85,10 @@ inherit their document's scope.
 ### The policy — who it applies to
 
 1. A policy **applies** to a subject holding at least one of its `appliesTo(...)` roles.
-2. A subject holding `ADMIN` or one of the policy's `exemptRoles(...)` is **exempt**; exemption wins
+2. A subject holding one of the policy's `exemptRoles(...)` is **exempt** (no role is exempt implicitly; trusted code is never scoped); exemption wins
    (staff who also hold `CUSTOMER` see everything).
 3. Several applicable policies for one entity are **OR'ed** — each role grants a slice.
-4. With no applicable policy the entity is unscoped; `@AccessControl` stays the only gate.
+4. With no applicable policy the entity is unscoped; the `RoleGrants` entity grant stays the only gate.
 5. A policy never widens access: the entity-level grant is checked first.
 
 `write(...)` defaults to the read scope; `write(RecordScope.none())` allows changes only through
@@ -117,7 +117,7 @@ too, and an explicit body value cannot override them.
 | ref pickers, mentions, comments, tags, presence | target/record scope applied; unreadable records are 404 or not readable |
 | notifications | a notification about a record the recipient can't read is withheld from its feed and stream (one rule for both), and the unread badge counts only what the feed shows |
 | task inbox | task visibility stays assignment-based; a subject label of an unreadable record is masked |
-| links to a renamed or removed entity | a former `previousNames` entry still resolves; a name that resolves to nothing is withheld/masked for a subject some policy narrows, never for ADMIN or unnarrowed subjects |
+| links to a renamed or removed entity | a former `previousNames` entry still resolves; a name that resolves to nothing is withheld/masked for a subject some policy narrows, never for trusted code or unnarrowed subjects |
 | SSE `/api/events` | a record event reaches a scoped subscriber only if the record is in its scope (one query per event and distinct scope) |
 | MCP built-in and command tools | run as the caller's subject through the same services |
 | CRM inbox | the bound customer catalog's policy narrows readable contacts (on top of `readableWhen`) |
@@ -149,8 +149,10 @@ record — do not store customer-private files as media when external users exis
 
 Startup fails on an unknown entity or field, a scope over a secret or polymorphic-ref field, `via`
 on a non-ref field, an inherited `via` cycle, a register scoped by a non-dimension, a literal that
-can never match, a policy without a read scope, and a **dead** policy (none of its `appliesTo` roles
-may read the entity at all).
+can never match, a policy without a read scope, an `appliesTo` or `exemptRoles` role that is neither
+a declared role nor a `fromIdp` name, and a **dead** policy (none of its `appliesTo` roles has a
+read grant on the entity in `RoleGrants`). Neither role check applies to an application without
+grants.
 
 Every scoped column gets an index (`idx_<table>_<column>`, shortened with a hash past 63
 characters) when `onno.schema.mode` resolves to `apply` — the default; a blank value counts as

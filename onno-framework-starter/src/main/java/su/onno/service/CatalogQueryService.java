@@ -20,7 +20,7 @@ import java.util.UUID;
  * so the SQL and ref-resolution live in one place.
  *
  * <p>Every read takes the {@link AccessSubject} it is made for. Entity-level RBAC
- * ({@code @AccessControl}) stays with the callers; the subject's <strong>record scope</strong>
+ * ({@code RoleGrants}) stays with the callers; the subject's <strong>record scope</strong>
  * ({@link su.onno.access.RecordAccessPolicy}) is applied here, inside the {@code WHERE}, because it
  * is part of the query — lists, counts, groups, aggregates, search, trees and {@code get} all see
  * only the subject's rows. Trusted code passes {@link AccessSubject#system()}.

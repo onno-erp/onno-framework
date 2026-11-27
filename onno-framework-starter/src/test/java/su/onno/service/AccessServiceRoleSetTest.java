@@ -1,5 +1,7 @@
 package su.onno.service;
 
+import su.onno.access.RoleGrants;
+import su.onno.access.RoleKey;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import org.junit.jupiter.api.Test;
@@ -12,24 +14,28 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * {@link AccessService#canRead(java.util.Set, String, String)} — the pre-resolved-roles read check
  * the live SSE stream uses to filter entity-change and presence events per subscriber (#190). It must
- * mirror the {@link java.security.Principal} overload: ADMIN superuser bypass, deny-by-default for an
- * entity with no grant or a caller with no roles, and case-/separator-insensitive {@code {name}}
+ * mirror the {@link java.security.Principal} overload: the role grants (no role passes implicitly),
+ * deny-by-default for an entity with no grant or a caller with no roles, and case-/separator-insensitive {@code {name}}
  * resolution. The {@code Set} overload exists because the fan-out runs off the request thread, where
  * the {@code SecurityContext} can no longer resolve the subscriber's authorities.
  */
 class AccessServiceRoleSetTest {
 
-    /** A catalog readable only by RENTALS, mirroring {@code @AccessControl(readRoles = {"RENTALS"})}. */
+    enum TestRole implements RoleKey { RENTALS, FINANCE, ADMIN }
+
+    static final class Property {}
+
+    /** A catalog only RENTALS may read. */
     private static CatalogDescriptor catalog(String logicalName) {
         return new CatalogDescriptor(logicalName, logicalName, logicalName.replace(" ", "_").toLowerCase(),
-                Object.class, 9, false, true, "C", "Sales",
-                List.of("RENTALS"), List.of(), List.of());
+                Property.class, 9, false, true, "C", "Sales", List.of());
     }
 
     private AccessService withCatalog() {
         MetadataRegistry registry = new MetadataRegistry();
         registry.registerCatalog(catalog("Properties"));
-        return new AccessService(registry);
+        return new AccessService(registry, RoleGrants.of(TestRole.class)
+                .role(TestRole.RENTALS, r -> r.read(Property.class)));
     }
 
     @Test
@@ -46,8 +52,8 @@ class AccessServiceRoleSetTest {
     }
 
     @Test
-    void adminRoleIsSuperuser() {
-        assertThat(withCatalog().canRead(Set.of("ADMIN"), "catalog", "properties")).isTrue();
+    void aRoleNamedAdminIsOrdinary() {
+        assertThat(withCatalog().canRead(Set.of("ADMIN"), "catalog", "properties")).isFalse();
     }
 
     @Test
@@ -89,9 +95,9 @@ class AccessServiceRoleSetTest {
     @Test
     void failsClosedForUnknownEventTypes() {
         AccessService access = withCatalog();
-        // A future / unknown event kind must not leak — only the ADMIN superuser receives it.
+        // A future / unknown event kind must not leak: nobody receives it, whatever their roles.
         assertThat(access.canReceiveEvent(Set.of("RENTALS"), "telemetry", "properties")).isFalse();
-        assertThat(access.canReceiveEvent(Set.of("ADMIN"), "telemetry", "properties")).isTrue();
+        assertThat(access.canReceiveEvent(Set.of("ADMIN"), "telemetry", "properties")).isFalse();
     }
 
     @Test

@@ -1,5 +1,8 @@
 package su.onno.web;
 
+import su.onno.access.RoleGrants;
+import su.onno.access.RoleKey;
+
 import su.onno.service.AccessService;
 import su.onno.service.CatalogQueryService;
 import su.onno.service.DocumentQueryService;
@@ -9,7 +12,6 @@ import su.onno.access.AccessSubject;
 import su.onno.access.RecordAccessPolicy;
 import su.onno.access.RecordPolicies;
 import su.onno.access.RecordScope;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.metadata.CatalogDescriptor;
@@ -47,7 +49,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class RefPickerDecorateTest {
 
-    @AccessControl(readRoles = {"CLERK", "CUSTOMER"})
+    enum TestRole implements RoleKey { CLERK, CUSTOMER }
+
+    private static final RoleGrants GRANTS = RoleGrants.of(TestRole.class)
+            .role(TestRole.CLERK, r -> r.write(Client.class))
+            .role(TestRole.CUSTOMER, r -> r.write(Client.class));
+
     @Catalog(name = "PickerClients")
     static class Client extends CatalogObject {
         @Attribute(length = 40)
@@ -81,7 +88,7 @@ class RefPickerDecorateTest {
         RecordScopeCompiler scopes = new RecordScopeCompiler(new RecordPolicies(registry, List.of(
                 RecordAccessPolicy.forCatalog(Client.class).appliesTo("CUSTOMER")
                         .read(RecordScope.eq("tier", "gold")))));
-        AccessService access = new AccessService(registry);
+        AccessService access = new AccessService(registry, GRANTS);
         controller = new RefOptionController(
                 new CatalogQueryService(registry, jdbi, scopes, access),
                 new DocumentQueryService(registry, jdbi, scopes, access),

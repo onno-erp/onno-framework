@@ -11,7 +11,7 @@ vi.mock("@/components/lists/entity-list", () => ({
     <div>{headerExtra}<output data-testid="query">{JSON.stringify({ filters: list.filters, queryParams })}</output></div>,
 }));
 const model: AppModel = {
-  user: { username: "u", displayName: "User", avatarUrl: "", roles: [] },
+  user: { username: "u", displayName: "User", avatarUrl: "", roles: [], permissions: [], unrestricted: false }, roles: [],
   features: { comments: false, notifications: false }, entities: [], constants: [],
   informationRegisters: [{ logicalName: "Rates", name: "rates", route: "/information-registers/rates", title: "Rates", context: "Finance", periodic: true }],
 };

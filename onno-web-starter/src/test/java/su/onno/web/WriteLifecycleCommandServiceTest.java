@@ -1,5 +1,8 @@
 package su.onno.web;
 
+import su.onno.access.RoleGrants;
+import su.onno.access.RoleKey;
+
 import su.onno.service.TestEntityStore;
 
 import su.onno.service.AccessService;
@@ -10,7 +13,6 @@ import su.onno.service.DocumentQueryService;
 import su.onno.service.EntityJsonRepresentation;
 import su.onno.service.WebProperties;
 import su.onno.access.AccessSubject;
-import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.annotations.Document;
@@ -64,11 +66,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class WriteLifecycleCommandServiceTest {
 
+    enum TestRole implements RoleKey { ADMIN }
+
+    private static final RoleGrants GRANTS = RoleGrants.of(TestRole.class)
+            .role(TestRole.ADMIN, r -> r.write(LifecycleWidget.class)
+                    .post(LifecycleOrder.class).unpost(LifecycleOrder.class));
+
     @Enumeration(name = "Lifecycle Statuses")
     public enum LifecycleStatus { NEW, IN_PROGRESS, DONE }
 
     @Document(name = "LifecycleOrders", numberPrefix = "LO-")
-    @AccessControl(readRoles = "ADMIN")
     @SuppressWarnings({"unused", "FieldMayBeFinal", "FieldCanBeLocal", "MismatchedQueryAndUpdateOfCollection"}) // Reflective model fixture.
     public static class LifecycleOrder extends DocumentObject
             implements OnFillingHandler, BeforeWriteHandler, AfterWriteHandler, Validated {
@@ -117,7 +124,6 @@ class WriteLifecycleCommandServiceTest {
     }
 
     @Catalog(name = "LifecycleWidgets", codePrefix = "LW-")
-    @AccessControl(readRoles = "ADMIN")
     @SuppressWarnings({"unused", "FieldMayBeFinal", "FieldCanBeLocal", "MismatchedQueryAndUpdateOfCollection"}) // Reflective model fixture.
     public static class LifecycleWidget extends CatalogObject
             implements BeforeWriteHandler, AfterWriteHandler, Validated {
@@ -193,7 +199,7 @@ class WriteLifecycleCommandServiceTest {
         WebProperties props = new WebProperties();
         NumberGenerator numbers = new SequentialNumbers();
         SecretCipher cipher = new SecretCipher(null);
-        AccessService access = new AccessService(registry);
+        AccessService access = new AccessService(registry, GRANTS);
         ApplicationEventPublisher events = event -> { };
         documentQuery = new DocumentQueryService(registry, jdbi);
         catalogQuery = new CatalogQueryService(registry, jdbi);

@@ -4,6 +4,9 @@ import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import su.onno.access.RoleGrants;
+import su.onno.access.RoleKey;
+import su.onno.auth.AuthPermissions;
 
 import java.util.List;
 import java.util.Set;
@@ -14,6 +17,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class UserAccountsTest {
 
+    enum TestRole implements RoleKey { IT, MANAGER }
+
+    /** IT manages accounts; MANAGER does not. */
+    private static final RoleGrants GRANTS = RoleGrants.of(TestRole.class)
+            .role(TestRole.IT, r -> r.permit(AuthPermissions.MANAGE_USERS));
+
     private JdbcUserStore store;
     private UserAccounts accounts;
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder(4);
@@ -23,7 +32,7 @@ class UserAccountsTest {
         JdbcDataSource ds = new JdbcDataSource();
         ds.setURL("jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
         store = new JdbcUserStore(ds);
-        accounts = new UserAccounts(store, encoder, new PasswordPolicy(8));
+        accounts = new UserAccounts(store, encoder, new PasswordPolicy(8), GRANTS);
     }
 
     @Test
@@ -86,16 +95,16 @@ class UserAccountsTest {
     }
 
     @Test
-    void theLastEnabledAdministratorCannotBeDisabledOrDemoted() {
-        UserAccount admin = accounts.create("root", List.of("ADMIN"), "a sturdy password", false);
+    void theLastEnabledAccountManagerCannotBeDisabledOrDemoted() {
+        UserAccount admin = accounts.create("root", List.of("IT"), "a sturdy password", false);
 
         assertThatThrownBy(() -> accounts.setEnabled(admin.id(), false))
                 .isInstanceOf(UserAccountException.class)
-                .hasMessageContaining("last enabled administrator");
+                .hasMessageContaining("last enabled account that may manage accounts");
         assertThatThrownBy(() -> accounts.setRoles(admin.id(), Set.of("MANAGER")))
                 .isInstanceOf(UserAccountException.class);
 
-        UserAccount second = accounts.create("root2", List.of("ADMIN"), "a sturdy password", false);
+        UserAccount second = accounts.create("root2", List.of("it"), "a sturdy password", false);
         UserAccount disabled = accounts.setEnabled(admin.id(), false);
 
         assertThat(disabled.enabled()).isFalse();
@@ -104,10 +113,38 @@ class UserAccountsTest {
     }
 
     @Test
-    void rolesAreValidatedAndTheSpringPrefixIsStripped() {
-        UserAccount account = accounts.create("erin", List.of("ROLE_MANAGER", " CLERK "), "a sturdy password", false);
+    void withoutGrantsEveryAccountManagesSoOnlyTheLastEnabledOneIsProtected() {
+        UserAccounts open = new UserAccounts(store, encoder, new PasswordPolicy(8));
+        UserAccount only = open.create("solo", List.of(), "a sturdy password", false);
+        assertThatThrownBy(() -> open.setEnabled(only.id(), false)).isInstanceOf(UserAccountException.class);
+        open.setRoles(only.id(), Set.of("ANYTHING"));
+    }
 
-        assertThat(account.roles()).containsExactlyInAnyOrder("MANAGER", "CLERK");
+    @Test
+    void detectsAStoreWhereNobodyManagesAccounts() {
+        // An upgraded store: accounts still hold the old ADMIN role, which the grants no longer know.
+        UserAccount legacy = accounts.create("root", List.of("ADMIN"), "a sturdy password", false);
+        assertThat(accounts.anyEnabledAccountManages()).isFalse();
+
+        UserAccount it = accounts.create("ops", List.of("IT"), "a sturdy password", false);
+        assertThat(accounts.anyEnabledAccountManages()).isTrue();
+        accounts.setEnabled(legacy.id(), false);
+        assertThat(accounts.anyEnabledAccountManages()).as("the IT account still manages").isTrue();
+        assertThat(it.enabled()).isTrue();
+    }
+
+    @Test
+    void canManageFollowsTheGrantsNotARoleName() {
+        assertThat(accounts.canManage(List.of("ROLE_IT"))).isTrue();
+        assertThat(accounts.canManage(List.of("ADMIN"))).isFalse();
+    }
+
+    @Test
+    void rolesAreValidatedAndTheSpringPrefixIsStripped() {
+        UserAccount account = accounts.create("erin", List.of("ROLE_MANAGER", " CLERK ", "role_auditor", "viewer"),
+                "a sturdy password", false);
+
+        assertThat(account.roles()).containsExactlyInAnyOrder("MANAGER", "CLERK", "AUDITOR", "VIEWER");
         assertThatThrownBy(() -> accounts.setRoles(account.id(), List.of("bad role")))
                 .isInstanceOf(UserAccountException.class);
     }
