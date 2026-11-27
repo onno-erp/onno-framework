@@ -46,7 +46,8 @@ class CrmDeliveryRecipientsTest {
                 identity(conversation.getCustomer(), personal, "known@example.com")));
         var service = mock(ConversationService.class);
         when(service.delivery(conversation.getId(), alice)).thenReturn(new CrmMessageTransport.Connection(true, "Gmail", 8000)
-                .withRecipients("thread@example.com", List.of("known@example.com", "private@example.com", "thread@example.com")));
+                .withRecipients("thread@example.com", List.of("known@example.com", "private@example.com", "thread@example.com"))
+                .withCc(List.of("Marco <marco@venue.test>")));
         var controller = new CrmInboxController(service, mock(CurrentUserResolver.class), mock(CrmAgentIdentityResolver.class), access,
                 workspaces, mock(CommentAuthorAvatars.class), mock(CrmAttachments.class), identities, contacts);
 
@@ -54,6 +55,8 @@ class CrmDeliveryRecipientsTest {
 
         assertThat(delivery.recipient()).isEqualTo("thread@example.com");
         assertThat(delivery.recipients()).containsExactly("known@example.com", "thread@example.com");
+        // The reply-all suggestion comes from mail this conversation shows, so filtering recipients keeps it.
+        assertThat(delivery.cc()).containsExactly("Marco <marco@venue.test>");
 
         // Sending to a hidden address is refused before the service sees it.
         when(access.hasAnyRole(any(java.security.Principal.class), any())).thenReturn(true);

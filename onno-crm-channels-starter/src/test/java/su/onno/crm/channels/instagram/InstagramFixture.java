@@ -41,6 +41,7 @@ final class InstagramFixture {
     final ConversationMessageRepository messages = mock(ConversationMessageRepository.class);
     final InboxRepository inboxes = mock(InboxRepository.class);
     final CrmContactService contacts = mock(CrmContactService.class);
+    final ContactIdentityRepository identities = mock(ContactIdentityRepository.class);
     final CrmConversationStatuses statuses = mock(CrmConversationStatuses.class);
     final CrmChannelsProperties properties = new CrmChannelsProperties();
     final UUID inbox = UUID.randomUUID();
@@ -86,7 +87,7 @@ final class InstagramFixture {
     /** Builds a fresh bridge over the same database, as an application restart would. */
     InstagramBridge restart() {
         bridge = new InstagramBridge(client, jdbc, new DataSourceTransactionManager(ds), inboxes, conversations, messages,
-                mock(ContactIdentityRepository.class), contacts, mock(CrmWorkspaceService.class), statuses,
+                identities, contacts, mock(CrmWorkspaceService.class), statuses,
                 new UiMessages(Map.of()), properties);
         bridge.clock(clock);
         bridge.initialize();

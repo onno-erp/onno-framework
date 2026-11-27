@@ -166,7 +166,8 @@ of the row keeps the full context menu. Flat table view only.
 Utilities to reach for instead of reinventing: `lib/time-range.ts`, `lib/aggregate-data.ts` (bucket
 shaping/labels), `lib/chart-colors.ts`, `lib/format.ts` + `lib/cell-format.ts`, `lib/utils.ts`
 (`cn`), `lib/messages.ts` (chrome strings — mirror of `UiMessages.DEFAULTS`, change both in one PR),
-`lib/notify-error.ts` (`notifyError`: report a caught request failure exactly once).
+`lib/notify-error.ts` (`notifyError`: report a caught request failure exactly once),
+`lib/feedback-toast.tsx` (`toastFeedback`: typed feedback as a toast; `claimFeedback`: show it once).
 
 List selection actions appear inline in the scrolling facet rail, using shared `Button`
 `size="toolbar"` (32px, compact text) and `variant="subtle"`: a solid neutral pill shared with filter triggers.
@@ -210,6 +211,29 @@ exceptions. Keep component tests for every custom picker trigger.
   merely open, inactive tab stays unfilled until hover. Exactly one tab is the command target for
   global actions such as Escape. The fixed tab strip scrolls horizontally when needed and must
   always hide vertical overflow.
+- Workspace navigation behaves like a browser window: an ordinary open (a menu item, a link, a
+  record) replaces what the focused island's active tab shows, and that tab keeps its own Back /
+  Forward history. Back and Forward are the two arrow buttons at the start of every island's tab
+  strip (disabled when there is nowhere to go), Alt+Left / Alt+Right outside text fields, and the
+  mouse's back / forward buttons. A new tab opens only on request. The "+" after an island's last
+  tab means the same in every island and is never a no-op: it opens the new-tab palette
+  (`components/shell/new-tab-palette.tsx`, also Alt+T for the focused island), a searchable list of
+  every navigation screen and a New form for every entity the viewer may create (the island's
+  current entity first). Enter or a click opens the pick as a new tab of that island, Shift+Enter
+  or a Shift-click in a new island beside it; a screen that is already open is marked and activated.
+  The other requests: a middle- or Ctrl/Cmd-click on a menu item, a middle-click on a list row
+  (Ctrl/Cmd- and Shift-click on a row stay selection), "Open in new tab" in a row's context menu,
+  batch "Open" over selected rows, a reference picker's open and "+ New" buttons (the form being
+  edited and its waiting picker stay open), or `openRoute(link, { newWorkspaceTab: true })`.
+  Click modifiers follow the browser's and live in one place, `placementForClick`
+  (`lib/open-placement.ts`): plain = the active tab, middle or Ctrl/Cmd = a new tab, Shift = a new
+  island beside the focused one (the browser's "new window"). Do not add a second "+" to a tab
+  strip or give it another meaning; creating a record belongs to the list's New button, the
+  navigation section's actions and the palette's Create group.
+  A surface that is already open is activated rather than duplicated, and a tab holding unsaved
+  edits is never replaced, not even by the browser's own Back / Forward; the route opens beside it.
+  An island keeps at most 15 tabs: past that it quietly closes its least recently used tab that is
+  neither active nor dirty. A tab's context menu offers "Close other tabs".
 - Desktop rail highlighting follows the focused tab's navigation section. When the focused
   pane is empty or its route is outside authored navigation, the selected drawer section becomes
   the single highlighted fallback only while its submenu is visible; never paint both the routed
@@ -242,10 +266,19 @@ exceptions. Keep component tests for every custom picker trigger.
   `CommandResult` with `.title(...)`/`.detail(...)` over a bare message when an outcome benefits from a
   title, explanation, or details.
 - One failed request, one toast (#505). `fetchJson` toasts a failure by default and marks the
-  `ApiError` `notified`. A caller with its own wording passes `{ silent: true }`; a catch block that
-  ends a user action reports through `notifyError` instead of calling `toast.error`, so it adds a
-  toast only where none was shown — including what the api layer leaves to its caller (network
-  errors, field errors without an inline form, typed feedback, 401).
+  `ApiError` `notified`; the decision is each call's own, so callers sharing one in-flight GET get
+  a toast if any of them is not silent, and only one. A caller with its own wording passes
+  `{ silent: true }`; a catch block that ends a user action reports through `notifyError` instead
+  of calling `toast.error`, so it adds a toast only where none was shown — including what the api
+  layer leaves to its caller (network errors, field errors without an inline form, typed feedback).
+  Typed feedback becomes a toast of its kind under its own title (input errors and details listed
+  below it), not a bare message. Command surfaces (record actions, list commands and batch actions,
+  the shell's `onno://` actions) report through `useCommandFeedback().notifyError` instead, so typed
+  feedback keeps its dialog. The same feedback object is shown once, wherever it is presented
+  (`claimFeedback` in `lib/feedback-toast.tsx`).
+- A lapsed session (401) is never toasted in this package: the api layer hands it to the auth
+  recovery, every catch skips it with `isSessionLapse`, and a raw `fetch` passes its 401 to
+  `handleUnauthorized()` (both in `lib/api.ts`).
 - The shell logo's empty `onno://` action is a semantic home intent. Resolve it through
   `shell.home`; only apps that declare a `/` page land on `/`.
 - Esc closes the topmost layer only (overlay before page).

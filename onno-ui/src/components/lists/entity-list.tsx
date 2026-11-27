@@ -6,7 +6,7 @@ import { Button, buttonVariants } from "../ui/button";
 import { ListSelectionCheckbox, selectLoaded } from "./list-selection-checkbox";
 import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { PageGutterContext } from "../../lib/page-gutter";
-import { ArrowDown, ArrowLeftRight, ArrowUp, CalendarDays, Check, ChevronsUpDown, Copy, ExternalLink, GanttChart, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowLeftRight, ArrowUp, CalendarDays, Check, ChevronsUpDown, Copy, ExternalLink, GanttChart, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Plus, Rows3, Search, SquarePlus, Table2, Trash2, X } from "lucide-react";
 import { CalendarDate, getLocalTimeZone, parseDate, startOfMonth, startOfYear, today } from "@internationalized/date";
 import { toast } from "../ui/toast";
 import { ListMapView, type ListMapConfig } from "../maps/list-map-view";
@@ -45,8 +45,9 @@ import {
   ContextMenuSub,
 } from "../ui/context-menu";
 import { Icon } from "../../lib/icons";
-import { api, ApiError, downloadSelection } from "../../lib/api";
+import { api, ApiError, downloadSelection, handleUnauthorized, isSessionLapse } from "../../lib/api";
 import { useCommandFeedback } from "../../lib/command-feedback";
+import { errorMessage } from "../../lib/notify-error";
 import { isInteractiveLayerOpen, matchesKey, shortcutLabel } from "../../lib/keybindings";
 import { withBasePath } from "../../lib/base-path";
 import { cn, copyToClipboard, enumPillStyle, rowStyleClass } from "../../lib/utils";
@@ -2431,8 +2432,8 @@ export function EntityListView({
   // Run a command: POST /api/commands and apply the CommandResult — toast, refresh. A command with
   // inputs first opens the dialog to collect them (formInputs arrive on the second, submitting
   // call). While the (possibly slow/async) handler runs, the button shows a spinner and is
-  // disabled, so there's feedback and no double-submit. (api.runCommand is CSRF-aware and toasts
-  // failures.)
+  // disabled, so there's feedback and no double-submit. (api.runCommand is CSRF-aware; a failure
+  // is reported once — here, or by the form dialog that asked for it.)
   const runCommand = useCallback(
     (command: ListCommand, id?: string, formInputs?: CommandFormValues, propagateError = false): Promise<void> | void => {
       if (command.form?.length && !formInputs) {
@@ -2453,7 +2454,7 @@ export function EntityListView({
         })
         .catch((error) => {
           if (propagateError) throw error;
-          feedback.fromError(error);
+          feedback.notifyError(error);
         })
         .finally(() =>
           setPending((s) => {
@@ -2495,7 +2496,10 @@ export function EntityListView({
     try {
       while (true) {
         const response = await fetch(`${feedBase}?${params}`, { credentials: "include", signal: controller.signal });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) {
+          if (response.status === 401) handleUnauthorized();
+          throw new ApiError(`HTTP ${response.status}`, response.status);
+        }
         const data: FeedWindow = await response.json();
         if (controller.signal.aborted) return;
         for (const row of data.rows ?? []) {
@@ -2510,8 +2514,9 @@ export function EntityListView({
       setAllMatchingIds(ids);
       setSelected(ids);
       selAnchorRef.current = 0;
-    } catch {
-      if (!controller.signal.aborted) toast.error(t("list.selectAllFailed"));
+    } catch (error) {
+      // A lapsed session is left to the auth recovery.
+      if (!controller.signal.aborted && !isSessionLapse(error)) toast.error(t("list.selectAllFailed"));
     } finally {
       if (selectAllRequest.current === controller) {
         selectAllRequest.current = null;
@@ -2603,10 +2608,15 @@ export function EntityListView({
       await downloadSelection(download.url, ids, `${download.key}.zip`);
       toast.dismiss(toastId);
     } catch (error) {
-      // Turns the loading toast into the error; downloadSelection never toasts, so this is the only one.
-      // eslint-disable-next-line onno/notify-caught-error
-      toast.error(error instanceof Error && error.message ? error.message : t("list.download.failed", { label: download.title }),
-        { id: toastId });
+      if (isSessionLapse(error)) {
+        // A lapsed session is left to the auth recovery; just retire the loading toast.
+        toast.dismiss(toastId);
+      } else {
+        // Turns the loading toast into the error; downloadSelection never toasts, so this is the only one.
+        // eslint-disable-next-line onno/notify-caught-error
+        toast.error(error instanceof Error && error.message ? error.message : t("list.download.failed", { label: download.title }),
+          { id: toastId });
+      }
     } finally {
       setPending((s) => {
         const n = new Set(s);
@@ -2649,9 +2659,11 @@ export function EntityListView({
         clearSelection();
         reload();
       } catch (error) {
-        // the api layer already toasted the failure — just retire the loading toast
+        // Retire the loading toast; a form-driven batch hands the failure to its dialog, any other
+        // is reported here once.
         toast.dismiss(toastId);
         if (propagateFeedback) throw error;
+        feedback.notifyError(error);
       } finally {
         batchBusyRef.current = false;
         setPending((s) => {
@@ -2679,8 +2691,9 @@ export function EntityListView({
         );
         clearSelection();
         reload();
-      } catch {
+      } catch (error) {
         toast.dismiss(toastId);
+        feedback.notifyError(error);
       } finally {
         batchBusyRef.current = false;
         setPending((s) => {
@@ -2690,7 +2703,7 @@ export function EntityListView({
         });
       }
     },
-    [kind, name, reload, clearSelection, t]
+    [kind, name, reload, clearSelection, t, feedback]
   );
 
   // Surgically refresh a single changed row in place: fetch just that id (same decorated shape as a
@@ -2896,20 +2909,33 @@ export function EntityListView({
         if (batchBusyRef.current) return;
         batchBusyRef.current = true;
         let ok = 0;
+        // Why copies failed, for the summary below: only what the api layer did not toast itself
+        // (a network error, field errors, typed feedback), each reason once.
+        const reasons = new Set<string>();
         try {
           for (const id of ids) {
             try {
               if (kind === "documents") await api.duplicateDocument(name, id);
               else await api.duplicateCatalogItem(name, id);
               ok++;
-            } catch {
-              // already toasted by the api layer
+            } catch (error) {
+              // A lapsed session ends the paste with no summary: the auth recovery takes over.
+              if (isSessionLapse(error)) return;
+              if (!(error instanceof ApiError && error.notified)) reasons.add(errorMessage(error));
             }
           }
         } finally {
           batchBusyRef.current = false;
         }
-        (ok === ids.length ? toast.success : toast.error)(t("clipboard.pasted", { ok, n: ids.length }));
+        // A summary, not a report: name the first few reasons and elide the rest.
+        const SHOWN_REASONS = 3;
+        const description = reasons.size ? (
+          <div className="onno-toast__body">
+            {[...reasons].slice(0, SHOWN_REASONS).map((reason) => <p key={reason} className="onno-toast__message">{reason}</p>)}
+            {reasons.size > SHOWN_REASONS ? <p className="onno-toast__message">…</p> : null}
+          </div>
+        ) : undefined;
+        (ok === ids.length ? toast.success : toast.error)(t("clipboard.pasted", { ok, n: ids.length }), { description });
         reload();
       })();
     };
@@ -2987,7 +3013,7 @@ export function EntityListView({
         const batch = (rowMenu.batch || selected.size > 1) && selected.has(rowMenu.id);
         const ids = batch ? [...selected] : [rowMenu.id];
         const openBatch = () => {
-          for (const id of ids) openRoute(rowOpenUrl(kind, name, id));
+          for (const id of ids) openRoute(rowOpenUrl(kind, name, id), { newWorkspaceTab: true });
         };
         const flatCustom = recordCommands.filter((c) => !c.group);
         const submenus = rowSubmenus;
@@ -3071,6 +3097,15 @@ export function EntityListView({
                   <ExternalLink className="text-muted-foreground" aria-hidden="true" />
                   <span>{t("action.open")}</span>
                   <ContextMenuShortcut>{shortcutLabel({ key: "Enter", mod: true })}</ContextMenuShortcut>
+                </ContextMenuItem>
+                <ContextMenuItem
+                  onSelect={() => {
+                    openRoute(rowMenu.url, { newWorkspaceTab: true });
+                    close();
+                  }}
+                >
+                  <SquarePlus className="text-muted-foreground" aria-hidden="true" />
+                  <span>{t("workspace.openInNewTab")}</span>
                 </ContextMenuItem>
                 {showDuplicate ? (
                   <>
@@ -3206,7 +3241,7 @@ export function EntityListView({
             <div role="group" aria-label={t("list.selectionActions")} className="flex shrink-0 items-center gap-2 border-r border-border pr-2">
               {canWrite && SelectionWidget ? <SelectionWidget ids={[...selected]} complete={() => { clearSelection(); reload(); }} /> : null}
               <Button size="toolbar" variant="subtle" onClick={() => {
-                for (const id of selected) openRoute(rowOpenUrl(kind, name, id));
+                for (const id of selected) openRoute(rowOpenUrl(kind, name, id), { newWorkspaceTab: true });
               }}><ExternalLink />{t("action.open")}</Button>
               {(list.selectionDownloads ?? []).filter(d => !builtInHidden(d.key)).map(d => (
                 <Button key={d.key} size="toolbar" variant="subtle" disabled={pending.has(`download:${d.key}`)}
@@ -3712,8 +3747,16 @@ export function EntityListView({
                       // omitted when writable so rows from older servers keep the full menu.
                       data-onno-row-writable={canWrite ? undefined : "0"}
                       // Shift-click extends the selection — suppress the browser's text-range drag.
+                      // …and a middle press the browser's autoscroll (it opens a new tab instead).
                       onMouseDown={(e) => {
-                        if (e.shiftKey && recordId) e.preventDefault();
+                        if ((e.shiftKey && recordId) || (e.button === 1 && url)) e.preventDefault();
+                      }}
+                      // Middle-click opens the record in a new workspace tab, like a link in a
+                      // browser. (⌘/Ctrl- and Shift-click belong to the selection.)
+                      onAuxClick={(e) => {
+                        if (e.button !== 1 || !url) return;
+                        e.preventDefault();
+                        openRoute(url, { newWorkspaceTab: true });
                       }}
                       onClick={(e) => {
                         // ⌘/Ctrl toggles a row in and out; Shift selects the range from the last

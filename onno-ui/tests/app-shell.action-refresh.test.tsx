@@ -59,7 +59,8 @@ describe("shell header-action CommandResult.refresh (#447)", () => {
     await waitFor(() => expect(document.querySelector(`[data-tab="${source}"]`)).not.toBeNull());
     fireEvent.click(screen.getByRole("button", { name: `Run header action ${source}` }));
     expect(runCommand).toHaveBeenCalledWith("documents", "orders", "advance", "o1");
-    act(() => window.dispatchEvent(new CustomEvent("onno:open", { detail: "onno://catalogs/customers" })));
+    // A new tab: an ordinary open would replace the source surface in its own tab.
+    act(() => window.dispatchEvent(new CustomEvent("onno:open-tab", { detail: "onno://catalogs/customers" })));
     const otherDraft = await screen.findByLabelText(`Draft ${other}`);
     fireEvent.change(otherDraft, { target: { value: "Typing in another tab" } });
     await act(async () => finish({ refresh: true }));

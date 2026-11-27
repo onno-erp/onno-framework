@@ -246,7 +246,7 @@ public class AccessService {
         return canWrite(subject, descriptor) && holdsOptional(subject, descriptor.postRoles());
     }
 
-    /** Whether {@code subject} may unpost documents of this type (also gates deleting a posted one). */
+    /** Whether {@code subject} may unpost documents of this type. */
     public boolean canUnpost(AccessSubject subject, DocumentDescriptor descriptor) {
         return canWrite(subject, descriptor) && holdsOptional(subject, descriptor.unpostRoles());
     }

@@ -57,6 +57,7 @@ to contribute nothing and wire your own security.
 | `onno.auth.database.password-min-length` | `8` | `database` mode: minimum length of a password a holder or administrator chooses. |
 | `onno.auth.database.seed-password-change-required` | `true` | `database` mode: accounts seeded from `onno.auth.users` must set a new password at first sign-in. When `false`, every seed password must satisfy the policy or startup fails. |
 | `onno.auth.additional-public-paths` | — | Your Ant patterns permitted without authentication, combined with the framework's public paths below (which always stay public) and the implicit "everything outside `/api/**`". `onno.auth.public-paths` is the older name for the same thing and is also combined. |
+| `onno.auth.additional-csrf-ignored-paths` | — | Additional CSRF-exempt Ant patterns in cookie-based modes. Combined with the mandatory `/api/auth/login` exemption, legacy `onno.auth.csrf-ignored-paths`, and `AuthPathsContributor` beans. Does not grant anonymous access. |
 | `onno.auth.users[*].username` | — | `in-memory`: an account. `database`: a first-boot seed, copied into the empty store once and ignored afterwards. |
 | `onno.auth.users[*].password` | — | Plaintext password; BCrypt-encoded at startup. Missing username **or** password fails startup. |
 | `onno.auth.users[*].roles` | `[]` | Role names (stored as `ROLE_*` authorities by Spring's `User.roles(...)`). |
@@ -150,7 +151,7 @@ mechanisms keep a signed-in tab working:
 
 The SPA's `AuthProvider` drives the client side: a 4-minute `/api/auth/me` heartbeat plus a 401 hook on
 every data call route a lapsed session into recovery (remember-me re-auth, or the OIDC redirect)
-instead of a dead panel.
+instead of a dead panel. The UI shows no error toast for the 401 itself; the recovery is the answer.
 
 ### CSRF model
 
@@ -167,8 +168,48 @@ CSRF protection is **enabled** using `CookieCsrfTokenRepository.withHttpOnlyFals
 - A `CsrfCookieFilter` runs on every request and materializes the deferred token, so the
   `XSRF-TOKEN` cookie is present after the **first response** to a fresh client (e.g. `GET /api/auth/me`),
   rather than only after something downstream happens to read it.
-- **`POST /api/auth/login` is exempt from CSRF** (`ignoringRequestMatchers("/api/auth/login")`) — you
-  do not need a token to log in. Every other mutation under `/api/**` needs the header.
+- **`POST /api/auth/login` is always exempt from CSRF** — custom or empty CSRF-exclusion
+  lists cannot remove this exemption. Other mutations require the header unless explicitly exempted.
+
+Use `onno.auth.additional-csrf-ignored-paths` for additional Ant patterns. The legacy
+`onno.auth.csrf-ignored-paths` is still supported and merged, rather than replacing the mandatory
+login exemption. Public access and CSRF exemptions are independent: neither implies the other.
+Application-defined `/api/auth/login/{method}[/challenge]` endpoints remain CSRF-protected by default.
+
+```yaml
+onno:
+  auth:
+    additional-public-paths:
+      - /api/public/intake
+    additional-csrf-ignored-paths:
+      - /api/public/intake
+```
+
+Starters may contribute endpoints without overriding a `SecurityFilterChain` or mutating bound
+properties. Register one or more `su.onno.auth.spi.AuthPathsContributor` beans (the interface lives
+in `onno-framework`, so a connector need not depend on the auth starter):
+
+```java
+@Bean
+AuthPathsContributor intakePaths() {
+    return new AuthPathsContributor() {
+        @Override
+        public List<String> publicPaths() {
+            return List.of("/api/public/intake");
+        }
+
+        @Override
+        public List<String> csrfIgnoredPaths() {
+            return List.of("/api/public/intake");
+        }
+    };
+}
+```
+
+All contributors are combined with configuration and mandatory framework paths; duplicates are
+removed. Public patterns apply in every mode, including the database account-session guard.
+CSRF exclusions apply only in cookie-based modes; `resource-server` keeps CSRF disabled.
+Contributors affect the default onno chains, not an application-owned `SecurityFilterChain`.
 
 ### Endpoints (`AuthApiController`, base path `/api/auth`)
 

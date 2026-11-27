@@ -93,7 +93,8 @@ public class CrmInboxController {
                 request == null ? null : request.body(),
                 request == null ? java.util.List.of() : request.attachments(),
                 user.displayName(),
-                user.recordId(), request == null ? null : request.subject(), recipient, from), principal), user.avatarUrl());
+                user.recordId(), request == null ? null : request.subject(), recipient, from,
+                request == null ? null : request.html(), request == null ? List.of() : request.cc()), principal), user.avatarUrl());
     }
 
     /**
@@ -193,12 +194,18 @@ public class CrmInboxController {
     /**
      * {@code attachments} are media URLs from {@code POST /api/media}, never raw bytes or links.
      * {@code from} is the id of one of the delivery connection's {@code senders}; omit it to send
-     * from the default {@code sender}.
+     * from the default {@code sender}. {@code html} is an email's formatted version of {@code body} (sanitized on
+     * receipt; a 400 on other channels). {@code cc} is who an email reply copies ({@code "Name <address>"} or bare
+     * addresses, at most 20; any address, not only the suggested ones), a 422 when one is invalid or on other channels.
      */
-    public record SendMessage(String body, List<String> attachments, String subject, String recipient, String from) {
+    public record SendMessage(String body, List<String> attachments, String subject, String recipient, String from, String html,
+                              List<String> cc) {
         public SendMessage {
             attachments = attachments == null ? List.of() : List.copyOf(attachments);
+            cc = cc == null ? List.of() : cc.stream().filter(Objects::nonNull).toList();
         }
+        public SendMessage(String body, List<String> attachments, String subject, String recipient, String from, String html) { this(body,attachments,subject,recipient,from,html,null); }
+        public SendMessage(String body, List<String> attachments, String subject, String recipient, String from) { this(body,attachments,subject,recipient,from,null); }
         public SendMessage(String body, List<String> attachments, String subject, String recipient) { this(body,attachments,subject,recipient,null); }
         public SendMessage(String body, List<String> attachments, String subject) { this(body,attachments,subject,null); }
         public SendMessage(String body, List<String> attachments) { this(body, attachments, null); }
@@ -239,7 +246,11 @@ public class CrmInboxController {
             /** Sanitized email HTML; null when the message is plain text. Render isolated, never inline. */
             String bodyHtml,
             /** The sender account id a reply was queued with (a Gmail mailbox address); null otherwise. */
-            String senderAccount
+            String senderAccount,
+            /** An email's To list ({@code "Name <address>"} entries joined by {@code ", "}); null when not known. */
+            String sentTo,
+            /** An email's Cc list, in the same form; null when nobody was copied. */
+            String copyTo
     ) {}
 
     private MessageView view(ConversationMessage message, String authorAvatarUrl) {
@@ -257,6 +268,8 @@ public class CrmInboxController {
                 message.getSubject(),
                 message.getRecipient(),
                 message.getBodyHtml(),
-                message.getSenderAccount());
+                message.getSenderAccount(),
+                message.getSentTo(),
+                message.getCopyTo());
     }
 }

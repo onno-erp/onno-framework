@@ -13,9 +13,18 @@ import java.util.*;
 final class GmailMail {
     /**
      * A parsed email. {@code files} carry their bytes; {@code remote} files stay in Gmail and are
-     * only described ({@link #readFull}).
+     * only described ({@link #readFull}). {@code to} and {@code cc} are the email's recipients as
+     * {@code "Name <address>"} entries (names decoded), in header order.
      */
-    record Incoming(String sender,String name,String replyTo,String subject,String messageId,String text,Instant sentAt,List<Outgoing> files,String html,List<RemoteFile> remote) {
+    record Incoming(String sender,String name,String replyTo,String subject,String messageId,String text,Instant sentAt,List<Outgoing> files,String html,List<RemoteFile> remote,
+                    List<String> to,List<String> cc) {
+        Incoming {
+            to=to==null?List.of():List.copyOf(to);
+            cc=cc==null?List.of():List.copyOf(cc);
+        }
+        Incoming(String sender,String name,String replyTo,String subject,String messageId,String text,Instant sentAt,List<Outgoing> files,String html,List<RemoteFile> remote) {
+            this(sender,name,replyTo,subject,messageId,text,sentAt,files,html,remote,List.of(),List.of());
+        }
         Incoming(String sender,String name,String replyTo,String subject,String messageId,String text,Instant sentAt,List<Outgoing> files,String html) {
             this(sender,name,replyTo,subject,messageId,text,sentAt,files,html,List.of());
         }
@@ -32,7 +41,43 @@ final class GmailMail {
         var files=new ArrayList<Outgoing>();collect(message,files);
         return new Incoming(from.getAddress(),from.getPersonal()==null?from.getAddress():from.getPersonal(),reply.getAddress(),
             Objects.toString(message.getSubject(),"(No subject)"),Objects.toString(message.getMessageID(),""),nonEmptyBody(body(message)),
-            message.getSentDate()==null?Instant.now():message.getSentDate().toInstant(),List.copyOf(files),EmailHtml.sanitize(html(message)));
+            message.getSentDate()==null?Instant.now():message.getSentDate().toInstant(),List.copyOf(files),EmailHtml.sanitize(html(message)),List.of(),
+            recipients(message,Message.RecipientType.TO),recipients(message,Message.RecipientType.CC));
+    }
+    /** One recipient header of raw MIME; a header that cannot be parsed strictly is read leniently, else left out. */
+    private static List<String> recipients(MimeMessage message,Message.RecipientType type) {
+        try { return entries(message.getRecipients(type)); }
+        catch(MessagingException strict) {
+            try { return entries(header(message.getHeader(type==Message.RecipientType.TO?"To":"Cc",","))); }
+            catch(MessagingException ignored) { return List.of(); }
+        }
+    }
+    private static Address[] header(String value) throws AddressException {
+        return value==null||value.isBlank()?null:InternetAddress.parseHeader(value,false);
+    }
+    /**
+     * Addresses as readable entries: {@code "Name <address>"} with the name decoded (quoted when it holds a
+     * comma or another special), or the bare address. Group members are listed; empty groups and entries
+     * without an address are left out.
+     */
+    static List<String> entries(Address[] addresses) {
+        var entries=new ArrayList<String>();
+        if(addresses==null)return entries;
+        for(var address:addresses) {
+            if(!(address instanceof InternetAddress internet))continue;
+            if(internet.isGroup()) {
+                try { entries.addAll(entries(internet.getGroup(false))); } catch(AddressException ignored) { /* an unreadable group is skipped */ }
+                continue;
+            }
+            String bare=internet.getAddress();
+            if(bare==null||bare.isBlank()||bare.contains("\r")||bare.contains("\n"))continue;
+            String personal=internet.getPersonal();
+            if(personal!=null)personal=personal.replaceAll("[\\r\\n\\t]+"," ").strip();
+            if(personal==null||personal.isBlank()||personal.equalsIgnoreCase(bare)){entries.add(bare);continue;}
+            boolean quote=personal.chars().anyMatch(c->"()<>[]:;@\\,.\"".indexOf(c)>=0);
+            entries.add((quote?"\""+personal.replace("\\","\\\\").replace("\"","\\\"")+"\"":personal)+" <"+bare+">");
+        }
+        return entries;
     }
     /**
      * Parses Gmail's {@code format=full} answer the way {@link #read} parses raw MIME, without the
@@ -50,7 +95,11 @@ final class GmailMail {
         return new Incoming(from.getAddress(),from.getPersonal()==null?from.getAddress():from.getPersonal(),reply.getAddress(),
             subject==null?"(No subject)":MimeUtility.decodeText(subject),Objects.toString(header(payload,"Message-ID"),""),nonEmptyBody(fullBody(payload)),
             message.hasNonNull("internalDate")?Instant.ofEpochMilli(message.path("internalDate").asLong()):Instant.now(),
-            List.of(),EmailHtml.sanitize(fullHtml(payload)),List.copyOf(remote));
+            List.of(),EmailHtml.sanitize(fullHtml(payload)),List.copyOf(remote),fullRecipients(payload,"To"),fullRecipients(payload,"Cc"));
+    }
+    private static List<String> fullRecipients(com.fasterxml.jackson.databind.JsonNode payload,String name) {
+        try { return entries(header(header(payload,name))); }
+        catch(AddressException unreadable) { return List.of(); }
     }
     private static String header(com.fasterxml.jackson.databind.JsonNode part,String name) {
         for(var header:part.path("headers"))if(header.path("name").asText().equalsIgnoreCase(name))return header.path("value").asText();
@@ -193,7 +242,17 @@ final class GmailMail {
     /** {@link #reply(String,String,String,String,String,List,UUID)} signed with {@code signatureHtml} (see {@link #compose(String,String,String,String,String,List,UUID,String)}). */
     static String reply(String from,String to,String subject,String reference,String body,
             List<Outgoing> files,UUID id,String signatureHtml) throws Exception {
-        return compose(from,to,subject.regionMatches(true,0,"Re:",0,3)?subject:"Re: "+subject,reference,body,files,id,signatureHtml);
+        return reply(from,to,subject,reference,body,null,files,id,signatureHtml);
+    }
+    /** {@link #reply(String,String,String,String,String,List,UUID,String)} with a formatted body (see {@link #compose(String,String,String,String,String,String,List,UUID,String)}). */
+    static String reply(String from,String to,String subject,String reference,String body,String bodyHtml,
+            List<Outgoing> files,UUID id,String signatureHtml) throws Exception {
+        return reply(from,to,subject,reference,body,bodyHtml,files,id,signatureHtml,List.of());
+    }
+    /** {@link #reply(String,String,String,String,String,String,List,UUID,String)} copying {@code cc}. */
+    static String reply(String from,String to,String subject,String reference,String body,String bodyHtml,
+            List<Outgoing> files,UUID id,String signatureHtml,List<String> cc) throws Exception {
+        return compose(from,to,subject.regionMatches(true,0,"Re:",0,3)?subject:"Re: "+subject,reference,body,bodyHtml,files,id,signatureHtml,cc);
     }
     static String compose(String from,String to,String subject,String reference,String body,
             List<Outgoing> files,UUID id) throws Exception {
@@ -207,16 +266,37 @@ final class GmailMail {
      */
     static String compose(String from,String to,String subject,String reference,String body,
             List<Outgoing> files,UUID id,String signatureHtml) throws Exception {
+        return compose(from,to,subject,reference,body,null,files,id,signatureHtml);
+    }
+    /**
+     * An email with a formatted body: {@code bodyHtml} (already sanitized, {@code ConversationMessage#getBodyHtml})
+     * becomes the HTML alternative, with the signature under it when there is one, and {@code body} the plain-text
+     * one. A null or blank {@code bodyHtml} is {@link #compose(String,String,String,String,String,List,UUID,String)}.
+     */
+    static String compose(String from,String to,String subject,String reference,String body,String bodyHtml,
+            List<Outgoing> files,UUID id,String signatureHtml) throws Exception {
+        return compose(from,to,subject,reference,body,bodyHtml,files,id,signatureHtml,List.of());
+    }
+    /**
+     * {@link #compose(String,String,String,String,String,String,List,UUID,String)} copying {@code cc}: each entry one
+     * address ({@code "Name <address>"} or bare), put in the Cc header. A line break or anything that is not exactly
+     * one valid address is refused, so no entry can add a header of its own.
+     */
+    static String compose(String from,String to,String subject,String reference,String body,String bodyHtml,
+            List<Outgoing> files,UUID id,String signatureHtml,List<String> cc) throws Exception {
         if(subject.contains("\r")||subject.contains("\n"))throw new IllegalArgumentException("Invalid email subject");
         if(from.contains("\r")||from.contains("\n")||to.contains("\r")||to.contains("\n")||reference.contains("\r")||reference.contains("\n"))throw new IllegalArgumentException("Invalid email header");
         var message=new MimeMessage(Session.getInstance(new Properties()));
         message.setFrom(new InternetAddress(from,true));message.setRecipient(Message.RecipientType.TO,new InternetAddress(to,true));
+        var copies=copies(cc);
+        if(copies.length>0)message.setRecipients(Message.RecipientType.CC,copies);
         message.setSubject(subject,"UTF-8");
         String signature=signatureHtml==null||signatureHtml.isBlank()?null:signatureHtml;
-        if(files.isEmpty())setText(message,body,signature);
+        String formatted=bodyHtml==null||bodyHtml.isBlank()?null:bodyHtml;
+        if(files.isEmpty())setText(message,body,formatted,signature);
         else {
             var parts=new MimeMultipart("mixed");
-            var text=new MimeBodyPart();setText(text,body,signature);parts.addBodyPart(text);
+            var text=new MimeBodyPart();setText(text,body,formatted,signature);parts.addBodyPart(text);
             for(var file:files) {
                 var part=new MimeBodyPart();
                 part.setDataHandler(new jakarta.activation.DataHandler(
@@ -233,24 +313,48 @@ final class GmailMail {
         message.setSentDate(new Date());message.saveChanges();message.setHeader("Message-ID","<onno-"+id+"@"+from.substring(from.indexOf('@')+1)+">");
         var out=new ByteArrayOutputStream();message.writeTo(out);return Base64.getUrlEncoder().withoutPadding().encodeToString(out.toByteArray());
     }
-    /** The email's text: plain, or plain and HTML alternatives when it is signed. */
-    private static void setText(MimePart part,String body,String signature) throws Exception {
-        if(signature==null){part.setText(body,"UTF-8");return;}
+    /** The Cc entries as addresses, each checked to be exactly one valid address on one line. */
+    static InternetAddress[] copies(List<String> cc) throws AddressException {
+        if(cc==null||cc.isEmpty())return new InternetAddress[0];
+        var copies=new ArrayList<InternetAddress>();
+        for(String entry:cc) {
+            if(entry==null||entry.isBlank())continue;
+            if(entry.chars().anyMatch(c->c<0x20||c==0x7f))throw new IllegalArgumentException("Invalid email header");
+            var parsed=InternetAddress.parse(entry,true);
+            if(parsed.length!=1||parsed[0].isGroup())throw new IllegalArgumentException("Invalid Cc address");
+            parsed[0].validate();
+            String personal=parsed[0].getPersonal();
+            try { copies.add(personal==null||personal.isBlank()?new InternetAddress(parsed[0].getAddress()):new InternetAddress(parsed[0].getAddress(),personal,"UTF-8")); }
+            catch(UnsupportedEncodingException impossible) { throw new IllegalStateException(impossible); }
+        }
+        return copies.toArray(InternetAddress[]::new);
+    }
+    /** The email's text: plain, or plain and HTML alternatives when it is formatted or signed. */
+    private static void setText(MimePart part,String body,String bodyHtml,String signature) throws Exception {
+        if(signature==null && bodyHtml==null){part.setText(body,"UTF-8");return;}
         var alternatives=new MimeMultipart("alternative");
         var plain=new MimeBodyPart();
-        String signatureText=EmailHtml.toText(signature);
+        String signatureText=signature==null?"":EmailHtml.toText(signature);
         plain.setText(signatureText.isBlank()?body:body+"\n\n-- \n"+signatureText,"UTF-8");
         alternatives.addBodyPart(plain);
         var html=new MimeBodyPart();
-        html.setText(signedHtml(body,signature),"UTF-8","html");
+        html.setText(signature==null?formattedHtml(bodyHtml):signedHtml(body,bodyHtml,signature),"UTF-8","html");
         alternatives.addBodyPart(html);
         part.setContent(alternatives);
     }
     /** The typed text as HTML (escaped, line breaks kept) followed by the signature, as Gmail lays it out. */
     static String signedHtml(String body,String signature) {
-        String text=org.jsoup.nodes.Entities.escape(body).replace("\r\n","\n").replace("\n","<br>");
+        return signedHtml(body,null,signature);
+    }
+    /** {@link #signedHtml(String,String)} with the formatted body, when there is one, in place of the escaped text. */
+    static String signedHtml(String body,String bodyHtml,String signature) {
+        String text=bodyHtml!=null?bodyHtml:org.jsoup.nodes.Entities.escape(body).replace("\r\n","\n").replace("\n","<br>");
         return "<div dir=\"auto\">"+text+"</div><br><div class=\"gmail_signature\" data-smartmail=\"gmail_signature\">"
             +signature+"</div>";
+    }
+    /** A formatted body without a signature. */
+    static String formattedHtml(String bodyHtml) {
+        return "<div dir=\"auto\">"+bodyHtml+"</div>";
     }
     private static String safeName(String name) {
         String leaf=name==null||name.isBlank()?"attachment":name.replaceAll("[\\r\\n\"\\\\/]","_").strip();

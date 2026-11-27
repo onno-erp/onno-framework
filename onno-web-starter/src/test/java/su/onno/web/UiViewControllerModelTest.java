@@ -109,6 +109,28 @@ class UiViewControllerModelTest {
                 .containsExactly(Map.of("name", "UmShopName", "type", "String"));
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void informationRegisterSurfaceIsReadOnlyAndRequiresReadAccess() throws Exception {
+        var response = mvc.perform(get("/api/ui/view/information-registers/um_rates").principal(READER))
+                .andReturn().getResponse();
+        assertThat(response.getStatus()).isEqualTo(200);
+        Map<String, Object> view = json.readValue(response.getContentAsString(), Map.class);
+        var register = (Map<String, Object>) view.get("informationRegister");
+        assertThat(register).containsEntry("periodic", true);
+        var list = (Map<String, Object>) register.get("list");
+        assertThat(list).containsEntry("canWrite", false).containsEntry("newUrl", null)
+                .containsEntry("feed", "/api/list/information-registers/um_rates");
+        assertThat((List<Map<String, Object>>) list.get("columns"))
+                .extracting(c -> c.get("fieldName")).containsExactly("period", "currency", "rate");
+        assertThat(((List<Map<String, Object>>) list.get("columns")).getFirst()).containsEntry("label", "Date");
+        assertThat(((List<Map<String, Object>>) list.get("filters")).getFirst()).containsEntry("label", "Date");
+        assertThat(mvc.perform(get("/api/ui/view/information-registers/um_rates").principal(HR))
+                .andReturn().getResponse().getStatus()).isEqualTo(403);
+        assertThat(mvc.perform(get("/api/ui/view/information-registers/missing").principal(READER))
+                .andReturn().getResponse().getStatus()).isEqualTo(404);
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> model(Principal who) throws Exception {
         var response = mvc.perform(get("/api/ui/model").principal(who)).andReturn().getResponse();

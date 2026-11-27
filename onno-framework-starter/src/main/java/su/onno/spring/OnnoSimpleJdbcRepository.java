@@ -1,6 +1,5 @@
 package su.onno.spring;
 
-import su.onno.lifecycle.BeforeDeleteHandler;
 import su.onno.model.CatalogObject;
 import su.onno.model.DocumentObject;
 
@@ -12,18 +11,19 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Spring Data JDBC repository base that implements the framework's deletion-mark contract for
- * catalogs and documents. Other aggregate types keep Spring Data's ordinary physical deletion.
+ * catalogs and documents through {@link EntityDeleteService}, the same command the generic REST/UI
+ * delete runs. Other aggregate types keep Spring Data's ordinary physical deletion.
  */
 @Transactional(readOnly = true)
 public class OnnoSimpleJdbcRepository<T, ID> extends SimpleJdbcRepository<T, ID> {
 
-    private final JdbcAggregateOperations operations;
+    private final EntityDeleteService deletes;
 
     public OnnoSimpleJdbcRepository(JdbcAggregateOperations operations,
                                     PersistentEntity<T, ?> entity,
                                     JdbcConverter converter) {
         super(operations, entity, converter);
-        this.operations = operations;
+        this.deletes = new EntityDeleteService(operations);
     }
 
     @Override
@@ -35,20 +35,8 @@ public class OnnoSimpleJdbcRepository<T, ID> extends SimpleJdbcRepository<T, ID>
     @Override
     @Transactional
     public void delete(T aggregate) {
-        if (aggregate instanceof CatalogObject catalog) {
-            beforeDelete(aggregate);
-            catalog.setDeletionMark(true);
-            operations.save(aggregate);
-            return;
-        }
-        if (aggregate instanceof DocumentObject document) {
-            if (document.isPosted()) {
-                throw new IllegalStateException(
-                        "Posted document " + document.getId() + " must be unposted before deletion");
-            }
-            beforeDelete(aggregate);
-            document.setDeletionMark(true);
-            operations.save(aggregate);
+        if (aggregate instanceof CatalogObject || aggregate instanceof DocumentObject) {
+            deletes.delete(aggregate);
             return;
         }
         super.delete(aggregate);
@@ -70,11 +58,5 @@ public class OnnoSimpleJdbcRepository<T, ID> extends SimpleJdbcRepository<T, ID>
     @Transactional
     public void deleteAll() {
         findAll().forEach(this::delete);
-    }
-
-    private static void beforeDelete(Object aggregate) {
-        if (aggregate instanceof BeforeDeleteHandler handler) {
-            handler.beforeDelete();
-        }
     }
 }

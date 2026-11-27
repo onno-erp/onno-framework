@@ -14,7 +14,7 @@ Pick the one that matches what you're adding. Most "integrations" are **connecto
 | Surface | You're adding… | Mechanism |
 | --- | --- | --- |
 | **Connector** | a binding to an external system (a PMS, a bank, a marketplace, an ERP) | a Spring Boot auto-configuration starter that exposes a typed client + sync service |
-| **SPI** | a pluggable implementation of a framework contract | a `@Bean` implementing an SPI interface (`MediaStorage`, `MailDispatcher`, `MailEventVerifier`, an additive `AuthMethodsContributor` login button, a read-only record-menu `RecordActionContributor` or list-selection `SelectionDownloadContributor`, a `PdfConverter` for print forms, a custom `SecurityFilterChain`/`UserDetailsService`) |
+| **SPI** | a pluggable implementation of a framework contract | a `@Bean` implementing an SPI interface (`MediaStorage`, `MailDispatcher`, `MailEventVerifier`, an additive `AuthMethodsContributor` login button, `AuthPathsContributor` public/CSRF endpoint patterns, a read-only record-menu `RecordActionContributor` or list-selection `SelectionDownloadContributor`, a `PdfConverter` for print forms, a custom `SecurityFilterChain`/`UserDetailsService`) |
 | **UI** | a screen, component, outlet contribution or record command | an npm package of React components on `@onno/ui` (rendered by the host app's pages, or passed to `defineApp({ extensions })`), plus `Commands`/`Checks`/`PickerOptions` beans for behaviour (see [onno-ui/README.md](../onno-ui/README.md)) |
 | **MCP** | an agent-callable application or integration operation | `@McpTool` on a Spring bean method, or an `McpToolProvider` bean for direct SDK access (see [onno-mcp-starter/README.md](../onno-mcp-starter/README.md#custom-tools)) |
 | **Skill / plugin** | guidance that makes an AI agent good at your domain | a Claude skill published through a plugin marketplace (see [.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json)) |
@@ -323,7 +323,10 @@ An application may own a Templates catalog, picker, and button, registering `exa
 contains no template catalog or picker. Replace that contribution
 ID to customize it, or register additional IDs to add neighboring buttons. The
 composer supplies `insertDraft` only in reply mode; the host preserves the existing
-draft, enforces the channel length limit, and never sends on insertion. Empty
+draft, enforces the channel length limit, and never sends on insertion. Its optional second argument
+puts files already stored through `/api/media` (a generated PDF, as `DraftFile`s) in the reply's
+attachment tray; a channel that takes no files, or a full tray, refuses them with the composer's
+own reason before the draft changes. Empty
 template catalogs remain hidden.
 
 Applications optionally define conversation-status choices and transitions with a `CrmStateConfiguration` Java bean.
