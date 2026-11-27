@@ -20,7 +20,8 @@ import java.lang.annotation.Target;
  * write access: the caller must be able to write the document <em>and</em> hold one of the
  * listed roles. Left empty, every writer may post / unpost (the pre-existing behaviour).
  * {@code ADMIN} always passes. The gates apply to every user-facing path (generic REST, MCP
- * tools, the built-in UI actions, and deleting a posted document, which unposts it); trusted
+ * tools and the built-in UI actions). Deleting never unposts: a posted document must be unposted
+ * explicitly first, so the unpost gate always applies to it. Trusted
  * application code calling {@code PostingService} directly is not gated, like typed repositories.
  *
  * <pre>{@code
@@ -44,9 +45,9 @@ public @interface AccessControl {
     String[] postRoles() default {};
 
     /**
-     * Documents only: roles that may unpost the document — including deleting a posted document,
-     * which unposts it first — in addition to holding write access. Empty means every writer may
-     * unpost.
+     * Documents only: roles that may unpost the document, in addition to holding write access.
+     * Empty means every writer may unpost. A posted document must be unposted explicitly before it
+     * can be deleted; a delete never unposts it.
      */
     String[] unpostRoles() default {};
 }

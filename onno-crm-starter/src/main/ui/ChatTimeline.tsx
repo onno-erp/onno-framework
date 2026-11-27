@@ -11,6 +11,7 @@ import { VoicePlayer } from "./VoicePlayer";
 import { ChatMessageBody } from "./chatMessageRenderers";
 import { action, type Config } from "./CrmWorkspace";
 import { fileSize, fullTime, initials, type CrmAttachment, type CrmMessage, type CrmNote, type CrmTimelineEntry } from "./crmModel";
+import { addressLabel, parseAddress, splitAddresses } from "./emailAddresses";
 
 /**
  * The chat's building blocks: avatars, message bubbles, notes, system events, and the timeline that
@@ -65,6 +66,27 @@ export function MessageAttachments({ files, outbound }: { files: CrmAttachment[]
   );
 }
 
+/** How many people a recipients line names before it says "+N". */
+const NAMED_RECIPIENTS = 3;
+
+/**
+ * Who else was on an email, as one muted line: "to Sarah, me · cc Marco, Giulia". Drawn only when the email had a
+ * Cc or several To, so ordinary one-to-one mail stays as it was. Names when the headers gave them, else addresses;
+ * a long list ends in "+N", and the full lists are the line's tooltip. "me" is the conversation's own mailbox.
+ */
+export function MessageRecipients({ message, outbound }: { message: Pick<CrmMessage, "sentTo" | "copyTo" | "accountLabel">; outbound: boolean }) {
+  const to = splitAddresses(message.sentTo), cc = splitAddresses(message.copyTo);
+  if (!cc.length && to.length < 2) return null;
+  const own = new Set((message.accountLabel ?? "").toLowerCase().split(/[\s·<>,;]+/).filter(Boolean));
+  const label = (entry: string) => own.has(parseAddress(entry).address.toLowerCase()) ? t("crm.chat.me") : addressLabel(entry);
+  const list = (entries: string[]) => entries.length <= NAMED_RECIPIENTS ? entries.map(label).join(", ")
+    : `${entries.slice(0, NAMED_RECIPIENTS - 1).map(label).join(", ")} +${entries.length - NAMED_RECIPIENTS + 1}`;
+  const line = [to.length ? `${t("crm.chat.recipientsTo")} ${list(to)}` : null, cc.length ? `${t("crm.chat.recipientsCc")} ${list(cc)}` : null].filter(Boolean).join(" · ");
+  const title = [to.length ? `${t("crm.chat.to")}: ${to.join(", ")}` : null, cc.length ? `${t("crm.chat.cc")}: ${cc.join(", ")}` : null].filter(Boolean).join("\n");
+  return <p data-message-recipients="" title={title}
+    className={`mt-0.5 truncate text-[11px] ${outbound ? "text-primary-foreground/75" : "text-muted-foreground"}`}>{line}</p>;
+}
+
 /** The `crm.chat.message.actions` outlet's context for one message: the conversation's, plus the message. */
 export type MessageActionsContext = Omit<ExtensionContext, "record" | "recordId">;
 
@@ -82,6 +104,8 @@ export function TimelineMessage({ message, avatarUrl, retry, busy, config, chann
   const files = (message.attachments ?? []).filter(file => !html || !html.includes(file.url));
   const images = files.filter(file => file.image);
   const others = files.filter(file => !file.image);
+  const recipients = splitAddresses(message.copyTo).length > 0 || splitAddresses(message.sentTo).length > 1
+    ? <MessageRecipients message={message} outbound={outbound} /> : null;
   return (
     <div data-chat-message={message.id} className={outbound ? "group/message flex flex-row-reverse items-end gap-2" : "group/message flex items-end gap-2"}>
       {config?.showAvatar !== false && <CrmAvatar name={message.authorName} url={avatarUrl} channel={channel || message.channel} />}
@@ -95,9 +119,11 @@ export function TimelineMessage({ message, avatarUrl, retry, busy, config, chann
             {message.authorName}
           </span>
         </div>
-        {outbound && (message.subject || message.recipient) ? <p className="mt-0.5 truncate text-[11px] text-primary-foreground/75">
-          {[message.recipient && `→ ${message.recipient}`, message.subject].filter(Boolean).join(" · ")}
+        {/* The recipients line names the recipient itself when it is drawn. */}
+        {outbound && (message.subject || (message.recipient && !recipients)) ? <p className="mt-0.5 truncate text-[11px] text-primary-foreground/75">
+          {[!recipients && message.recipient && `→ ${message.recipient}`, message.subject].filter(Boolean).join(" · ")}
         </p> : null}
+        {recipients}
         <MediaGrid images={images} />
         <ChatMessageBody message={message} fallback={html ? <EmailHtmlBody html={html} /> : message.body?.trim()
           ? <p className="mt-1 whitespace-pre-wrap text-sm leading-6"><LinkedText text={message.body} /></p> : null} />

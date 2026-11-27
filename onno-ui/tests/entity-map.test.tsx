@@ -10,11 +10,11 @@ const seen = vi.hoisted(() => ({ source: null as unknown, features: [] as Featur
 vi.mock("@/lib/aggregate-data", () => ({
   useEntityRows: (source: unknown) => {
     seen.source = source;
-    return [
+    return { rows: [
       { id: "s-1", name: "North", description: "Store 1", lat: 55.75, lng: 37.61 },
       { id: "s-2", name: "South", description: "Store 2", lat: 55.7, lng: 37.6 },
       { id: "s-3", name: "Nowhere", description: "Store 3" },
-    ];
+    ], hasMore: false, nextCursor: null };
   },
 }));
 vi.mock("@/lib/entity-source", () => ({

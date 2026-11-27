@@ -12,6 +12,8 @@ import su.onno.security.SecretCipher;
 import su.onno.spring.fixtures.TestService;
 import su.onno.spring.fixtures.TestServiceCategory;
 import su.onno.spring.fixtures.TestServiceRepository;
+import su.onno.spring.fixtures.TestDeleteGuardedCatalog;
+import su.onno.spring.fixtures.TestDeleteGuardedCatalogRepository;
 import su.onno.spring.fixtures.TestStarterInvoice;
 import su.onno.spring.fixtures.TestStarterInvoiceRepository;
 
@@ -67,6 +69,9 @@ class SoftDeleteFinderIT {
     private TestStarterInvoiceRepository documentRepository;
 
     @Autowired
+    private TestDeleteGuardedCatalogRepository guardedRepository;
+
+    @Autowired
     private DataSource dataSource;
 
     private UUID liveId;
@@ -82,7 +87,9 @@ class SoftDeleteFinderIT {
             h.execute("DELETE FROM document_starter_invoices_items");
             h.execute("DELETE FROM document_starter_invoices");
             h.execute("DELETE FROM catalog_test_services");
+            h.execute("DELETE FROM catalog_delete_guarded_things");
         });
+        TestDeleteGuardedCatalog.deleteHookCalls = 0;
 
         liveId = save("S-1", "Rabies shot", false);
         save("S-2", "Microchipping", false);
@@ -145,6 +152,49 @@ class SoftDeleteFinderIT {
                 .isEqualTo(false);
     }
 
+    @Test
+    void repositoryDelete_runsDeleteHookButSkipsWriteLifecycleAndBumpsVersion() {
+        TestDeleteGuardedCatalog thing = new TestDeleteGuardedCatalog();
+        thing.setCode("G-1");
+        thing.setDescription("Guarded");
+        thing.setName("Guarded");
+        UUID id = guardedRepository.save(thing).getId();
+        TestDeleteGuardedCatalog stored = guardedRepository.findById(id).orElseThrow();
+        assertThat(stored.getWrites()).isEqualTo(1);
+        int versionBefore = stored.getVersion();
+
+        guardedRepository.delete(stored);
+
+        assertThat(TestDeleteGuardedCatalog.deleteHookCalls).isEqualTo(1);
+        assertThat(guardedRepository.findById(id)).get().satisfies(deleted -> {
+            assertThat(deleted.isDeletionMark()).isTrue();
+            assertThat(deleted.getWrites()).isEqualTo(1);           // beforeWrite did not recalculate
+            assertThat(deleted.getVersion()).isEqualTo(versionBefore + 1);
+        });
+
+        // Deleting an already deleted record is a no-op: the hook does not run again.
+        guardedRepository.delete(guardedRepository.findById(id).orElseThrow());
+        assertThat(TestDeleteGuardedCatalog.deleteHookCalls).isEqualTo(1);
+    }
+
+    @Test
+    void repositoryDelete_rechecksPostedFlagUnderLock() {
+        TestStarterInvoice draft = invoice("INV-3");
+        documentRepository.save(draft);
+        TestStarterInvoice loaded = documentRepository.findById(draft.getId()).orElseThrow();
+        // Posting flips _posted without bumping the version, so the loaded copy looks deletable.
+        Jdbi.create(dataSource).useHandle(h -> h.createUpdate(
+                        "UPDATE document_starter_invoices SET _posted = TRUE WHERE _id = :id")
+                .bind("id", draft.getId()).execute());
+
+        assertThatThrownBy(() -> documentRepository.delete(loaded))
+                .isInstanceOf(PostedDocumentDeletionException.class);
+        assertThat(documentRepository.findById(draft.getId())).get().satisfies(stored -> {
+            assertThat(stored.isPosted()).isTrue();
+            assertThat(stored.isDeletionMark()).isFalse();
+        });
+    }
+
     private UUID save(String code, String name, boolean deletionMark) {
         TestService s = new TestService();
         s.setCode(code);
@@ -164,6 +214,7 @@ class SoftDeleteFinderIT {
         MetadataRegistry registry = new MetadataRegistry();
         MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
         registry.registerCatalog(scanner.scan(TestService.class));
+        registry.registerCatalog(scanner.scan(TestDeleteGuardedCatalog.class));
         registry.registerDocument(scanner.scanDocument(TestStarterInvoice.class));
         registry.registerEnumeration(scanner.scanEnumeration(TestServiceCategory.class));
         return registry;
@@ -268,8 +319,11 @@ class SoftDeleteFinderIT {
         @Bean
         OnnoBeforeConvertCallback onnoBeforeConvertCallback(MetadataRegistry registry,
                                                             NumberGenerator numberGenerator,
-                                                            SecretCipher secretCipher) {
-            return new OnnoBeforeConvertCallback(registry, numberGenerator, secretCipher);
+                                                            SecretCipher secretCipher,
+                                                            DataSource dataSource) {
+            OnnoBeforeConvertCallback callback = new OnnoBeforeConvertCallback(registry, numberGenerator, secretCipher);
+            callback.setJdbi(Jdbi.create(new org.jdbi.v3.spring5.SpringConnectionFactory(dataSource)));
+            return callback;
         }
 
         @Bean

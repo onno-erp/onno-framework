@@ -5,10 +5,12 @@ import { toSnakeCase } from "../../lib/utils";
 import { useEntityVersion } from "../../lib/aggregate-data";
 import { useEntitySource } from "../../lib/entity-source";
 import { whereParam, type WhereClause } from "../../lib/measure";
-import { formatAmount, pickField, toNumber } from "../../lib/format";
+import { formatAmount, toNumber } from "../../lib/format";
 import type { EntityRecord } from "../../lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { HintIcon } from "../ui/hint-icon";
+import { recordTitle, recordDetails, useRecordColumns, type RecordColumn } from "../../lib/record-presentation";
+import { RecordsTruncated } from "./records-truncated";
 import { Boundary } from "../pages/boundary";
 
 /** A compact list of an entity's most recent records, each opening its record. */
@@ -25,9 +27,9 @@ export interface RecentRecordsProps {
   limit?: number;
   /** The date field rows sort by (newest first) and show on the right; default `"date"`. */
   dateField?: string;
-  /** The headline; default the record's number/code/description/name. */
+  /** The headline; default the record's description/number/code. */
   primary?: (record: EntityRecord) => ReactNode;
-  /** The second line; default the first resolved reference (`…Display`). */
+  /** The second line; default the entity metadata's first text/reference label. */
   secondary?: (record: EntityRecord) => ReactNode;
   /** The trailing amount; default the first of total/totalGross/amount/sum. */
   amount?: (record: EntityRecord) => number | null | undefined;
@@ -43,28 +45,15 @@ export interface RecentRecordsProps {
   locale?: string;
 }
 
-// Identity fields tried for the headline when no `primary` is authored.
-const TITLE_FALLBACKS = ["number", "code", "description", "name"];
-// Default secondary line: common logical reference-display companions.
-const DEFAULT_SECONDARY = ["clientDisplay", "primaryClientDisplay", "propertyDisplay", "customerDisplay"];
 // Default trailing amount: the usual document money fields.
 const DEFAULT_AMOUNT = ["total", "totalGross", "amount", "sum"];
 
-/** The default headline: the record's number/code/description/name. */
-export function defaultPrimary(row: EntityRecord): string {
-  return pickField(row, TITLE_FALLBACKS) ?? "";
-}
+/** The default headline is the framework's record identity. */
+export const defaultPrimary = recordTitle;
 
-/** The default second line: a common reference display, else the first non-empty `…Display`. */
-export function defaultSecondary(row: EntityRecord): string {
-  const preferred = pickField(row, DEFAULT_SECONDARY);
-  if (preferred) return preferred;
-  for (const key of Object.keys(row)) {
-    if (key.endsWith("Display") && typeof row[key] === "string" && (row[key] as string).trim()) {
-      return row[key] as string;
-    }
-  }
-  return "";
+/** The second line follows the entity's declared text/reference columns. */
+export function defaultSecondary(row: EntityRecord, columns: readonly RecordColumn[] = []): string {
+  return recordDetails(row, columns)[0] ?? "";
 }
 
 /** The default amount: the first of total/totalGross/amount/sum holding a number. */
@@ -107,11 +96,13 @@ function RecentRecordsCard(props: RecentRecordsProps) {
   const maxItems = props.limit || 8;
   const [items, setItems] = useState<EntityRecord[]>([]);
   const source = useEntitySource(entity, { dateField: props.dateField, where: props.where });
+  const columns = useRecordColumns(source);
+  const [hasMore, setHasMore] = useState(false);
   const liveVersion = useEntityVersion(source);
   const dateField = props.dateField || "date";
 
   const headline = (row: EntityRecord): ReactNode => (props.primary ?? defaultPrimary)(row);
-  const subtitle = (row: EntityRecord): ReactNode => (props.secondary ?? defaultSecondary)(row);
+  const subtitle = (row: EntityRecord): ReactNode => props.secondary ? props.secondary(row) : defaultSecondary(row, columns);
 
   const amount = (row: EntityRecord): string => {
     const n = (props.amount ?? defaultAmount)(row);
@@ -133,6 +124,8 @@ function RecentRecordsCard(props: RecentRecordsProps) {
   };
 
   useEffect(() => {
+    setItems([]);
+    setHasMore(false);
     if (!source || (source.entityType !== "document" && source.entityType !== "catalog")) {
       setItems([]);
       return;
@@ -142,7 +135,11 @@ function RecentRecordsCard(props: RecentRecordsProps) {
     let alive = true;
     fetch(`/api/list/${source.entityType}s/${name}?${params.toString()}`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((data: { rows?: EntityRecord[] }) => alive && setItems(data.rows ?? []))
+      .then((data: { rows?: EntityRecord[]; hasMore?: boolean }) => {
+        if (!alive) return;
+        setItems(data.rows ?? []);
+        setHasMore(data.hasMore === true);
+      })
       .catch(() => alive && setItems([]));
     return () => {
       alive = false;
@@ -174,6 +171,7 @@ function RecentRecordsCard(props: RecentRecordsProps) {
         </div>
       </CardHeader>
       <CardContent>
+        <RecordsTruncated count={rows.length} truncated={hasMore || items.length > rows.length} />
         {rows.length === 0 ? (
           <p className="py-6 text-center text-xs text-muted-foreground">No records yet.</p>
         ) : (

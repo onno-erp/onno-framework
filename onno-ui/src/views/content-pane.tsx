@@ -16,6 +16,10 @@ import { linkedWhere } from "../lib/links";
 function withLinkedWhere(view: ViewModel, path: string): ViewModel {
   const where = linkedWhere(path);
   if (!where) return view;
+  if ("informationRegister" in view) {
+    const register = view.informationRegister;
+    return { informationRegister: { ...register, list: { ...register.list as object, baseWhere: where } } };
+  }
   return "list" in view ? { list: { ...view.list, baseWhere: where } } : view;
 }
 

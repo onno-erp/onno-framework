@@ -779,6 +779,8 @@ export function useRecordForm(form: FormDescriptor): RecordFormState {
           : await api.createCatalogItem(name, payload, { silent: true });
       }
       const savedId = String(isEdit ? id : saved.id);
+      // Confirm the save before posting, so a posting failure reported below is the toast in front.
+      if (isEdit) toast.success(t("toast.saved"));
       // Post after a successful save when requested. The document is already persisted, so
       // a posting failure (e.g. a validation/balance error) surfaces a toast but the saved
       // record still opens — the user can fix it and re-post. api.postDocument re-posts a
@@ -786,9 +788,10 @@ export function useRecordForm(form: FormDescriptor): RecordFormState {
       if (thenPost && kind === "documents") {
         try {
           await api.postDocument(name, savedId);
-        } catch {
-          // The error toast is already shown by the api layer; fall through to open the
-          // saved (unposted) record so the user lands somewhere actionable.
+        } catch (error) {
+          // Reported once: the api layer leaves a network error, field errors or typed feedback
+          // to us. The saved record then opens as above.
+          notifyError(error);
         }
       }
       dirty.clear(); // saved — nothing left for the discard guard to protect
@@ -797,7 +800,6 @@ export function useRecordForm(form: FormDescriptor): RecordFormState {
         // The record route is the form: keep it open and re-seed from the authoritative saved row.
         applyRecord(saved);
         if (refreshable || (thenPost && kind === "documents")) await refetch(true);
-        toast.success(t("toast.saved"));
         setSaving(false);
         return;
       }

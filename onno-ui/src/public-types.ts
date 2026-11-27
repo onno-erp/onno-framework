@@ -482,6 +482,24 @@ export type InformationWhere<N> = { [F in InfoField<N>]?: FieldPredicate<InfoVal
   not?: InformationWhere<N>;
 };
 
+/** Names that have a navigable list surface; information registers remain read-only. */
+export type NavigationEntityName = EntityName | (Typed extends true ? Extract<keyof OnnoInformationRegisters, string> : string);
+type InformationListField<N> = InfoField<N> | "id" | (InfoEntry<N> extends { periodic: true } ? "period" : never);
+
+/** Presentation of a read-only information-register list, without form or write commands. */
+export interface InformationRegisterCustomization<N extends InformationRegisterName = InformationRegisterName> {
+  icon?: LucideIcon;
+  fields?: Partial<Record<InformationListField<N>, Pick<FieldCustomization, "label" | "format" | "hidden" | "hideInList" | "input">>>;
+  list?: {
+    columns?: InformationListField<N>[];
+    labels?: Partial<Record<InformationListField<N>, string>>;
+    title?: string;
+    sort?: InformationListField<N> | `-${InformationListField<N>}`;
+    where?: InformationWhere<N>;
+    filters?: ListFilter<InformationListField<N>>[];
+  };
+}
+
 /** A `@Constant`'s name, checked against the model when generated. */
 export type ConstantName = [keyof OnnoConstants] extends [never] ? string : Extract<keyof OnnoConstants, string>;
 /** A `@Constant`'s value type. */
@@ -689,16 +707,16 @@ export type PageDefinition<P extends PagePath = PagePath> = PageOptions & (
  */
 export type NavItemSpec<P extends PagePath = PagePath> =
   | NavGroupSpec<P>
-  | EntityName
+  | NavigationEntityName
   | P
-  | { entity: EntityName; label?: string; icon?: LucideIcon; roles?: RoleName[] }
+  | { entity: NavigationEntityName; label?: string; icon?: LucideIcon; roles?: RoleName[] }
   | { path: P; label?: string; icon?: LucideIcon; roles?: RoleName[] };
 
 export interface NavGroupSpec<P extends PagePath = PagePath> { title: string; icon?: LucideIcon; actions?: ReactNode; roles?: RoleName[]; items: NavItemSpec<P>[] }
 export interface NavSectionSpec<P extends PagePath = PagePath> { title?: string | null; icon?: LucideIcon; actions?: ReactNode; roles?: RoleName[]; items: NavItemSpec<P>[] }
 export type NavigationProps = Omit<import("./components/shell/navigation").NavigationProps, "navigation"> & { navigation: NavSection[] };
 export type NavigationGroupProps = { title: string; icon?: LucideIcon; actions?: ReactNode; children: ReactNode; defaultOpen?: boolean };
-export type NavigationLinkProps = ({ entity: EntityName; path?: never } | { path: PagePath; entity?: never }) & {
+export type NavigationLinkProps = ({ entity: NavigationEntityName; path?: never } | { path: PagePath; entity?: never }) & {
   label?: string; icon?: LucideIcon; roles?: RoleName[]; className?: string;
 };
 
@@ -710,7 +728,7 @@ export interface AppDefinition<P extends PagePath = PagePath> {
   /** Optional React replacement for the desktop navigation and mobile menu body. */
   navigationComponent?: ComponentType<NavigationProps>;
   /** How each entity's default list and form differ from the framework's, by entity name. */
-  entities?: { [E in EntityName]?: EntityCustomization<E> };
+  entities?: { [E in EntityName]?: EntityCustomization<E> } & { [N in Exclude<NavigationEntityName, EntityName>]?: InformationRegisterCustomization<N> };
   pages?: PageDefinition<P>[];
   /**
    * The sidebar. Omitted: entities grouped by context plus every labelled page. Items the user

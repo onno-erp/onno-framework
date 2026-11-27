@@ -5,7 +5,7 @@ import { setModel } from "@/lib/model-store";
 import { Kanban } from "@/components/widgets/kanban";
 import { RecentRecords } from "@/components/widgets/recent-records";
 
-const api = vi.hoisted(() => ({ listCatalog: vi.fn(), listDocuments: vi.fn() }));
+const api = vi.hoisted(() => ({ listCatalogPage: vi.fn(), listDocumentsPage: vi.fn(), getJson: vi.fn().mockResolvedValue({}) }));
 vi.mock("@/lib/api", () => ({ api }));
 vi.mock("@/lib/aggregate-data", () => ({ useEntityVersion: () => 0 }));
 
@@ -45,8 +45,8 @@ function model(entityType: "catalog" | "document", canWrite = true) {
 
 function mockRows() {
   const rows = [{ id: "r-1", description: "Example record", posted: false }];
-  api.listCatalog.mockResolvedValue(rows);
-  api.listDocuments.mockResolvedValue(rows);
+  api.listCatalogPage.mockResolvedValue({ rows, hasMore: false, nextCursor: null });
+  api.listDocumentsPage.mockResolvedValue({ rows, hasMore: false, nextCursor: null });
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ rows }), {
     headers: { "Content-Type": "application/json" },
   })));
@@ -118,13 +118,13 @@ describe("record components take typed where and render functions", () => {
 
   it("Kanban lists with where and renders caption/primary/secondary", async () => {
     model("document");
-    api.listDocuments.mockResolvedValue([{ id: "r-1", number: "SO-1", subject: "Ship pallets", posted: false }]);
+    api.listDocumentsPage.mockResolvedValue({ rows: [{ id: "r-1", number: "SO-1", subject: "Ship pallets", posted: false }], hasMore: false, nextCursor: null });
     render(<Kanban entity="SalesOrders" where={{ total: { gte: 100 } }} caption={(o) => `#${o.number}`}
       primary={(o) => o.subject as string} secondary={() => "second line"} />);
 
     expect(await screen.findByText("#SO-1")).toBeTruthy();
     expect(screen.getByText("Ship pallets")).toBeTruthy();
     expect(screen.getByText("second line")).toBeTruthy();
-    expect(api.listDocuments).toHaveBeenCalledWith("sales_orders", undefined, undefined, { total: { gte: 100 } });
+    expect(api.listDocumentsPage).toHaveBeenCalledWith("sales_orders", undefined, undefined, { total: { gte: 100 } }, { limit: 500 });
   });
 });

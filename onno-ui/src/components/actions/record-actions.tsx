@@ -65,8 +65,9 @@ function commandSource(url: string): { kind: string; name: string; key: string; 
   return { kind, name, key, id };
 }
 
-// Run a post/unpost/command url and apply its result. Errors self-toast via the api layer.
-// `inputs` carries a command dialog's submitted values (commands only).
+// Run a post/unpost/command url and apply its result. A failure rejects; the caller reports it
+// once (the cluster, or the command dialog). `inputs` carries a command dialog's submitted values
+// (commands only).
 async function runAsync(url: string, inputs: CommandFormValues | undefined, feedback: CommandFeedbackHandlers): Promise<void> {
   const r = url.replace("onno://", "");
   if (r.startsWith("post/") || r.startsWith("unpost/")) {
@@ -109,7 +110,7 @@ export function RecordActions({ items }: { items: RecordAction[] }) {
     });
     return runAsync(it.url, inputs, feedback)
       .catch((error) => {
-        feedback.fromError(error);
+        feedback.notifyError(error);
       })
       .finally(() =>
         setPending((s) => {

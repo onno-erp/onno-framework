@@ -422,6 +422,13 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
+    public InformationRegisterListController informationRegisterListController(MetadataRegistry registry,
+            InformationRegisterQueryService query, AccessService access, ResolvedMetadataService metadata,
+            UiMessages messages) {
+        return new InformationRegisterListController(registry, query, access, metadata, messages);
+    }
+
+    @Bean
     public RegisterListController registerListController(RegisterQueryService registerQueryService,
                                                          AccessService access, UiMessages uiMessages) {
         return new RegisterListController(registerQueryService, access, uiMessages);

@@ -2,7 +2,7 @@
  * Unsent composer work, kept per conversation so that switching chats, contacts, inbox modes or tabs
  * never throws away what someone was writing.
  *
- * The text parts (reply, edited subject, chosen recipient, chosen sending mailbox, reply-or-note mode
+ * The text parts (reply, edited subject, chosen recipient, edited Cc, chosen sending mailbox, reply-or-note mode
  * and the internal note) live in memory for the page session and in localStorage across reloads,
  * keyed by inbox workspace + conversation. Storage is best effort: every access is guarded, an entry
  * over {@link MAX_DRAFT_CHARS} stays in memory only, entries older than {@link DRAFT_TTL_MS} are
@@ -26,6 +26,8 @@ export type ComposerDraft = {
   subject: string | null;
   /** The email recipient the reply is pinned to; `null` follows the connection's default. */
   recipient: string | null;
+  /** Who an email reply copies, as edited (`Name <address>` entries); `null` follows the connection's suggestion (`delivery.cc`). */
+  cc: string[] | null;
   /** The chosen sending mailbox (a connection `senders` id); `null` follows the connection's default. */
   from: string | null;
   /** The internal note as typed, and the same note with its references serialised for sending. */
@@ -33,7 +35,7 @@ export type ComposerDraft = {
   noteBody: string;
 };
 
-export const EMPTY_DRAFT: ComposerDraft = Object.freeze({ mode: "reply", body: "", html: null, subject: null, recipient: null, from: null, note: "", noteBody: "" });
+export const EMPTY_DRAFT: ComposerDraft = Object.freeze({ mode: "reply", body: "", html: null, subject: null, recipient: null, cc: null, from: null, note: "", noteBody: "" });
 const STORAGE_PREFIX = "onno.crm.draft.v1|";
 /** Drafts untouched for this long are dropped from storage. */
 export const DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -48,7 +50,7 @@ export function hasDraftText(draft: ComposerDraft | null | undefined): boolean {
 }
 
 function isBlank(draft: ComposerDraft): boolean {
-  return !hasDraftText(draft) && draft.mode === "reply" && draft.from === null && draft.recipient === null;
+  return !hasDraftText(draft) && draft.mode === "reply" && draft.from === null && draft.recipient === null && draft.cc === null;
 }
 
 const nullableString = (value: unknown) => typeof value === "string" ? value : null;
@@ -61,6 +63,7 @@ function normalise(value: unknown): ComposerDraft | null {
     html: nullableString(raw.html),
     subject: nullableString(raw.subject),
     recipient: nullableString(raw.recipient),
+    cc: Array.isArray(raw.cc) ? raw.cc.filter((entry): entry is string => typeof entry === "string") : null,
     from: nullableString(raw.from),
     note: typeof raw.note === "string" ? raw.note : "",
     noteBody: typeof raw.noteBody === "string" ? raw.noteBody : typeof raw.note === "string" ? raw.note : "",
@@ -192,7 +195,7 @@ export function createDraftStore({ storage = defaultStorage, now = Date.now, deb
       const target = entry(key);
       const draft = target.draft ?? { ...EMPTY_DRAFT, mode };
       if (mode === "note") target.draft = { ...draft, note: "", noteBody: "" };
-      else { target.draft = { ...draft, body: "", html: null, subject: null, recipient: null, from: null }; target.files = []; }
+      else { target.draft = { ...draft, body: "", html: null, subject: null, recipient: null, cc: null, from: null }; target.files = []; }
       if (isBlank(target.draft)) target.draft = null;
       dirty.delete(key);
       persist(key);

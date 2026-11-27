@@ -698,7 +698,7 @@ function Shell() {
             message: t("confirm.delete.document.message"),
             confirmLabel: t("action.delete"),
             danger: true,
-            onConfirm: () => api.deleteDocument(name, id).then(after).catch(() => {}),
+            onConfirm: () => api.deleteDocument(name, id).then(after).catch((error) => commandFeedback.notifyError(error)),
           });
         } else if (kind === "catalogs") {
           setConfirm({
@@ -706,14 +706,14 @@ function Shell() {
             message: t("confirm.delete.item.message"),
             confirmLabel: t("action.delete"),
             danger: true,
-            onConfirm: () => api.deleteCatalogItem(name, id).then(after).catch(() => {}),
+            onConfirm: () => api.deleteCatalogItem(name, id).then(after).catch((error) => commandFeedback.notifyError(error)),
           });
         }
         return;
       }
       if (rest.startsWith("command/")) {
         // command/{kind}/{name}/{key}[/{id}] — an entity command (a record command with its id).
-        // POST it (CSRF-aware, errors self-toast) and apply the CommandResult.
+        // POST it (CSRF-aware; a failure is reported once) and apply the CommandResult.
         const [kind, name, key, id] = rest.slice("command/".length).split("/");
         if (!kind || !name || !key) return;
         // A URL-dispatched command has no React control to spin, so a loading toast gives feedback
@@ -727,7 +727,7 @@ function Shell() {
           })
           .catch((error) => {
             toast.dismiss(loadingId);
-            commandFeedback.fromError(error);
+            commandFeedback.notifyError(error);
           });
         return;
       }
@@ -735,12 +735,12 @@ function Shell() {
         // post/{name}/{id} or unpost/{name}/{id} — drive the document's posting state via
         // REST. Posting emits ("posted"/"unposted", document) + ("changed","register","*")
         // over SSE, so the detail surface and any open register refresh themselves; no
-        // manual navigation needed. The api layer toasts any failure (validation/balance).
+        // manual navigation needed. A failure (validation/balance, network) is reported once.
         const unpost = rest.startsWith("unpost/");
         const [name, id] = rest.slice((unpost ? "unpost/" : "post/").length).split("/");
         if (!name || !id) return;
         const op = unpost ? api.unpostDocument(name, id) : api.postDocument(name, id);
-        op.then(() => toast.success(t(unpost ? "toast.unposted" : "toast.posted"))).catch(() => {});
+        op.then(() => toast.success(t(unpost ? "toast.unposted" : "toast.posted"))).catch((error) => commandFeedback.notifyError(error));
         return;
       }
       const explicitMain = rest.startsWith("main/");

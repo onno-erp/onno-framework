@@ -1,5 +1,5 @@
 import { openRoute } from "../../lib/navigation";
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { format } from "date-fns";
 import {
   DragDropContext,
@@ -24,20 +24,8 @@ import { Avatar, AvatarImage, AvatarFallback } from "../ui/avatar";
 import { logicalEntityKey } from "../../lib/entity-keys";
 import type { WhereClause } from "../../lib/measure";
 import { formatAmount, toNumber } from "../../lib/format";
-
-function pickAvatar(row: EntityRecord): { url?: string; label?: string } {
-  for (const key of Object.keys(row)) {
-    if (key.endsWith("Avatar") && typeof row[key] === "string" && (row[key] as string).trim()) {
-      const base = key.slice(0, -"Avatar".length);
-      const label = row[`${base}Display`];
-      return {
-        url: row[key] as string,
-        label: typeof label === "string" ? label : undefined,
-      };
-    }
-  }
-  return {};
-}
+import { pickAvatar, recordDetails, recordTitle, useRecordColumns, type RecordColumn } from "../../lib/record-presentation";
+import { RecordsTruncated } from "./records-truncated";
 
 /** A board of an entity's records in columns; documents drag between Draft and Posted. */
 export interface KanbanProps {
@@ -62,9 +50,9 @@ export interface KanbanProps {
   dateField?: string;
   /** The small caption atop each card; default the record's number/code. */
   caption?: (record: EntityRecord) => ReactNode;
-  /** The card's headline; default the customer/client display or description/name. */
+  /** The card's headline; default the record's description/number/code. */
   primary?: (record: EntityRecord) => ReactNode;
-  /** The card's second line; default the property/warehouse display. */
+  /** The card's second line; default the entity metadata's first text/reference label. */
   secondary?: (record: EntityRecord) => ReactNode;
   /** The trailing amount; default `total`. */
   amount?: (record: EntityRecord) => number | null | undefined;
@@ -84,11 +72,11 @@ const text = (v: unknown) => (v == null ? "" : String(v));
 
 /** The default card caption: the record's number, else its code. */
 export const defaultKanbanCaption = (row: EntityRecord): ReactNode => text(row.number ?? row.code);
-/** The default card headline: a customer/client display, else description/name. */
-export const defaultKanbanPrimary = (row: EntityRecord): ReactNode =>
-  text(row.customerDisplay ?? row.clientDisplay ?? row.primaryClientDisplay ?? row.description ?? row.name);
-/** The default card second line: a property/warehouse display. */
-export const defaultKanbanSecondary = (row: EntityRecord): ReactNode => text(row.propertyDisplay ?? row.warehouseDisplay);
+/** The default card headline uses the framework's record identity. */
+export const defaultKanbanPrimary = recordTitle;
+/** The default second line follows the entity's declared columns. */
+export const defaultKanbanSecondary = (row: EntityRecord, columns: readonly RecordColumn[] = []): ReactNode =>
+  recordDetails(row, columns)[0] ?? "";
 /** The default card amount: a numeric `total`. */
 export const defaultKanbanAmount = (row: EntityRecord): number | null => toNumber(row.total);
 
@@ -233,29 +221,38 @@ function KanbanBoard(props: KanbanProps) {
   const { title, hint, entity, by: groupBy, dateField: dateFieldProp, limit } = props;
   const [items, setItems] = useState<EntityRecord[]>([]);
   const source = useEntitySource(entity, { where: props.where });
+  const recordColumns = useRecordColumns(source);
+  const [hasMore, setHasMore] = useState(false);
+  const request = useRef(0);
+  const cancelLoad = useCallback(() => { request.current++; }, []);
   const model = useModel();
   const entityType = source?.entityType;
   const entityName = source?.entityName ?? "";
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
+    const seq = ++request.current;
     if (!source) return;
     const name = toSnakeCase(source.entityName);
-    if (source.entityType === "document") {
-      api.listDocuments(name, undefined, undefined, source.where).then(setItems);
-    } else if (source.entityType === "catalog") {
-      api.listCatalog(name, source.where).then(setItems);
-    }
+    const page = source.entityType === "document"
+      ? await api.listDocumentsPage(name, undefined, undefined, source.where, { limit: 500 })
+      : source.entityType === "catalog" ? await api.listCatalogPage(name, source.where, { limit: 500 }) : null;
+    if (seq !== request.current) return;
+    setItems(page?.rows ?? []);
+    setHasMore(page?.hasMore === true);
   }, [source]);
 
   useEffect(() => {
-    load();
-  }, [load]);
-  useEntityChanges(source?.entityName, load);
+    setItems([]);
+    setHasMore(false);
+    void load().catch(notifyError);
+    return cancelLoad;
+  }, [load, cancelLoad]);
+  useEntityChanges(source?.entityName, () => { void load().catch(notifyError); });
 
   const dateField = dateFieldProp || "date";
   const captionOf = props.caption ?? defaultKanbanCaption;
   const primaryOf = props.primary ?? defaultKanbanPrimary;
-  const secondaryOf = props.secondary ?? defaultKanbanSecondary;
+  const secondaryOf = props.secondary ?? ((row: EntityRecord) => defaultKanbanSecondary(row, recordColumns));
   const amountOf = (row: EntityRecord): string => {
     const n = (props.amount ?? defaultKanbanAmount)(row);
     if (n == null || !Number.isFinite(n)) return "";
@@ -273,6 +270,7 @@ function KanbanBoard(props: KanbanProps) {
       : kanbanColumns(kind, field, fieldInfo, items)),
     [kind, field, fieldInfo, items],
   );
+  const visibleCount = columns.reduce((n, col) => n + items.filter(col.match).slice(0, limit || 12).length, 0);
   const draggable = columns.some((column) => column.apply != null);
   // RBAC: the model marks canWrite=false when the viewer may not write the entity — cards stay
   // clickable (open the record) but can't be dragged between columns. REST enforces anyway.
@@ -311,11 +309,11 @@ function KanbanBoard(props: KanbanProps) {
 
     try {
       await target.apply(entityName, row);
-      load();
+      void load().catch(notifyError);
     } catch (err) {
       // The api layer usually toasted already; notifyError adds one only when it didn't.
       notifyError(err, { fallback: "Move failed" });
-      load();
+      void load().catch(notifyError);
     }
   };
 
@@ -360,6 +358,7 @@ function KanbanBoard(props: KanbanProps) {
         </div>
       </CardHeader>
       <CardContent className="overflow-x-auto">
+        <RecordsTruncated count={visibleCount} truncated={hasMore || visibleCount < items.length} />
         <DragDropContext onDragEnd={onDragEnd}>
           <div className="flex gap-3 min-w-fit pb-1">
             {columns.map((col) => {
@@ -397,7 +396,7 @@ function KanbanBoard(props: KanbanProps) {
                         )}
                         {cards.map((row, index) => {
                           const id = String(row.id ?? "");
-                          const avatar = pickAvatar(row);
+                          const avatar = pickAvatar(row, recordColumns);
                           const caption = captionOf(row);
                           const primaryDisplay = primaryOf(row);
                           const secondaryDisplay = secondaryOf(row);
@@ -430,7 +429,7 @@ function KanbanBoard(props: KanbanProps) {
                                 >
                                   <div className="flex items-start justify-between gap-2">
                                     <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                                      {caption}
+                                      {!props.caption && caption === primaryDisplay ? null : caption}
                                     </span>
                                     {typeof row[dateField] === "string" && row[dateField] && (
                                       <span className="text-[10px] text-muted-foreground tabular-nums">

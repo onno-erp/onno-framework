@@ -290,7 +290,7 @@ public class MetadataToolFactory implements McpToolProvider {
 
             tools.add(destructiveTool("delete_document",
                     "Delete a document",
-                    "Soft-deletes an existing document by id. If it is posted, it is unposted first. "
+                    "Soft-deletes an existing document by id. A posted document is rejected: unpost it first. "
                             + "Returns a small acknowledgement.",
                     idSchema("Document logical name (see describe_metadata)."),
                     (exchange, args) -> {
