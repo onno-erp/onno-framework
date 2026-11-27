@@ -231,8 +231,8 @@ specified in [docs/HEADLESS_READ_API.md](../docs/HEADLESS_READ_API.md).
 | POST | `/{name}/{id}/unpost` | Reverse a posted document. Needs the `unpostRoles` when declared; `BeforeUnpostHandler` may veto. |
 | GET | `/{name}/{id}/posting-preview` | The movements a post would write, without writing them. |
 | POST | `/{name}/{id}/duplicate` | Server-side copy: attributes and lines, fresh id and number, dated now, unposted. |
-| POST | `/{name}/batch-delete` | Soft-delete `{ids: […]}` (≤500), unposting posted ones. |
-| DELETE | `/{name}/{id}` | Soft delete; a posted document is unposted first (which needs the unpost right). |
+| POST | `/{name}/batch-delete` | Soft-delete `{ids: […]}` (≤500); posted ones fail (unpost first). |
+| DELETE | `/{name}/{id}` | Soft delete (`BeforeDeleteHandler`, no `beforeWrite`/validation); a posted document answers `409` — unpost it first. |
 | POST | `/{name}/validate`, `/{name}/{id}/validate` | Dry run of the write path; nothing persists. |
 
 ### Accumulation registers — `/api/registers`

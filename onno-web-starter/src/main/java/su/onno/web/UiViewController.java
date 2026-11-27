@@ -449,8 +449,8 @@ public class UiViewController {
         if (canWrite) {
             actions.add(ViewDescriptors.RecordAction.builtIn("duplicate",
                     "onno://documents/" + name + "/" + id + "/duplicate"));
-            // Deleting a posted document unposts it, so it is offered only with the unpost right.
-            if (!posted || canUnpost) {
+            // A posted document must be unposted explicitly before it can be deleted.
+            if (!posted) {
                 actions.add(new ViewDescriptors.RecordAction("delete", null,
                         "onno://delete/documents/" + name + "/" + id, true));
             }
