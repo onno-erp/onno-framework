@@ -411,6 +411,11 @@ writes use the same field name:
 }
 ```
 
+`folder` and `parent` are only accepted for hierarchical catalogs; supplying either to a flat
+catalog returns a field validation error (also reported by live validation). Flat logical responses
+omit hierarchy fields even when an old database retains legacy hierarchy columns. The HTTP parent
+remains a UUID or `null`; the Java entity now uses `Ref<Self>` on `HierarchicalCatalogObject<Self>`.
+
 Hierarchical catalog writes validate `parent` after the entity's filling/before-write hooks. The
 parent must be an existing folder in the same catalog, not marked for deletion, and its ancestor
 chain must not contain a cycle. `parent: null` moves a record to the root. A folder with active

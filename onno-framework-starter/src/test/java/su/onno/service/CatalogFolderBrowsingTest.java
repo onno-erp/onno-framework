@@ -12,6 +12,7 @@ import su.onno.metadata.DefaultNamingStrategy;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.MetadataScanner;
 import su.onno.model.CatalogObject;
+import su.onno.model.HierarchicalCatalogObject;
 import su.onno.schema.SchemaGenerator;
 
 import org.h2.jdbcx.JdbcDataSource;
@@ -48,7 +49,7 @@ class CatalogFolderBrowsingTest {
 
     @AccessControl(readRoles = {"CLERK", "CUSTOMER"})
     @Catalog(name = "BrowseItems", hierarchical = true)
-    static class Item extends CatalogObject {
+    static class Item extends HierarchicalCatalogObject<Item> {
         @Attribute(length = 20)
         private String tier;
     }

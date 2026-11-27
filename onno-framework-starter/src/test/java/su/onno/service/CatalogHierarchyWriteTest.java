@@ -8,6 +8,8 @@ import su.onno.metadata.DefaultNamingStrategy;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.MetadataScanner;
 import su.onno.model.CatalogObject;
+import su.onno.types.Ref;
+import su.onno.model.HierarchicalCatalogObject;
 import su.onno.schema.SchemaGenerator;
 import su.onno.spring.OnnoSimpleJdbcRepository;
 import su.onno.validation.ValidationException;
@@ -39,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class CatalogHierarchyWriteTest {
 
     @Catalog(name = "HierarchyNodes", hierarchical = true)
-    public static class Node extends CatalogObject implements BeforeWriteHandler {
+    public static class Node extends HierarchicalCatalogObject<Node> implements BeforeWriteHandler {
         @Transient Runnable beforeValidation;
 
         @Override public void beforeWrite() {
@@ -85,18 +87,17 @@ class CatalogHierarchyWriteTest {
         Node second = save(node(true, null));
         Node item = save(node(false, first.getId()));
         Node folder = save(node(true, first.getId()));
-        item.setParent(second.getId());
+        item.setParent(Ref.of(Node.class, second.getId()));
         save(item);
-        folder.setParent(second.getId());
+        folder.setParent(Ref.of(Node.class, second.getId()));
         save(folder);
-        assertThat(repository.findById(item.getId()).orElseThrow().getParent()).isEqualTo(second.getId());
-        assertThat(repository.findById(folder.getId()).orElseThrow().getParent()).isEqualTo(second.getId());
+        assertThat(repository.findById(item.getId()).orElseThrow().getParent()).isEqualTo(Ref.of(Node.class, second.getId()));
+        assertThat(repository.findById(folder.getId()).orElseThrow().getParent()).isEqualTo(Ref.of(Node.class, second.getId()));
     }
 
     @Test void unknownAndForeignCatalogParentsAreRejected() {
         invalid(node(false, UUID.randomUUID()), "existing folder");
         Flat flat = new Flat();
-        flat.setFolder(true);
         stack.store().inTransaction(() -> stack.store().save(flat));
         invalid(node(false, flat.getId()), "existing folder");
     }
@@ -113,10 +114,10 @@ class CatalogHierarchyWriteTest {
     @Test void newAndExistingRecordsCannotBeTheirOwnParents() {
         Node fresh = node(true, null);
         fresh.setId(UUID.randomUUID());
-        fresh.setParent(fresh.getId());
+        fresh.setParent(Ref.of(Node.class, fresh.getId()));
         invalid(fresh, "cycle");
         Node stored = save(node(true, null));
-        stored.setParent(stored.getId());
+        stored.setParent(Ref.of(Node.class, stored.getId()));
         invalid(stored, "cycle");
         assertThat(repository.findById(stored.getId()).orElseThrow().getParent()).isNull();
     }
@@ -126,7 +127,7 @@ class CatalogHierarchyWriteTest {
         Node child = save(node(true, root.getId()));
         Node grandchild = save(node(true, child.getId()));
         Integer version = root.getVersion();
-        root.setParent(grandchild.getId());
+        root.setParent(Ref.of(Node.class, grandchild.getId()));
         invalid(root, "cycle");
         Node unchanged = repository.findById(root.getId()).orElseThrow();
         assertThat(unchanged.getParent()).isNull();
@@ -135,7 +136,7 @@ class CatalogHierarchyWriteTest {
 
     @Test void beforeWriteCannotBypassTheParentCheck() {
         Node item = node(false, null);
-        item.beforeValidation = () -> item.setParent(UUID.randomUUID());
+        item.beforeValidation = () -> item.setParent(Ref.of(Node.class, UUID.randomUUID()));
         invalid(item, "existing folder");
         assertThat(repository.count()).isZero();
     }
@@ -188,11 +189,31 @@ class CatalogHierarchyWriteTest {
         assertThat(repository.findById(folder.getId()).orElseThrow().isDeletionMark()).isFalse();
     }
 
-    @Test void flatCatalogsKeepTheirExistingWriteBehavior() {
+    @Test void flatCatalogsSaveWithoutHierarchyColumns() {
         Flat item = new Flat();
-        item.setParent(UUID.randomUUID());
+        item.setDescription("Flat");
         stack.store().inTransaction(() -> stack.store().save(item));
-        assertThat(stack.store().find(Flat.class, item.getId()).getParent()).isEqualTo(item.getParent());
+        assertThat(stack.store().find(Flat.class, item.getId()).getDescription()).isEqualTo("Flat");
+    }
+
+    @Test void legacyUuidParentReadsAsAReferenceToTheConcreteCatalog() {
+        Node folder = save(node(true, null));
+        Node child = save(node(false, null));
+        stack.jdbi().useHandle(h -> h.createUpdate("UPDATE " + descriptor.tableName()
+                        + " SET _parent=:parent WHERE _id=:id")
+                .bind("parent", folder.getId()).bind("id", child.getId()).execute());
+        Ref<Node> parent = repository.findById(child.getId()).orElseThrow().getParent();
+        assertThat(parent).isEqualTo(Ref.of(Node.class, folder.getId()));
+        assertThat(parent.type()).isEqualTo(Node.class);
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"}) // Simulate a raw/reflection caller bypassing javac's type check.
+    void anIncorrectRuntimeReferenceTypeIsRejectedBeforeWriting() {
+        Node folder = save(node(true, null));
+        Node child = node(false, null);
+        ((HierarchicalCatalogObject) child).setParent(Ref.of(Flat.class, folder.getId()));
+        invalid(child, "same catalog entity type");
     }
 
     @Test void longValidAncestorChainsAreAcceptedWithoutRecursion() {
@@ -207,7 +228,7 @@ class CatalogHierarchyWriteTest {
                     .bind("id", id).bind("code", code).bindByType("parent", previous, UUID.class).execute());
             parent = id;
         }
-        assertThat(save(node(false, parent)).getParent()).isEqualTo(parent);
+        assertThat(save(node(false, parent)).getParent()).isEqualTo(Ref.of(Node.class, parent));
     }
 
     @Test void liveValidationUsesTheSameCheckWithoutWritingAndSupportsClearingTheParent() {
@@ -235,8 +256,8 @@ class CatalogHierarchyWriteTest {
         Node first = save(node(true, null));
         Node second = save(node(true, null));
         var ready = new CyclicBarrier(2);
-        first.setParent(second.getId());
-        second.setParent(first.getId());
+        first.setParent(Ref.of(Node.class, second.getId()));
+        second.setParent(Ref.of(Node.class, first.getId()));
         first.beforeValidation = second.beforeValidation = () -> {
             try { ready.await(5, TimeUnit.SECONDS); }
             catch (Exception error) { throw new IllegalStateException(error); }
@@ -287,7 +308,7 @@ class CatalogHierarchyWriteTest {
     private static Node node(boolean folder, UUID parent) {
         Node node = new Node();
         node.setFolder(folder);
-        node.setParent(parent);
+        node.setParent(parent == null ? null : Ref.of(Node.class, parent));
         return node;
     }
 }

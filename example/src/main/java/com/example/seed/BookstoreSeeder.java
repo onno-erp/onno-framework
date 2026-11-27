@@ -523,7 +523,7 @@ public class BookstoreSeeder implements ApplicationRunner {
         BookCategory c = new BookCategory();
         c.setDescription(name);
         c.setColor(color);
-        c.setParent(shelf);
+        c.setParent(shelf == null ? null : Ref.of(BookCategory.class, shelf));
         return Ref.of(BookCategory.class, categories.save(c).getId());
     }
 

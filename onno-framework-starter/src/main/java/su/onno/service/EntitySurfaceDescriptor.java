@@ -20,7 +20,8 @@ record EntitySurfaceDescriptor(
         String defaultSortColumn,
         boolean defaultDescending,
         Set<String> nonNullableSystemSorts,
-        Class<?> javaClass
+        Class<?> javaClass,
+        boolean hierarchical
 ) {
 
     static EntitySurfaceDescriptor catalog(CatalogDescriptor desc) {
@@ -34,12 +35,13 @@ record EntitySurfaceDescriptor(
                 desc.tableName(),
                 desc.attributes(),
                 Set.copyOf(sortable),
-                AggregateBuckets.CATALOG_SYSTEM_COLUMNS,
+                desc.hierarchical() ? AggregateBuckets.CATALOG_SYSTEM_COLUMNS : Set.of("_code", "_description"),
                 List.of("_code", "_description"),
                 "_code",
                 false,
                 Set.of("_code"),
-                desc.javaClass()
+                desc.javaClass(),
+                desc.hierarchical()
         );
     }
 
@@ -59,7 +61,8 @@ record EntitySurfaceDescriptor(
                 "_date",
                 true,
                 Set.of("_date", "_number", "_posted"),
-                desc.javaClass()
+                desc.javaClass(),
+                false
         );
     }
 
@@ -106,6 +109,10 @@ record EntitySurfaceDescriptor(
                     "_posted", Where.Type.BOOLEAN, "_deletion_mark", Where.Type.BOOLEAN);
             default -> java.util.Map.of();
         };
+        if (kind.equals("catalog") && !hierarchical) {
+            system = new java.util.LinkedHashMap<>(system);
+            system.remove("_is_folder");
+        }
         return Where.Schema.of(attributes, system, this::storageColumn);
     }
 
@@ -137,8 +144,8 @@ record EntitySurfaceDescriptor(
                 case "code", "_code" -> "_code";
                 case "description", "_description" -> "_description";
                 case "deletionMark", "_deletion_mark" -> "_deletion_mark";
-                case "folder", "_is_folder" -> "_is_folder";
-                case "parent", "_parent" -> "_parent";
+                case "folder", "_is_folder" -> hierarchical ? "_is_folder" : null;
+                case "parent", "_parent" -> hierarchical ? "_parent" : null;
                 case "version", "_version" -> "_version";
                 default -> null;
             };

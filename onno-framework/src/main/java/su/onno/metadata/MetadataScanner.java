@@ -4,6 +4,7 @@ import su.onno.annotations.*;
 import su.onno.model.AccumulationRecord;
 import su.onno.model.AccumulationType;
 import su.onno.model.CatalogObject;
+import su.onno.model.HierarchicalCatalogObject;
 import su.onno.model.DocumentObject;
 import su.onno.model.InformationRecord;
 import su.onno.model.Periodicity;
@@ -17,7 +18,9 @@ import java.nio.charset.StandardCharsets;
 import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
 
@@ -52,6 +55,17 @@ public class MetadataScanner {
             throw new IllegalArgumentException(clazz.getName() + " must extend CatalogObject");
         }
 
+        boolean hierarchyBase = HierarchicalCatalogObject.class.isAssignableFrom(clazz);
+        if (catalog.hierarchical() != hierarchyBase) {
+            throw new IllegalArgumentException(clazz.getName() + (catalog.hierarchical()
+                    ? " must extend HierarchicalCatalogObject<Self> when hierarchical = true"
+                    : " must extend CatalogObject without HierarchicalCatalogObject when hierarchical = false"));
+        }
+        if (hierarchyBase && hierarchySelfType(clazz) != clazz) {
+            throw new IllegalArgumentException(clazz.getName()
+                    + " must use its own entity type in HierarchicalCatalogObject<Self>");
+        }
+
         String logicalName = catalog.name();
         String displayTitle = catalog.title().isEmpty() ? logicalName : catalog.title();
         String storageKey = catalog.tableName().isEmpty() ? logicalName : catalog.tableName();
@@ -65,6 +79,26 @@ public class MetadataScanner {
                 catalog.hierarchical(), catalog.autoNumber(), catalog.codePrefix(),
                 catalog.context(), readRoles(clazz), writeRoles(clazz), attributes,
                 List.of(catalog.previousNames()), scanTabularSections(clazz, storageKey));
+    }
+
+    /** Resolve Self through intermediate generic bases without a Spring runtime dependency. */
+    private static Type hierarchySelfType(Class<?> clazz) {
+        var arguments = new HashMap<TypeVariable<?>, Type>();
+        for (Class<?> current = clazz; current != null; current = current.getSuperclass()) {
+            if (!(current.getGenericSuperclass() instanceof ParameterizedType base)) continue;
+            Class<?> raw = (Class<?>) base.getRawType();
+            TypeVariable<?>[] variables = raw.getTypeParameters();
+            Type[] values = base.getActualTypeArguments();
+            for (int i = 0; i < variables.length; i++) {
+                Type value = values[i];
+                while (value instanceof TypeVariable<?> variable && arguments.containsKey(variable)) {
+                    value = arguments.get(variable);
+                }
+                arguments.put(variables[i], value);
+            }
+            if (raw == HierarchicalCatalogObject.class) return arguments.get(variables[0]);
+        }
+        return null;
     }
 
     public DocumentDescriptor scanDocument(Class<?> clazz) {

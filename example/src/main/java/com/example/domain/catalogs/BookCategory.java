@@ -3,7 +3,7 @@ package com.example.domain.catalogs;
 import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
-import su.onno.model.CatalogObject;
+import su.onno.model.HierarchicalCatalogObject;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -20,7 +20,7 @@ import lombok.Setter;
 @AccessControl(readRoles = {"MANAGER"}, writeRoles = {"MANAGER"})
 @Getter
 @Setter
-public class BookCategory extends CatalogObject {
+public class BookCategory extends HierarchicalCatalogObject<BookCategory> {
 
     @Attribute(displayName = "Color", length = 7, pattern = "#[0-9A-Fa-f]{6}")
     private String color;

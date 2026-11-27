@@ -9,10 +9,26 @@ import su.onno.metadata.MetadataScanner;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class EntitySurfaceDescriptorTest {
 
     private final MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
+
+    @Test
+    void hierarchyColumnsAreOnlyExposedOnHierarchicalCatalogs() {
+        var flat = EntitySurfaceDescriptor.catalog(scanner.scan(EntityJsonRepresentationTest.Customer.class));
+        assertThatThrownBy(() -> flat.whereSchema().resolve("folder")).isInstanceOf(ServiceException.class);
+        assertThatThrownBy(() -> flat.whereSchema().resolve("parent")).isInstanceOf(ServiceException.class);
+        assertThat(flat.whereSchema().columns()).doesNotContainKeys("_is_folder", "_parent");
+        assertThat(flat.widgetSystemColumns()).doesNotContain("_is_folder");
+
+        var tree = EntitySurfaceDescriptor.catalog(scanner.scan(CatalogHierarchyWriteTest.Node.class));
+        assertThat(tree.storageColumn("folder")).isEqualTo("_is_folder");
+        assertThat(tree.storageColumn("parent")).isEqualTo("_parent");
+        assertThat(tree.whereSchema().columns()).containsKey("_is_folder");
+        assertThat(tree.widgetSystemColumns()).contains("_is_folder");
+    }
 
     @Test
     void catalogQueryFieldsAcceptLogicalAndStorageNames() {

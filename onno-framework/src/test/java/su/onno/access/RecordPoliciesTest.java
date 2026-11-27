@@ -13,6 +13,7 @@ import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.MetadataScanner;
 import su.onno.model.AccumulationRecord;
 import su.onno.model.AccumulationType;
+import su.onno.model.HierarchicalCatalogObject;
 import su.onno.model.CatalogObject;
 import su.onno.model.DocumentObject;
 import su.onno.types.Ref;
@@ -71,7 +72,7 @@ class RecordPoliciesTest {
 
     @Catalog(name = "RpFolders", hierarchical = true)
     @AccessControl(readRoles = {"CUSTOMER"})
-    public static class Folder extends CatalogObject {
+    public static class Folder extends HierarchicalCatalogObject<Folder> {
     }
 
     @Catalog(name = "RpStaffOnly")

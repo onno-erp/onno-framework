@@ -272,9 +272,18 @@ Use hierarchical catalogs when users organize entities into folders or parent-ch
 
 ```java
 @Catalog(name = "Product Groups", hierarchical = true)
-public class ProductGroup extends CatalogObject {
+public class ProductGroup extends HierarchicalCatalogObject<ProductGroup> {
 }
 ```
+
+`HierarchicalCatalogObject<E>` adds `boolean folder` and `Ref<E> parent` (`null` means root).
+Use the concrete entity itself as `E`, e.g. `group.setParent(Ref.of(ProductGroup.class, parentId))`.
+Metadata scanning rejects a missing hierarchy base, a mismatched `hierarchical` flag, or a wrong self type.
+Flat `CatalogObject` has neither property, and fresh flat tables have neither `_is_folder` nor `_parent`.
+The UUID storage format is unchanged, so existing hierarchy links need no data conversion.
+The reconciler treats removal of old flat hierarchy columns as destructive: the default skips it and
+preserves data. Back up or migrate any meaningful legacy values before explicitly enabling destructive
+changes. Without a previous schema snapshot, unknown old columns are left untouched.
 
 For hierarchical catalogs, the shared save callback checks that `parent` is a live folder in the
 same catalog and that its ancestor chain is acyclic. This also applies to typed repository saves,

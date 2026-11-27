@@ -7,6 +7,7 @@ import su.onno.metadata.DefaultNamingStrategy;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.MetadataScanner;
 import su.onno.model.CatalogObject;
+import su.onno.model.HierarchicalCatalogObject;
 import su.onno.schema.SchemaGenerator;
 
 import org.h2.jdbcx.JdbcDataSource;
@@ -29,7 +30,7 @@ import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 class CatalogParentFilterTest {
 
     @Catalog(name = "ParentGroups", hierarchical = true)
-    static class Group extends CatalogObject {
+    static class Group extends HierarchicalCatalogObject<Group> {
     }
 
     @Catalog(name = "ParentFlat")
@@ -106,15 +107,15 @@ class CatalogParentFilterTest {
     }
 
     private void insert(CatalogDescriptor desc, UUID id, String name, boolean folder, UUID parent) {
-        String parentCol = desc.hierarchical() ? ", _parent" : "";
-        String parentVal = desc.hierarchical() ? ", :parent" : "";
+        String parentCol = desc.hierarchical() ? ", _is_folder, _parent" : "";
+        String parentVal = desc.hierarchical() ? ", :folder, :parent" : "";
         jdbi.useHandle(h -> {
             var u = h.createUpdate("INSERT INTO " + desc.tableName()
-                            + " (_id, _code, _description, _deletion_mark, _is_folder, _version" + parentCol + ") "
-                            + "VALUES (:id, :name, :name, false, :folder, 0" + parentVal + ")")
-                    .bind("id", id).bind("name", name).bind("folder", folder);
+                            + " (_id, _code, _description, _deletion_mark, _version" + parentCol + ") "
+                            + "VALUES (:id, :name, :name, false, 0" + parentVal + ")")
+                    .bind("id", id).bind("name", name);
             if (desc.hierarchical()) {
-                u.bind("parent", parent);
+                u.bind("parent", parent).bind("folder", folder);
             }
             u.execute();
         });

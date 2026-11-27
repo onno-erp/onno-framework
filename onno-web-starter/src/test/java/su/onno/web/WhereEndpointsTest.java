@@ -246,8 +246,8 @@ class WhereEndpointsTest {
     private UUID client(String code, String name, String tier) {
         UUID id = UUID.randomUUID();
         jdbi.useHandle(h -> h.createUpdate("INSERT INTO " + clients.tableName()
-                        + " (_id, _code, _description, _deletion_mark, _is_folder, _version, "
-                        + column(Client.class, "tier") + ") VALUES (:id, :code, :name, false, false, 0, :tier)")
+                        + " (_id, _code, _description, _deletion_mark, _version, "
+                        + column(Client.class, "tier") + ") VALUES (:id, :code, :name, false, 0, :tier)")
                 .bind("id", id).bind("code", code).bind("name", name).bind("tier", tier).execute());
         return id;
     }

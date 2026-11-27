@@ -80,7 +80,14 @@ In brief:
 
 - **`@Catalog`** — stable reference data (Products, Customers). `codeLength`, `codePrefix`,
   `autoNumber`, `hierarchical`, `previousNames`, `context`. Base class `CatalogObject`
-  (`id`, `code`, `description`, `deletionMark`, `folder`, `parent`, `@Version version`, `isNew`).
+  (`id`, `code`, `description`, `deletionMark`, `@Version version`, `isNew`). A hierarchical catalog
+  extends `HierarchicalCatalogObject<Self>` instead, adding `boolean folder` and `Ref<Self> parent`.
+  The scanner checks the hierarchy flag and concrete self type. Only hierarchical desired tables
+  contain `_is_folder` and `_parent`; parent storage remains UUID, preserving existing links.
+  On upgrade, old flat hierarchy columns are destructive drops and are skipped by default; preserve
+  or migrate meaningful values before opting into destructive changes. With no previous snapshot,
+  legacy columns are retained. Changing a flat catalog to hierarchical adds nullable parent and
+  false-default folder columns without rewriting existing rows.
 - **`@Document`** — business events (Sales Order, Invoice). `numberPrefix`, `numberLength`,
   `autoNumber`, `previousNames`, `context`. Base class `DocumentObject`
   (`id`, `number`, `date`, `posted`, `deletionMark`, `version`, `isNew`).

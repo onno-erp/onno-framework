@@ -82,7 +82,7 @@ public class RecordHistory {
 
     /** What the recorder needs to know about one tracked entity. */
     private record Target(String type, String name, String table, List<AttributeDescriptor> attributes,
-                          List<TabularSectionDescriptor> sections) {
+                          List<TabularSectionDescriptor> sections, boolean hierarchical) {
     }
 
     private RecordHistory() {
@@ -161,7 +161,7 @@ public class RecordHistory {
             for (CatalogDescriptor d : registry.allCatalogs()) {
                 if (d.javaClass().equals(entity)) {
                     return Optional.of(new Target(CATALOG, d.logicalName(), d.tableName(),
-                            d.attributes(), d.tabularSections()));
+                            d.attributes(), d.tabularSections(), d.hierarchical()));
                 }
             }
             return Optional.empty();
@@ -171,7 +171,7 @@ public class RecordHistory {
             for (DocumentDescriptor d : registry.allDocuments()) {
                 if (d.javaClass().equals(entity)) {
                     return Optional.of(new Target(DOCUMENT, d.logicalName(), d.tableName(),
-                            d.attributes(), d.tabularSections()));
+                            d.attributes(), d.tabularSections(), false));
                 }
             }
         }
@@ -204,8 +204,10 @@ public class RecordHistory {
         if (CATALOG.equals(target.type())) {
             fields.put("code", text(raw.get("_code")));
             fields.put("description", text(raw.get("_description")));
-            fields.put("parent", text(raw.get("_parent")));
-            fields.put("folder", text(raw.get("_is_folder")));
+            if (target.hierarchical()) {
+                fields.put("parent", text(raw.get("_parent")));
+                fields.put("folder", text(raw.get("_is_folder")));
+            }
         } else {
             fields.put("number", text(raw.get("_number")));
             fields.put("date", text(raw.get("_date")));

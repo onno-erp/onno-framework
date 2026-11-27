@@ -156,7 +156,7 @@ public class GenericCatalogController {
             // (localizable via onno.ui.messages "duplicate.copySuffix"; blank disables).
             body.put("description", row.get("_description") + messages.get("duplicate.copySuffix"));
         }
-        if (row.get("_parent") != null) {
+        if (desc.hierarchical() && row.get("_parent") != null) {
             body.put("parent", row.get("_parent"));
         }
         for (AttributeDescriptor attr : desc.attributes()) {

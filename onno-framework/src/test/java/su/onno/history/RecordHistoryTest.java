@@ -10,6 +10,7 @@ import su.onno.metadata.EnumerationDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.MetadataScanner;
 import su.onno.model.CatalogObject;
+import su.onno.model.HierarchicalCatalogObject;
 import su.onno.model.TabularSectionRow;
 import su.onno.schema.SchemaGenerator;
 import su.onno.security.SecretCipher;
@@ -67,6 +68,9 @@ class RecordHistoryTest {
         @Attribute(length = 60) private String title;
     }
 
+    @Catalog(name = "CoreHistoryTree", history = true, hierarchical = true)
+    public static class Tree extends HierarchicalCatalogObject<Tree> { }
+
     protected Jdbi jdbi;
     private RecordHistory history;
     private SecretCipher cipher;
@@ -91,9 +95,38 @@ class RecordHistoryTest {
         plain = scanner.scan(Plain.class);
         registry.registerCatalog(card);
         registry.registerCatalog(plain);
+        registry.registerCatalog(scanner.scan(Tree.class));
         new SchemaGenerator(registry).execute(jdbi);
         cipher = new SecretCipher("core-history-key");
         history = new RecordHistory(jdbi, registry, cipher, () -> HistoryActor.named("resolved@test"));
+    }
+
+    @Test
+    void hierarchyHistoryStillRecordsFolderAndParentUuids() {
+        UUID id = UUID.randomUUID();
+        UUID parent = UUID.randomUUID();
+        jdbi.useTransaction(h -> {
+            h.createUpdate("INSERT INTO catalog_core_history_tree (_id, _code, _is_folder, _parent)"
+                            + " VALUES (:id, 'T', true, :parent)")
+                    .bind("id", id).bind("parent", parent).execute();
+            history.record(h, Tree.class, id, RecordImage.ABSENT, HistoryActor.SYSTEM);
+        });
+        assertThat(history.list(id).getFirst().changes()).contains(
+                header("folder", null, "true"), header("parent", null, parent.toString()));
+    }
+
+    @Test
+    void legacyFlatHierarchyColumnsAreNotExposedAsHistoryFields() {
+        UUID id = UUID.randomUUID();
+        jdbi.useHandle(h -> {
+            h.execute("ALTER TABLE " + card.tableName() + " ADD COLUMN _is_folder BOOLEAN DEFAULT TRUE");
+            h.execute("ALTER TABLE " + card.tableName() + " ADD COLUMN _parent UUID");
+        });
+        write(id, HistoryActor.SYSTEM, h -> h.createUpdate("INSERT INTO " + card.tableName()
+                        + " (_id, _code, _description, _parent) VALUES (:id, 'L', 'Legacy', :parent)")
+                .bind("id", id).bind("parent", UUID.randomUUID()).execute());
+        assertThat(history.list(id).getFirst().changes()).extracting(HistoryChange::field)
+                .doesNotContain("folder", "parent");
     }
 
     @Test
@@ -105,9 +138,9 @@ class RecordHistoryTest {
 
         write(id, ann, h -> {
             h.createUpdate("INSERT INTO " + card.tableName()
-                            + " (_id, _code, _description, _deletion_mark, _is_folder, _version, title, weight,"
+                            + " (_id, _code, _description, _deletion_mark, _version, title, weight,"
                             + " born_on, seen_at, neutered, status, pin)"
-                            + " VALUES (:id, 'C-1', 'Rex', FALSE, FALSE, 0, 'Rex', 12.500, :born, :seen, FALSE, :status, :pin)")
+                            + " VALUES (:id, 'C-1', 'Rex', FALSE, 0, 'Rex', 12.500, :born, :seen, FALSE, :status, :pin)")
                     .bind("id", id).bind("born", LocalDate.of(2020, 5, 17))
                     .bind("seen", LocalDateTime.of(2026, 11, 13, 9, 30))
                     .bind("status", open).bind("pin", cipher.encrypt("1234"))
@@ -149,12 +182,13 @@ class RecordHistoryTest {
 
         assertThat(entries.get(4).changes()).contains(
                 header("code", null, "C-1"), header("description", null, "Rex"),
-                header("folder", null, "false"), header("title", null, "Rex"),
+                header("title", null, "Rex"),
                 header("weight", null, "12.5"), header("bornOn", null, "2020-05-17"),
                 header("seenAt", null, "2026-11-13T09:30"), header("neutered", null, "false"),
                 header("status", null, open.toString()),
                 new HistoryChange(null, null, null, "pin", null, null, true),
                 new HistoryChange("notes", 1, HistoryChange.ROW_ADDED, "text", null, "first", false));
+        assertThat(entries.get(4).changes()).extracting(HistoryChange::field).doesNotContain("folder", "parent");
         assertThat(entries.get(3).changes()).containsExactlyInAnyOrder(
                 header("title", "Rex", "Rexy"), header("weight", "12.5", "13.25"),
                 header("neutered", "false", "true"),
@@ -190,8 +224,8 @@ class RecordHistoryTest {
         try {
             jdbi.useTransaction(h -> {
                 h.createUpdate("INSERT INTO " + card.tableName()
-                                + " (_id, _code, _description, _deletion_mark, _is_folder, _version, neutered)"
-                                + " VALUES (:id, 'C-2', 'Tom', FALSE, FALSE, 0, FALSE)")
+                                + " (_id, _code, _description, _deletion_mark, _version, neutered)"
+                                + " VALUES (:id, 'C-2', 'Tom', FALSE, 0, FALSE)")
                         .bind("id", id).execute();
                 history.record(h, Card.class, id, RecordImage.ABSENT, HistoryActor.SYSTEM);
                 throw new IllegalStateException("write rejected");
@@ -210,8 +244,8 @@ class RecordHistoryTest {
         jdbi.useTransaction(h -> {
             assertThat(history.capture(h, Plain.class, id)).isNull();
             h.createUpdate("INSERT INTO " + plain.tableName()
-                            + " (_id, _code, _description, _deletion_mark, _is_folder, _version, title)"
-                            + " VALUES (:id, 'P-1', 'x', FALSE, FALSE, 0, 'x')").bind("id", id).execute();
+                            + " (_id, _code, _description, _deletion_mark, _version, title)"
+                            + " VALUES (:id, 'P-1', 'x', FALSE, 0, 'x')").bind("id", id).execute();
             history.record(h, Plain.class, id, RecordImage.ABSENT, null);
         });
         jdbi.useHandle(h -> history.recordEvent(h, Plain.class, id, RecordHistory.POSTED, null));

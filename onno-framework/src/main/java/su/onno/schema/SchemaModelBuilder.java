@@ -208,8 +208,10 @@ public class SchemaModelBuilder {
         columns.add(ColumnModel.of("_code", "VARCHAR(" + codeLength + ")"));
         columns.add(ColumnModel.of("_description", "VARCHAR(255)"));
         columns.add(ColumnModel.withDefault("_deletion_mark", "BOOLEAN", "FALSE"));
-        columns.add(ColumnModel.withDefault("_is_folder", "BOOLEAN", "FALSE"));
-        columns.add(ColumnModel.of("_parent", "UUID"));
+        if (catalog.hierarchical()) {
+            columns.add(ColumnModel.withDefault("_is_folder", "BOOLEAN", "FALSE"));
+            columns.add(ColumnModel.of("_parent", "UUID"));
+        }
         columns.add(ColumnModel.withDefault("_version", "INTEGER", "0"));
         for (AttributeDescriptor attr : catalog.attributes()) {
             columns.add(attributeColumn(attr, attr.required()));
